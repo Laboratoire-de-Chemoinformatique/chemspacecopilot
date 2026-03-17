@@ -125,7 +125,6 @@ def test_tracker_enabled_basic(tmp_path, monkeypatch):
 )
 def test_session_tracking(tmp_path, monkeypatch):
     """Test session tracking creates proper run structure."""
-    import mlflow
 
     tracking_uri = f"file://{tmp_path}/mlruns"
     monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)

@@ -20,10 +20,12 @@ Main Classes and Functions:
 ---------------------------
 """
 
+# Analysis toolkits
+from .analysis import RobustnessAnalysisToolkit
 from .chemistry import (
+    AutoencoderToolkit,
     BaseChemistryToolkit,
     ChemicalSimilarityToolkit,
-    AutoencoderToolkit,
     PeptideWAEToolkit,
     SynPlannerToolkit,
 )
@@ -39,9 +41,6 @@ from .databases.chembl import ChemblToolkit
 # Import all the main classes and functions for the public API
 from .io.pointer_pandas_tools import PointerPandasTools
 from .io.session_toolkit import SessionToolkit
-
-# Analysis toolkits
-from .analysis import RobustnessAnalysisToolkit
 
 # Backwards compatibility alias
 from .io.utils import image_to_base64, safe_file_operation, validate_positive_int

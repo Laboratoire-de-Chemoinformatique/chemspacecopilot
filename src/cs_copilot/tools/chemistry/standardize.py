@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from typing import Optional
 
+import pandas as pd
 from rdkit import Chem
 from rdkit.Chem.MolStandardize import rdMolStandardize
 
@@ -23,7 +26,7 @@ def standardize_smiles(smiles: str) -> Optional[str]:
         return None
 
 
-def standardize_smiles_column(df: "pd.DataFrame", col_name: str) -> "pd.DataFrame":
+def standardize_smiles_column(df: pd.DataFrame, col_name: str) -> pd.DataFrame:
     """Apply SMILES standardization to a DataFrame column in-place.
 
     Rows where standardization fails (invalid SMILES) will have the column value
@@ -36,7 +39,6 @@ def standardize_smiles_column(df: "pd.DataFrame", col_name: str) -> "pd.DataFram
     Returns:
         The same DataFrame with the column values replaced by standardized SMILES.
     """
-    import pandas as pd  # noqa: F811
 
     df[col_name] = df[col_name].apply(
         lambda s: standardize_smiles(s) if isinstance(s, str) else None

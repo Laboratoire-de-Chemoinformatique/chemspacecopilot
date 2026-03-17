@@ -1,11 +1,10 @@
 """Unit tests for GTM sampling helpers exposed through the toolkit."""
 
+import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-import sys
 
 import pandas as pd
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SRC_PATH = PROJECT_ROOT / "src"
@@ -17,7 +16,7 @@ if tools_package_name not in sys.modules:
     tools_stub.__path__ = [str(SRC_PATH / "cs_copilot" / "tools")]
     sys.modules[tools_package_name] = tools_stub
 
-from cs_copilot.tools.chemography.gtm import GTMToolkit
+from cs_copilot.tools.chemography.gtm import GTMToolkit  # noqa: E402
 
 
 def make_toolkit(**overrides) -> GTMToolkit:

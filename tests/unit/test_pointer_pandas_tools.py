@@ -3,6 +3,7 @@
 
 import pandas as pd
 import pytest
+
 from cs_copilot.tools.io.pointer_pandas_tools import PointerPandasTools, _coerce_columns
 
 

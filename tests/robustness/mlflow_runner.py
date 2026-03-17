@@ -1,7 +1,6 @@
 """MLflow-enhanced robustness test runner."""
 
 import logging
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from robustness_minimal_example import RobustnessConfig, RobustnessRunner
@@ -137,7 +136,7 @@ class MLflowRobustnessRunner(RobustnessRunner):
         test_name = test_config.name
         test_run_name = f"test_{test_name}"
 
-        with mlflow.start_run(run_name=test_run_name, nested=True) as test_run:
+        with mlflow.start_run(run_name=test_run_name, nested=True):
             # Log test configuration
             mlflow.log_params(
                 {
@@ -179,7 +178,7 @@ class MLflowRobustnessRunner(RobustnessRunner):
 
         variation_run_name = f"variation_{run_id}"
 
-        with mlflow.start_run(run_name=variation_run_name, nested=True) as variation_run:
+        with mlflow.start_run(run_name=variation_run_name, nested=True):
             # Log variation details
             mlflow.log_params(
                 {

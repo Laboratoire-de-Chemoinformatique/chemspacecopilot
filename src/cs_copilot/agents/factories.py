@@ -14,27 +14,27 @@ from agno.agent import Agent
 from agno.models.base import Model  # Agno v2 base class
 
 from cs_copilot.tools import (
+    AutoencoderToolkit,
     ChemblToolkit,
     ChemicalSimilarityToolkit,
-    AutoencoderToolkit,
-    PeptideWAEToolkit,
-    SynPlannerToolkit,
     GTMToolkit,
+    PeptideWAEToolkit,
     PointerPandasTools,
+    SynPlannerToolkit,
     # SessionToolkit,
     save_gtm_plot,
 )
 from cs_copilot.tools.analysis import RobustnessAnalysisToolkit
 
 from .prompts import (
+    AUTOENCODER_INSTRUCTIONS,
+    CHEMBL_INSTRUCTIONS,
     CHEMOINFORMATICIAN_INSTRUCTIONS,  # Comprehensive chemoinformatics analysis
     GTM_AGENT_INSTRUCTIONS,  # Unified GTM agent (all GTM operations)
-    REPORT_GENERATOR_INSTRUCTIONS,  # Universal presentation layer
-    CHEMBL_INSTRUCTIONS,
-    AUTOENCODER_INSTRUCTIONS,
     PEPTIDE_WAE_INSTRUCTIONS,  # Peptide WAE for amino acid sequence generation
-    SYNPLANNER_INSTRUCTIONS,
+    REPORT_GENERATOR_INSTRUCTIONS,  # Universal presentation layer
     ROBUSTNESS_EVALUATION_INSTRUCTIONS,
+    SYNPLANNER_INSTRUCTIONS,
 )
 
 

@@ -5,9 +5,10 @@ Robustness metrics calculation and aggregation.
 """
 
 import logging
-from typing import Any, Dict, List
-import numpy as np
 from datetime import datetime
+from typing import Any, Dict, List
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +246,7 @@ class RobustnessMetrics:
         except Exception as e:
             logger.debug(f"Response structure outlier detection failed: {e}")
 
-        outliers = sorted(list(outlier_indices))
+        outliers = sorted(outlier_indices)
         logger.info(f"Total outliers identified: {len(outliers)} out of {len(outputs)} runs")
         return outliers
 

@@ -5,20 +5,15 @@ Test script to verify S3 integration is working correctly
 
 import sys
 
-sys.path.append("src")
-
-# Load environment variables from .env file
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import pandas as pd
+from dotenv import load_dotenv
 
 from cs_copilot.storage import S3
 
 
 def test_s3_operations():
     """Test basic S3 operations"""
+    load_dotenv()
     print("Testing S3 integration...")
 
     try:

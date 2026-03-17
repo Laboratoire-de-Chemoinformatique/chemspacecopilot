@@ -10,14 +10,12 @@ robustness and consistency of generated molecules.
 import logging
 from pathlib import Path
 from typing import Dict, List
-import pandas as pd
+
 import numpy as np
 import pytest
 
-from cs_copilot.agents import get_cs_copilot_agent_team
-from .prompt_variations import PromptVariationGenerator
 from .comparators import OutputComparator
-from .metrics import RobustnessMetrics
+from .prompt_variations import PromptVariationGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +39,7 @@ class TestAutoencoderRobustness:
         """
         import datetime
         import uuid
+
         from cs_copilot.storage import is_s3_enabled
         from cs_copilot.storage.client import S3 as S3Client
 
@@ -157,6 +156,7 @@ class TestAutoencoderRobustness:
         """
         import datetime
         import uuid
+
         from cs_copilot.storage import is_s3_enabled
         from cs_copilot.storage.client import S3 as S3Client
 
@@ -271,6 +271,7 @@ class TestAutoencoderRobustness:
         """
         import datetime
         import uuid
+
         from cs_copilot.storage import is_s3_enabled
         from cs_copilot.storage.client import S3 as S3Client
 
@@ -387,6 +388,7 @@ class TestAutoencoderRobustness:
         """
         import datetime
         import uuid
+
         from cs_copilot.storage import is_s3_enabled
         from cs_copilot.storage.client import S3 as S3Client
 
@@ -492,6 +494,7 @@ class TestAutoencoderRobustness:
         """
         import datetime
         import uuid
+
         from cs_copilot.storage import is_s3_enabled
         from cs_copilot.storage.client import S3 as S3Client
 
@@ -506,7 +509,6 @@ class TestAutoencoderRobustness:
             logger.warning("S3 not enabled - sessions will not be isolated")
 
         variations = prompt_generator.get_variations("autoencoder_sampling", n=10)
-        all_valid = True
         validity_rates = []
 
         for i, prompt in enumerate(variations):
@@ -536,7 +538,6 @@ class TestAutoencoderRobustness:
 
                 if validity_rate < 0.90:
                     logger.warning(f"Low validity rate for variation {i+1}")
-                    all_valid = False
 
             finally:
                 # Restore original S3 prefix

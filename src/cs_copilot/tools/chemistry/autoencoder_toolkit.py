@@ -11,13 +11,10 @@ from the latent space.
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional, Union, Dict, Any
-from tempfile import TemporaryDirectory
-
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import torch
-from rdkit import Chem
 from tqdm import tqdm
 
 from cs_copilot.storage import S3
@@ -112,8 +109,10 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         - Respects env-provided cache if present (but doesn't require it)
         - Falls back to direct HTTP with Authorization when needed
         """
+        import os
+        import time
         from pathlib import Path
-        import os, time, shutil
+
         import requests
 
         base_path = Path(self.model_path)
@@ -202,21 +201,21 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             except Exception as _cleanup_err:  # pragma: no cover - best effort cleanup
                 logger.debug(f"Cache cleanup skipped: {_cleanup_err!r}")
 
-        except ImportError:
+        except ImportError as e:
             raise AutoencoderError(
                 "huggingface_hub not installed. Install it with: pip install huggingface_hub"
-            )
+            ) from e
         except Exception as e:
             raise AutoencoderError(
                 f"Failed to download model from Hugging Face ({HUGGINGFACE_AUTOENCODER_REPO}): {repr(e)}. "
                 f"Original model path: {self.model_path}"
-            )
+            ) from e
 
     def _load_model(self):
         """Load the trained autoencoder model and vocabulary."""
         try:
             # Import deepchemography components
-            from deepchemography import LSTMAutoencoder, OneHotVocab
+            from deepchemography import LSTMAutoencoder
 
             # Build paths - handle both string and Path objects
             base_path = Path(self.model_path)
@@ -246,9 +245,9 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             logger.info(f"  Device: {self.device}")
 
         except ImportError as e:
-            raise AutoencoderError(f"Failed to import deepchemography: {e}")
+            raise AutoencoderError(f"Failed to import deepchemography: {e}") from e
         except Exception as e:
-            raise AutoencoderError(f"Failed to load autoencoder model: {e}")
+            raise AutoencoderError(f"Failed to load autoencoder model: {e}") from e
 
     def validate_model_loaded(self) -> bool:
         """

@@ -5,7 +5,6 @@ Helper utilities for robustness test analysis.
 """
 
 import logging
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 

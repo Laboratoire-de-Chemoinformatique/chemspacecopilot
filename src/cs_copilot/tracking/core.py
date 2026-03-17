@@ -2,7 +2,6 @@
 
 import logging
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .config import MLflowConfig
@@ -137,9 +136,6 @@ class MLflowTracker:
         if not self.is_enabled():
             yield None
             return
-
-        # Use nested run if parent run exists
-        parent_run_id = self._active_run_stack[-1] if self._active_run_stack else None
 
         run_name = run_name or sanitize_run_name(f"agent_{agent_name}")
 

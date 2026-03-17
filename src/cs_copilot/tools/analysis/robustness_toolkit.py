@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from agno.tools import Toolkit
@@ -439,7 +439,6 @@ class RobustnessAnalysisToolkit(Toolkit):
         # Check for score distribution
         if "mean_score" in analysis:
             score = analysis["mean_score"]
-            rating = analysis.get("rating", "Unknown")
 
             if score >= 0.90:
                 insights.append(

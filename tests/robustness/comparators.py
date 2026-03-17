@@ -5,16 +5,16 @@ Output comparison utilities for robustness testing.
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Set
-import re
 
+import imagehash
 import numpy as np
 import pandas as pd
+from PIL import Image
 from scipy import stats
 from sentence_transformers import SentenceTransformer, util
-from PIL import Image
-import imagehash
 
 logger = logging.getLogger(__name__)
 
@@ -412,8 +412,8 @@ class OutputComparator:
     def _ssim_pairwise(self, image_paths: List[Path]) -> float:
         """Calculate structural similarity index (SSIM) pairwise."""
         try:
-            from skimage.metrics import structural_similarity as ssim
             from skimage.io import imread
+            from skimage.metrics import structural_similarity as ssim
 
             images = [imread(str(path)) for path in image_paths]
 

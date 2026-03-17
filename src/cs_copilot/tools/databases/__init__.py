@@ -10,8 +10,6 @@ like ChemblToolkit.
 
 import logging
 
-logger = logging.getLogger(__name__)
-
 from .base import (
     BaseDatabaseToolkit,
     ConnectionError,
@@ -21,10 +19,12 @@ from .base import (
     RateLimited,
     ValidationError,
 )
-from .types import DBConfig, PaginationMode, QueryMetrics, QueryParams, Record, ResultPage
 
 # Import ChemblToolkit - now safe because it uses lazy initialization internally
 from .chembl import ChemblToolkit
+from .types import DBConfig, PaginationMode, QueryMetrics, QueryParams, Record, ResultPage
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     # Toolkit classes

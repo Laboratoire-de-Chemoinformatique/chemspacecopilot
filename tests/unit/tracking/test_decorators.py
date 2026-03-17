@@ -2,7 +2,6 @@
 
 import pytest
 
-from cs_copilot.tracking.config import MLflowConfig
 from cs_copilot.tracking.core import get_tracker, reset_tracker
 from cs_copilot.tracking.decorators import track_agent_run, track_tool_call
 

@@ -38,23 +38,20 @@ except ImportError:
 
 import pandas as pd
 
-# Load environment variables from .env file
-load_dotenv()
-
-from cs_copilot.agents import get_cs_copilot_agent_team
-from cs_copilot.model_config import run_with_retry
-from cs_copilot.storage import S3
-from cs_copilot.utils.logging import get_logger
+from cs_copilot.model_config import run_with_retry  # noqa: E402
+from cs_copilot.storage import S3  # noqa: E402
+from cs_copilot.utils.logging import get_logger  # noqa: E402
 
 # Add robustness directory to path for clean imports (works in both pytest and standalone)
 _robustness_dir = Path(__file__).parent
 if str(_robustness_dir) not in sys.path:
     sys.path.insert(0, str(_robustness_dir))
 
-from prompt_variations import PromptVariationGenerator
-from test_utils import ModelLoader, ResponseParser, S3SessionManager, create_agent_team_factory
+from prompt_variations import PromptVariationGenerator  # noqa: E402
+from test_utils import ResponseParser, create_agent_team_factory  # noqa: E402
 
 logger = get_logger(__name__)
+load_dotenv()
 
 # Flag to determine if running in pytest mode
 try:
@@ -81,7 +78,7 @@ def _load_model_from_config():
 
 def _setup_s3():
     """Setup S3 configuration and check availability."""
-    from cs_copilot.storage import is_s3_enabled, get_s3_config
+    from cs_copilot.storage import get_s3_config, is_s3_enabled
 
     if not is_s3_enabled():
         logger.warning("S3 not enabled - files will be stored locally")
@@ -1082,7 +1079,6 @@ def _create_visualizations(
         return {}
 
     try:
-        from cs_copilot.storage import is_s3_enabled
 
         # Setup output directory
         timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -1175,7 +1171,7 @@ def _create_visualizations(
             transform=ax.transAxes,
             ha="center",
             va="top",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+            bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.5},
             fontsize=12,
             fontweight="bold",
         )
@@ -1288,7 +1284,7 @@ def _create_visualizations(
         ax.grid(axis="y", alpha=0.3)
 
         # Add value labels on bars
-        for i, bar in enumerate(bars):
+        for _i, bar in enumerate(bars):
             height = bar.get_height()
             ax.text(
                 bar.get_x() + bar.get_width() / 2.0,
@@ -1413,7 +1409,7 @@ def _create_visualizations(
             ax.legend()
 
             # Add value labels on bars
-            for i, bar in enumerate(bars):
+            for _i, bar in enumerate(bars):
                 height = bar.get_height()
                 label = "✓ Match" if height == 1.0 else "✗ Mismatch"
                 color = "#2ecc71" if height == 1.0 else "#e74c3c"
@@ -1500,8 +1496,6 @@ def run_chembl_prompt_matrix(
     test_run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Initialize MLflow tracking if enabled
-    mlflow_client = None
-    suite_run = None
     if enable_mlflow:
         try:
             import mlflow
@@ -1687,7 +1681,7 @@ def run_chembl_prompt_matrix(
             import mlflow
 
             suite_run_name = f"chembl_interactivity_suite_{test_run_id}"
-            with mlflow.start_run(run_name=suite_run_name) as suite_run:
+            with mlflow.start_run(run_name=suite_run_name):
                 # Log suite configuration
                 try:
                     mlflow.log_params(
@@ -1745,7 +1739,7 @@ def run_chembl_prompt_matrix(
             logger.info("=" * 80)
 
         # Get unique prompt indices
-        prompt_indices = sorted(set(r.prompt_index for r in results))
+        prompt_indices = sorted({r.prompt_index for r in results})
 
         for prompt_idx in prompt_indices:
             try:

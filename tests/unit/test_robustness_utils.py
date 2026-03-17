@@ -12,7 +12,7 @@ Tests the shared infrastructure introduced in Phase 1-4 refactoring:
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -20,7 +20,7 @@ import pytest
 robustness_dir = Path(__file__).parent.parent / "robustness"
 sys.path.insert(0, str(robustness_dir))
 
-from test_utils import ModelConfig, ResponseParser, S3SessionManager, TestValidation
+from test_utils import ModelConfig, ResponseParser, S3SessionManager, TestValidation  # noqa: E402
 
 
 class TestResponseParser:
@@ -124,7 +124,7 @@ class TestS3SessionManager:
         manager = S3SessionManager()
         mock_s3.prefix = "original_prefix"
 
-        with manager.create_isolated_session("test", 0, 0) as session_id:
+        with manager.create_isolated_session("test", 0, 0) as _session_id:
             # Prefix should be changed during context
             assert mock_s3.prefix.startswith("sessions/robustness_")
 
@@ -294,10 +294,9 @@ class TestConfigValidator:
 
     def test_validate_valid_config(self, valid_config_dict, tmp_path):
         """Test validation with valid configuration."""
-        from config_schema import ConfigValidator
-
         # Write to temporary file
         import yaml
+        from config_schema import ConfigValidator
 
         config_path = tmp_path / "test_config.yaml"
         config_path.write_text(yaml.dump(valid_config_dict))

@@ -2,8 +2,6 @@
 
 import time
 
-import pytest
-
 from cs_copilot.tracking.streaming_buffer import StreamingBuffer
 
 

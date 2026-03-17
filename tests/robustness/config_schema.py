@@ -241,7 +241,7 @@ class ConfigValidator:
             with open(config_path, "r") as f:
                 data = yaml.safe_load(f)
         except yaml.YAMLError as e:
-            raise ValueError(f"Invalid YAML in configuration file: {e}")
+            raise ValueError(f"Invalid YAML in configuration file: {e}") from e
 
         if not isinstance(data, dict):
             raise ValueError("Configuration file must contain a YAML dictionary")

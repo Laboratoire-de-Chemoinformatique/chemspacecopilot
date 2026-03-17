@@ -12,9 +12,8 @@ import pandas as pd
 from agno.agent import Agent
 
 from cs_copilot.storage import S3
-from cs_copilot.tools.io.utils import validate_positive_int
-
 from cs_copilot.tools.chemistry.standardize import standardize_smiles_column
+from cs_copilot.tools.io.utils import validate_positive_int
 
 from .base import BaseDatabaseToolkit, DatabaseError, NotFound, RateLimited, ValidationError
 from .types import DBConfig, PaginationMode, QueryParams, ResultPage
@@ -322,8 +321,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 assay_types = []
             else:
                 raise ValueError(
-                    f"assay_types must be a list/sequence, not a dict. "
-                    f"Use a list like ['B', 'F'] or [] for all types."
+                    "assay_types must be a list/sequence, not a dict. "
+                    "Use a list like ['B', 'F'] or [] for all types."
                 )
 
         default_assay_types = ["B", "F"] if assay_types is None else assay_types

@@ -78,7 +78,7 @@ class StreamingBuffer:
         """
         params = {}
         if self.tool_calls:
-            params["tools_used"] = ",".join(set(tc["tool"] for tc in self.tool_calls))
+            params["tools_used"] = ",".join({tc["tool"] for tc in self.tool_calls})
         return params
 
     def clear(self):

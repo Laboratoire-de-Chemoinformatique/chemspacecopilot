@@ -15,9 +15,7 @@ Functions are organized into categories:
 
 import base64
 import gzip
-import logging
 import math
-import warnings
 from pathlib import Path
 from typing import Any, Iterable, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -29,8 +27,6 @@ import numpy as np
 import optuna
 import pandas as pd
 import torch
-
-
 from agno.agent import Agent
 from agno.tools.pandas import PandasTools
 from chemographykit.gtm import GTM
@@ -45,7 +41,6 @@ from chemographykit.utils.density import density_to_table, get_density_matrix
 from chemographykit.utils.molecules import calculate_latent_coords
 from chemographykit.utils.regression import get_reg_density_matrix, reg_density_to_table
 from optuna.samplers import TPESampler
-from rdkit import Chem
 from rdkit.Chem.Scaffolds import MurckoScaffold
 from scipy.ndimage import convolve
 from sklearn.neighbors import NearestNeighbors
@@ -54,12 +49,11 @@ from cs_copilot.storage import S3
 from cs_copilot.utils.logging import setup_logging
 
 from ..chemistry.base_chemistry import _smiles_to_mol_or_none
-from ..chemistry.standardize import standardize_smiles, standardize_smiles_column
 from ..chemistry.descriptors import (
-    DEFAULT_DESCRIPTOR_COLUMN,
     DEFAULT_DESCRIPTOR_TYPE,
     MolecularDescriptorEncoder,
 )
+from ..chemistry.standardize import standardize_smiles, standardize_smiles_column
 from ..constants import (
     CSV_EXTENSION,
     DEFAULT_CHART_HEIGHT,
@@ -82,7 +76,7 @@ from ..constants import (
     SEQUENCE_COLUMN,
     SMILES_COLUMN,
 )
-from ..io.formatting import df_as_str, has_integer_sqrt, value_counts_df, smiles_to_png_bytes
+from ..io.formatting import df_as_str, has_integer_sqrt, smiles_to_png_bytes, value_counts_df
 from ..io.utils import validate_positive_int
 
 # Set up logging with warning suppression
@@ -194,8 +188,6 @@ def calculate_nn_preservation(
     nbrs_low = NearestNeighbors(n_neighbors=max_k + 1).fit(X_low_dim)
     _, indices_low = nbrs_low.kneighbors(X_low_dim)
     indices_low = indices_low[:, 1:]  # Exclude self
-
-    n_samples = X_high_dim.shape[0]
 
     for k in k_list:
         indices_high_k = indices_high[:, :k]  # shape (n_samples, k)
@@ -415,8 +407,6 @@ def calculate_nn_preservation_per_sample(
     Returns:
         np.ndarray: Per-sample preservation scores as a percentage, shape (n_samples,).
     """
-    n_samples = X_high_dim.shape[0]
-
     # Ensure k_neighbors doesn't exceed available neighbors
     max_k_available = high_dim_indexes.shape[1]
     k = min(k_neighbors, max_k_available)
@@ -483,7 +473,6 @@ def _read_csv_flexible(file_handle) -> pd.DataFrame:
     Returns:
         DataFrame with data columns preserved (not consumed as index)
     """
-    import csv
     from io import StringIO
 
     # Read raw content to analyze
@@ -517,7 +506,6 @@ def _read_csv_flexible(file_handle) -> pd.DataFrame:
 
         # Check if first column looks like an index (integers or unnamed)
         first_col = df_test.columns[0]
-        first_col_values = df_test.iloc[:, 0]
 
         # Heuristics to detect if first column is an index:
         # 1. Column name is 'Unnamed: 0' or empty
@@ -701,13 +689,13 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
         with S3.open(gtm_saved_file, "rb") as f:
             with gzip.open(f, "rb") as gz:
                 gtm = dill.load(gz)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"GTM model file not found: {gtm_saved_file}")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"GTM model file not found: {gtm_saved_file}") from e
     except ModuleNotFoundError as e:
         logger.error(f"Error loading GTM model (missing module): {e}")
         raise
     except Exception as e:
-        raise ValueError(f"Failed to load GTM model: {e}")
+        raise ValueError(f"Failed to load GTM model: {e}") from e
 
     # Extract GTM model properties
     try:
@@ -716,7 +704,7 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
         raise ValueError(
             f"GTM model appears to be corrupted or incompatible. "
             f"Cannot extract model properties: {e}"
-        )
+        ) from e
 
     logger.info(f"GTM model loaded: {num_nodes} grid nodes")
 
@@ -727,10 +715,10 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
     try:
         with S3.open(data_file, "r") as f:
             df = _read_csv_flexible(f)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Dataset file not found: {data_file}")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"Dataset file not found: {data_file}") from e
     except Exception as e:
-        raise ValueError(f"Failed to read dataset file: {e}")
+        raise ValueError(f"Failed to read dataset file: {e}") from e
 
     if df.empty:
         raise ValueError("Dataset file is empty")
@@ -746,7 +734,7 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
         raise ValueError(
             f"Dataset must contain a SMILES column. {e}. "
             f"Expected one of: {_SMILES_COLUMN_VARIANTS}"
-        )
+        ) from e
 
     logger.info(f"Loaded dataset with {original_count} molecules")
 
@@ -810,7 +798,7 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
                 f"Descriptor dimensionality mismatch: computed descriptors have {X.shape[1]} dimensions, "
                 f"but the GTM model was trained with a different descriptor size. "
                 f"Ensure the same descriptor type is used. Error: {e}"
-            )
+            ) from e
         raise
 
     logger.info(
@@ -957,7 +945,7 @@ def _convert_to_nm(value: float, units: str) -> float | None:
 
 def _select_activity_threshold(
     df: pd.DataFrame,
-    thresholds_nm: list[float] = [1000.0, 500.0, 100.0, 50.0],
+    thresholds_nm: list[float] | None = None,
 ) -> float | None:
     """
     Select the best activity threshold for a target based on classification rules.
@@ -992,7 +980,8 @@ def _select_activity_threshold(
 
     valid_thresholds = []
 
-    for threshold_nm in thresholds_nm:
+    thresholds = thresholds_nm or [1000.0, 500.0, 100.0, 50.0]
+    for threshold_nm in thresholds:
         # Classify compounds based on this threshold
         labels = []
         for _, row in valid_df.iterrows():
@@ -1009,12 +998,12 @@ def _select_activity_threshold(
                 labels.append(None)  # Rejected (between threshold and 10×threshold)
 
         # Count valid classifications
-        valid_labels = [l for l in labels if l is not None]
+        valid_labels = [label for label in labels if label is not None]
         if len(valid_labels) <= 100:
             continue
 
-        n_active = sum(1 for l in valid_labels if l == "active")
-        n_inactive = sum(1 for l in valid_labels if l == "inactive")
+        n_active = sum(1 for label in valid_labels if label == "active")
+        n_inactive = sum(1 for label in valid_labels if label == "inactive")
 
         # Check conditions
         if n_active < 20:
@@ -1352,15 +1341,12 @@ def preprocess_gtm_activity_data(
 
     # Try to get regression activity column first
     regression_column = None
-    regression_type = None
     if "pchembl_value" in df.columns and df["pchembl_value"].notna().any():
         regression_column = df["pchembl_value"]
-        regression_type = "regression"
         logger.info("Found 'pchembl_value' column for regression landscape")
 
     # Try to get classification activity column
     classification_column = None
-    classification_type = None
 
     # First, try to classify from raw activity data (preferred method)
     if all(col in df.columns for col in ["standard_type", "standard_value", "standard_units"]):
@@ -1373,7 +1359,6 @@ def preprocess_gtm_activity_data(
 
         classification_column = classify_activity_data(df, target_column=target_col)
         if classification_column is not None and classification_column.notna().any():
-            classification_type = "classification"
             n_classified_raw = classification_column.notna().sum()
             logger.info(
                 f"Classified activity data from raw values: "
@@ -1414,7 +1399,6 @@ def preprocess_gtm_activity_data(
         # Parse all activity_comment values
         classification_column = df["activity_comment"].apply(_parse_activity_comment)
         if classification_column.notna().any():
-            classification_type = "classification"
             logger.info(
                 f"Using 'activity_comment' column for classification landscape (fallback): "
                 f"{classification_column.notna().sum()} compounds classified"
@@ -1461,7 +1445,6 @@ def preprocess_gtm_activity_data(
     if create_classification:
         logger.debug("Computing classification activity landscape")
         valid_mask = classification_column.notna()
-        df_class = df[valid_mask].copy()
         resps_class = resps[valid_mask]
         activity_col_class = classification_column[valid_mask]
 
@@ -1633,27 +1616,6 @@ def load_gtm(dataset: str, gtm_model: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         node_threshold=0.1,
     )
 
-    # Create charts without configuration (config must be applied after concatenation)
-    chart_density = altair_discrete_density_landscape(source, title="GTM Density Landscape")
-    chart_NB = altair_discrete_regression_landscape(
-        source_NB, title="Neighborhood preservation landscape"
-    )
-
-    # Concatenate charts first, then apply configuration
-    combined_chart = (
-        (
-            chart_density.properties(width=600, height=600)
-            | chart_NB.properties(width=600, height=600)
-        )
-        .resolve_scale(x="independent", y="independent", color="independent")
-        .configure_legend(
-            labelFontSize=20,
-            gradientVerticalMaxLength=600,
-            gradientThickness=30,
-            tickCount=6,
-        )
-    )
-
     NB_score = sum(NB_node) / len(NB_node)
     logger.info(f"Neighborhood preservation score: {NB_score:5.3f}")
 
@@ -1797,10 +1759,10 @@ def calculate_map_ruggedness(df, gtm):
             # Compute descriptors if none found
             try:
                 smiles_col = find_smiles_column(df)
-            except ValueError:
+            except ValueError as e:
                 raise ValueError(
                     "Cannot compute descriptors: DataFrame has no SMILES column and no descriptor columns"
-                )
+                ) from e
             df, X, descriptor_column = _compute_descriptors(df, smiles_column=smiles_col)
             X = X.astype(np.float64)
     else:
@@ -1860,7 +1822,7 @@ def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
     if torch.cuda.is_available():
         try:
             # Test CUDA functionality
-            test_tensor = torch.tensor([1.0]).cuda()
+            torch.tensor([1.0]).cuda()
             device = "cuda"
             logger.info("Using CUDA device for GTM optimization")
         except Exception as e:
@@ -2032,7 +1994,7 @@ def optimize_gtm_model(
         )
 
         # Optimize GTM model
-        logger.info(f"Optimizing GTM with entropy")
+        logger.info("Optimizing GTM with entropy")
         df, gtm, best_score = optimize_gtm(df, smiles_column)
 
         # Store results in agent session
@@ -2536,7 +2498,6 @@ def load_and_prepare_gtm_data_with_model(
         data.gtm = gtm_model  # Use the provided model
 
         # Load dataset and prepare descriptors
-        gtm_saved_file = _ensure_suffix(gtm_model_path, ".pkl.gz")
         data_file = _ensure_suffix(dataset, ".csv")
 
         with S3.open(data_file, "r") as f:
@@ -2572,7 +2533,6 @@ def load_and_prepare_gtm_data_with_model(
 
         # Always compute density and neighborhood preservation
         # Validate that the dataset is compatible with the GTM model
-        n_molecules = resps.shape[0]
         n_nodes = resps.shape[1]
         expected_nodes = gtm_model.num_nodes
 
@@ -3019,7 +2979,7 @@ def select_nodes_by_density(
     if density_col not in density_table.columns:
         # Fallback to 'density' if 'filtered_density' is not available
         if use_filtered and "density" in density_table.columns:
-            logger.warning(f"Column 'filtered_density' not found, using 'density' instead")
+            logger.warning("Column 'filtered_density' not found, using 'density' instead")
             density_col = "density"
         else:
             raise ValueError(f"density_table must contain '{density_col}' column")
@@ -3512,11 +3472,11 @@ def load_dbaasp_data(
     try:
         with S3.open(path, "r") as f:
             df = pd.read_csv(f)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         raise FileNotFoundError(
             f"DBAASP data file not found at {path}. "
             f"Download it from the wae_peptides HuggingFace repository or provide a custom path."
-        )
+        ) from e
 
     # Find sequence column (case-insensitive)
     seq_col = None
@@ -3542,7 +3502,7 @@ def load_dbaasp_data(
             continue
         # Check if column is binary (0/1 values only)
         unique_vals = df[col].dropna().unique()
-        if set(unique_vals).issubset({0, 1, 0.0, 1.0}):
+        if set(unique_vals).issubset({0, 1}):
             labels = df[col].values.astype(int)
             organism_activity[col] = labels
             n_active = int(labels.sum())
@@ -3587,8 +3547,6 @@ def create_peptide_activity_landscape(
             - chart: Altair chart object
             - landscape_table: DataFrame with landscape data (x, y, nodes, prob, etc.)
     """
-    class_names = ["inactive", "active"]
-
     # Use ChemographyKit to compute classification landscape
     class_density = get_class_density_matrix(responsibilities, activity_labels)
     landscape_table = class_density_to_table(class_density, node_threshold=node_threshold)

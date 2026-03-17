@@ -4,10 +4,8 @@
 Tests for the autoencoder toolkit, including Hugging Face download functionality.
 """
 
-import os
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -42,7 +40,7 @@ class TestAutoencoderDownload:
                 "cs_copilot.tools.chemistry.autoencoder_toolkit.AutoencoderToolkit._load_model"
             ):
                 # Try to initialize AutoencoderToolkit with missing files
-                toolkit = AutoencoderToolkit(model_path=str(model_path), device="cpu")
+                AutoencoderToolkit(model_path=str(model_path), device="cpu")
 
                 # Verify snapshot_download was called with correct parameters
                 assert mock_download.called
@@ -163,7 +161,7 @@ class TestAutoencoderDownload:
             mock_download.side_effect = create_test_files
 
             # This should not raise an error
-            toolkit = AutoencoderToolkit(model_path=str(model_path), device="cpu")
+            AutoencoderToolkit(model_path=str(model_path), device="cpu")
 
             # Verify the directory was created
             assert model_path.exists()

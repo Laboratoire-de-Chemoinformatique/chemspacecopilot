@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import numpy as np
 
@@ -177,7 +177,7 @@ class ToolSequenceComparator:
         most_common_transitions = sorted(transitions.items(), key=lambda x: x[1], reverse=True)[:10]
 
         # 4. Unique sequence count
-        unique_sequences = len(set(tuple(seq) for seq in non_empty))
+        unique_sequences = len({tuple(seq) for seq in non_empty})
 
         return {
             "total_sequences": len(sequences),

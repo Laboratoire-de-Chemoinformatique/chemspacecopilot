@@ -14,7 +14,7 @@ import re
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, List, Optional, Set
 
 from cs_copilot.storage import S3
 from cs_copilot.utils.logging import get_logger
@@ -59,8 +59,8 @@ class ModelLoader:
         """Load configuration from YAML file."""
         try:
             import yaml
-        except ImportError:
-            raise ImportError("PyYAML is required to load robustness_config.yaml")
+        except ImportError as e:
+            raise ImportError("PyYAML is required to load robustness_config.yaml") from e
 
         if not config_path.exists():
             raise FileNotFoundError(f"Config file not found: {config_path}")

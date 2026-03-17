@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -27,7 +27,6 @@ class MLflowRobustnessReporter:
     def _initialize_mlflow(self):
         """Initialize MLflow client."""
         try:
-            import mlflow
             from mlflow.tracking import MlflowClient
 
             self._client = MlflowClient()
@@ -57,7 +56,7 @@ class MLflowRobustnessReporter:
             return []
 
         # Search for suite-level runs (non-nested runs)
-        filter_string = f"tags.suite_id != ''"
+        filter_string = "tags.suite_id != ''"
         runs = self._client.search_runs(
             experiment_ids=[self._experiment.experiment_id],
             filter_string=filter_string,

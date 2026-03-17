@@ -10,15 +10,14 @@ robustness and consistency of outputs.
 import logging
 from pathlib import Path
 from typing import Dict, List
-import pandas as pd
+
 import joblib
+import pandas as pd
 import pytest
 
-from cs_copilot.agents import get_cs_copilot_agent_team
-from cs_copilot.storage import S3
-from .prompt_variations import PromptVariationGenerator
 from .comparators import OutputComparator
 from .metrics import RobustnessMetrics
+from .prompt_variations import PromptVariationGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +41,7 @@ class TestPipelineRobustness:
         """
         import datetime
         import uuid
+
         from cs_copilot.storage import is_s3_enabled
         from cs_copilot.storage.client import S3 as S3Client
 
@@ -167,6 +167,7 @@ class TestPipelineRobustness:
         """
         import datetime
         import uuid
+
         from cs_copilot.storage import is_s3_enabled
         from cs_copilot.storage.client import S3 as S3Client
 

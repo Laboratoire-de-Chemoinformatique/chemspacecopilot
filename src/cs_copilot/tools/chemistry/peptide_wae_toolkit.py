@@ -17,7 +17,6 @@ import numpy as np
 import torch
 from agno.tools.toolkit import Toolkit
 
-from cs_copilot.storage import S3
 from cs_copilot.tools.constants import (
     DEFAULT_PEPTIDE_WAE_MODEL_PATH,
     HUGGINGFACE_PEPTIDE_WAE_REPO,
@@ -107,10 +106,7 @@ class PeptideWAEToolkit(Toolkit):
         """
         import os
         import shutil
-        import time
         from pathlib import Path
-
-        import requests
 
         base_path = Path(self.model_path)
         files = ["model.pt", "vocab.dict"]
@@ -145,6 +141,7 @@ class PeptideWAEToolkit(Toolkit):
                 cache_dir=cache_dir,
                 local_dir=str(base_path),
                 resume_download=True,
+                token=hf_token,
             )
 
             # Verify files
@@ -163,21 +160,21 @@ class PeptideWAEToolkit(Toolkit):
             except Exception:
                 pass
 
-        except ImportError:
+        except ImportError as e:
             raise PeptideWAEError(
                 "huggingface_hub not installed. Install it with: pip install huggingface_hub"
-            )
+            ) from e
         except Exception as e:
             raise PeptideWAEError(
                 f"Failed to download peptide WAE model from HuggingFace "
                 f"({HUGGINGFACE_PEPTIDE_WAE_REPO}): {repr(e)}. "
                 f"Original model path: {self.model_path}"
-            )
+            ) from e
 
     def _load_model(self):
         """Load the trained peptide WAE model and vocabulary."""
         try:
-            from deepchemography.peptides import PeptideWAE, PeptideVocab, get_default_config
+            from deepchemography.peptides import PeptideVocab, PeptideWAE, get_default_config
 
             base_path = Path(self.model_path)
             model_file = str(base_path / "model.pt")
@@ -215,9 +212,9 @@ class PeptideWAEToolkit(Toolkit):
             logger.info(f"  Device: {self.device}")
 
         except ImportError as e:
-            raise PeptideWAEError(f"Failed to import deepchemography.peptides: {e}")
+            raise PeptideWAEError(f"Failed to import deepchemography.peptides: {e}") from e
         except Exception as e:
-            raise PeptideWAEError(f"Failed to load peptide WAE model: {e}")
+            raise PeptideWAEError(f"Failed to load peptide WAE model: {e}") from e
 
     def validate_model_loaded(self) -> bool:
         """

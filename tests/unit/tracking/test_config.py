@@ -1,10 +1,5 @@
 """Unit tests for MLflow configuration."""
 
-import os
-from pathlib import Path
-
-import pytest
-
 from cs_copilot.tracking.config import MLflowConfig
 
 

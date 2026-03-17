@@ -1,7 +1,5 @@
 """Unit tests for MLflow tracking utilities."""
 
-import pytest
-
 from cs_copilot.tracking.utils import (
     Timer,
     build_prompt_signature,

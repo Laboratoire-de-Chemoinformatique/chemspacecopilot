@@ -1,16 +1,12 @@
 """Integration tests for agent MLflow tracking."""
 
-import os
-import tempfile
-
 import pytest
 
 # Skip if MLflow not installed
 pytest.importorskip("mlflow")
 
 
-from cs_copilot.tracking import get_tracker, reset_tracker
-from cs_copilot.tracking.config import MLflowConfig
+from cs_copilot.tracking import get_tracker, reset_tracker  # noqa: E402
 
 
 @pytest.fixture
@@ -168,7 +164,6 @@ def test_mlflow_run_hierarchy(tracking_env):
     # Create a session -> agent -> tool hierarchy
     with tracker.track_session("test_session") as session_run:
         assert session_run is not None
-        session_run_id = session_run.info.run_id
 
         with tracker.track_agent_run("test_agent", "test prompt") as agent_run:
             assert agent_run is not None

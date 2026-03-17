@@ -25,25 +25,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-import yaml
-
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
 
-load_dotenv()
-
-from cs_copilot.utils.logging import get_logger
+from cs_copilot.utils.logging import get_logger  # noqa: E402
 
 # Import shared test utilities
 sys.path.insert(0, str(Path(__file__).parent))
-from test_utils import ModelLoader, ResponseParser, S3SessionManager
-from tool_tracker import ToolSequenceComparator
-from config_schema import ConfigValidator
+from config_schema import ConfigValidator  # noqa: E402
+from test_utils import ResponseParser, S3SessionManager  # noqa: E402
+from tool_tracker import ToolSequenceComparator  # noqa: E402
 
 logger = get_logger(__name__)
+load_dotenv()
 
 
 @dataclass
@@ -256,7 +253,7 @@ class RobustnessRunner:
 
     def _setup_s3(self):
         """Setup S3 configuration and check availability."""
-        from cs_copilot.storage import is_s3_enabled, get_s3_config
+        from cs_copilot.storage import get_s3_config, is_s3_enabled
 
         if not is_s3_enabled():
             if self.config.s3_session_isolation:

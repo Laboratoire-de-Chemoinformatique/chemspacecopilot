@@ -32,7 +32,6 @@ repos:
     hooks:
       - id: black
         name: Format code with Black
-        language_version: python3.11
         files: ^(src/|tests/)
 
   # Import sorting with isort (only src and tests)
@@ -45,16 +44,13 @@ repos:
   #      files: ^(src/|tests/)
 
   # Python linting with Ruff (only src and tests, auto-fix safe issues)
-  #- repo: https://github.com/astral-sh/ruff-pre-commit
-  #  rev: v0.8.4
-  #  hooks:
-  #    - id: ruff
-  #      name: Lint with Ruff
-  #      args: [--fix]
-  #      files: ^(src/|tests/)
-      # - id: ruff-format
-      #   name: Format with Ruff
-      #   files: ^(src/|tests/)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        name: Lint with Ruff
+        args: [--fix]
+        files: ^(src/|tests/)
 
   # Run tests
   - repo: local

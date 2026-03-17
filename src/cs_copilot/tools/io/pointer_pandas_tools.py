@@ -484,22 +484,22 @@ class PointerPandasTools(PandasTools):
                 if "n" in params and isinstance(params["n"], str):
                     try:
                         params["n"] = int(params["n"])
-                    except ValueError:
+                    except ValueError as e:
                         raise ValueError(
                             f"Parameter 'n' must be an integer, got string '{params['n']}' "
                             f"that cannot be converted to int"
-                        )
+                        ) from e
                 if operation == "sample":
                     _normalize_param_aliases(params, "frac", ("fraction",))
                     # Coerce string floats to float
                     if "frac" in params and isinstance(params["frac"], str):
                         try:
                             params["frac"] = float(params["frac"])
-                        except ValueError:
+                        except ValueError as e:
                             raise ValueError(
                                 f"Parameter 'frac' must be a float, got string '{params['frac']}' "
                                 f"that cannot be converted to float"
-                            )
+                            ) from e
 
             # Allow describe(column=...) to target a subset without passing column to pandas
             # Note: 'include' is NOT aliased - it's a valid pandas parameter for data type selection

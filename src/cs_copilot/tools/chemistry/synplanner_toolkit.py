@@ -30,7 +30,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from agno.agent import Agent
-from rdkit import Chem
 
 from cs_copilot.storage import S3
 from cs_copilot.tools.io.formatting import smiles_to_png_bytes
@@ -158,18 +157,19 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         ):
             return
 
-        synplanner_pkg = self._import_synplanner()
+        self._import_synplanner()
 
         # Import required modules
         try:
+            from pathlib import Path
+
+            from synplan.mcts.expansion import PolicyNetworkFunction
+            from synplan.utils.config import PolicyNetworkConfig
             from synplan.utils.loading import (
+                download_all_data,
                 load_building_blocks,
                 load_reaction_rules,
-                download_all_data,
             )
-            from synplan.mcts.expansion import PolicyNetworkFunction
-            from synplan.utils.config import PolicyNetworkConfig, TreeConfig
-            from pathlib import Path
         except ImportError as exc:
             raise SynPlannerError(
                 f"Failed to import SynPlanner components: {exc}. "
@@ -500,10 +500,10 @@ class SynPlannerToolkit(BaseChemistryToolkit):
     def _create_and_search_tree(self, smiles: str) -> Any:
         """Create a SynPlanner Tree and run the search."""
         try:
-            from synplan.mcts.tree import Tree
-            from synplan.utils.config import TreeConfig, RolloutEvaluationConfig
-            from synplan.utils.loading import load_evaluation_function
             from synplan.chem.utils import mol_from_smiles as synplan_mol_from_smiles
+            from synplan.mcts.tree import Tree
+            from synplan.utils.config import RolloutEvaluationConfig, TreeConfig
+            from synplan.utils.loading import load_evaluation_function
         except ImportError as exc:
             raise SynPlannerError(f"Failed to import SynPlanner Tree components: {exc}") from exc
 
@@ -548,10 +548,9 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             )
             # Run the search by iterating over the tree
             # The Tree class implements __iter__ and __next__ to perform MCTS search
-            tree_solved = False
-            for solved, node_id in tree:
+            for solved, _node_id in tree:
                 if solved:
-                    tree_solved = True
+                    break
         except StopIteration:
             # StopIteration is raised when search completes (max iterations, time, or tree size reached)
             pass
@@ -631,7 +630,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                 route_nodes = tree.route_to_node(node_id)
 
                 # Extract reaction information from consecutive node pairs
-                for before_node, after_node in zip(route_nodes, route_nodes[1:]):
+                for before_node, after_node in zip(route_nodes, route_nodes[1:], strict=False):
                     try:
                         # Extract reactants (from before node)
                         reactants = []
@@ -815,7 +814,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             logger.warning("SynPlanner visualization module not available")
             return visualizations
 
-        for idx, route_data in enumerate(raw_routes):
+        for _idx, route_data in enumerate(raw_routes):
             node_id = route_data.get("node_id")
             if node_id is None:
                 continue

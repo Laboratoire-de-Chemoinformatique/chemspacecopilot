@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 # coding: utf-8
-from __future__ import annotations
-
 """
 GTM-specific dimensionality reduction toolkit for chemical data analysis.
 
@@ -9,12 +7,13 @@ This module provides a high-level toolkit class that delegates to
 gtm_operations.py for the actual implementations.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Iterable, List, Optional, Sequence, Tuple, Literal, Union
+from typing import Iterable, List, Literal, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
-
 from agno.agent import Agent
 
 from . import gtm_operations

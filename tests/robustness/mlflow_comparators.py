@@ -1,7 +1,7 @@
 """Extended comparators with MLflow logging capabilities."""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from comparators import OutputComparator
 
