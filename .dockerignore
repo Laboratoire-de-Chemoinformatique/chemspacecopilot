@@ -72,6 +72,7 @@ Thumbs.db
 docs/
 *.md
 !README.md
+!chainlit.md
 
 # CI/CD
 .github/
