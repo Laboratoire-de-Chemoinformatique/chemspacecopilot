@@ -351,7 +351,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 if organism:
                     assay_filter_kwargs["target_organism__icontains"] = organism
 
-                assays = list(client.assay.filter(**assay_filter_kwargs)[:1000])
+                assays = list(client.assay.filter(**assay_filter_kwargs))
 
                 if mechanism:
                     mechanism_lower = mechanism.lower()
@@ -383,8 +383,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 activity_query = client.activity.filter(**activity_filter_kwargs).only(
                     self.ACTIVITY_FIELDS
                 )
-                activity_limit = max_records or self.config.page_size
-                activities = list(activity_query[:activity_limit])
+                
+                activities = list(activity_query)
 
                 if not activities:
                     logger.warning(f"No activity data found for keyword: {keyword}")
