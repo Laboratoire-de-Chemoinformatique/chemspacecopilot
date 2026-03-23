@@ -297,9 +297,7 @@ class TestChemblToolkit:
         mock_client = Mock()
         # Mock assay search
         mock_assays = [{"assay_chembl_id": "CHEMBL1"}, {"assay_chembl_id": "CHEMBL2"}]
-        mock_assay_query = MagicMock()
-        mock_assay_query.__getitem__.return_value = mock_assays
-        mock_client.assay.filter.return_value = mock_assay_query
+        mock_client.assay.filter.return_value = mock_assays
 
         # Mock activity search
         mock_activities = [
@@ -347,9 +345,7 @@ class TestChemblToolkit:
         # Mock ChEMBL client
         mock_client = Mock()
         # Mock empty assay search
-        mock_assay_query = MagicMock()
-        mock_assay_query.__getitem__.return_value = []
-        mock_client.assay.filter.return_value = mock_assay_query
+        mock_client.assay.filter.return_value = []
         mock_ensure_client.return_value = mock_client
 
         toolkit = ChemblToolkit()
@@ -365,9 +361,7 @@ class TestChemblToolkit:
 
         mock_client = Mock()
         mock_assays = [{"assay_chembl_id": "CHEMBL1"}, {"assay_chembl_id": "CHEMBL2"}]
-        mock_assay_query = MagicMock()
-        mock_assay_query.__getitem__.return_value = mock_assays
-        mock_client.assay.filter.return_value = mock_assay_query
+        mock_client.assay.filter.return_value = mock_assays
 
         mock_activities = [
             {
@@ -441,9 +435,7 @@ class TestChemblToolkit:
         # Mock ChEMBL client
         mock_client = Mock()
         mock_assays = [{"assay_chembl_id": "CHEMBL1"}]
-        mock_assay_query = MagicMock()
-        mock_assay_query.__getitem__.return_value = mock_assays
-        mock_client.assay.filter.return_value = mock_assay_query
+        mock_client.assay.filter.return_value = mock_assays
 
         mock_activities = [
             {
@@ -814,9 +806,7 @@ class TestChemblIntegration:
         # Mock the full ChEMBL API workflow
         mock_client = Mock()
         mock_assays = [{"assay_chembl_id": "CHEMBL1"}]
-        mock_assay_query = MagicMock()
-        mock_assay_query.__getitem__.return_value = mock_assays
-        mock_client.assay.filter.return_value = mock_assay_query
+        mock_client.assay.filter.return_value = mock_assays
 
         mock_activities = [
             {

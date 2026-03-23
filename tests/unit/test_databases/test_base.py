@@ -4,7 +4,6 @@
 Tests for the base database toolkit.
 """
 
-
 from cs_copilot.tools.databases.base import (
     BaseDatabaseToolkit,
     DatabaseError,

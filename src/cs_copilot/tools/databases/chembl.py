@@ -383,7 +383,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 activity_query = client.activity.filter(**activity_filter_kwargs).only(
                     self.ACTIVITY_FIELDS
                 )
-                
+
                 activities = list(activity_query)
 
                 if not activities:
