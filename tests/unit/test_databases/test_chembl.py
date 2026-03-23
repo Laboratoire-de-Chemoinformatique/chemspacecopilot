@@ -478,6 +478,96 @@ class TestChemblToolkit:
         with pytest.raises(ValueError, match="assay_types must be a list/sequence, not a dict"):
             toolkit.fetch_compounds("kinase", assay_types={"B": True, "F": False})
 
+    @patch.object(ChemblToolkit, "_ensure_client")
+    @patch("cs_copilot.tools.databases.chembl.S3")
+    def test_fetch_compounds_multi_keyword_tracks_keywords(self, mock_s3, mock_ensure_client):
+        """Test that query_keywords column tracks which keywords retrieved each row."""
+        mock_client = Mock()
+
+        # Two keywords: "cdk2" and "kinase"
+        # activity_id=1 appears for both keywords (overlap)
+        # activity_id=2 only from "cdk2", activity_id=3 only from "kinase"
+        assays_cdk2 = [{"assay_chembl_id": "CHEMBL_A1"}]
+        assays_kinase = [{"assay_chembl_id": "CHEMBL_A2"}]
+
+        activities_cdk2 = [
+            {
+                "activity_id": 1,
+                "assay_chembl_id": "CHEMBL_A1",
+                "molecule_chembl_id": "MOL1",
+                "standard_value": 10.0,
+                "canonical_smiles": "CCO",
+            },
+            {
+                "activity_id": 2,
+                "assay_chembl_id": "CHEMBL_A1",
+                "molecule_chembl_id": "MOL2",
+                "standard_value": 20.0,
+                "canonical_smiles": "CCC",
+            },
+        ]
+        activities_kinase = [
+            {
+                "activity_id": 1,
+                "assay_chembl_id": "CHEMBL_A2",
+                "molecule_chembl_id": "MOL1",
+                "standard_value": 10.0,
+                "canonical_smiles": "CCO",
+            },
+            {
+                "activity_id": 3,
+                "assay_chembl_id": "CHEMBL_A2",
+                "molecule_chembl_id": "MOL3",
+                "standard_value": 30.0,
+                "canonical_smiles": "CCCO",
+            },
+        ]
+
+        # Return different assays per keyword call (use lists directly for list() compatibility)
+        mock_client.assay.filter.side_effect = [assays_cdk2, assays_kinase]
+
+        # Return different activities per keyword call
+        act_filter_cdk2 = MagicMock()
+        act_filter_cdk2.only.return_value = activities_cdk2
+        act_filter_kinase = MagicMock()
+        act_filter_kinase.only.return_value = activities_kinase
+
+        mock_client.activity.filter.side_effect = [act_filter_cdk2, act_filter_kinase]
+        mock_ensure_client.return_value = mock_client
+
+        # Mock S3 operations
+        mock_file = MagicMock()
+        mock_s3.open.return_value.__enter__.return_value = mock_file
+        mock_s3.open.return_value.__exit__.return_value = False
+
+        toolkit = ChemblToolkit()
+        # Patch _save_chembl_data to capture the DataFrame
+        saved_dfs = []
+        original_save = toolkit._save_chembl_data
+
+        def capture_save(df, query):
+            saved_dfs.append(df.copy())
+            return original_save(df, query)
+
+        toolkit._save_chembl_data = capture_save
+        result = toolkit.fetch_compounds("cdk2, kinase")
+
+        assert len(saved_dfs) == 1
+        df = saved_dfs[0]
+        assert "query_keywords" in df.columns
+
+        # activity_id=1 appeared in both keywords
+        row_overlap = df[df["activity_id"] == 1].iloc[0]
+        assert row_overlap["query_keywords"] == "cdk2|kinase"
+
+        # activity_id=2 only from "cdk2"
+        row_cdk2 = df[df["activity_id"] == 2].iloc[0]
+        assert row_cdk2["query_keywords"] == "cdk2"
+
+        # activity_id=3 only from "kinase"
+        row_kinase = df[df["activity_id"] == 3].iloc[0]
+        assert row_kinase["query_keywords"] == "kinase"
+
     def test_convert_to_chembl_query_valid(self):
         """Test ChEMBL query conversion with valid input."""
         toolkit = ChemblToolkit()
