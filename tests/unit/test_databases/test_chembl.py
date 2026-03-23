@@ -542,7 +542,7 @@ class TestChemblToolkit:
             return original_save(df, query)
 
         toolkit._save_chembl_data = capture_save
-        result = toolkit.fetch_compounds("cdk2, kinase")
+        toolkit.fetch_compounds("cdk2, kinase")
 
         assert len(saved_dfs) == 1
         df = saved_dfs[0]
