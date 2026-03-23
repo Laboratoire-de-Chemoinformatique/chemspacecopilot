@@ -291,6 +291,32 @@ class TestBackendSelection:
         with pytest.raises(ValueError, match="Unknown ChEMBL backend"):
             ChemblToolkit(backend="postgres")
 
+    @patch.object(SqlChemblFetcher, "from_env")
+    def test_mysql_backend_reports_both_capabilities(self, mock_from_env):
+        """When MySQL is configured, both supports_http_api and supports_sql must be True."""
+        mock_from_env.return_value = MagicMock(spec=SqlChemblFetcher)
+        toolkit = ChemblToolkit(backend="mysql")
+        assert toolkit.config.supports_sql is True
+        assert toolkit.config.supports_http_api is True
+
+    @patch.object(SqlChemblFetcher, "from_env")
+    def test_get_capabilities_active_backend_mysql(self, mock_from_env):
+        """get_capabilities reports active_backend='mysql' when MySQL is configured."""
+        mock_from_env.return_value = MagicMock(spec=SqlChemblFetcher)
+        toolkit = ChemblToolkit(backend="mysql")
+        caps = toolkit.get_capabilities()
+        assert caps["supports_sql"] is True
+        assert caps["supports_http_api"] is True
+        assert caps["active_backend"] == "mysql"
+
+    def test_get_capabilities_active_backend_rest(self):
+        """get_capabilities reports active_backend='rest' for REST backend."""
+        toolkit = ChemblToolkit(backend="rest")
+        caps = toolkit.get_capabilities()
+        assert caps["supports_sql"] is False
+        assert caps["supports_http_api"] is True
+        assert caps["active_backend"] == "rest"
+
     @patch.object(ChemblToolkit, "_ensure_client")
     @patch("cs_copilot.tools.databases.chembl.S3")
     def test_fetch_compounds_uses_fetcher(self, mock_s3, mock_ensure_client):

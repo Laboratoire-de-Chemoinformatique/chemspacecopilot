@@ -75,21 +75,33 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 - "mysql": Force MySQL database
             **toolkit_kwargs: Additional arguments for Agno Toolkit
         """
+        resolved = self._resolve_backend(backend)
+        is_mysql = resolved == "mysql"
+
         if config is None:
             config = DBConfig(
                 uri=self.BASE_URL,
                 timeout_s=30.0,
                 retries=3,
                 page_size=100,
-                rate_limit=10.0,  # ChEMBL rate limit
+                rate_limit=10.0,
+                supports_sql=is_mysql,
                 supports_http_api=True,
                 pagination_mode=PaginationMode.OFFSET_LIMIT,
             )
 
-        # Set default instructions if not provided
         if "instructions" not in toolkit_kwargs:
+            if is_mysql:
+                backend_label = (
+                    "Active backend: Connected to a LOCAL MySQL ChEMBL database. "
+                    "The ChEMBL REST API is also available as a fallback."
+                )
+            else:
+                backend_label = "Active backend: Using the ChEMBL REST API."
             toolkit_kwargs["instructions"] = (
-                "ChEMBL database toolkit for fetching compound bioactivity data, generating EDA reports, and analyzing chemical datasets."
+                "ChEMBL database toolkit for fetching compound bioactivity data, "
+                "generating EDA reports, and analyzing chemical datasets. "
+                f"{backend_label}"
             )
 
         super().__init__(
@@ -99,27 +111,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
         )
         self._client = None  # Will be initialized lazily
         self._client_init_error = None  # Store initialization error if any
-        self._fetcher = self._create_fetcher(backend)
-        self._update_instructions_with_backend()
+        self._fetcher = self._create_fetcher(resolved)
         self.register(self.fetch_compounds)
         self.register(self.describe_dataset)
         self.register(self.convert_to_chembl_query)
-
-    def _update_instructions_with_backend(self):
-        """Update toolkit instructions and config flags to reflect the active backend."""
-        if isinstance(self._fetcher, SqlChemblFetcher):
-            backend_info = "Connected to a LOCAL MySQL ChEMBL database."
-            self.config.supports_sql = True
-            self.config.supports_http_api = False
-        else:
-            backend_info = "Using the ChEMBL REST API."
-            self.config.supports_sql = False
-            self.config.supports_http_api = True
-        self.instructions = (
-            f"ChEMBL database toolkit for fetching compound bioactivity data, "
-            f"generating EDA reports, and analyzing chemical datasets. "
-            f"Active backend: {backend_info}"
-        )
 
     def _ensure_client(self):
         """Lazy initialization of ChEMBL client."""
@@ -138,21 +133,22 @@ class ChemblToolkit(BaseDatabaseToolkit):
             raise DatabaseError(f"ChEMBL client unavailable: {self._client_init_error}")
         return self._client
 
-    def _create_fetcher(self, backend: str) -> ChemblDataFetcher:
-        """Create the appropriate data fetcher based on backend selection."""
+    @staticmethod
+    def _resolve_backend(backend: str) -> str:
+        """Resolve 'auto' to a concrete backend name."""
         import os
 
         if backend == "auto":
-            backend = "mysql" if os.getenv("CHEMBL_MYSQL_HOST") else "rest"
+            return "mysql" if os.getenv("CHEMBL_MYSQL_HOST") else "rest"
+        if backend in ("rest", "mysql"):
+            return backend
+        raise ValueError(f"Unknown ChEMBL backend: {backend!r}. Use 'rest', 'mysql', or 'auto'.")
 
-        if backend == "rest":
-            return RestChemblFetcher(self._ensure_client)
-        elif backend == "mysql":
+    def _create_fetcher(self, backend: str) -> ChemblDataFetcher:
+        """Create the data fetcher for an already-resolved backend."""
+        if backend == "mysql":
             return SqlChemblFetcher.from_env()
-        else:
-            raise ValueError(
-                f"Unknown ChEMBL backend: {backend!r}. Use 'rest', 'mysql', or 'auto'."
-            )
+        return RestChemblFetcher(self._ensure_client)
 
     def _get_resource_client(self, resource: str):
         client = self._ensure_client()
@@ -179,6 +175,12 @@ class ChemblToolkit(BaseDatabaseToolkit):
         except Exception as e:
             logger.warning(f"ChEMBL ping failed: {e}")
             return False
+
+    def get_capabilities(self) -> Dict[str, Any]:
+        """Get information about database capabilities including the active backend."""
+        caps = super().get_capabilities()
+        caps["active_backend"] = "mysql" if self.config.supports_sql else "rest"
+        return caps
 
     def query(self, params: QueryParams) -> ResultPage:
         """
