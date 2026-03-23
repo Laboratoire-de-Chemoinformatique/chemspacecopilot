@@ -59,6 +59,9 @@ allow-direct-references = true
 packages = ["src/cs_copilot"]
 
 [project.optional-dependencies]
+mysql = [
+    "pymysql>=1.1.0",
+]
 synplanner = [
     "SynPlanner>=1.2.1",
     "pubchempy>=1.0.5",

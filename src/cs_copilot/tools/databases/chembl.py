@@ -16,6 +16,7 @@ from cs_copilot.tools.chemistry.standardize import standardize_smiles_column
 from cs_copilot.tools.io.utils import validate_positive_int
 
 from .base import BaseDatabaseToolkit, DatabaseError, NotFound, RateLimited, ValidationError
+from .chembl_fetcher import ChemblDataFetcher, RestChemblFetcher, SqlChemblFetcher
 from .types import DBConfig, PaginationMode, QueryParams, ResultPage
 
 logger = logging.getLogger(__name__)
@@ -57,12 +58,21 @@ class ChemblToolkit(BaseDatabaseToolkit):
         "target_chembl_id",
     ]
 
-    def __init__(self, config: Optional[DBConfig] = None, **toolkit_kwargs):
+    def __init__(
+        self,
+        config: Optional[DBConfig] = None,
+        backend: str = "auto",
+        **toolkit_kwargs,
+    ):
         """
         Initialize ChEMBL toolkit.
 
         Args:
             config: Database configuration (optional, uses defaults if not provided)
+            backend: Data source backend. One of:
+                - "auto": Use MySQL if CHEMBL_MYSQL_HOST is set, otherwise REST API
+                - "rest": Force REST API (chembl_webresource_client)
+                - "mysql": Force MySQL database
             **toolkit_kwargs: Additional arguments for Agno Toolkit
         """
         if config is None:
@@ -89,6 +99,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         )
         self._client = None  # Will be initialized lazily
         self._client_init_error = None  # Store initialization error if any
+        self._fetcher = self._create_fetcher(backend)
         self.register(self.fetch_compounds)
         self.register(self.describe_dataset)
         self.register(self.convert_to_chembl_query)
@@ -110,6 +121,22 @@ class ChemblToolkit(BaseDatabaseToolkit):
             raise DatabaseError(f"ChEMBL client unavailable: {self._client_init_error}")
         return self._client
 
+    def _create_fetcher(self, backend: str) -> ChemblDataFetcher:
+        """Create the appropriate data fetcher based on backend selection."""
+        import os
+
+        if backend == "auto":
+            backend = "mysql" if os.getenv("CHEMBL_MYSQL_HOST") else "rest"
+
+        if backend == "rest":
+            return RestChemblFetcher(self._ensure_client)
+        elif backend == "mysql":
+            return SqlChemblFetcher.from_env()
+        else:
+            raise ValueError(
+                f"Unknown ChEMBL backend: {backend!r}. Use 'rest', 'mysql', or 'auto'."
+            )
+
     def _get_resource_client(self, resource: str):
         client = self._ensure_client()
         try:
@@ -118,22 +145,20 @@ class ChemblToolkit(BaseDatabaseToolkit):
             raise ValidationError(f"Unsupported ChEMBL resource: {resource}") from exc
 
     def connect(self) -> None:
-        """Connect to ChEMBL API (validate access)."""
+        """Connect to ChEMBL data source (validate access)."""
         try:
-            client = self._ensure_client()
-            list(client.target.filter(target_chembl_id="CHEMBL1").only(["target_chembl_id"])[:1])
+            self._fetcher.connect()
             self._connected = True
-            logger.info("Connected to ChEMBL API successfully")
+            logger.info("Connected to ChEMBL successfully")
         except Exception as e:
             self._connected = False
-            logger.error(f"Failed to connect to ChEMBL API: {e}")
+            logger.error(f"Failed to connect to ChEMBL: {e}")
             raise DatabaseError(f"ChEMBL connection failed: {e}") from e
 
     def ping(self) -> bool:
-        """Test ChEMBL API connectivity."""
+        """Test ChEMBL data source connectivity."""
         try:
-            client = self._ensure_client()
-            return client.status is not None
+            return self._fetcher.ping()
         except Exception as e:
             logger.warning(f"ChEMBL ping failed: {e}")
             return False
@@ -335,7 +360,6 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
         logger.info(f"Fetching ChEMBL compounds for {len(keywords)} keyword(s): {keywords}")
 
-        client = self._ensure_client()
         all_dataframes = []
         all_assay_ids = set()  # Track unique assays across all keywords
 
@@ -347,11 +371,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 # Step 1: Fetch assays for this keyword
                 logger.debug(f"Fetching assays from ChEMBL for keyword: '{keyword}'")
 
-                assay_filter_kwargs: Dict[str, Any] = {"description__icontains": keyword}
-                if organism:
-                    assay_filter_kwargs["target_organism__icontains"] = organism
-
-                assays = list(client.assay.filter(**assay_filter_kwargs))
+                assays = self._fetcher.fetch_assays(keyword, organism)
 
                 if mechanism:
                     mechanism_lower = mechanism.lower()
@@ -375,16 +395,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
                 # Step 2: Fetch activities for these assays
                 logger.debug(f"Fetching activities from ChEMBL for keyword: '{keyword}'")
-                activity_filter_kwargs: Dict[str, Any] = {"assay_chembl_id__in": assay_ids}
 
-                if assay_type_codes:
-                    activity_filter_kwargs["assay_type__in"] = assay_type_codes
-
-                activity_query = client.activity.filter(**activity_filter_kwargs).only(
-                    self.ACTIVITY_FIELDS
+                activities = self._fetcher.fetch_activities(
+                    assay_ids, assay_type_codes, self.ACTIVITY_FIELDS
                 )
-                
-                activities = list(activity_query)
 
                 if not activities:
                     logger.warning(f"No activity data found for keyword: {keyword}")
