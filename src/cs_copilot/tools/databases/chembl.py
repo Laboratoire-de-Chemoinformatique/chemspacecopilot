@@ -398,6 +398,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 df = self.to_dataframe(activities)
                 df = self._merge_assay_data(df, assays)
                 df["smi"] = df["canonical_smiles"]  # Use standard 'smi' column name
+                df["query_keywords"] = keyword
                 all_dataframes.append(df)
 
             # Step 4: Merge all DataFrames and remove duplicates
@@ -407,17 +408,28 @@ class ChemblToolkit(BaseDatabaseToolkit):
             logger.info(f"Merging {len(all_dataframes)} datasets and removing duplicates")
             merged_df = pd.concat(all_dataframes, ignore_index=True)
 
-            # Remove duplicates based on activity_id (most specific identifier)
-            # If activity_id is not available, use combination of molecule_chembl_id, assay_chembl_id, and standard_value
-            initial_count = len(merged_df)
+            # Determine dedup key
             if "activity_id" in merged_df.columns:
-                merged_df = merged_df.drop_duplicates(subset=["activity_id"], keep="first")
+                dedup_key = ["activity_id"]
             else:
-                # Fallback: use combination of identifiers
-                dedup_cols = ["molecule_chembl_id", "assay_chembl_id"]
+                dedup_key = ["molecule_chembl_id", "assay_chembl_id"]
                 if "standard_value" in merged_df.columns:
-                    dedup_cols.append("standard_value")
-                merged_df = merged_df.drop_duplicates(subset=dedup_cols, keep="first")
+                    dedup_key.append("standard_value")
+
+            # Aggregate query_keywords for duplicate rows (multi-keyword only)
+            if len(keywords) > 1:
+                keywords_agg = (
+                    merged_df.groupby(dedup_key, sort=False)["query_keywords"]
+                    .apply(lambda s: "|".join(sorted(s.unique())))
+                    .reset_index()
+                )
+                merged_df = merged_df.drop(columns=["query_keywords"]).merge(
+                    keywords_agg, on=dedup_key, how="left"
+                )
+
+            # Remove duplicates
+            initial_count = len(merged_df)
+            merged_df = merged_df.drop_duplicates(subset=dedup_key, keep="first")
 
             duplicates_removed = initial_count - len(merged_df)
             logger.info(
