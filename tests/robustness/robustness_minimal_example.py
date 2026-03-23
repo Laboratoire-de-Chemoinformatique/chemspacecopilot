@@ -774,7 +774,9 @@ class RobustnessRunner:
                     "✅ **Good robustness.** Minor inconsistencies but acceptable for production.\n"
                 )
             elif avg_score >= 0.7:
-                report += "⚠️ **Acceptable robustness** but room for improvement. Monitor closely.\n"
+                report += (
+                    "⚠️ **Acceptable robustness** but room for improvement. Monitor closely.\n"
+                )
             else:
                 report += "❌ **Concerning robustness.** Significant inconsistencies detected. Review agent prompts and tool implementations.\n"
 

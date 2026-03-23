@@ -596,7 +596,7 @@ class PointerPandasTools(PandasTools):
                     columns = _coerce_columns(params.pop("column"), param_name="column")
                     value = params.get("value")
                     if not isinstance(value, dict):
-                        params["value"] = {c: value for c in columns}
+                        params["value"] = dict.fromkeys(columns, value)
 
             if operation == "select":
                 columns = params.get("columns", params.get("column"))
