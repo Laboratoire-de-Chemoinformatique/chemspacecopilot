@@ -62,6 +62,9 @@ packages = ["src/cs_copilot"]
 mysql = [
     "pymysql>=1.1.0",
 ]
+postgresql = [
+    "psycopg2-binary>=2.9.9",
+]
 synplanner = [
     "SynPlanner>=1.2.1",
     "pubchempy>=1.0.5",

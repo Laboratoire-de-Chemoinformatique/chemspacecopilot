@@ -9,7 +9,7 @@ Provides pluggable backends (REST API, MySQL) for the ChemblToolkit.
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional
 
 from .base import DatabaseError
 
@@ -92,20 +92,26 @@ class RestChemblFetcher(ChemblDataFetcher):
 
 
 class SqlChemblFetcher(ChemblDataFetcher):
-    """Fetches ChEMBL data from a MySQL database via SQLAlchemy."""
+    """Fetches ChEMBL data from a local SQL database via SQLAlchemy.
 
-    def __init__(self, engine):
+    Works with MySQL, PostgreSQL, and SQLite backends — the SQL queries
+    use only ANSI-standard syntax.  Use the ``from_mysql_env``,
+    ``from_postgres_env``, or ``from_sqlite`` classmethods to create an
+    instance from environment configuration.
+    """
+
+    def __init__(self, engine, backend_label: str = "SQL"):
         self._engine = engine
+        self._backend_label = backend_label
 
     @classmethod
-    def from_env(cls) -> "SqlChemblFetcher":
+    def from_mysql_env(cls) -> "SqlChemblFetcher":
         """Create from CHEMBL_MYSQL_* environment variables."""
         try:
             import pymysql  # noqa: F401
         except ImportError:
             raise ImportError(
-                "pymysql is required for MySQL backend. "
-                "Install it with: uv sync --extra mysql"
+                "pymysql is required for MySQL backend. Install it with: uv sync --extra mysql"
             )
 
         from sqlalchemy import create_engine
@@ -119,7 +125,52 @@ class SqlChemblFetcher(ChemblDataFetcher):
         url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
         engine = create_engine(url, pool_pre_ping=True, pool_size=5)
         logger.info(f"Created MySQL engine for ChEMBL: {host}:{port}/{database}")
-        return cls(engine)
+        return cls(engine, backend_label="MySQL")
+
+    @classmethod
+    def from_env(cls) -> "SqlChemblFetcher":
+        """Backward-compatible alias for :meth:`from_mysql_env`."""
+        return cls.from_mysql_env()
+
+    @classmethod
+    def from_postgres_env(cls) -> "SqlChemblFetcher":
+        """Create from CHEMBL_PG_* environment variables."""
+        try:
+            import psycopg2  # noqa: F401
+        except ImportError:
+            raise ImportError(
+                "psycopg2 is required for PostgreSQL backend. "
+                "Install it with: uv sync --extra postgresql"
+            )
+
+        from sqlalchemy import create_engine
+
+        host = os.getenv("CHEMBL_PG_HOST", "localhost")
+        port = os.getenv("CHEMBL_PG_PORT", "5432")
+        user = os.getenv("CHEMBL_PG_USER", "chembl")
+        password = os.getenv("CHEMBL_PG_PASSWORD", "")
+        database = os.getenv("CHEMBL_PG_DATABASE", "chembl_36")
+
+        url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
+        engine = create_engine(url, pool_pre_ping=True, pool_size=5)
+        logger.info(f"Created PostgreSQL engine for ChEMBL: {host}:{port}/{database}")
+        return cls(engine, backend_label="PostgreSQL")
+
+    @classmethod
+    def from_sqlite(cls, path: Optional[str] = None) -> "SqlChemblFetcher":
+        """Create from a SQLite file path or CHEMBL_SQLITE_PATH env var."""
+        from sqlalchemy import create_engine
+
+        db_path = path or os.getenv("CHEMBL_SQLITE_PATH")
+        if not db_path:
+            raise ValueError(
+                "SQLite path required. Pass path= or set CHEMBL_SQLITE_PATH env var."
+            )
+
+        url = f"sqlite:///{db_path}"
+        engine = create_engine(url)
+        logger.info(f"Created SQLite engine for ChEMBL: {db_path}")
+        return cls(engine, backend_label="SQLite")
 
     def fetch_assays(self, keyword, organism=None):
         from sqlalchemy import text
@@ -190,9 +241,9 @@ class SqlChemblFetcher(ChemblDataFetcher):
                 from sqlalchemy import text
 
                 conn.execute(text("SELECT 1"))
-            logger.info("Connected to ChEMBL MySQL database successfully")
+            logger.info(f"Connected to ChEMBL {self._backend_label} database successfully")
         except Exception as e:
-            raise DatabaseError(f"ChEMBL MySQL connection failed: {e}") from e
+            raise DatabaseError(f"ChEMBL {self._backend_label} connection failed: {e}") from e
 
     def ping(self):
         try:

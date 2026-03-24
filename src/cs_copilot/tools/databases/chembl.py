@@ -26,8 +26,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
     """
     ChEMBL-specific database toolkit implementation.
 
-    Supports two backends: local MySQL database and ChEMBL REST API.
-    The backend is selected automatically based on environment configuration.
+    Supports multiple SQL backends (SQLite, PostgreSQL, MySQL) and the ChEMBL
+    REST API.  The backend is selected automatically based on environment
+    configuration.
     """
 
     # ChEMBL-specific constants
@@ -70,13 +71,16 @@ class ChemblToolkit(BaseDatabaseToolkit):
         Args:
             config: Database configuration (optional, uses defaults if not provided)
             backend: Data source backend. One of:
-                - "auto": Use MySQL if CHEMBL_MYSQL_HOST is set, otherwise REST API
+                - "auto": Auto-detect from env vars (SQLite > PostgreSQL > MySQL > REST)
                 - "rest": Force REST API (chembl_webresource_client)
                 - "mysql": Force MySQL database
+                - "postgresql": Force PostgreSQL database
+                - "sqlite": Force SQLite database
             **toolkit_kwargs: Additional arguments for Agno Toolkit
         """
         resolved = self._resolve_backend(backend)
-        is_mysql = resolved == "mysql"
+        self._active_backend = resolved
+        is_sql = resolved in ("mysql", "postgresql", "sqlite")
 
         if config is None:
             config = DBConfig(
@@ -85,15 +89,20 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 retries=3,
                 page_size=100,
                 rate_limit=10.0,
-                supports_sql=is_mysql,
+                supports_sql=is_sql,
                 supports_http_api=True,
                 pagination_mode=PaginationMode.OFFSET_LIMIT,
             )
 
+        _BACKEND_LABELS = {
+            "mysql": "Connected to a LOCAL MySQL ChEMBL database",
+            "postgresql": "Connected to a LOCAL PostgreSQL ChEMBL database",
+            "sqlite": "Connected to a LOCAL SQLite ChEMBL database",
+        }
         if "instructions" not in toolkit_kwargs:
-            if is_mysql:
+            if resolved in _BACKEND_LABELS:
                 backend_label = (
-                    "Active backend: Connected to a LOCAL MySQL ChEMBL database. "
+                    f"Active backend: {_BACKEND_LABELS[resolved]}. "
                     "The ChEMBL REST API is also available as a fallback."
                 )
             else:
@@ -139,15 +148,28 @@ class ChemblToolkit(BaseDatabaseToolkit):
         import os
 
         if backend == "auto":
-            return "mysql" if os.getenv("CHEMBL_MYSQL_HOST") else "rest"
-        if backend in ("rest", "mysql"):
+            if os.getenv("CHEMBL_SQLITE_PATH"):
+                return "sqlite"
+            if os.getenv("CHEMBL_PG_HOST"):
+                return "postgresql"
+            if os.getenv("CHEMBL_MYSQL_HOST"):
+                return "mysql"
+            return "rest"
+        valid = ("rest", "mysql", "postgresql", "sqlite")
+        if backend in valid:
             return backend
-        raise ValueError(f"Unknown ChEMBL backend: {backend!r}. Use 'rest', 'mysql', or 'auto'.")
+        raise ValueError(
+            f"Unknown ChEMBL backend: {backend!r}. Use one of: {', '.join(valid)}, or 'auto'."
+        )
 
     def _create_fetcher(self, backend: str) -> ChemblDataFetcher:
         """Create the data fetcher for an already-resolved backend."""
         if backend == "mysql":
-            return SqlChemblFetcher.from_env()
+            return SqlChemblFetcher.from_mysql_env()
+        if backend == "postgresql":
+            return SqlChemblFetcher.from_postgres_env()
+        if backend == "sqlite":
+            return SqlChemblFetcher.from_sqlite()
         return RestChemblFetcher(self._ensure_client)
 
     def _get_resource_client(self, resource: str):
@@ -179,7 +201,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
     def get_capabilities(self) -> Dict[str, Any]:
         """Get information about database capabilities including the active backend."""
         caps = super().get_capabilities()
-        caps["active_backend"] = "mysql" if self.config.supports_sql else "rest"
+        caps["active_backend"] = self._active_backend
         return caps
 
     def query(self, params: QueryParams) -> ResultPage:

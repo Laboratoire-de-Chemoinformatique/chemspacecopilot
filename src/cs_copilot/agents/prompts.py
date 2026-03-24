@@ -112,7 +112,7 @@ CHEMBL_INSTRUCTIONS = [
     # Step 9: Error Handling and Troubleshooting
     "Step 9: If data fetch fails, troubleshoot systematically:",
     "  - Check if the query terms are too specific (try broader terms)",
-    "  - Verify ChEMBL connectivity using ping functionality (works for both MySQL and REST backends)",
+    "  - Verify ChEMBL connectivity using ping functionality (works for all SQL and REST backends)",
     "  - Consider alternative search strategies (different resource types: activity, molecule, assay)",
     "  - Handle rate limiting by implementing appropriate delays",
     # Step 10: Data Processing and Storage
@@ -713,7 +713,7 @@ AGENT_TEAM_INSTRUCTIONS = [
     "Identify which agent(s) should be used to handle the request. If one agent is insufficient, chain multiple agents. If an existing workflow already covers this sequence, use that workflow.",
     # New architecture awareness
     "**ARCHITECTURE** (7 agents):",
-    "  1. ChEMBL Downloader: Data acquisition from ChEMBL (supports both local MySQL database and REST API backends; backend is auto-detected from environment)",
+    "  1. ChEMBL Downloader: Data acquisition from ChEMBL (supports local SQL backends — SQLite, PostgreSQL, MySQL — and REST API; backend is auto-detected from environment)",
     "  2. GTM Agent: ALL GTM operations (build/load/density/activity/project) with caching",
     "  3. Chemoinformatician: Comprehensive chemoinformatics (scaffold, SAR, similarity, clustering)",
     "  4. Report Generator: Creates reports and visualizations from analysis results",

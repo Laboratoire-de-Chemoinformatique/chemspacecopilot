@@ -5,6 +5,7 @@ Tests for the SQL ChEMBL data fetcher and backend selection.
 """
 
 import os
+import sys
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -214,7 +215,7 @@ class TestSqlChemblFetcher:
     def test_connect_failure(self):
         engine = MagicMock()
         engine.connect.side_effect = Exception("Connection refused")
-        fetcher = SqlChemblFetcher(engine)
+        fetcher = SqlChemblFetcher(engine, backend_label="MySQL")
         with pytest.raises(DatabaseError, match="ChEMBL MySQL connection failed"):
             fetcher.connect()
 
@@ -228,12 +229,10 @@ class TestSqlChemblFetcher:
         with patch.dict(os.environ, {"CHEMBL_MYSQL_HOST": "localhost"}):
             with patch("builtins.__import__", side_effect=ImportError("No module named 'pymysql'")):
                 with pytest.raises(ImportError, match="pymysql is required"):
-                    SqlChemblFetcher.from_env()
+                    SqlChemblFetcher.from_mysql_env()
 
     def test_from_env_reads_env_vars(self):
-        """Test that from_env correctly reads environment variables."""
-        import sys
-
+        """Test that from_mysql_env correctly reads environment variables."""
         env = {
             "CHEMBL_MYSQL_HOST": "db.example.com",
             "CHEMBL_MYSQL_PORT": "3307",
@@ -241,32 +240,112 @@ class TestSqlChemblFetcher:
             "CHEMBL_MYSQL_PASSWORD": "secret",
             "CHEMBL_MYSQL_DATABASE": "chembl_34",
         }
-        # Mock pymysql so the import check passes
         mock_pymysql = MagicMock()
         with patch.dict(sys.modules, {"pymysql": mock_pymysql}):
             with patch.dict(os.environ, env, clear=False):
-                from sqlalchemy import create_engine
-
-                with patch(
-                    "sqlalchemy.create_engine", return_value=MagicMock()
-                ) as mock_ce:
-                    fetcher = SqlChemblFetcher.from_env()
+                with patch("sqlalchemy.create_engine", return_value=MagicMock()) as mock_ce:
+                    fetcher = SqlChemblFetcher.from_mysql_env()
                     mock_ce.assert_called_once()
                     url = mock_ce.call_args[0][0]
                     assert "db.example.com" in url
                     assert "3307" in url
                     assert "chembl_user" in url
                     assert "chembl_34" in url
+                    assert fetcher._backend_label == "MySQL"
+
+    def test_from_env_backward_compat(self):
+        """Test that from_env still works as alias for from_mysql_env."""
+        mock_pymysql = MagicMock()
+        env = {"CHEMBL_MYSQL_HOST": "localhost"}
+        with patch.dict(sys.modules, {"pymysql": mock_pymysql}):
+            with patch.dict(os.environ, env, clear=False):
+                with patch("sqlalchemy.create_engine", return_value=MagicMock()):
+                    fetcher = SqlChemblFetcher.from_env()
+                    assert fetcher._backend_label == "MySQL"
+
+
+class TestSqlChemblFetcherSQLite:
+    """Tests for SqlChemblFetcher SQLite backend."""
+
+    def test_from_sqlite_with_path(self):
+        with patch("sqlalchemy.create_engine", return_value=MagicMock()) as mock_ce:
+            fetcher = SqlChemblFetcher.from_sqlite("/path/to/chembl_36.db")
+            mock_ce.assert_called_once()
+            url = mock_ce.call_args[0][0]
+            assert url == "sqlite:////path/to/chembl_36.db"
+            assert fetcher._backend_label == "SQLite"
+
+    def test_from_sqlite_env_var(self):
+        with patch.dict(os.environ, {"CHEMBL_SQLITE_PATH": "/data/chembl.db"}):
+            with patch("sqlalchemy.create_engine", return_value=MagicMock()) as mock_ce:
+                fetcher = SqlChemblFetcher.from_sqlite()
+                url = mock_ce.call_args[0][0]
+                assert "/data/chembl.db" in url
+                assert fetcher._backend_label == "SQLite"
+
+    def test_from_sqlite_no_path_raises(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("CHEMBL_SQLITE_PATH", None)
+            with pytest.raises(ValueError, match="SQLite path required"):
+                SqlChemblFetcher.from_sqlite()
+
+    def test_connect_failure_uses_sqlite_label(self):
+        engine = MagicMock()
+        engine.connect.side_effect = Exception("file not found")
+        fetcher = SqlChemblFetcher(engine, backend_label="SQLite")
+        with pytest.raises(DatabaseError, match="ChEMBL SQLite connection failed"):
+            fetcher.connect()
+
+
+class TestSqlChemblFetcherPostgres:
+    """Tests for SqlChemblFetcher PostgreSQL backend."""
+
+    def test_from_postgres_env_reads_env_vars(self):
+        env = {
+            "CHEMBL_PG_HOST": "pg.example.com",
+            "CHEMBL_PG_PORT": "5433",
+            "CHEMBL_PG_USER": "pg_user",
+            "CHEMBL_PG_PASSWORD": "pg_pass",
+            "CHEMBL_PG_DATABASE": "chembl_36",
+        }
+        mock_psycopg2 = MagicMock()
+        with patch.dict(sys.modules, {"psycopg2": mock_psycopg2}):
+            with patch.dict(os.environ, env, clear=False):
+                with patch("sqlalchemy.create_engine", return_value=MagicMock()) as mock_ce:
+                    fetcher = SqlChemblFetcher.from_postgres_env()
+                    mock_ce.assert_called_once()
+                    url = mock_ce.call_args[0][0]
+                    assert "pg.example.com" in url
+                    assert "5433" in url
+                    assert "pg_user" in url
+                    assert "chembl_36" in url
+                    assert fetcher._backend_label == "PostgreSQL"
+
+    def test_from_postgres_env_missing_psycopg2(self):
+        with patch("builtins.__import__", side_effect=ImportError("No psycopg2")):
+            with pytest.raises(ImportError, match="psycopg2 is required"):
+                SqlChemblFetcher.from_postgres_env()
+
+    def test_connect_failure_uses_postgresql_label(self):
+        engine = MagicMock()
+        engine.connect.side_effect = Exception("Connection refused")
+        fetcher = SqlChemblFetcher(engine, backend_label="PostgreSQL")
+        with pytest.raises(DatabaseError, match="ChEMBL PostgreSQL connection failed"):
+            fetcher.connect()
 
 
 class TestBackendSelection:
     """Tests for ChemblToolkit backend auto-detection and selection."""
 
+    def _clear_chembl_env(self):
+        """Remove all ChEMBL backend env vars."""
+        for key in ("CHEMBL_MYSQL_HOST", "CHEMBL_PG_HOST", "CHEMBL_SQLITE_PATH"):
+            os.environ.pop(key, None)
+
     def test_default_is_rest_when_no_env(self):
-        """Without CHEMBL_MYSQL_HOST, auto selects REST."""
+        """Without any ChEMBL env vars, auto selects REST."""
         with patch.dict(os.environ, {}, clear=False):
-            # Remove CHEMBL_MYSQL_HOST if present
-            os.environ.pop("CHEMBL_MYSQL_HOST", None)
+            self._clear_chembl_env()
             toolkit = ChemblToolkit()
             assert isinstance(toolkit._fetcher, RestChemblFetcher)
 
@@ -274,35 +353,95 @@ class TestBackendSelection:
         toolkit = ChemblToolkit(backend="rest")
         assert isinstance(toolkit._fetcher, RestChemblFetcher)
 
-    @patch.object(SqlChemblFetcher, "from_env")
-    def test_explicit_mysql_backend(self, mock_from_env):
-        mock_from_env.return_value = MagicMock(spec=SqlChemblFetcher)
+    @patch.object(SqlChemblFetcher, "from_mysql_env")
+    def test_explicit_mysql_backend(self, mock_from_mysql):
+        mock_from_mysql.return_value = MagicMock(spec=SqlChemblFetcher)
         toolkit = ChemblToolkit(backend="mysql")
-        assert mock_from_env.called
+        assert mock_from_mysql.called
 
-    @patch.object(SqlChemblFetcher, "from_env")
-    def test_auto_detects_mysql_from_env(self, mock_from_env):
-        mock_from_env.return_value = MagicMock(spec=SqlChemblFetcher)
+    @patch.object(SqlChemblFetcher, "from_mysql_env")
+    def test_auto_detects_mysql_from_env(self, mock_from_mysql):
+        mock_from_mysql.return_value = MagicMock(spec=SqlChemblFetcher)
         with patch.dict(os.environ, {"CHEMBL_MYSQL_HOST": "localhost"}):
+            self._clear_chembl_env()
+            os.environ["CHEMBL_MYSQL_HOST"] = "localhost"
             toolkit = ChemblToolkit(backend="auto")
-            assert mock_from_env.called
+            assert mock_from_mysql.called
+
+    @patch.object(SqlChemblFetcher, "from_sqlite")
+    def test_auto_detects_sqlite_from_env(self, mock_from_sqlite):
+        mock_from_sqlite.return_value = MagicMock(spec=SqlChemblFetcher)
+        with patch.dict(os.environ, {"CHEMBL_SQLITE_PATH": "/tmp/chembl.db"}):
+            toolkit = ChemblToolkit(backend="auto")
+            assert mock_from_sqlite.called
+
+    @patch.object(SqlChemblFetcher, "from_postgres_env")
+    def test_auto_detects_postgresql_from_env(self, mock_from_pg):
+        mock_from_pg.return_value = MagicMock(spec=SqlChemblFetcher)
+        with patch.dict(os.environ, {}, clear=False):
+            self._clear_chembl_env()
+            os.environ["CHEMBL_PG_HOST"] = "localhost"
+            toolkit = ChemblToolkit(backend="auto")
+            assert mock_from_pg.called
+
+    @patch.object(SqlChemblFetcher, "from_sqlite")
+    def test_auto_priority_sqlite_over_pg_and_mysql(self, mock_from_sqlite):
+        """SQLite takes priority when multiple env vars are set."""
+        mock_from_sqlite.return_value = MagicMock(spec=SqlChemblFetcher)
+        env = {
+            "CHEMBL_SQLITE_PATH": "/tmp/chembl.db",
+            "CHEMBL_PG_HOST": "localhost",
+            "CHEMBL_MYSQL_HOST": "localhost",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            toolkit = ChemblToolkit(backend="auto")
+            assert mock_from_sqlite.called
+            assert toolkit._active_backend == "sqlite"
+
+    @patch.object(SqlChemblFetcher, "from_postgres_env")
+    def test_auto_priority_pg_over_mysql(self, mock_from_pg):
+        """PostgreSQL takes priority over MySQL."""
+        mock_from_pg.return_value = MagicMock(spec=SqlChemblFetcher)
+        with patch.dict(os.environ, {}, clear=False):
+            self._clear_chembl_env()
+            os.environ["CHEMBL_PG_HOST"] = "localhost"
+            os.environ["CHEMBL_MYSQL_HOST"] = "localhost"
+            toolkit = ChemblToolkit(backend="auto")
+            assert mock_from_pg.called
+            assert toolkit._active_backend == "postgresql"
 
     def test_invalid_backend_raises(self):
         with pytest.raises(ValueError, match="Unknown ChEMBL backend"):
             ChemblToolkit(backend="postgres")
 
-    @patch.object(SqlChemblFetcher, "from_env")
-    def test_mysql_backend_reports_both_capabilities(self, mock_from_env):
+    @patch.object(SqlChemblFetcher, "from_sqlite")
+    def test_explicit_sqlite_backend(self, mock_from_sqlite):
+        mock_from_sqlite.return_value = MagicMock(spec=SqlChemblFetcher)
+        toolkit = ChemblToolkit(backend="sqlite")
+        assert mock_from_sqlite.called
+        assert toolkit._active_backend == "sqlite"
+        assert toolkit.config.supports_sql is True
+
+    @patch.object(SqlChemblFetcher, "from_postgres_env")
+    def test_explicit_postgresql_backend(self, mock_from_pg):
+        mock_from_pg.return_value = MagicMock(spec=SqlChemblFetcher)
+        toolkit = ChemblToolkit(backend="postgresql")
+        assert mock_from_pg.called
+        assert toolkit._active_backend == "postgresql"
+        assert toolkit.config.supports_sql is True
+
+    @patch.object(SqlChemblFetcher, "from_mysql_env")
+    def test_mysql_backend_reports_both_capabilities(self, mock_from_mysql):
         """When MySQL is configured, both supports_http_api and supports_sql must be True."""
-        mock_from_env.return_value = MagicMock(spec=SqlChemblFetcher)
+        mock_from_mysql.return_value = MagicMock(spec=SqlChemblFetcher)
         toolkit = ChemblToolkit(backend="mysql")
         assert toolkit.config.supports_sql is True
         assert toolkit.config.supports_http_api is True
 
-    @patch.object(SqlChemblFetcher, "from_env")
-    def test_get_capabilities_active_backend_mysql(self, mock_from_env):
+    @patch.object(SqlChemblFetcher, "from_mysql_env")
+    def test_get_capabilities_active_backend_mysql(self, mock_from_mysql):
         """get_capabilities reports active_backend='mysql' when MySQL is configured."""
-        mock_from_env.return_value = MagicMock(spec=SqlChemblFetcher)
+        mock_from_mysql.return_value = MagicMock(spec=SqlChemblFetcher)
         toolkit = ChemblToolkit(backend="mysql")
         caps = toolkit.get_capabilities()
         assert caps["supports_sql"] is True
@@ -316,6 +455,22 @@ class TestBackendSelection:
         assert caps["supports_sql"] is False
         assert caps["supports_http_api"] is True
         assert caps["active_backend"] == "rest"
+
+    @patch.object(SqlChemblFetcher, "from_sqlite")
+    def test_get_capabilities_active_backend_sqlite(self, mock_from_sqlite):
+        mock_from_sqlite.return_value = MagicMock(spec=SqlChemblFetcher)
+        toolkit = ChemblToolkit(backend="sqlite")
+        caps = toolkit.get_capabilities()
+        assert caps["supports_sql"] is True
+        assert caps["active_backend"] == "sqlite"
+
+    @patch.object(SqlChemblFetcher, "from_postgres_env")
+    def test_get_capabilities_active_backend_postgresql(self, mock_from_pg):
+        mock_from_pg.return_value = MagicMock(spec=SqlChemblFetcher)
+        toolkit = ChemblToolkit(backend="postgresql")
+        caps = toolkit.get_capabilities()
+        assert caps["supports_sql"] is True
+        assert caps["active_backend"] == "postgresql"
 
     @patch.object(ChemblToolkit, "_ensure_client")
     @patch("cs_copilot.tools.databases.chembl.S3")
