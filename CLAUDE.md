@@ -30,6 +30,14 @@ MINIO_ACCESS_KEY=cs_copilot
 MINIO_SECRET_KEY=chempwd123
 ASSETS_BUCKET=chatbot-assets
 
+# Optional - ChEMBL local MySQL (auto-detected when CHEMBL_MYSQL_HOST is set)
+# Download dump: https://chembl.gitbook.io/chembl-interface-documentation/downloads
+# CHEMBL_MYSQL_HOST=localhost
+# CHEMBL_MYSQL_PORT=3306
+# CHEMBL_MYSQL_USER=chembl
+# CHEMBL_MYSQL_PASSWORD=
+# CHEMBL_MYSQL_DATABASE=chembl_36
+
 # Optional - Postgres for Chainlit history
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chainlit
 ```
