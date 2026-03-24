@@ -30,6 +30,12 @@ MINIO_ACCESS_KEY=cs_copilot
 MINIO_SECRET_KEY=chempwd123
 ASSETS_BUCKET=chatbot-assets
 
+# Optional - ChEMBL local database (auto-detected; priority: SQLite > PG > MySQL)
+# Download dumps: https://chembl.gitbook.io/chembl-interface-documentation/downloads
+# CHEMBL_SQLITE_PATH=/path/to/chembl_36.db          # no extra driver needed
+# CHEMBL_PG_HOST=localhost                            # needs: uv sync --extra postgresql
+# CHEMBL_MYSQL_HOST=localhost                         # needs: uv sync --extra mysql
+
 # Optional - Postgres for Chainlit history
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chainlit
 ```

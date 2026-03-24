@@ -295,7 +295,7 @@ class TestChemblToolkit:
         """Test successful compound fetching."""
         # Mock ChEMBL client
         mock_client = Mock()
-        # Mock assay search
+        # Mock assay search - use plain list for proper list() iteration
         mock_assays = [{"assay_chembl_id": "CHEMBL1"}, {"assay_chembl_id": "CHEMBL2"}]
         mock_client.assay.filter.return_value = mock_assays
 
@@ -344,7 +344,7 @@ class TestChemblToolkit:
         """Test compound fetching when no assays found."""
         # Mock ChEMBL client
         mock_client = Mock()
-        # Mock empty assay search
+        # Mock empty assay search - use plain list for proper list() iteration
         mock_client.assay.filter.return_value = []
         mock_ensure_client.return_value = mock_client
 
