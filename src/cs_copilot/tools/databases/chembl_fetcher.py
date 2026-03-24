@@ -112,7 +112,7 @@ class SqlChemblFetcher(ChemblDataFetcher):
         except ImportError:
             raise ImportError(
                 "pymysql is required for MySQL backend. Install it with: uv sync --extra mysql"
-            )
+            ) from None
 
         from sqlalchemy import create_engine
 
@@ -141,7 +141,7 @@ class SqlChemblFetcher(ChemblDataFetcher):
             raise ImportError(
                 "psycopg2 is required for PostgreSQL backend. "
                 "Install it with: uv sync --extra postgresql"
-            )
+            ) from None
 
         from sqlalchemy import create_engine
 
@@ -163,9 +163,7 @@ class SqlChemblFetcher(ChemblDataFetcher):
 
         db_path = path or os.getenv("CHEMBL_SQLITE_PATH")
         if not db_path:
-            raise ValueError(
-                "SQLite path required. Pass path= or set CHEMBL_SQLITE_PATH env var."
-            )
+            raise ValueError("SQLite path required. Pass path= or set CHEMBL_SQLITE_PATH env var.")
 
         url = f"sqlite:///{db_path}"
         engine = create_engine(url)

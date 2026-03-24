@@ -356,7 +356,7 @@ class TestBackendSelection:
     @patch.object(SqlChemblFetcher, "from_mysql_env")
     def test_explicit_mysql_backend(self, mock_from_mysql):
         mock_from_mysql.return_value = MagicMock(spec=SqlChemblFetcher)
-        toolkit = ChemblToolkit(backend="mysql")
+        ChemblToolkit(backend="mysql")
         assert mock_from_mysql.called
 
     @patch.object(SqlChemblFetcher, "from_mysql_env")
@@ -365,14 +365,14 @@ class TestBackendSelection:
         with patch.dict(os.environ, {"CHEMBL_MYSQL_HOST": "localhost"}):
             self._clear_chembl_env()
             os.environ["CHEMBL_MYSQL_HOST"] = "localhost"
-            toolkit = ChemblToolkit(backend="auto")
+            ChemblToolkit(backend="auto")
             assert mock_from_mysql.called
 
     @patch.object(SqlChemblFetcher, "from_sqlite")
     def test_auto_detects_sqlite_from_env(self, mock_from_sqlite):
         mock_from_sqlite.return_value = MagicMock(spec=SqlChemblFetcher)
         with patch.dict(os.environ, {"CHEMBL_SQLITE_PATH": "/tmp/chembl.db"}):
-            toolkit = ChemblToolkit(backend="auto")
+            ChemblToolkit(backend="auto")
             assert mock_from_sqlite.called
 
     @patch.object(SqlChemblFetcher, "from_postgres_env")
@@ -381,7 +381,7 @@ class TestBackendSelection:
         with patch.dict(os.environ, {}, clear=False):
             self._clear_chembl_env()
             os.environ["CHEMBL_PG_HOST"] = "localhost"
-            toolkit = ChemblToolkit(backend="auto")
+            ChemblToolkit(backend="auto")
             assert mock_from_pg.called
 
     @patch.object(SqlChemblFetcher, "from_sqlite")
