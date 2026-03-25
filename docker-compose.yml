@@ -19,6 +19,8 @@ services:
       - OLLAMA_HOST=${OLLAMA_HOST:-}
       # DeepSeek API Key (only required when MODEL_PROVIDER=deepseek or not set)
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      # OpenRouter API Key (only required when MODEL_PROVIDER=openrouter)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
 
       # Chainlit Auth
       - CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET:-default-secret-change-in-production}
