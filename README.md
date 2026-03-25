@@ -99,6 +99,14 @@ S3_ENDPOINT_URL=http://localhost:9000
 MINIO_ACCESS_KEY=cs_copilot
 MINIO_SECRET_KEY=chempwd123
 ASSETS_BUCKET=chatbot-assets
+
+# Optional — ChEMBL local MySQL (faster queries, offline use)
+# Download dump: https://chembl.gitbook.io/chembl-interface-documentation/downloads
+# CHEMBL_MYSQL_HOST=localhost
+# CHEMBL_MYSQL_PORT=3306
+# CHEMBL_MYSQL_USER=chembl
+# CHEMBL_MYSQL_PASSWORD=
+# CHEMBL_MYSQL_DATABASE=chembl_36
 ```
 
 The repository also includes a tracked `.modelconf` file. Edit it if you want to switch from the default DeepSeek backend to a local Ollama model.
@@ -177,7 +185,7 @@ The system uses a **Factory Pattern + Registry** for agent creation. The default
 
 | Agent | Role |
 |-------|------|
-| **ChEMBL Downloader** | Downloads and filters bioactivity data from the ChEMBL database |
+| **ChEMBL Downloader** | Downloads and filters bioactivity data from ChEMBL (REST API by default; optional [local MySQL backend](https://chembl.gitbook.io/chembl-interface-documentation/downloads)) |
 | **GTM Agent** | Unified GTM operations: build, load, density analysis, activity landscapes, projection, and GTM sampling support |
 | **Chemoinformatician** | Downstream chemoinformatics analysis including scaffold, similarity, clustering, and SAR workflows |
 | **Report Generator** | Formats analysis results into reports and visual outputs |

@@ -307,6 +307,8 @@ class ChEMBLDownloaderFactory(BaseAgentFactory):
             name="chembl_agent",
             description="""
             You are a specialized agent for downloading and processing bioactivity data from the ChEMBL database.
+            You support multiple backends: local SQL databases (SQLite, PostgreSQL, or MySQL — used when configured) and the ChEMBL REST API.
+            The backend is selected automatically — you do not need to worry about which one is active.
             Your role is to query ChEMBL based on user requests (e.g., protein targets, compound types),
             retrieve relevant bioactivity data, validate data quality, and prepare structured datasets
             for downstream cheminformatics analysis.
