@@ -6,6 +6,7 @@ import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 from typing import Optional
 
 import pandas as pd
@@ -14,18 +15,27 @@ from rdkit.Chem.MolStandardize import rdMolStandardize
 
 logger = logging.getLogger(__name__)
 _THREAD_LOCAL = threading.local()
+_STANDARDIZE_CACHE_SIZE = 16_384
 
 
-def _get_standardizers() -> tuple[rdMolStandardize.Uncharger, rdMolStandardize.TautomerEnumerator]:
+def _get_standardizers() -> tuple[
+    rdMolStandardize.Uncharger,
+    rdMolStandardize.TautomerEnumerator,
+    rdMolStandardize.LargestFragmentChooser,
+]:
     """Create RDKit standardizer helpers lazily per worker thread."""
     uncharger = getattr(_THREAD_LOCAL, "uncharger", None)
     tautomer_enumerator = getattr(_THREAD_LOCAL, "tautomer_enumerator", None)
-    if uncharger is None or tautomer_enumerator is None:
+    fragment_chooser = getattr(_THREAD_LOCAL, "fragment_chooser", None)
+    if uncharger is None or tautomer_enumerator is None or fragment_chooser is None:
+        cleanup_params = rdMolStandardize.CleanupParameters()
         uncharger = rdMolStandardize.Uncharger()
         tautomer_enumerator = rdMolStandardize.TautomerEnumerator()
+        fragment_chooser = rdMolStandardize.LargestFragmentChooser(cleanup_params)
         _THREAD_LOCAL.uncharger = uncharger
         _THREAD_LOCAL.tautomer_enumerator = tautomer_enumerator
-    return uncharger, tautomer_enumerator
+        _THREAD_LOCAL.fragment_chooser = fragment_chooser
+    return uncharger, tautomer_enumerator, fragment_chooser
 
 
 def _resolve_worker_count(max_workers: Optional[int], string_row_count: int) -> int:
@@ -49,21 +59,28 @@ def _standardize_chunk(smiles_values: list[str]) -> list[Optional[str]]:
     return [standardize_smiles(smiles) for smiles in smiles_values]
 
 
-def standardize_smiles(smiles: str) -> Optional[str]:
+@lru_cache(maxsize=_STANDARDIZE_CACHE_SIZE)
+def _standardize_smiles_cached(smiles: str) -> Optional[str]:
     try:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
             return None
 
         clean_mol = rdMolStandardize.Cleanup(mol)
-        parent = rdMolStandardize.FragmentParent(clean_mol)
-        uncharger, tautomer_enumerator = _get_standardizers()
+        uncharger, tautomer_enumerator, fragment_chooser = _get_standardizers()
+        parent = fragment_chooser.choose(clean_mol)
         uncharged = uncharger.uncharge(parent)
         tautomer = tautomer_enumerator.Canonicalize(uncharged)
 
         return Chem.MolToSmiles(tautomer, canonical=True)
     except Exception:
         return None
+
+
+def standardize_smiles(smiles: str) -> Optional[str]:
+    if not isinstance(smiles, str):
+        return None
+    return _standardize_smiles_cached(smiles)
 
 
 def standardize_smiles_column(
