@@ -49,7 +49,9 @@ class TestStandardizeSmilesColumn:
             standardize_smiles("C[NH3+]"),
         ]
         assert result is original_df
-        normalized_result = [None if pd.isna(value) else value for value in result["smiles"].tolist()]
+        normalized_result = [
+            None if pd.isna(value) else value for value in result["smiles"].tolist()
+        ]
         assert normalized_result == expected
 
     def test_threaded_standardization_matches_serial_and_preserves_order(self):
