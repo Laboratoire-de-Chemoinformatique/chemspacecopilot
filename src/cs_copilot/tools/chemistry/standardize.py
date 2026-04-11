@@ -3,9 +3,8 @@ from __future__ import annotations
 import logging
 import math
 import os
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from functools import lru_cache
 from typing import Optional
 
@@ -14,8 +13,14 @@ from rdkit import Chem
 from rdkit.Chem.MolStandardize import rdMolStandardize
 
 logger = logging.getLogger(__name__)
-_THREAD_LOCAL = threading.local()
 _STANDARDIZE_CACHE_SIZE = 16_384
+_STANDARDIZERS: Optional[
+    tuple[
+        rdMolStandardize.Uncharger,
+        rdMolStandardize.TautomerEnumerator,
+        rdMolStandardize.LargestFragmentChooser,
+    ]
+] = None
 
 
 def _get_standardizers() -> tuple[
@@ -23,19 +28,17 @@ def _get_standardizers() -> tuple[
     rdMolStandardize.TautomerEnumerator,
     rdMolStandardize.LargestFragmentChooser,
 ]:
-    """Create RDKit standardizer helpers lazily per worker thread."""
-    uncharger = getattr(_THREAD_LOCAL, "uncharger", None)
-    tautomer_enumerator = getattr(_THREAD_LOCAL, "tautomer_enumerator", None)
-    fragment_chooser = getattr(_THREAD_LOCAL, "fragment_chooser", None)
-    if uncharger is None or tautomer_enumerator is None or fragment_chooser is None:
+    """Create RDKit standardizer helpers lazily per worker process."""
+    global _STANDARDIZERS
+
+    if _STANDARDIZERS is None:
         cleanup_params = rdMolStandardize.CleanupParameters()
-        uncharger = rdMolStandardize.Uncharger()
-        tautomer_enumerator = rdMolStandardize.TautomerEnumerator()
-        fragment_chooser = rdMolStandardize.LargestFragmentChooser(cleanup_params)
-        _THREAD_LOCAL.uncharger = uncharger
-        _THREAD_LOCAL.tautomer_enumerator = tautomer_enumerator
-        _THREAD_LOCAL.fragment_chooser = fragment_chooser
-    return uncharger, tautomer_enumerator, fragment_chooser
+        _STANDARDIZERS = (
+            rdMolStandardize.Uncharger(),
+            rdMolStandardize.TautomerEnumerator(),
+            rdMolStandardize.LargestFragmentChooser(cleanup_params),
+        )
+    return _STANDARDIZERS
 
 
 def _resolve_worker_count(max_workers: Optional[int], string_row_count: int) -> int:
@@ -48,7 +51,7 @@ def _resolve_worker_count(max_workers: Optional[int], string_row_count: int) -> 
         return min(max_workers, string_row_count)
 
     cpu_count = os.cpu_count() or 1
-    return min(string_row_count, max(1, min(cpu_count, 8)))
+    return min(string_row_count, cpu_count)
 
 
 def _chunk_size(item_count: int, worker_count: int) -> int:
@@ -88,7 +91,7 @@ def standardize_smiles_column(
     col_name: str,
     *,
     max_workers: Optional[int] = None,
-    min_parallel_rows: int = 1000,
+    min_parallel_rows: int = 64,
 ) -> pd.DataFrame:
     """Apply SMILES standardization to a DataFrame column in-place.
 
@@ -111,7 +114,7 @@ def standardize_smiles_column(
     string_values = [column_values[pos] for pos in string_positions]
     string_row_count = len(string_values)
     worker_count = _resolve_worker_count(max_workers, string_row_count)
-    mode = "threaded" if string_row_count >= min_parallel_rows and worker_count > 1 else "serial"
+    mode = "processes" if string_row_count >= min_parallel_rows and worker_count > 1 else "serial"
     serial_fallback = False
 
     logger.info(
@@ -125,14 +128,14 @@ def standardize_smiles_column(
     started_at = time.perf_counter()
 
     standardized_values: list[Optional[str]]
-    if mode == "threaded":
+    if mode == "processes":
         chunk_size = _chunk_size(string_row_count, worker_count)
         chunks = [
             string_values[start : start + chunk_size]
             for start in range(0, string_row_count, chunk_size)
         ]
         try:
-            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            with ProcessPoolExecutor(max_workers=worker_count) as executor:
                 standardized_values = [
                     standardized
                     for chunk_result in executor.map(_standardize_chunk, chunks)
@@ -140,7 +143,8 @@ def standardize_smiles_column(
                 ]
         except Exception:
             logger.warning(
-                "Threaded SMILES standardization failed for column '%s'; falling back to serial",
+                "Process-based SMILES standardization failed for column '%s'; "
+                "falling back to serial",
                 col_name,
                 exc_info=True,
             )

@@ -104,6 +104,27 @@ class SqlChemblFetcher(ChemblDataFetcher):
         self._engine = engine
         self._backend_label = backend_label
 
+    @staticmethod
+    def _build_connection_url(
+        drivername: str,
+        host: str,
+        port: str,
+        user: str,
+        password: str,
+        database: str,
+    ):
+        """Build a SQLAlchemy URL while preserving special characters in credentials."""
+        from sqlalchemy.engine import URL
+
+        return URL.create(
+            drivername=drivername,
+            username=user,
+            password=password,
+            host=host,
+            port=int(port),
+            database=database,
+        )
+
     @classmethod
     def from_mysql_env(cls) -> "SqlChemblFetcher":
         """Create from CHEMBL_MYSQL_* environment variables."""
@@ -122,7 +143,14 @@ class SqlChemblFetcher(ChemblDataFetcher):
         password = os.getenv("CHEMBL_MYSQL_PASSWORD", "")
         database = os.getenv("CHEMBL_MYSQL_DATABASE", "chembl_35")
 
-        url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
+        url = cls._build_connection_url(
+            drivername="mysql+pymysql",
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+        )
         engine = create_engine(url, pool_pre_ping=True, pool_size=5)
         logger.info(f"Created MySQL engine for ChEMBL: {host}:{port}/{database}")
         return cls(engine, backend_label="MySQL")
@@ -151,7 +179,14 @@ class SqlChemblFetcher(ChemblDataFetcher):
         password = os.getenv("CHEMBL_PG_PASSWORD", "")
         database = os.getenv("CHEMBL_PG_DATABASE", "chembl_36")
 
-        url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
+        url = cls._build_connection_url(
+            drivername="postgresql+psycopg2",
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+        )
         engine = create_engine(url, pool_pre_ping=True, pool_size=5)
         logger.info(f"Created PostgreSQL engine for ChEMBL: {host}:{port}/{database}")
         return cls(engine, backend_label="PostgreSQL")
