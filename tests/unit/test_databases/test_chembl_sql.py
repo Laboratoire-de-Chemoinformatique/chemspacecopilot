@@ -247,11 +247,36 @@ class TestSqlChemblFetcher:
                     fetcher = SqlChemblFetcher.from_mysql_env()
                     mock_ce.assert_called_once()
                     url = mock_ce.call_args[0][0]
-                    assert "db.example.com" in url
-                    assert "3307" in url
-                    assert "chembl_user" in url
-                    assert "chembl_34" in url
+                    assert url.drivername == "mysql+pymysql"
+                    assert url.host == "db.example.com"
+                    assert url.port == 3307
+                    assert url.username == "chembl_user"
+                    assert url.password == "secret"
+                    assert url.database == "chembl_34"
+                    assert url.render_as_string(hide_password=False).startswith(
+                        "mysql+pymysql://chembl_user:secret@db.example.com:3307/chembl_34"
+                    )
                     assert fetcher._backend_label == "MySQL"
+
+    def test_from_env_preserves_special_chars_in_mysql_password(self):
+        env = {
+            "CHEMBL_MYSQL_HOST": "localhost",
+            "CHEMBL_MYSQL_PORT": "3306",
+            "CHEMBL_MYSQL_USER": "aorlov",
+            "CHEMBL_MYSQL_PASSWORD": "AxelMySQL7140@",
+            "CHEMBL_MYSQL_DATABASE": "chembl_36",
+        }
+        mock_pymysql = MagicMock()
+        with patch.dict(sys.modules, {"pymysql": mock_pymysql}):
+            with patch.dict(os.environ, env, clear=False):
+                with patch("sqlalchemy.create_engine", return_value=MagicMock()) as mock_ce:
+                    SqlChemblFetcher.from_mysql_env()
+                    url = mock_ce.call_args[0][0]
+                    assert url.host == "localhost"
+                    assert url.port == 3306
+                    assert url.username == "aorlov"
+                    assert url.password == "AxelMySQL7140@"
+                    assert url.database == "chembl_36"
 
     def test_from_env_backward_compat(self):
         """Test that from_env still works as alias for from_mysql_env."""
@@ -315,11 +340,33 @@ class TestSqlChemblFetcherPostgres:
                     fetcher = SqlChemblFetcher.from_postgres_env()
                     mock_ce.assert_called_once()
                     url = mock_ce.call_args[0][0]
-                    assert "pg.example.com" in url
-                    assert "5433" in url
-                    assert "pg_user" in url
-                    assert "chembl_36" in url
+                    assert url.drivername == "postgresql+psycopg2"
+                    assert url.host == "pg.example.com"
+                    assert url.port == 5433
+                    assert url.username == "pg_user"
+                    assert url.password == "pg_pass"
+                    assert url.database == "chembl_36"
                     assert fetcher._backend_label == "PostgreSQL"
+
+    def test_from_postgres_env_preserves_special_chars_in_password(self):
+        env = {
+            "CHEMBL_PG_HOST": "localhost",
+            "CHEMBL_PG_PORT": "5432",
+            "CHEMBL_PG_USER": "chembl",
+            "CHEMBL_PG_PASSWORD": "pg_pass@local",
+            "CHEMBL_PG_DATABASE": "chembl_36",
+        }
+        mock_psycopg2 = MagicMock()
+        with patch.dict(sys.modules, {"psycopg2": mock_psycopg2}):
+            with patch.dict(os.environ, env, clear=False):
+                with patch("sqlalchemy.create_engine", return_value=MagicMock()) as mock_ce:
+                    SqlChemblFetcher.from_postgres_env()
+                    url = mock_ce.call_args[0][0]
+                    assert url.host == "localhost"
+                    assert url.port == 5432
+                    assert url.username == "chembl"
+                    assert url.password == "pg_pass@local"
+                    assert url.database == "chembl_36"
 
     def test_from_postgres_env_missing_psycopg2(self):
         with patch("builtins.__import__", side_effect=ImportError("No psycopg2")):
