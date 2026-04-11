@@ -93,8 +93,9 @@ DEEPSEEK_API_KEY=your-api-key-here
 # MODEL_ID=deepseek-chat
 # OLLAMA_HOST=http://localhost:11434
 
-# Optional — S3/MinIO storage (disable with USE_S3=false)
-USE_S3=true
+# Optional — S3/MinIO storage (set USE_S3=true only when you want remote storage)
+USE_S3=false
+# When enabled:
 S3_ENDPOINT_URL=http://localhost:9000
 MINIO_ACCESS_KEY=cs_copilot
 MINIO_SECRET_KEY=chempwd123

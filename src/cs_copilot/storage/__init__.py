@@ -29,12 +29,13 @@ Usage:
 """
 
 from .client import S3, SESSION_ID
-from .config import S3Config, get_s3_config, is_s3_enabled
+from .config import S3Config, StorageConfigError, get_s3_config, is_s3_enabled
 
 __all__ = [
     "S3",
     "SESSION_ID",
     "S3Config",
+    "StorageConfigError",
     "get_s3_config",
     "is_s3_enabled",
 ]
