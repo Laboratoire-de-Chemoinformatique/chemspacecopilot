@@ -12,10 +12,11 @@ This package provides comprehensive tools for:
 
 from .dimensionality_reduction import BaseDRToolkit
 from .gtm import GTMToolkit
-from .gtm_operations import save_gtm_plot
+from .gtm_operations import save_gtm_landscape_plot, save_gtm_plot
 
 __all__ = [
     "BaseDRToolkit",
     "GTMToolkit",
     "save_gtm_plot",
+    "save_gtm_landscape_plot",
 ]

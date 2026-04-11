@@ -22,6 +22,7 @@ from cs_copilot.tools import (
     PointerPandasTools,
     SynPlannerToolkit,
     # SessionToolkit,
+    save_gtm_landscape_plot,
     save_gtm_plot,
 )
 from cs_copilot.tools.analysis import RobustnessAnalysisToolkit
@@ -526,6 +527,7 @@ class GTMAgentFactory(BaseAgentFactory):
             tools=[
                 GTMToolkit(),
                 PointerPandasTools(),
+                save_gtm_landscape_plot,
                 save_gtm_plot,
             ],
             instructions=GTM_AGENT_INSTRUCTIONS,
@@ -607,6 +609,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
             """,
             tools=[
                 PointerPandasTools(),
+                save_gtm_landscape_plot,  # For saved GTM landscape tables
                 save_gtm_plot,  # For GTM-specific visualizations
                 # Plotting libraries (matplotlib, seaborn) available via Python environment
             ],
@@ -739,6 +742,7 @@ class PeptideWAEFactory(BaseAgentFactory):
                 PeptideWAEToolkit(),
                 GTMToolkit(),
                 PointerPandasTools(),
+                save_gtm_landscape_plot,
                 save_gtm_plot,
             ],
             instructions=PEPTIDE_WAE_INSTRUCTIONS,

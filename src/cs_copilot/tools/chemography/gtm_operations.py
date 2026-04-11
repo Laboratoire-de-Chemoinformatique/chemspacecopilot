@@ -16,6 +16,7 @@ Functions are organized into categories:
 import base64
 import gzip
 import math
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -33,8 +34,14 @@ from chemographykit.gtm import GTM
 from chemographykit.plots.altair_landscapes import (
     altair_discrete_class_landscape,
     altair_discrete_density_landscape,
+    altair_discrete_query_landscape,
     altair_discrete_regression_landscape,
     altair_points_chart,
+)
+from chemographykit.plots.plotly_landscapes import (
+    plotly_discrete_class_landscape,
+    plotly_smooth_density_landscape,
+    plotly_smooth_regression_landscape,
 )
 from chemographykit.utils.classification import class_density_to_table, get_class_density_matrix
 from chemographykit.utils.density import density_to_table, get_density_matrix
@@ -88,6 +95,17 @@ SESSION_GTM_MODEL_PATH_KEY = "_current_gtm_model_path"
 
 # Standard SMILES column name variations to check (in priority order)
 _SMILES_COLUMN_VARIANTS = [SMILES_COLUMN, "SMILES", "smiles", "Smiles"]
+LandscapeType = Literal["density", "classification", "regression", "query"]
+LandscapeRenderer = Literal["altair", "plotly"]
+
+_LANDSCAPE_REQUIRED_COLUMNS: dict[str, set[str]] = {
+    "density": {"x", "y", "nodes", "density", "filtered_density"},
+    "classification": {"x", "y", "nodes", "density"},
+    "regression": {"x", "y", "nodes", "density", "filtered_reg_density"},
+    "query": {"x", "y", "nodes", "density", "criteria_satisfied"},
+}
+
+_PLOTLY_SUPPORTED_LANDSCAPES = {"density", "classification", "regression"}
 
 
 def find_smiles_column(df: pd.DataFrame) -> str:
@@ -444,6 +462,228 @@ def configure_chart(
         gradientVerticalMaxLength=600,
         gradientThickness=30,
         tickCount=6,
+    )
+
+
+@contextmanager
+def _disable_altair_max_rows():
+    """Temporarily disable Altair's dataset row limit during chart serialization."""
+    with alt.data_transformers.disable_max_rows():
+        yield
+
+
+def _write_chart_outputs(chart: alt.Chart, html_path: str, png_path: str) -> None:
+    """Write HTML and PNG chart outputs while bypassing Altair's default row cap."""
+    with _disable_altair_max_rows():
+        with S3.open(html_path, "w") as sf:
+            sf.write(chart.to_html())
+
+        with S3.open(png_path, "wb") as sf:
+            chart.save(sf, format="png")
+
+
+def _write_plotly_outputs(fig, html_path: str, png_path: str) -> bool:
+    """Write Plotly HTML output and PNG when the image backend is available."""
+    with S3.open(html_path, "w") as sf:
+        fig.write_html(sf, include_plotlyjs="cdn", full_html=True)
+
+    try:
+        with S3.open(png_path, "wb") as sf:
+            fig.write_image(sf, format="png")
+        return True
+    except Exception as exc:
+        logger.warning(f"Skipping Plotly PNG export for {png_path}: {exc}")
+        return False
+
+
+def _normalize_landscape_type(landscape_type: str) -> LandscapeType:
+    """Validate and normalize the requested ChemographyKit landscape type."""
+    normalized = landscape_type.strip().lower()
+    valid_types = set(_LANDSCAPE_REQUIRED_COLUMNS)
+    if normalized not in valid_types:
+        raise ValueError(
+            f"Unsupported landscape_type '{landscape_type}'. "
+            f"Expected one of: {sorted(valid_types)}"
+        )
+    return normalized  # type: ignore[return-value]
+
+
+def _normalize_landscape_renderer(renderer: str) -> LandscapeRenderer:
+    """Validate and normalize the requested landscape renderer."""
+    normalized = renderer.strip().lower()
+    valid_renderers = {"altair", "plotly"}
+    if normalized not in valid_renderers:
+        raise ValueError(
+            f"Unsupported renderer '{renderer}'. Expected one of: {sorted(valid_renderers)}"
+        )
+    return normalized  # type: ignore[return-value]
+
+
+def _load_landscape_table(landscape_file: str) -> pd.DataFrame:
+    """Load a saved GTM landscape table from local or S3-backed storage."""
+    if not landscape_file:
+        raise ValueError("landscape_file cannot be empty")
+
+    with S3.open(landscape_file, "r") as sf:
+        source_table = _read_csv_flexible(sf)
+
+    for col in ("x", "y", "nodes"):
+        if col in source_table.columns:
+            source_table[col] = pd.to_numeric(source_table[col], errors="raise").astype(int)
+
+    return source_table
+
+
+def _validate_landscape_table(source_table: pd.DataFrame, landscape_type: LandscapeType) -> None:
+    """Ensure the landscape table contains the columns required by ChemographyKit."""
+    required_columns = _LANDSCAPE_REQUIRED_COLUMNS[landscape_type]
+    missing_columns = sorted(required_columns - set(source_table.columns))
+    if missing_columns:
+        raise ValueError(
+            f"Landscape table for '{landscape_type}' is missing required columns: "
+            f"{missing_columns}. Available columns: {list(source_table.columns)}"
+        )
+
+    if landscape_type == "classification":
+        _resolve_classification_columns(source_table)
+
+
+def _resolve_classification_columns(source_table: pd.DataFrame) -> dict[str, str]:
+    """Infer ChemographyKit classification probability and density columns."""
+    explicit_columns = {
+        "first_prob": "first_class_prob",
+        "second_prob": "second_class_prob",
+        "first_density": "first_class_density",
+        "second_density": "second_class_density",
+    }
+    if all(column in source_table.columns for column in explicit_columns.values()):
+        return explicit_columns
+
+    prob_columns = [
+        column
+        for column in source_table.columns
+        if column.endswith("_prob") and column not in {"first_class_prob", "second_class_prob"}
+    ]
+    density_columns = [
+        column
+        for column in source_table.columns
+        if column.endswith("_density")
+        and column not in {"density", "filtered_density", "first_class_density", "second_class_density"}
+    ]
+
+    if len(prob_columns) < 2 or len(density_columns) < 2:
+        raise ValueError(
+            "Classification landscape table must include either "
+            "first_class_prob/second_class_prob/first_class_density/second_class_density "
+            "or at least two *_prob and two *_density columns."
+        )
+
+    prob_columns = sorted(prob_columns)
+    density_columns = sorted(density_columns)
+    prob_prefixes = {column[: -len("_prob")]: column for column in prob_columns}
+    density_prefixes = {column[: -len("_density")]: column for column in density_columns}
+    shared_prefixes = sorted(prefix for prefix in prob_prefixes if prefix in density_prefixes)
+
+    if len(shared_prefixes) < 2:
+        raise ValueError(
+            "Could not pair classification probability and density columns by class prefix. "
+            f"Probability columns: {prob_columns}; density columns: {density_columns}"
+        )
+
+    first_prefix, second_prefix = shared_prefixes[:2]
+    return {
+        "first_prob": prob_prefixes[first_prefix],
+        "second_prob": prob_prefixes[second_prefix],
+        "first_density": density_prefixes[first_prefix],
+        "second_density": density_prefixes[second_prefix],
+    }
+
+
+def _classification_labels(columns: dict[str, str]) -> tuple[str, str]:
+    """Derive human-readable class labels from resolved classification column names."""
+    explicit_labels = {
+        "first_class_prob": "Inactive",
+        "second_class_prob": "Active",
+    }
+    if columns["first_prob"] in explicit_labels and columns["second_prob"] in explicit_labels:
+        return explicit_labels[columns["first_prob"]], explicit_labels[columns["second_prob"]]
+
+    def _label(column_name: str, suffix: str) -> str:
+        return column_name[: -len(suffix)].replace("_", " ").strip().title()
+
+    return _label(columns["first_prob"], "_prob"), _label(columns["second_prob"], "_prob")
+
+
+def _build_node_labels_layer(
+    source_table: pd.DataFrame, mark_nodes: Optional[List[int]]
+) -> alt.Chart | None:
+    """Create a text layer labeling selected GTM nodes."""
+    if not mark_nodes:
+        return None
+
+    return (
+        alt.Chart(source_table)
+        .mark_text(align="left", baseline="middle", dx=1)
+        .encode(
+            x="x:Q",
+            y=alt.Y("y:Q", scale=alt.Scale(reverse=True)),
+            text=alt.condition(
+                alt.FieldOneOfPredicate(field="nodes", oneOf=mark_nodes),
+                "nodes:Q",
+                alt.value(""),
+            ),
+        )
+    )
+
+
+def _create_altair_landscape_chart(
+    source_table: pd.DataFrame, landscape_type: LandscapeType, title: str
+) -> alt.Chart:
+    """Dispatch to the appropriate ChemographyKit Altair landscape renderer."""
+    if landscape_type == "density":
+        return altair_discrete_density_landscape(source_table, title=title)
+    if landscape_type == "classification":
+        classification_columns = _resolve_classification_columns(source_table)
+        first_label, second_label = _classification_labels(classification_columns)
+        return altair_discrete_class_landscape(
+            source_table,
+            title=title,
+            first_class_prob_column_name=classification_columns["first_prob"],
+            second_class_prob_column_name=classification_columns["second_prob"],
+            first_class_density_column_name=classification_columns["first_density"],
+            second_class_density_column_name=classification_columns["second_density"],
+            first_class_label=first_label,
+            second_class_label=second_label,
+        )
+    if landscape_type == "regression":
+        return altair_discrete_regression_landscape(source_table, title=title)
+    return altair_discrete_query_landscape(source_table, title=title)
+
+
+def _create_plotly_landscape_figure(source_table: pd.DataFrame, landscape_type: LandscapeType, title: str):
+    """Dispatch to the appropriate ChemographyKit Plotly landscape renderer."""
+    if landscape_type not in _PLOTLY_SUPPORTED_LANDSCAPES:
+        raise ValueError(
+            f"Plotly landscapes are only available for {sorted(_PLOTLY_SUPPORTED_LANDSCAPES)}. "
+            f"Received: '{landscape_type}'."
+        )
+
+    if landscape_type == "density":
+        return plotly_smooth_density_landscape(source_table, title=title)
+    if landscape_type == "regression":
+        return plotly_smooth_regression_landscape(source_table, title=title)
+
+    classification_columns = _resolve_classification_columns(source_table)
+    first_label, second_label = _classification_labels(classification_columns)
+    return plotly_discrete_class_landscape(
+        source_table,
+        title=title,
+        first_class_prob_column_name=classification_columns["first_prob"],
+        second_class_prob_column_name=classification_columns["second_prob"],
+        first_class_density_column_name=classification_columns["first_density"],
+        second_class_density_column_name=classification_columns["second_density"],
+        first_class_label=first_label,
+        second_class_label=second_label,
     )
 
 
@@ -2318,14 +2558,7 @@ def create_activity_landscapes_tool(
 
         # Save files
         logger.debug(f"Saving activity landscape charts to {s3_html} and {s3_png}")
-
-        # Save HTML version
-        with S3.open(s3_html, "w") as sf:
-            sf.write(chart.to_html())
-
-        # Save PNG version
-        with S3.open(s3_png, "wb") as sf:
-            chart.save(sf, format="png")
+        _write_chart_outputs(chart, s3_html, s3_png)
 
         logger.info(f"Successfully created activity landscapes: {s3_html}, {s3_png}")
         return f"GTM activity landscape saved to S3: `{S3.path(s3_html)}` and `{S3.path(s3_png)}`"
@@ -2393,22 +2626,10 @@ def save_gtm_plot(
 
         # Create optional labels layer for marked nodes
         layers = [density_chart, points]
-        if mark_nodes:
+        labels = _build_node_labels_layer(source, mark_nodes)
+        if labels is not None:
             logger.debug(f"Adding labels for {len(mark_nodes)} marked nodes")
-            text = (
-                alt.Chart(source_mols)
-                .mark_text(align="left", baseline="middle", dx=1)
-                .encode(
-                    x="x:Q",
-                    y=alt.Y("y:Q", scale=alt.Scale(reverse=True)),
-                    text=alt.condition(
-                        alt.FieldOneOfPredicate(field="node_index", oneOf=mark_nodes),
-                        "node_index:Q",
-                        alt.value(""),
-                    ),
-                )
-            )
-            layers.append(text)
+            layers.append(labels)
 
         # Combine and configure chart
         chart = alt.layer(*layers).properties(
@@ -2427,18 +2648,96 @@ def save_gtm_plot(
 
         # Save files
         logger.debug(f"Saving GTM plot to {s3_html} and {s3_png}")
-
-        with S3.open(s3_html, "w") as sf:
-            sf.write(chart.to_html())
-
-        with S3.open(s3_png, "wb") as sf:
-            chart.save(sf, format="png")
+        _write_chart_outputs(chart, s3_html, s3_png)
 
         logger.info(f"Successfully created GTM plot: {s3_html}, {s3_png}")
         return f"GTM plot saved to S3: `{S3.path(s3_html)}` and `{S3.path(s3_png)}`"
 
     except Exception as e:
         logger.error(f"Error creating GTM plot: {e}")
+        raise
+
+
+def save_gtm_landscape_plot(
+    landscape_file: str,
+    landscape_type: LandscapeType,
+    renderer: LandscapeRenderer = "altair",
+    mark_nodes: Optional[List[int]] = None,
+    chart_width: int = DEFAULT_CHART_WIDTH,
+    chart_height: int = DEFAULT_CHART_HEIGHT,
+) -> str:
+    """
+    Generate and save a ChemographyKit landscape plot from a saved landscape table.
+
+    Args:
+        landscape_file: Path to a CSV containing a GTM landscape table
+        landscape_type: ChemographyKit landscape type to render
+        renderer: Rendering backend ("altair" or "plotly")
+        mark_nodes: Optional list of node indices to label on the plot
+        chart_width: Width of the output chart (pixels)
+        chart_height: Height of the output chart (pixels)
+
+    Returns:
+        Success message with file paths
+    """
+    normalized_type = _normalize_landscape_type(landscape_type)
+    normalized_renderer = _normalize_landscape_renderer(renderer)
+    validate_positive_int(chart_width, "chart_width")
+    validate_positive_int(chart_height, "chart_height")
+
+    if mark_nodes is not None and not isinstance(mark_nodes, list):
+        raise ValueError("mark_nodes must be a list or None")
+
+    logger.info(
+        f"Creating {normalized_renderer} {normalized_type} landscape plot from {landscape_file}"
+    )
+
+    try:
+        source_table = _load_landscape_table(landscape_file)
+        _validate_landscape_table(source_table, normalized_type)
+
+        title = f"{Path(landscape_file).stem} ({normalized_renderer} {normalized_type})"
+        base_path = (
+            f"{Path(landscape_file).with_suffix('')}_{normalized_renderer}_{normalized_type}_landscape"
+        )
+        html_path = f"{base_path}{HTML_EXTENSION}"
+        png_path = f"{base_path}{PNG_EXTENSION}"
+
+        logger.debug(
+            f"Saving {normalized_renderer} {normalized_type} landscape plot to "
+            f"{html_path} and {png_path}"
+        )
+
+        if normalized_renderer == "altair":
+            chart = _create_altair_landscape_chart(source_table, normalized_type, title=title)
+            labels = _build_node_labels_layer(source_table, mark_nodes)
+            if labels is not None:
+                chart = alt.layer(chart, labels)
+
+            chart = configure_chart(chart, chart_width, chart_height)
+            _write_chart_outputs(chart, html_path, png_path)
+            png_written = True
+        else:
+            if mark_nodes:
+                logger.warning("mark_nodes is ignored for Plotly landscape plots")
+            fig = _create_plotly_landscape_figure(source_table, normalized_type, title=title)
+            fig.update_layout(width=chart_width, height=chart_height)
+            png_written = _write_plotly_outputs(fig, html_path, png_path)
+
+        logger.info(f"Successfully created {normalized_renderer} {normalized_type} landscape plot")
+        if png_written:
+            return (
+                f"{normalized_renderer.capitalize()} {normalized_type} landscape saved to S3: "
+                f"`{S3.path(html_path)}` and `{S3.path(png_path)}`"
+            )
+        return (
+            f"{normalized_renderer.capitalize()} {normalized_type} landscape saved to S3: "
+            f"`{S3.path(html_path)}`. PNG export was skipped because the Plotly image backend "
+            f"is unavailable."
+        )
+
+    except Exception as e:
+        logger.error(f"Error creating {normalized_renderer} {normalized_type} landscape plot: {e}")
         raise
 
 
@@ -3623,11 +3922,7 @@ def create_peptide_activity_landscapes_tool(
             png_path = f"{base}{PNG_EXTENSION}"
             csv_path = f"{base}{CSV_EXTENSION}"
 
-            with S3.open(html_path, "w") as sf:
-                sf.write(chart.to_html())
-
-            with S3.open(png_path, "wb") as sf:
-                chart.save(sf, format="png")
+            _write_chart_outputs(chart, html_path, png_path)
 
             with S3.open(csv_path, "w") as sf:
                 landscape_table.to_csv(sf, index=False)

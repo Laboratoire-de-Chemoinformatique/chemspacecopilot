@@ -66,6 +66,7 @@ class GTMToolkit(BaseDRToolkit):
         self.register(self.sample_active_nodes)
         self.register(self.sample_by_coordinates)
         self.register(self.create_activity_landscapes)
+        self.register(self.save_gtm_landscape_plot)
         self.register(self.project_data_on_gtm)
         # Latent-space GTM tools (for peptide WAE integration)
         self.register(self.train_gtm_on_latent_space)
@@ -735,6 +736,38 @@ class GTMToolkit(BaseDRToolkit):
         )
         return gtm_operations.create_activity_landscapes_tool(
             dataset, resolved_model, node_threshold, chart_width, chart_height
+        )
+
+    def save_gtm_landscape_plot(
+        self,
+        landscape_file: str,
+        landscape_type: Literal["density", "classification", "regression", "query"],
+        renderer: Literal["altair", "plotly"] = "altair",
+        mark_nodes: Optional[List[int]] = None,
+        chart_width: int = 600,
+        chart_height: int = 600,
+    ) -> str:
+        """
+        Render a saved ChemographyKit landscape table as an HTML/PNG plot.
+
+        Args:
+            landscape_file: Path to the landscape CSV table
+            landscape_type: Landscape type to render
+            renderer: Rendering backend to use
+            mark_nodes: Optional list of node identifiers to label
+            chart_width: Width of the output chart (pixels)
+            chart_height: Height of the output chart (pixels)
+
+        Returns:
+            Success message with file paths
+        """
+        return gtm_operations.save_gtm_landscape_plot(
+            landscape_file=landscape_file,
+            landscape_type=landscape_type,
+            renderer=renderer,
+            mark_nodes=mark_nodes,
+            chart_width=chart_width,
+            chart_height=chart_height,
         )
 
     def project_data_on_gtm(self, dataset_file: str, gtm_model_file: str) -> str:
