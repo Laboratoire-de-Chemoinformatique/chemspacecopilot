@@ -37,3 +37,7 @@ notebooks/__marimo__/
 
 # HuggingFace Hub cache refs
 models/**/refs/
+
+CLAUDE.md
+AGENTS.md
+CLAUDE.md
