@@ -4,6 +4,7 @@
 Tests for the ChEMBL database toolkit.
 """
 
+from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pandas as pd
@@ -323,6 +324,7 @@ class TestChemblToolkit:
         mock_file = MagicMock()
         mock_s3.open.return_value.__enter__.return_value = mock_file
         mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
 
         toolkit = ChemblToolkit()
         result = toolkit.fetch_compounds("kinase", max_records=100)
@@ -387,6 +389,7 @@ class TestChemblToolkit:
         mock_file = MagicMock()
         mock_s3.open.return_value.__enter__.return_value = mock_file
         mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
 
         toolkit = ChemblToolkit()
         result = toolkit.fetch_compounds(
@@ -405,6 +408,52 @@ class TestChemblToolkit:
         mock_client.activity.filter.assert_called_with(
             assay_chembl_id__in=["CHEMBL1", "CHEMBL2"], assay_type__in=["B", "F"]
         )
+
+    @patch.object(ChemblToolkit, "_ensure_client")
+    def test_fetch_compounds_uses_local_storage_by_default(
+        self, mock_ensure_client, monkeypatch, tmp_path
+    ):
+        """Ambient AWS credentials should not switch ChEMBL dataset saves to S3."""
+        from cs_copilot.storage import S3
+
+        mock_client = Mock()
+        mock_client.assay.filter.return_value = [{"assay_chembl_id": "CHEMBL1"}]
+        mock_client.activity.filter.return_value.only.return_value = [
+            {
+                "activity_id": 1,
+                "assay_chembl_id": "CHEMBL1",
+                "molecule_chembl_id": "CHEMBL1",
+                "standard_value": 10.0,
+                "canonical_smiles": "CCO",
+            }
+        ]
+        mock_ensure_client.return_value = mock_client
+
+        monkeypatch.chdir(tmp_path)
+        for key in (
+            "USE_S3",
+            "S3_ENDPOINT_URL",
+            "MINIO_ENDPOINT",
+            "MINIO_ENDPOINT_URL",
+            "MINIO_ACCESS_KEY",
+            "MINIO_SECRET_KEY",
+        ):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test-key")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
+        monkeypatch.setenv("ASSETS_BUCKET", "test-bucket")
+
+        original_prefix = S3.prefix
+        S3.prefix = "sessions/test-session"
+        try:
+            result = ChemblToolkit().fetch_compounds("kinase", max_records=100)
+        finally:
+            S3.prefix = original_prefix
+
+        expected_path = Path("data") / "sessions" / "test-session" / "chembl_kinase.csv"
+        assert (tmp_path / expected_path).exists()
+        assert "Saved locally" in result
+        assert str(expected_path) in result
 
     def test_fetch_compounds_invalid_query(self):
         """Test compound fetching with invalid query."""
@@ -453,6 +502,7 @@ class TestChemblToolkit:
         mock_file = MagicMock()
         mock_s3.open.return_value.__enter__.return_value = mock_file
         mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
 
         toolkit = ChemblToolkit()
         # This should not raise an error - empty dict should be coerced to empty list
@@ -531,6 +581,7 @@ class TestChemblToolkit:
         mock_file = MagicMock()
         mock_s3.open.return_value.__enter__.return_value = mock_file
         mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
 
         toolkit = ChemblToolkit()
         # Patch _save_chembl_data to capture the DataFrame
@@ -586,6 +637,7 @@ class TestChemblToolkit:
         # Mock CSV file
         mock_csv_file = Mock()
         mock_s3.open.return_value.__enter__.return_value = mock_csv_file
+        mock_s3.path.side_effect = lambda rel: rel
 
         with patch("pandas.read_csv") as mock_read_csv:
             mock_df = pd.DataFrame(
@@ -605,6 +657,7 @@ class TestChemblToolkit:
         """Test dataset description with empty file."""
         mock_csv_file = Mock()
         mock_s3.open.return_value.__enter__.return_value = mock_csv_file
+        mock_s3.path.side_effect = lambda rel: rel
 
         with patch("pandas.read_csv") as mock_read_csv:
             mock_read_csv.return_value = pd.DataFrame()  # Empty DataFrame
@@ -831,6 +884,7 @@ class TestChemblIntegration:
         mock_context2.__exit__.return_value = False
 
         mock_s3.open.side_effect = [mock_context1, mock_context2]
+        mock_s3.path.side_effect = lambda rel: rel
 
         # Mock pandas operations
         with patch("pandas.read_csv") as mock_read_csv:

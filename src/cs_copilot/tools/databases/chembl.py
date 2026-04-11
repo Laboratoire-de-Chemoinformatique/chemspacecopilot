@@ -499,7 +499,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
             if std_dropped:
                 logger.info(f"Dropped {std_dropped} records with unstandardizable SMILES")
 
-            # Step 6: Save to S3
+            # Step 6: Save dataset
             # Create filename from all keywords
             query_slug = "_".join(
                 [kw.replace(" ", "_") for kw in keywords[:3]]
@@ -591,14 +591,15 @@ class ChemblToolkit(BaseDatabaseToolkit):
         )
 
     def _save_chembl_data(self, df: pd.DataFrame, query: str) -> str:
-        """Save ChEMBL data to S3 and return filename."""
+        """Save ChEMBL data and return the resolved storage path."""
         filename = f"chembl_{query.replace(' ', '_')}.csv"
+        saved_path = S3.path(filename)
 
         try:
             with S3.open(filename, "w") as f:
                 df.to_csv(f, index=False)
-            logger.info(f"Saved ChEMBL data to {filename}")
-            return filename
+            logger.info(f"Saved ChEMBL data to {saved_path}")
+            return saved_path
         except Exception as e:
             logger.error(f"Error saving ChEMBL data: {e}")
             raise
@@ -621,9 +622,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
         )
 
         keywords_str = ", ".join([f"'{kw}'" for kw in keywords])
+        save_label = "Saved to S3" if filename.startswith("s3://") else "Saved locally"
         message = (
             f"✅ Fetched {len(df)} records from {len(keywords)} keyword(s): {keywords_str}\n"
-            f"📄 Saved to S3: `{filename}`\n"
+            f"📄 {save_label}: `{filename}`\n"
         )
 
         if total_assays > 0:
