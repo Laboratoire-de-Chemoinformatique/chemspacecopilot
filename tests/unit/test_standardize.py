@@ -14,9 +14,24 @@ assert _SPEC.loader is not None
 _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
 
+_resolve_worker_count = _MODULE._resolve_worker_count
 _standardize_smiles_cached = _MODULE._standardize_smiles_cached
 standardize_smiles = _MODULE.standardize_smiles
 standardize_smiles_column = _MODULE.standardize_smiles_column
+
+
+class InlineExecutor:
+    def __init__(self, max_workers):
+        self.max_workers = max_workers
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def map(self, func, iterable):
+        return [func(item) for item in iterable]
 
 
 class TestStandardizeSmilesColumn:
@@ -34,6 +49,12 @@ class TestStandardizeSmilesColumn:
 
     def test_standardize_smiles_keeps_largest_fragment_behavior(self):
         assert standardize_smiles("CC(=O)O.[Na+]") == "CC(=O)O"
+
+    def test_default_worker_count_uses_all_detected_cpus(self, monkeypatch):
+        monkeypatch.setattr(_MODULE.os, "cpu_count", lambda: 48)
+
+        assert _resolve_worker_count(None, 10_000) == 48
+        assert _resolve_worker_count(None, 4) == 4
 
     def test_serial_standardization_handles_mixed_inputs_in_place(self):
         df = pd.DataFrame({"smiles": ["CCO", "not-a-smiles", None, 123, "C[NH3+]"]})
@@ -54,22 +75,39 @@ class TestStandardizeSmilesColumn:
         ]
         assert normalized_result == expected
 
-    def test_threaded_standardization_matches_serial_and_preserves_order(self):
+    def test_process_standardization_matches_serial_and_preserves_order(self, monkeypatch):
+        monkeypatch.setattr(_MODULE, "ProcessPoolExecutor", InlineExecutor)
+
         smiles_values = ["CCO", "CCN", "invalid", "c1ccccc1O", None, 123, "CC(=O)O", "O=C([O-])C"]
         serial_df = pd.DataFrame({"smiles": smiles_values})
-        threaded_df = pd.DataFrame({"smiles": smiles_values})
+        parallel_df = pd.DataFrame({"smiles": smiles_values})
 
         serial_result = standardize_smiles_column(serial_df, "smiles", min_parallel_rows=1000)
-        threaded_result = standardize_smiles_column(
-            threaded_df,
+        parallel_result = standardize_smiles_column(
+            parallel_df,
             "smiles",
             max_workers=2,
             min_parallel_rows=1,
         )
 
-        assert threaded_result["smiles"].tolist() == serial_result["smiles"].tolist()
+        assert parallel_result["smiles"].tolist() == serial_result["smiles"].tolist()
 
-    def test_summary_logging_reports_mode_and_counts(self, caplog):
+    def test_default_threshold_uses_process_mode(self, monkeypatch, caplog):
+        monkeypatch.setattr(_MODULE, "ProcessPoolExecutor", InlineExecutor)
+        df = pd.DataFrame({"smiles": ["CCO"] * 64})
+
+        with caplog.at_level(logging.INFO):
+            standardize_smiles_column(df, "smiles", max_workers=2)
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert any(
+            "Standardizing SMILES column 'smiles': total_rows=64 string_rows=64 "
+            "mode=processes workers=2" in message
+            for message in messages
+        )
+
+    def test_summary_logging_reports_mode_and_counts(self, monkeypatch, caplog):
+        monkeypatch.setattr(_MODULE, "ProcessPoolExecutor", InlineExecutor)
         df = pd.DataFrame({"smiles": ["CCO", "invalid", None, "CCN"]})
 
         with caplog.at_level(logging.INFO):
@@ -77,8 +115,8 @@ class TestStandardizeSmilesColumn:
 
         messages = [record.getMessage() for record in caplog.records]
         assert any(
-            "Standardizing SMILES column 'smiles': total_rows=4 string_rows=3 mode=threaded workers=2"
-            in message
+            "Standardizing SMILES column 'smiles': total_rows=4 string_rows=3 "
+            "mode=processes workers=2" in message
             for message in messages
         )
         assert any(
@@ -89,11 +127,54 @@ class TestStandardizeSmilesColumn:
             for message in messages
         )
 
-    def test_small_inputs_remain_serial(self, caplog):
+    def test_process_fallback_reuses_serial_path(self, monkeypatch, caplog):
+        class FailingExecutor:
+            def __init__(self, max_workers):
+                self.max_workers = max_workers
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def map(self, func, iterable):
+                raise RuntimeError("executor failed")
+
+        monkeypatch.setattr(_MODULE, "ProcessPoolExecutor", FailingExecutor)
+        df = pd.DataFrame({"smiles": ["CCO", "invalid", None, "CCN"]})
+
+        with caplog.at_level(logging.INFO):
+            result = standardize_smiles_column(df, "smiles", max_workers=2, min_parallel_rows=1)
+
+        expected = [
+            standardize_smiles("CCO"),
+            standardize_smiles("invalid"),
+            None,
+            standardize_smiles("CCN"),
+        ]
+        normalized_result = [
+            None if pd.isna(value) else value for value in result["smiles"].tolist()
+        ]
+        assert normalized_result == expected
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert any(
+            "Process-based SMILES standardization failed for column 'smiles'; "
+            "falling back to serial" in message
+            for message in messages
+        )
+        assert any(
+            "Finished standardizing SMILES column 'smiles':" in message
+            and "serial_fallback=True" in message
+            for message in messages
+        )
+
+    def test_small_inputs_remain_serial_by_default(self, caplog):
         df = pd.DataFrame({"smiles": ["CCO", "CCN", None]})
 
         with caplog.at_level(logging.INFO):
-            standardize_smiles_column(df, "smiles", max_workers=4, min_parallel_rows=10)
+            standardize_smiles_column(df, "smiles", max_workers=2)
 
         messages = [record.getMessage() for record in caplog.records]
         assert any("mode=serial workers=2" in message for message in messages)
