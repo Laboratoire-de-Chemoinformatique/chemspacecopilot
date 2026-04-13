@@ -23,28 +23,38 @@ from .types import DBConfig, PaginationMode, QueryParams, ResultPage
 # Any run of hyphens or whitespace counts as a single token separator.
 _HYPHEN_OR_SPACE_RUN = re.compile(r"[-\s]+")
 
+# Letter→digit boundary (e.g. "CDK2" → "CDK|2", "PDE4A" → "PDE|4A").
+# Only splits where a letter is immediately followed by a digit; the
+# digit and any trailing letters stay together as one unit.
+_LETTER_DIGIT_BOUNDARY = re.compile(r"(?<=[a-zA-Z])(?=\d)")
+
 
 def _build_punctuation_regex(keyword: str) -> str | None:
     """Build a regex that matches all hyphen/space variants of *keyword*.
 
-    Returns ``None`` for single-token inputs (no separators to vary),
-    signalling the caller to use plain substring matching.
+    Returns ``None`` when the keyword cannot be split into multiple
+    parts, signalling the caller to use plain substring matching.
 
-    **Symmetry guarantee**: inputs that tokenize identically via
-    ``_HYPHEN_OR_SPACE_RUN`` produce the same regex.  In particular::
+    **Two splitting passes**:
 
-        _build_punctuation_regex("cyclin-dependent kinase 2")
-        == _build_punctuation_regex("cyclin dependent kinase 2")
-        == _build_punctuation_regex("cyclin-dependent kinase-2")
+    1. Split on explicit hyphens/spaces (``_HYPHEN_OR_SPACE_RUN``).
+    2. Sub-split each resulting token at letter→digit boundaries
+       (``_LETTER_DIGIT_BOUNDARY``), so ``"CDK2"`` → ``["CDK", "2"]``
+       and ``"PDE4A"`` → ``["PDE", "4A"]``.
 
-    For *n* ≤ 3 tokens the separator is ``[- ]?`` (optional), covering
-    the concat form (e.g. ``"5HT2A"`` from ``"5-HT2A"``).
+    This means single-token abbreviations like ``CDK2`` now produce a
+    regex (``CDK[- ]?2``) that matches ``CDK2``, ``CDK-2``, and
+    ``CDK 2``.
+
+    **Symmetry guarantee**: inputs that tokenize identically across both
+    passes produce the same regex.
+
+    For *n* ≤ 3 final tokens the separator is ``[- ]?`` (optional),
+    covering the concat form (e.g. ``"CDK2"`` from ``"CDK-2"``).
     For *n* ≥ 4 tokens the separator is ``[- ]`` (required).
 
     Uses ``[- ]`` (literal hyphen + space) rather than ``[-\\s]`` for
-    maximum SQL dialect compatibility (MySQL 5.7 Henry Spencer regex
-    does not support ``\\s``).  ChEMBL assay descriptions never contain
-    tabs or newlines between tokens.
+    maximum SQL dialect compatibility.
 
     Each token is ``re.escape``'d to handle metacharacters.
     """
@@ -53,8 +63,19 @@ def _build_punctuation_regex(keyword: str) -> str | None:
     base = keyword.strip()
     if not base:
         return None
-    tokens = [t for t in _HYPHEN_OR_SPACE_RUN.split(base) if t]
-    if not tokens or len(tokens) == 1:
+
+    # Pass 1: split on explicit hyphens/spaces.
+    raw_tokens = [t for t in _HYPHEN_OR_SPACE_RUN.split(base) if t]
+    if not raw_tokens:
+        return None
+
+    # Pass 2: sub-split each token at letter→digit boundaries.
+    tokens: list[str] = []
+    for t in raw_tokens:
+        parts = _LETTER_DIGIT_BOUNDARY.split(t)
+        tokens.extend(p for p in parts if p)
+
+    if len(tokens) <= 1:
         return None
     escaped = [re.escape(t) for t in tokens]
     sep = "[- ]?" if len(tokens) <= 3 else "[- ]"
