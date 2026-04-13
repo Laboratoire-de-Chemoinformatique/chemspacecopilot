@@ -986,14 +986,16 @@ class TestPunctuationRegex:
         assert re.search(p, "serotonin2A", re.IGNORECASE)
 
     def test_compact_5ht2a(self):
-        """Hyphen-separated compact names like 5-HT2A produce optional-sep regex."""
+        """Hyphen-separated compact names like 5-HT2A sub-split at letter→digit."""
         from cs_copilot.tools.databases.chembl import _build_punctuation_regex
 
         p = _build_punctuation_regex("5-HT2A")
-        assert p == r"5[- ]?HT2A"
+        # "HT2A" sub-splits to ["HT", "2A"] → 3 total tokens → optional sep
+        assert p == r"5[- ]?HT[- ]?2A"
         assert re.search(p, "5-HT2A")
         assert re.search(p, "5 HT2A")
         assert re.search(p, "5HT2A")
+        assert re.search(p, "5-HT-2A")
 
     def test_three_token_optional_separator(self):
         """3-token phrases also use optional separator."""
@@ -1005,13 +1007,39 @@ class TestPunctuationRegex:
         assert re.search(p, "B Raf kinase")
         assert re.search(p, "BRafkinase")
 
-    def test_single_token_returns_none(self):
-        """Single-token inputs return None (caller uses plain icontains)."""
+    def test_single_token_no_boundary_returns_none(self):
+        """All-letter tokens with no letter→digit boundary return None."""
         from cs_copilot.tools.databases.chembl import _build_punctuation_regex
 
         assert _build_punctuation_regex("EGFR") is None
         assert _build_punctuation_regex("BRAF") is None
-        assert _build_punctuation_regex("PDE4A") is None
+        assert _build_punctuation_regex("kinase") is None
+
+    def test_single_token_letter_digit_split(self):
+        """Single tokens with letter→digit boundaries produce a regex."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        # CDK2 → ["CDK", "2"] → CDK[- ]?2
+        p = _build_punctuation_regex("CDK2")
+        assert p == r"CDK[- ]?2"
+        assert re.search(p, "CDK2", re.IGNORECASE)
+        assert re.search(p, "CDK-2", re.IGNORECASE)
+        assert re.search(p, "CDK 2", re.IGNORECASE)
+
+        # PDE4A → ["PDE", "4A"] → PDE[- ]?4A
+        p = _build_punctuation_regex("PDE4A")
+        assert p == r"PDE[- ]?4A"
+        assert re.search(p, "PDE4A", re.IGNORECASE)
+        assert re.search(p, "PDE-4A", re.IGNORECASE)
+        assert re.search(p, "PDE 4A", re.IGNORECASE)
+
+        # JAK2 → ["JAK", "2"]
+        p = _build_punctuation_regex("JAK2")
+        assert p == r"JAK[- ]?2"
+
+        # IL6 → ["IL", "6"]
+        p = _build_punctuation_regex("IL6")
+        assert p == r"IL[- ]?6"
 
     def test_empty_returns_none(self):
         """Empty and whitespace-only inputs return None."""
