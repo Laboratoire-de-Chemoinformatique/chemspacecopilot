@@ -535,7 +535,9 @@ class GTMAgentFactory(BaseAgentFactory):
                 "gtm_cache": {
                     "model": None,
                     "dataset": None,
-                    "metadata": {},
+                    "metadata": {
+                        "optimization_strategy": None,
+                    },
                 },
                 "gtm_file_paths": {
                     "gtm_path": None,
