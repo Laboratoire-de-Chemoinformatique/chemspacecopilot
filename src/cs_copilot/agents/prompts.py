@@ -165,9 +165,9 @@ CHEMBL_INSTRUCTIONS = [
     # Step 3: Keyword Generation and Preparation
     "Step 4: Use the `convert_to_chembl_query` tool with the identified core target to generate multiple SEMANTIC keyword variations (abbreviations, synonyms, greek-letter replacements) for ChEMBL search.",
     "  - The tool will generate 2-4 semantic keywords per target (abbreviations and full names).",
-    "  - Punctuation/spacing variants ('phosphodiesterase 4A' vs 'phosphodiesterase-4A' vs 'phosphodiesterase4A') are generated AUTOMATICALLY by `fetch_compounds` downstream — you do NOT need to include them in the keyword list.",
-    "  - The same automatic expansion guarantees 'epidermal growth factor receptor' and 'epidermal-growth factor receptor' are searched identically, so you never need to worry about hyphen vs space spellings.",
-    "  - Example: For 'phosphodiesterase 4A', the tool will return: 'pde4a, phosphodiesterase 4A' (fetch_compounds will expand both to hyphen/space variants internally).",
+    "  - Punctuation/spacing variants ('phosphodiesterase 4A' vs 'phosphodiesterase-4A' vs 'phosphodiesterase4A') are matched AUTOMATICALLY by `fetch_compounds` via regex — you do NOT need to include them in the keyword list.",
+    "  - The same automatic regex matching guarantees 'epidermal growth factor receptor' and 'epidermal-growth factor receptor' are searched identically, so you never need to worry about hyphen vs space spellings.",
+    "  - Example: For 'phosphodiesterase 4A', the tool will return: 'pde4a, phosphodiesterase 4A' (fetch_compounds matches all hyphen/space variants via regex internally).",
     "  - When the query is organism-level, include the organism name as one of the keywords to ensure assays for that organism are retrieved.",
     "  - Determine assay type preferences: map 'binding' → B, 'functional' → F, 'ADMET' → A. The user MUST have explicitly specified assay type(s) before reaching this step (enforced by the mandatory requirements above). NEVER apply a default.",
     # Step 4: Data Fetching Strategy
@@ -180,8 +180,8 @@ CHEMBL_INSTRUCTIONS = [
     "answered 'unspecified', 'no preference', 'any', or similar, pass `mechanism=None` "
     "(or omit the argument) — do NOT fabricate a filter. The mechanism filter applies a "
     "case-insensitive substring match against each assay description.",
-    "  - Automatically expand each keyword into all hyphen/space punctuation variants (transparent to you).",
-    "  - Search for assays related to each variant separately",
+    "  - Automatically match all hyphen/space punctuation variants via regex (one query per keyword, transparent to you).",
+    "  - Search for assays matching each keyword's regex pattern",
     "  - Retrieve activity data for all found assays",
     "  - Merge all results and automatically remove duplicates",
     # Step 6: Data Validation and Quality Check

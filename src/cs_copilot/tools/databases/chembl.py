@@ -4,7 +4,6 @@
 ChEMBL-specific database toolkit implementation.
 """
 
-import itertools
 import logging
 import re
 import time
@@ -21,90 +20,45 @@ from .base import BaseDatabaseToolkit, DatabaseError, NotFound, RateLimited, Val
 from .chembl_fetcher import ChemblDataFetcher, RestChemblFetcher, SqlChemblFetcher
 from .types import DBConfig, PaginationMode, QueryParams, ResultPage
 
-_PUNCTUATION_VARIANT_CAP = 8
-
 # Any run of hyphens or whitespace counts as a single token separator.
 _HYPHEN_OR_SPACE_RUN = re.compile(r"[-\s]+")
 
 
-def _generate_punctuation_variants(keyword: str, cap: int = _PUNCTUATION_VARIANT_CAP) -> list[str]:
-    """Return a deterministic, symmetric list of punctuation/spacing variants.
+def _build_punctuation_regex(keyword: str) -> str | None:
+    """Build a regex that matches all hyphen/space variants of *keyword*.
 
-    **Symmetry guarantee**: two inputs that tokenize identically via
-    ``_HYPHEN_OR_SPACE_RUN`` produce *exactly* the same variant list. In
-    particular::
+    Returns ``None`` for single-token inputs (no separators to vary),
+    signalling the caller to use plain substring matching.
 
-        _generate_punctuation_variants("cyclin-dependent kinase 2")
-        == _generate_punctuation_variants("cyclin dependent kinase 2")
-        == _generate_punctuation_variants("cyclin-dependent kinase-2")
+    **Symmetry guarantee**: inputs that tokenize identically via
+    ``_HYPHEN_OR_SPACE_RUN`` produce the same regex.  In particular::
 
-    all return the same 8-element list. This is enforced by tokenizing the
-    input (discarding the original hyphen/space choices), then enumerating
-    every combination of ``" "`` and ``"-"`` separators between adjacent tokens.
+        _build_punctuation_regex("cyclin-dependent kinase 2")
+        == _build_punctuation_regex("cyclin dependent kinase 2")
+        == _build_punctuation_regex("cyclin-dependent kinase-2")
 
-    For ``n`` tokens, up to ``2**(n-1)`` hyphen/space combinations are generated;
-    for ``n <= 3`` there is extra budget and the no-separator concatenation
-    (e.g. ``"cdk 2"`` -> ``"cdk2"``) is also added. All variants are
-    deduplicated via casefold so case differences between LLM-generated
-    keywords never cause repeat calls.
+    For *n* ≤ 3 tokens the separator is ``[- ]?`` (optional), covering
+    the concat form (e.g. ``"5HT2A"`` from ``"5-HT2A"``).
+    For *n* ≥ 4 tokens the separator is ``[- ]`` (required).
 
-    Case is preserved in each variant; case-insensitive matching on the
-    ChEMBL backends (``description__icontains`` on REST, default ``LIKE``
-    collation on the SQL dumps) means case differences do not affect the
-    search results.
+    Uses ``[- ]`` (literal hyphen + space) rather than ``[-\\s]`` for
+    maximum SQL dialect compatibility (MySQL 5.7 Henry Spencer regex
+    does not support ``\\s``).  ChEMBL assay descriptions never contain
+    tabs or newlines between tokens.
 
-    Args:
-        keyword: Input keyword (caller already stripped).
-        cap: Maximum number of variants to return. Defaults to 8.
-
-    Returns:
-        Deduplicated list of variants. For a single-token input (no hyphens
-        or whitespace) the list contains only the original keyword.
+    Each token is ``re.escape``'d to handle metacharacters.
     """
     if not keyword:
-        return []
+        return None
     base = keyword.strip()
     if not base:
-        return []
-
+        return None
     tokens = [t for t in _HYPHEN_OR_SPACE_RUN.split(base) if t]
-    if not tokens:
-        return []
-    if len(tokens) == 1:
-        # Nothing to vary — return the original token unchanged.
-        return [tokens[0]]
-
-    variants: list[str] = []
-    seen: set[str] = set()
-
-    def _add(candidate: str) -> None:
-        candidate = candidate.strip()
-        if not candidate:
-            return
-        key = candidate.casefold()
-        if key in seen:
-            return
-        seen.add(key)
-        variants.append(candidate)
-
-    # Enumerate all 2**(n-1) combinations of " " vs "-" separators between
-    # adjacent tokens. The ordering of itertools.product is deterministic, so
-    # the resulting variant list is stable across calls.
-    for sep_choice in itertools.product((" ", "-"), repeat=len(tokens) - 1):
-        pieces = [tokens[0]]
-        # sep_choice has length n-1 (from repeat=) and tokens[1:] also has
-        # length n-1, so strict=True is safe and catches future mistakes.
-        for sep, tok in zip(sep_choice, tokens[1:], strict=True):
-            pieces.append(sep)
-            pieces.append(tok)
-        _add("".join(pieces))
-        if len(variants) >= cap:
-            return variants
-
-    # Budget left: add the no-separator concatenation, which covers compact
-    # forms like "5HT2A" from "5-HT2A" or "BRafkinase" from "B-Raf kinase".
-    _add("".join(tokens))
-    return variants[:cap]
+    if not tokens or len(tokens) == 1:
+        return None
+    escaped = [re.escape(t) for t in tokens]
+    sep = "[- ]?" if len(tokens) <= 3 else "[- ]"
+    return sep.join(escaped)
 
 
 logger = logging.getLogger(__name__)
@@ -487,25 +441,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
         if not raw_keywords:
             raise ValueError("query must contain at least one non-empty keyword")
 
-        # Expand each LLM-provided keyword into punctuation/spacing variants
-        # (transparent to the agent). The expansion is symmetric: equivalent
-        # spellings ("cyclin-dependent kinase 2" / "cyclin dependent kinase 2")
-        # produce the same variant set, so callers never have to worry about
-        # hyphen vs space vs concatenation.
-        keywords: list[str] = []
-        _seen_variants: set[str] = set()
-        for raw in raw_keywords:
-            for variant in _generate_punctuation_variants(raw):
-                key = variant.casefold()
-                if key in _seen_variants:
-                    continue
-                _seen_variants.add(key)
-                keywords.append(variant)
+        keywords: list[str] = raw_keywords
 
-        logger.info(
-            f"Fetching ChEMBL compounds for {len(raw_keywords)} input keyword(s) "
-            f"expanded to {len(keywords)} punctuation variants: {keywords}"
-        )
+        logger.info(f"Fetching ChEMBL compounds for {len(keywords)} keyword(s): {keywords}")
 
         all_dataframes = []
         all_assay_ids = set()  # Track unique assays across all keywords
@@ -516,9 +454,11 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 logger.info(f"Processing keyword: '{keyword}'")
 
                 # Step 1: Fetch assays for this keyword
-                logger.debug(f"Fetching assays from ChEMBL for keyword: '{keyword}'")
+                regex = _build_punctuation_regex(keyword)
+                if regex:
+                    logger.debug(f"Using regex for '{keyword}': {regex}")
 
-                assays = self._fetcher.fetch_assays(keyword, organism)
+                assays = self._fetcher.fetch_assays(keyword, organism, regex_pattern=regex)
 
                 if mechanism:
                     mechanism_lower = mechanism.lower()
@@ -803,9 +743,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
         variants (abbreviations, synonyms, Greek letter replacement).
         Punctuation and hyphenation variants (``"epidermal growth factor
         receptor"`` vs ``"epidermal-growth-factor receptor"`` vs
-        ``"epidermal growth factor-receptor"``) are automatically generated
-        downstream by ``fetch_compounds`` via
-        :func:`_generate_punctuation_variants` — the LLM should NOT spend
+        ``"epidermal growth factor-receptor"``) are automatically matched
+        downstream by ``fetch_compounds`` via a regex built by
+        :func:`_build_punctuation_regex` — the LLM should NOT spend
         its keyword budget on them.
 
         Args:
@@ -831,9 +771,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
             f"'protein kinase C alpha').\n"
             f"  - Greek character replacement (e.g., 'α' → 'alpha', 'β' → 'beta').\n"
             f"DO NOT generate punctuation / spacing variants yourself — the downstream "
-            f"`fetch_compounds` tool automatically expands each keyword into all hyphen/space "
-            f"combinations (e.g., 'epidermal growth factor receptor' is automatically expanded "
-            f"to 'epidermal-growth factor receptor', 'epidermal growth-factor-receptor', etc.).\n"
+            f"`fetch_compounds` tool automatically matches all hyphen/space combinations via "
+            f"regex (e.g., 'epidermal growth factor receptor' automatically matches "
+            f"'epidermal-growth factor receptor', 'epidermal growth-factor-receptor', etc.).\n"
             f"Output a comma-separated list of keyword phrases suitable for assay description "
             f"searches.\n"
             f"Example: For 'phosphodiesterase 4A', generate: 'pde4a, phosphodiesterase 4A'.\n"
