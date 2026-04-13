@@ -568,7 +568,8 @@ def _resolve_classification_columns(source_table: pd.DataFrame) -> dict[str, str
         column
         for column in source_table.columns
         if column.endswith("_density")
-        and column not in {"density", "filtered_density", "first_class_density", "second_class_density"}
+        and column
+        not in {"density", "filtered_density", "first_class_density", "second_class_density"}
     ]
 
     if len(prob_columns) < 2 or len(density_columns) < 2:
@@ -660,7 +661,9 @@ def _create_altair_landscape_chart(
     return altair_discrete_query_landscape(source_table, title=title)
 
 
-def _create_plotly_landscape_figure(source_table: pd.DataFrame, landscape_type: LandscapeType, title: str):
+def _create_plotly_landscape_figure(
+    source_table: pd.DataFrame, landscape_type: LandscapeType, title: str
+):
     """Dispatch to the appropriate ChemographyKit Plotly landscape renderer."""
     if landscape_type not in _PLOTLY_SUPPORTED_LANDSCAPES:
         raise ValueError(
@@ -2697,9 +2700,7 @@ def save_gtm_landscape_plot(
         _validate_landscape_table(source_table, normalized_type)
 
         title = f"{Path(landscape_file).stem} ({normalized_renderer} {normalized_type})"
-        base_path = (
-            f"{Path(landscape_file).with_suffix('')}_{normalized_renderer}_{normalized_type}_landscape"
-        )
+        base_path = f"{Path(landscape_file).with_suffix('')}_{normalized_renderer}_{normalized_type}_landscape"
         html_path = f"{base_path}{HTML_EXTENSION}"
         png_path = f"{base_path}{PNG_EXTENSION}"
 
