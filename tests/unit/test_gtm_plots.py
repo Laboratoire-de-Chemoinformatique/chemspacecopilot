@@ -339,7 +339,9 @@ def test_save_gtm_landscape_plot_plotly_reports_html_only_when_png_backend_missi
         def update_layout(self, **kwargs):
             return None
 
-    monkeypatch.setattr(gtm_operations, "plotly_smooth_density_landscape", lambda *_args, **_kwargs: _DummyFigure())
+    monkeypatch.setattr(
+        gtm_operations, "plotly_smooth_density_landscape", lambda *_args, **_kwargs: _DummyFigure()
+    )
     monkeypatch.setattr(gtm_operations, "_write_plotly_outputs", lambda *_args, **_kwargs: False)
 
     result = gtm_operations.save_gtm_landscape_plot(str(path), "density", renderer="plotly")

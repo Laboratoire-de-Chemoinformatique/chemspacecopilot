@@ -140,9 +140,7 @@ class S3Config:
             missing.append("AWS_SECRET_ACCESS_KEY")
         if missing:
             raise StorageConfigError(
-                "USE_S3=true without an endpoint requires "
-                + ", ".join(missing)
-                + " for AWS S3."
+                "USE_S3=true without an endpoint requires " + ", ".join(missing) + " for AWS S3."
             )
         return "aws"
 

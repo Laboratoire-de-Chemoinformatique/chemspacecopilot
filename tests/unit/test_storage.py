@@ -73,7 +73,9 @@ def test_valid_aws_config_enables_s3(clean_storage_env, fixed_session_prefix, mo
 
     assert get_s3_config().storage_backend() == "aws"
     assert is_s3_enabled() is True
-    assert S3.path("nested/dataset.csv") == "s3://test-bucket/sessions/test-session/nested/dataset.csv"
+    assert (
+        S3.path("nested/dataset.csv") == "s3://test-bucket/sessions/test-session/nested/dataset.csv"
+    )
 
 
 def test_valid_minio_config_enables_s3(clean_storage_env, monkeypatch):
@@ -88,7 +90,9 @@ def test_valid_minio_config_enables_s3(clean_storage_env, monkeypatch):
     assert is_s3_enabled() is True
 
 
-def test_incomplete_explicit_aws_config_raises(clean_storage_env, fixed_session_prefix, monkeypatch):
+def test_incomplete_explicit_aws_config_raises(
+    clean_storage_env, fixed_session_prefix, monkeypatch
+):
     """Explicit S3 mode should fail clearly when AWS credentials are incomplete."""
     monkeypatch.setenv("USE_S3", "true")
     monkeypatch.setenv("ASSETS_BUCKET", "test-bucket")
