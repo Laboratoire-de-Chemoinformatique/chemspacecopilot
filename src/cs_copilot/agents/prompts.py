@@ -563,7 +563,7 @@ GTM_AGENT_INSTRUCTIONS = [
     "  4. **Choose optimization strategy** — ask the user which effort level to use:",
     "     Present three options clearly:",
     "       * **Low** — fast heuristic grid search (9 combinations). Best for large datasets (>5 000 molecules) or quick exploration.",
-    "       * **Medium** — extended grid search (~108 combinations). Balanced speed and coverage. Recommended default.",
+    "       * **Medium** — extended grid search (~108 combinations). Balanced speed and coverage. ",
     "       * **High** — thorough Bayesian optimization with 50 trials. Best quality but slowest.",
     "     - If the dataset has **>5 000 molecules**, recommend **low** and mention that medium/high are available if the user wants better results.",
     "     - If the dataset has **<=5 000 molecules**, recommend **medium** as the default.",
@@ -849,7 +849,7 @@ AGENT_TEAM_INSTRUCTIONS = [
     "  - When routing a GTM optimization request, the GTM agent will ask the user about effort level (low/medium/high)",
     "  - If the user has already stated a preference, relay it when delegating to the GTM agent:",
     "    * 'quick', 'fast', 'rough' → low",
-    "    * 'default', 'standard', 'balanced' → medium",
+    "    * 'balanced' → medium",
     "    * 'thorough', 'full', 'best', 'exhaustive' → high",
     "  - After optimization completes with 'low' strategy, suggest upgrading:",
     "    'The GTM was optimized with a quick heuristic search. Would you like to re-optimize "

@@ -2090,7 +2090,7 @@ def gtm_param_grid(n_samples: int, mode: str = "extended") -> dict:
 def optimize_gtm(
     df: pd.DataFrame,
     smiles_column: str = "smi",
-    strategy: str = "medium",
+    strategy: str = "low",
 ):
     """
     Optimize GTM hyperparameters and fit the final model.
@@ -2274,7 +2274,7 @@ def optimize_gtm_model(
     gtm_name: str,
     smiles_column: str,
     agent: Agent,
-    strategy: str = "medium",
+    strategy: str = "low",
 ) -> str:
     """
     Load a dataset of SMILES strings, optimize a Generative Topographic Mapping (GTM)
@@ -3704,7 +3704,7 @@ SESSION_LATENT_GTM_SCALER_KEY = "_current_latent_gtm_scaler"
 def train_latent_gtm(
     latent_vectors: np.ndarray,
     config: Optional[dict] = None,
-    strategy: str = "medium",
+    strategy: str = "low",
 ) -> tuple:
     """
     Train a GTM on pre-computed latent vectors (e.g. from Peptide WAE).

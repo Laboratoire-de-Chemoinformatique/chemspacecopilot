@@ -83,7 +83,7 @@ class GTMToolkit(BaseDRToolkit):
         gtm_name: str,
         smiles_column: str,
         agent: Agent,
-        strategy: str = "medium",
+        strategy: str = "low",
     ) -> str:
         """
         Load a dataset of SMILES strings, optimize a Generative Topographic Mapping (GTM)
@@ -802,7 +802,7 @@ class GTMToolkit(BaseDRToolkit):
         dataset_name: str,
         gtm_name: str,
         agent: Agent,
-        strategy: str = "medium",
+        strategy: str = "low",
     ) -> str:
         """
         Train a GTM on pre-computed latent vectors (e.g. from Peptide WAE encoder).
