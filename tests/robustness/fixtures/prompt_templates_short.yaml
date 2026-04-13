@@ -1,11 +1,11 @@
 prompts:
   full_pipeline:
-    base: "Fetch kinase 2 inhibitor data, prepare GTM, describe the density landscape, prepare and describe the activity landscape, choose the most dense nodes and analyze the chemotypes in them. What assays do they correspond to? Are actives/inactives well separated? Summarize in detail."
+    base: "Fetch CDK2 inhibitor data, prepare GTM, describe the density landscape, prepare and describe the activity landscape, choose the most dense nodes and analyze the chemotypes in them. What assays do they correspond to? Are actives/inactives well separated? Summarize in detail."
     variations:
       - "Retrieve CDK2 inhibitor bioactivity from ChEMBL, build a GTM, describe density and activity landscapes, analyze dense-region scaffolds/assays, assess class separation, and summarize."
 
   chembl_download:
-    base: "Download kinase 2 inhibitor data from ChEMBL"
+    base: "Download CDK2 inhibitor data from ChEMBL"
     variations:
       - "Fetch CDK2 bioactivity from ChEMBL."
 
@@ -58,6 +58,17 @@ prompts:
         requires_clarification: false
         variations:
           - "Fetch ChEMBL HIV-1 RT pIC50 inhibition data."
+
+  chembl_specificity_floor:
+    base_prompts:
+      - base: "Fetch kinase 2 inhibitor data from ChEMBL"
+        requires_clarification: true
+        variations:
+          - "Pull kinase-2 inhibitors from ChEMBL."
+      - base: "Retrieve receptor 5 ligands from ChEMBL"
+        requires_clarification: true
+        variations:
+          - "Get receptor-5 binders from ChEMBL."
 
   gtm_optimization:
     base: "Build a GTM map"

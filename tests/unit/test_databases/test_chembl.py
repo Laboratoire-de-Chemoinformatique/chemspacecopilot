@@ -615,11 +615,12 @@ class TestChemblToolkit:
         """Test ChEMBL query conversion with valid input."""
         toolkit = ChemblToolkit()
 
-        result = toolkit.convert_to_chembl_query("kinase 2 inhibitor activity")
+        result = toolkit.convert_to_chembl_query("phosphodiesterase 4A")
 
         assert "ChEMBL's `assay_description__icontains` filter" in result
-        assert "kinase 2 inhibitor activity" in result
-        assert "kinase 2" in result  # Example output
+        assert "phosphodiesterase 4A" in result
+        # The new example in the tool's return message uses PDE4A as the abbreviation.
+        assert "pde4" in result.lower()
 
     def test_convert_to_chembl_query_invalid(self):
         """Test ChEMBL query conversion with invalid input."""
@@ -847,6 +848,41 @@ class TestChemblRateLimiting:
         assert toolkit.config.rate_limit == 5.0
         assert toolkit.config.timeout_s == 60.0
 
+    @patch.object(ChemblToolkit, "_ensure_client")
+    @patch("cs_copilot.tools.databases.chembl.S3")
+    def test_fetch_compounds_expands_punctuation_variants(self, mock_s3, mock_ensure_client):
+        """A single 4-token user keyword should produce 8 REST calls for punctuation variants."""
+        mock_client = Mock()
+        mock_client.assay.filter.return_value = [{"assay_chembl_id": "CHEMBL1"}]
+        mock_client.activity.filter.return_value.only.return_value = [
+            {
+                "activity_id": 1,
+                "assay_chembl_id": "CHEMBL1",
+                "molecule_chembl_id": "CHEMBL1",
+                "standard_value": 10.0,
+                "canonical_smiles": "CCO",
+            },
+        ]
+        mock_ensure_client.return_value = mock_client
+
+        mock_file = MagicMock()
+        mock_s3.open.return_value.__enter__.return_value = mock_file
+        mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
+
+        toolkit = ChemblToolkit()
+        toolkit.fetch_compounds("epidermal growth factor receptor")
+
+        called_keywords = {
+            call.kwargs.get("description__icontains")
+            for call in mock_client.assay.filter.call_args_list
+        }
+        # All 8 hyphen/space combinations must be present.
+        assert "epidermal growth factor receptor" in called_keywords
+        assert "epidermal-growth-factor-receptor" in called_keywords
+        assert "epidermal-growth factor receptor" in called_keywords
+        assert len(called_keywords) == 8
+
 
 class TestChemblIntegration:
     """Integration tests that test the full toolkit functionality."""
@@ -907,3 +943,94 @@ class TestChemblIntegration:
             # Step 2: Describe dataset
             desc_result = toolkit.describe_dataset("chembl_kinase.csv")
             assert isinstance(desc_result, str)
+
+
+class TestPunctuationVariants:
+    """Test the deterministic, symmetric punctuation-variant expander."""
+
+    def test_symmetric_cyclin_dependent_variants(self):
+        """The user's explicit invariant: equivalent spellings yield identical lists."""
+        from cs_copilot.tools.databases.chembl import _generate_punctuation_variants
+
+        a = _generate_punctuation_variants("cyclin-dependent kinase 2")
+        b = _generate_punctuation_variants("cyclin dependent kinase 2")
+        c = _generate_punctuation_variants("cyclin-dependent kinase-2")
+        d = _generate_punctuation_variants("cyclin dependent kinase-2")
+
+        assert a == b == c == d
+        # Must include both spellings the user called out.
+        assert "cyclin-dependent kinase 2" in a
+        assert "cyclin dependent kinase 2" in a
+        # Must include fully-hyphenated and fully-spaced forms.
+        assert "cyclin-dependent-kinase-2" in a
+        assert len(a) == 8  # 2**(4-1) = 8
+
+    def test_symmetric_four_token_phrase(self):
+        """Any 4-token phrase also exercises the 8-variant path."""
+        from cs_copilot.tools.databases.chembl import _generate_punctuation_variants
+
+        a = _generate_punctuation_variants("epidermal growth factor receptor")
+        b = _generate_punctuation_variants("epidermal-growth factor receptor")
+        c = _generate_punctuation_variants("epidermal-growth-factor-receptor")
+
+        assert a == b == c
+        assert "epidermal growth factor receptor" in a
+        assert "epidermal-growth-factor-receptor" in a
+
+    def test_two_token_phrase(self):
+        """2-token phrases produce 2 hyphen/space variants + 1 concat variant."""
+        from cs_copilot.tools.databases.chembl import _generate_punctuation_variants
+
+        v = _generate_punctuation_variants("serotonin 2A")
+        assert "serotonin 2A" in v
+        assert "serotonin-2A" in v
+        assert "serotonin2A" in v
+        assert len(v) == 3
+
+    def test_compact_receptor_name(self):
+        """Hyphen-separated compact names like 5-HT2A produce 3 variants."""
+        from cs_copilot.tools.databases.chembl import _generate_punctuation_variants
+
+        v = _generate_punctuation_variants("5-HT2A")
+        assert "5-HT2A" in v
+        assert "5 HT2A" in v
+        assert "5HT2A" in v
+
+    def test_single_token_is_returned_as_is(self):
+        """Single-token inputs have nothing to vary — return only the original."""
+        from cs_copilot.tools.databases.chembl import _generate_punctuation_variants
+
+        assert _generate_punctuation_variants("EGFR") == ["EGFR"]
+        assert _generate_punctuation_variants("BRAF") == ["BRAF"]
+        assert _generate_punctuation_variants("PDE4A") == ["PDE4A"]
+
+    def test_cap_respected(self):
+        """Cap caps the list even when more variants would be generated."""
+        from cs_copilot.tools.databases.chembl import _generate_punctuation_variants
+
+        v = _generate_punctuation_variants("epidermal growth factor receptor", cap=3)
+        assert len(v) <= 3
+
+    def test_empty_input(self):
+        """Empty and whitespace-only inputs return empty lists."""
+        from cs_copilot.tools.databases.chembl import _generate_punctuation_variants
+
+        assert _generate_punctuation_variants("") == []
+        assert _generate_punctuation_variants("   ") == []
+
+    def test_case_preserved(self):
+        """Case is preserved — first variant reflects the caller's casing."""
+        from cs_copilot.tools.databases.chembl import _generate_punctuation_variants
+
+        v_upper = _generate_punctuation_variants("JAK 2")
+        assert v_upper[0] == "JAK 2"
+        v_lower = _generate_punctuation_variants("jak 2")
+        assert v_lower[0] == "jak 2"
+
+    def test_casefold_dedup(self):
+        """Variants are deduped via casefold so mixed case inputs don't double-fetch."""
+        from cs_copilot.tools.databases.chembl import _generate_punctuation_variants
+
+        v = _generate_punctuation_variants("MEK 2")
+        # "MEK 2", "MEK-2", "MEK2" — 3 unique, nothing collapsed.
+        assert len(v) == 3
