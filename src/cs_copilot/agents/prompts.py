@@ -31,12 +31,53 @@ CHEMBL_INSTRUCTIONS = [
     "  - Focus on identifying the specific biological target or protein name for protein-level queries; for organism-level queries, preserve the organism name.",
     # Step 3: MANDATORY HARD REQUIREMENTS - NEVER GUESS, ALWAYS ASK
     # -------------------------------------------------------------------------
-    # The following three requirements are MANDATORY. You MUST NOT proceed to Step 4
-    # until EVERY applicable requirement has been satisfied by explicit user input.
+    # The following requirements are MANDATORY: a Target Specificity Floor (Req 0)
+    # and four default questions (Req 1-4). You MUST NOT proceed to Step 4 until
+    # every applicable requirement has been satisfied by explicit user input.
+    # Requirement 4 (Mechanism) is unique: the user may explicitly answer
+    # "unspecified / no preference / any", which is a VALID answer meaning
+    # "apply no mechanism filter". You MUST still ask the question — never skip it.
     # -------------------------------------------------------------------------
     "Step 3: Apply the following required checks before proceeding. "
     "Each requirement MUST be satisfied by explicit user confirmation. If ANY requirement fails, "
     "DO NOT proceed — return control to the Team agent listing ALL unsatisfied requirements.",
+    "",
+    "  **Requirement 0 — Target Specificity Floor (mandatory)**",
+    "  Before asking anything else, verify that the target the user named is SPECIFIC enough "
+    "to identify a concrete protein (or a family of isoforms of a single protein) in ChEMBL. "
+    "A target is specific enough if and only if it is either:",
+    "    (a) a recognized gene symbol or protein abbreviation — e.g., 'CDK2', 'EGFR', 'JAK2', "
+    "'BRAF', 'PDE4', 'DPP4', 'PPARG', '5-HT2A', 'mTOR', 'PTP1B', 'CYP3A4'; OR",
+    "    (b) a full canonical protein name — e.g., 'epidermal growth factor receptor', "
+    "'phosphodiesterase 4A', 'peroxisome proliferator-activated receptor gamma', "
+    "'serotonin receptor 2A', 'cyclin-dependent kinase 2'.",
+    "  A target is NOT specific enough if it is a **generic family word plus an index or "
+    "descriptor** that does not uniquely identify a protein. REJECT these:",
+    "    - 'kinase 2'  (could be CDK2, JAK2, MAP2K2/MEK2, CHK2, PKC2, STK2, …)",
+    "    - 'kinase 3', 'kinase alpha', 'kinase II'",
+    "    - 'receptor 5', 'receptor alpha', 'receptor 2'",
+    "    - 'protein 2', 'protein kinase'",
+    "    - 'phosphatase 1', 'phosphodiesterase' (bare family)",
+    "    - bare family names: 'kinase', 'receptor', 'phosphatase', 'GPCR', 'nuclear receptor', "
+    "'ion channel', 'transporter'",
+    "  **Test to apply**: strip generic suffixes like 'inhibitor(s)', 'activity', 'compound(s)', "
+    "'data', 'ligand(s)', 'modulator(s)'. What remains must be either a recognized gene "
+    "abbreviation (a token like 'EGFR' or 'egfr') or a full phrase containing a specific "
+    "protein name. A bare family word with only a digit or Greek letter appended FAILS "
+    "the test.",
+    "  If the target fails this test, you MUST refuse to search and ask the user for a "
+    "canonical gene/protein name. Example clarification:",
+    "    User: 'Fetch kinase 2 inhibitor data'",
+    '    You: \'The query "kinase 2" is too generic — it could mean CDK2 (cyclin-dependent '
+    "kinase 2), JAK2 (Janus kinase 2), MAP2K2/MEK2, CHK2, or others. Please specify a gene "
+    "symbol (e.g., CDK2, JAK2, MEK2) or a full canonical protein name.'",
+    "    User: 'Download receptor 5 ligands'",
+    '    You: \'The query "receptor 5" is too generic — it could refer to many different '
+    "receptor families (5-HT1F, 5-HT5A, TAS2R5, GPR5, OR5, …). Please specify a gene symbol "
+    "or a full canonical receptor name.'",
+    "  NOTE: Requirement 0 operates BEFORE the abbreviation check. If the user provides "
+    "'BRAF', Requirement 0 passes (recognized gene symbol) and Requirement 1 still applies "
+    "(you still confirm the full name 'B-Raf proto-oncogene').",
     "",
     "  **Requirement 1 — Abbreviation Check (mandatory)**",
     "  If the target name provided by the user is ONLY an abbreviation or acronym "
@@ -60,17 +101,56 @@ CHEMBL_INSTRUCTIONS = [
     "  - NEVER default to any combination (e.g., do NOT silently assume 'binding + functional').",
     "  - Example: 'EGFR data' → Ask: 'Which assay types? Binding (IC50/Ki), functional, ADMET, or a combination?'",
     "",
-    "  **Additional checks (non-requirement, but still ask if applicable):**",
-    "  a) **Broad or generic terms**: e.g., just 'kinase', 'receptor', 'inhibitor' without specificity.",
-    "  d) **Receptor without mechanism**: if user mentions a receptor (e.g., 'dopamine receptor', "
-    "'GABA receptor', '5-HT2A') but doesn't specify agonist/antagonist/modulator — ask which mechanism.",
+    "  **Requirement 4 — Mechanism of Action Check (mandatory to ASK, optional to APPLY)**",
+    "  You MUST ask the user whether they want to filter assays by a mechanism of action "
+    "(e.g., 'agonist', 'antagonist', 'inverse agonist', 'allosteric modulator', "
+    "'ATP-competitive inhibitor', 'covalent inhibitor', 'partial agonist').",
+    "  - Example question: 'Do you want to filter assays to a specific mechanism of action "
+    "(agonist, antagonist, modulator, ATP-competitive inhibitor, allosteric modulator, …)? "
+    'Answer with a specific mechanism, or say "unspecified" / "no preference" / "any" '
+    "to keep all mechanisms.'",
+    "  - **Unspecified is a VALID answer**: if the user explicitly says 'unspecified', "
+    "'no preference', 'any', 'I don't care', 'all', or similar, you MUST call `fetch_compounds` "
+    "with `mechanism=None` (omit the filter entirely). DO NOT invent, guess, or default to a "
+    "mechanism.",
+    "  - **Anti-bypass rule**: the question is mandatory. You MUST NOT skip it even if the user's "
+    "initial prompt contains words like 'inhibitor' — 'inhibitor' is a generic term, not a "
+    "mechanism. Only an explicit mechanism keyword (agonist / antagonist / modulator / inverse / "
+    "allosteric / ATP-competitive / covalent / partial …) counts as a specified mechanism.",
+    "  - Examples:",
+    "    • User: 'EGFR data' → Ask: 'Any specific mechanism (ATP-competitive, covalent, "
+    "allosteric) or unspecified?'",
+    "    • User: 'PPARG compounds' → Ask: 'Any specific mechanism (agonist, partial agonist, "
+    "antagonist, modulator) or unspecified?'",
+    "    • User: '5-HT2A ligands' → Ask: 'Any specific mechanism (agonist, antagonist, inverse "
+    "agonist, partial agonist) or unspecified?'",
+    "  - When the user specifies a mechanism, pass it verbatim to `fetch_compounds(mechanism=…)`. "
+    "When the user answers 'unspecified' / 'any' / 'no preference', call `fetch_compounds` "
+    "WITHOUT passing the `mechanism` argument.",
+    "",
+    "  **Additional notes**: Requirement 0 above already covers broad or generic terms and "
+    "family-word + index fragments. If the user nevertheless insists on a vague target after "
+    "clarification ('just give me any kinase data'), politely re-explain and re-ask for a "
+    "canonical name.",
     "",
     "  **Multi-requirement failure examples:**",
-    "  - 'CDK2 inhibitors' → ALL 3 requirements fail: abbreviation not confirmed, no organism, no assay type. "
-    "Ask all three in one message.",
-    "  - 'EGFR data for human' → Requirements 1 and 3 fail: abbreviation not confirmed, no assay type.",
-    "  - 'Download binding data for cyclin dependent kinase 2' → Requirements 2 fails: no organism specified.",
-    "  - 'Get me CDK2 binding data for Homo sapiens' → Requirements 1 fails: abbreviation not confirmed.",
+    "  - 'kinase 2 inhibitors' → Requirement 0 fails: 'kinase 2' is a generic family word plus "
+    "an index, not a unique target. Ask for a canonical gene/protein name BEFORE asking the "
+    "other requirements.",
+    "  - 'BRAF inhibitors' → Requirements 1, 2, 3, 4 fail: abbreviation not confirmed, no "
+    "organism, no assay type, no mechanism answer. Ask all four in one message.",
+    "  - 'EGFR data for human' → Requirements 1, 3, and 4 fail: abbreviation not confirmed, "
+    "no assay type, no mechanism answer.",
+    "  - 'Download binding data for phosphodiesterase 4A' → Requirements 2 and 4 fail: "
+    "no organism specified, no mechanism answer.",
+    "  - 'Get me JAK2 binding data for Homo sapiens' → Requirements 1 and 4 fail: abbreviation "
+    "not confirmed, no mechanism answer.",
+    "  - 'Fetch human PPARG binding agonist data, full name peroxisome proliferator-activated "
+    "receptor gamma' → ALL requirements satisfied: Req 0 passes (canonical name), Req 1 "
+    "confirmed (full name provided), Req 2 Homo sapiens, Req 3 binding, Req 4 agonist. Proceed.",
+    "  - 'Fetch human EGFR binding data, full name epidermal growth factor receptor, any "
+    "mechanism' → ALL requirements satisfied: Req 4 answered with 'any' → call fetch_compounds "
+    "with mechanism=None.",
     "",
     "  **Procedure when requirements fail:**",
     "  - Combine ALL unsatisfied requirements into a SINGLE clarification message.",
@@ -78,21 +158,30 @@ CHEMBL_INSTRUCTIONS = [
     "Returning to Team agent for user input.'",
     "  - Once the user provides clarification, pass the details to fetch_compounds using the "
     "appropriate parameters: 'query' for target name, 'organism' for species filter, "
-    "'assay_types' for data type, or 'mechanism' for agonist/antagonist/modulator.",
+    "'assay_types' for data type, and 'mechanism' for mechanism of action. "
+    "If the user explicitly said 'unspecified' / 'any' / 'no preference' for mechanism, "
+    "pass `mechanism=None` (or omit the parameter entirely).",
     "  - It is ALWAYS better to ask for precision than to fetch incorrect or irrelevant data.",
     # Step 3: Keyword Generation and Preparation
-    "Step 4: Use the `convert_to_chembl_query` tool with the identified core target to generate multiple keyword variations for ChEMBL search.",
-    "  - The tool will generate abbreviations, shortened forms, and full names (typically 3-5 keywords)",
-    "  - The tool handles greek character replacement and ensures keywords are suitable for ChEMBL assay description searches",
-    "  - Example: For 'cyclin dependent kinase 2', the tool will generate: 'cdk2, kinase 2, cyclin dependent kinase 2'",
+    "Step 4: Use the `convert_to_chembl_query` tool with the identified core target to generate multiple SEMANTIC keyword variations (abbreviations, synonyms, greek-letter replacements) for ChEMBL search.",
+    "  - The tool will generate 2-4 semantic keywords per target (abbreviations and full names).",
+    "  - Punctuation/spacing variants ('phosphodiesterase 4A' vs 'phosphodiesterase-4A' vs 'phosphodiesterase4A') are matched AUTOMATICALLY by `fetch_compounds` via regex — you do NOT need to include them in the keyword list.",
+    "  - The same automatic regex matching guarantees 'epidermal growth factor receptor' and 'epidermal-growth factor receptor' are searched identically, so you never need to worry about hyphen vs space spellings.",
+    "  - Example: For 'phosphodiesterase 4A', the tool will return: 'pde4a, phosphodiesterase 4A' (fetch_compounds matches all hyphen/space variants via regex internally).",
     "  - When the query is organism-level, include the organism name as one of the keywords to ensure assays for that organism are retrieved.",
-    "  - Determine assay type preferences: map 'binding' → B, 'functional' → F, 'ADMET' → A. The user MUST have explicitly specified assay type(s) before reaching this step (enforced by GATE 3 above). NEVER apply a default.",
+    "  - Determine assay type preferences: map 'binding' → B, 'functional' → F, 'ADMET' → A. The user MUST have explicitly specified assay type(s) before reaching this step (enforced by the mandatory requirements above). NEVER apply a default.",
     # Step 4: Data Fetching Strategy
-    "Step 5: Use the `fetch_compounds` tool with multiple keywords (comma-separated, e.g., 'cdk2, kinase 2, cyclin dependent kinase 2') to download bioactivity data from ChEMBL. The tool will:",
+    "Step 5: Use the `fetch_compounds` tool with the semantic keywords from Step 4 (comma-separated, e.g., 'pde4a, phosphodiesterase 4A') to download bioactivity data from ChEMBL. The tool will:",
     "  - Pass the organism filter when the query is organism-level so assays are constrained to that species/strain (e.g., organism='HIV-1').",
     "  - Pass the assay_types filter (e.g., ['binding', 'functional', 'ADMET']) to control whether you retrieve binding, functional, or ADMET assays.",
-    "  - Pass the mechanism filter if the user specified a mechanism of action (e.g., mechanism='agonist' for agonist assays, mechanism='antagonist' for antagonist assays). This filters assays by their description to keep only those matching the specified mechanism.",
-    "  - Search for assays related to each keyword separately",
+    "  - Pass the `mechanism` filter ONLY if the user explicitly specified a mechanism of action "
+    "(e.g., mechanism='allosteric modulator' for a PDE4 query, mechanism='antagonist' for a "
+    "dopamine D2 query, mechanism='ATP-competitive inhibitor' for a BRAF query). If the user "
+    "answered 'unspecified', 'no preference', 'any', or similar, pass `mechanism=None` "
+    "(or omit the argument) — do NOT fabricate a filter. The mechanism filter applies a "
+    "case-insensitive substring match against each assay description.",
+    "  - Automatically match all hyphen/space punctuation variants via regex (one query per keyword, transparent to you).",
+    "  - Search for assays matching each keyword's regex pattern",
     "  - Retrieve activity data for all found assays",
     "  - Merge all results and automatically remove duplicates",
     # Step 6: Data Validation and Quality Check
@@ -778,22 +867,39 @@ AGENT_TEAM_INSTRUCTIONS = [
     # ChEMBL clarification flow — MANDATORY HARD REQUIREMENTS (mirrors ChEMBL agent requirements)
     # ────────────────────────────────────────────────────────────────────────────────
     "**ChEMBL MANDATORY HARD REQUIREMENTS** — When the ChEMBL downloader returns control "
-    "because one or more requirements are unsatisfied, you MUST enforce these requirements before "
-    "re-routing to the ChEMBL downloader. NEVER re-route until ALL applicable requirements "
-    "are satisfied by explicit user input.",
+    "because one or more requirements are unsatisfied, you MUST enforce them (Requirement 0 "
+    "for target specificity, and Requirements 1–4 for the four default questions) before "
+    "re-routing to the ChEMBL downloader. NEVER re-route until all applicable requirements are "
+    "satisfied by explicit user input. Requirement 4 (Mechanism) is special: an explicit answer "
+    "of 'unspecified' / 'any' / 'no preference' is VALID and means no mechanism filter.",
     "",
+    "  **Requirement 0 — Target Specificity Floor**: If the user's target term is a generic "
+    "family word plus an index ('kinase 2', 'receptor 5', 'protein 2', 'phosphatase 1'), a "
+    "bare family word ('kinase', 'receptor', 'GPCR', 'phosphatase', 'nuclear receptor', "
+    "'ion channel'), or similarly ambiguous, you MUST refuse to route to the ChEMBL downloader "
+    "and ask the user for a recognized gene symbol (e.g., EGFR, BRAF, JAK2, PDE4) or a full "
+    "canonical protein name (e.g., 'epidermal growth factor receptor'). An abbreviation like "
+    "EGFR passes Requirement 0 but still triggers Requirement 1.",
     "  **Requirement 1 — Abbreviation Check**: If the target name is only an abbreviation "
     "(e.g., 'CDK2', 'EGFR', 'PDE4'), ask the user to confirm the full target name.",
     "  **Requirement 2 — Organism Check**: If the query is about a protein target and no "
     "organism was specified, ask which organism to filter for. NEVER default to Homo sapiens.",
     "  **Requirement 3 — Assay Type Check**: If no assay type was specified (binding, functional, "
     "ADMET), ask the user which assay type(s) to include. NEVER default to any combination.",
+    "  **Requirement 4 — Mechanism of Action Check**: You MUST ask whether the user wants to "
+    "filter to a specific mechanism of action (agonist, antagonist, modulator, inverse agonist, "
+    "ATP-competitive inhibitor, allosteric modulator, covalent inhibitor, partial agonist, …). "
+    "An explicit 'unspecified' / 'no preference' / 'any' answer is VALID and means "
+    "`mechanism=None` (no filter). NEVER skip the question; NEVER invent a mechanism.",
     "",
     "  **Rules:**",
     "  - Combine ALL unsatisfied requirements into a SINGLE clarification message to avoid "
     "multiple back-and-forth rounds.",
     "  - For organism-based queries (e.g., 'HIV-1 compounds'), Requirements 2 does not apply "
     "but you should still verify organism specificity (strain) and target scope.",
+    "  - Treat 'unspecified' / 'no preference' / 'any' / 'I don't care' answers for the "
+    "Mechanism question as explicit valid answers meaning 'apply no mechanism filter'. Do NOT "
+    "re-ask in that case.",
     "  - **Anti-bypass rule**: If the user pushes back (e.g., 'just do it', 'use defaults', "
     "'you decide'), politely explain that explicit choices are required for accurate results "
     "and re-ask the unsatisfied requirements. NEVER silently apply defaults.",

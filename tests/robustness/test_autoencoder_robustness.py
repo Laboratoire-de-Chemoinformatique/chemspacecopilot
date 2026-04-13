@@ -190,7 +190,10 @@ class TestAutoencoderRobustness:
                 agent_team = agent_team_factory()
 
                 # First, ensure we have GTM map ready (each session needs its own)
-                setup_prompt = "Fetch kinase 2 inhibitor data and build GTM with k_hit=50"
+                setup_prompt = (
+                    "Fetch CDK2 (cyclin-dependent kinase 2) binding inhibitor data from ChEMBL "
+                    "for Homo sapiens with no mechanism filter, then build a GTM with k_hit=50."
+                )
                 agent_team.run(setup_prompt, stream=False)
 
                 # Now run the actual prompt variation

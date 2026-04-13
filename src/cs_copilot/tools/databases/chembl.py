@@ -5,6 +5,7 @@ ChEMBL-specific database toolkit implementation.
 """
 
 import logging
+import re
 import time
 from typing import Any, Dict, Optional, Sequence
 
@@ -18,6 +19,47 @@ from cs_copilot.tools.io.utils import validate_positive_int
 from .base import BaseDatabaseToolkit, DatabaseError, NotFound, RateLimited, ValidationError
 from .chembl_fetcher import ChemblDataFetcher, RestChemblFetcher, SqlChemblFetcher
 from .types import DBConfig, PaginationMode, QueryParams, ResultPage
+
+# Any run of hyphens or whitespace counts as a single token separator.
+_HYPHEN_OR_SPACE_RUN = re.compile(r"[-\s]+")
+
+
+def _build_punctuation_regex(keyword: str) -> str | None:
+    """Build a regex that matches all hyphen/space variants of *keyword*.
+
+    Returns ``None`` for single-token inputs (no separators to vary),
+    signalling the caller to use plain substring matching.
+
+    **Symmetry guarantee**: inputs that tokenize identically via
+    ``_HYPHEN_OR_SPACE_RUN`` produce the same regex.  In particular::
+
+        _build_punctuation_regex("cyclin-dependent kinase 2")
+        == _build_punctuation_regex("cyclin dependent kinase 2")
+        == _build_punctuation_regex("cyclin-dependent kinase-2")
+
+    For *n* ≤ 3 tokens the separator is ``[- ]?`` (optional), covering
+    the concat form (e.g. ``"5HT2A"`` from ``"5-HT2A"``).
+    For *n* ≥ 4 tokens the separator is ``[- ]`` (required).
+
+    Uses ``[- ]`` (literal hyphen + space) rather than ``[-\\s]`` for
+    maximum SQL dialect compatibility (MySQL 5.7 Henry Spencer regex
+    does not support ``\\s``).  ChEMBL assay descriptions never contain
+    tabs or newlines between tokens.
+
+    Each token is ``re.escape``'d to handle metacharacters.
+    """
+    if not keyword:
+        return None
+    base = keyword.strip()
+    if not base:
+        return None
+    tokens = [t for t in _HYPHEN_OR_SPACE_RUN.split(base) if t]
+    if not tokens or len(tokens) == 1:
+        return None
+    escaped = [re.escape(t) for t in tokens]
+    sep = "[- ]?" if len(tokens) <= 3 else "[- ]"
+    return sep.join(escaped)
+
 
 logger = logging.getLogger(__name__)
 
@@ -395,9 +437,11 @@ class ChemblToolkit(BaseDatabaseToolkit):
         assay_type_codes = self._normalize_assay_types(default_assay_types)
 
         # Parse multiple keywords from query string
-        keywords = [kw.strip() for kw in query.split(",") if kw.strip()]
-        if not keywords:
+        raw_keywords = [kw.strip() for kw in query.split(",") if kw.strip()]
+        if not raw_keywords:
             raise ValueError("query must contain at least one non-empty keyword")
+
+        keywords: list[str] = raw_keywords
 
         logger.info(f"Fetching ChEMBL compounds for {len(keywords)} keyword(s): {keywords}")
 
@@ -410,9 +454,11 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 logger.info(f"Processing keyword: '{keyword}'")
 
                 # Step 1: Fetch assays for this keyword
-                logger.debug(f"Fetching assays from ChEMBL for keyword: '{keyword}'")
+                regex = _build_punctuation_regex(keyword)
+                if regex:
+                    logger.debug(f"Using regex for '{keyword}': {regex}")
 
-                assays = self._fetcher.fetch_assays(keyword, organism)
+                assays = self._fetcher.fetch_assays(keyword, organism, regex_pattern=regex)
 
                 if mechanism:
                     mechanism_lower = mechanism.lower()
@@ -690,29 +736,47 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
     def convert_to_chembl_query(self, natural_prompt: str) -> str:
         """
-        Generate multiple keyword variations from a target description for ChEMBL assay description searches.
+        Generate multiple semantic keyword variations from a target description
+        for ChEMBL assay description searches.
+
+        The returned instruction directs the LLM to focus on **semantic**
+        variants (abbreviations, synonyms, Greek letter replacement).
+        Punctuation and hyphenation variants (``"epidermal growth factor
+        receptor"`` vs ``"epidermal-growth-factor receptor"`` vs
+        ``"epidermal growth factor-receptor"``) are automatically matched
+        downstream by ``fetch_compounds`` via a regex built by
+        :func:`_build_punctuation_regex` — the LLM should NOT spend
+        its keyword budget on them.
 
         Args:
-            natural_prompt: Target description (should already have generic terms removed in previous steps)
+            natural_prompt: Target description (should already have generic
+                terms removed in previous steps)
 
         Returns:
-            Formatted instruction for generating multiple ChEMBL search keywords
-
-        Example:
-            >>> convert_to_chembl_query("cyclin dependent kinase 2")
-            Returns instruction to generate multiple keywords like: 'cdk2', 'kinase 2', 'cyclin dependent kinase 2'
+            Formatted instruction for generating ChEMBL search keywords
         """
         if not natural_prompt or not isinstance(natural_prompt, str):
             raise ValueError("natural_prompt must be a non-empty string")
 
         return (
             f"You are preparing queries for ChEMBL's `assay_description__icontains` filter.\n"
-            f"Given this target description: '{natural_prompt.strip()}', generate multiple keyword variations (typically 3-5) that are likely to appear in ChEMBL assay descriptions.\n"
-            f"Include:\n"
-            f"  - Abbreviations (e.g., 'cyclin dependent kinase 2' → 'cdk2')\n"
-            f"  - Shortened forms (e.g., 'kinase 2')\n"
-            f"  - Full names or common variations\n"
-            f"Replace greek characters with their English names (e.g., 'α' → 'alpha', 'β' → 'beta').\n"
-            f"Output a comma-separated list of keyword phrases suitable for searching assay descriptions.\n"
-            f"Example: For 'cyclin dependent kinase 2', generate: 'cdk2, kinase 2, cyclin dependent kinase 2'"
+            f"Given this target description: '{natural_prompt.strip()}', generate multiple "
+            f"SEMANTIC keyword variations (typically 2-4). Focus on:\n"
+            f"  - Gene symbols / abbreviations (e.g., 'epidermal growth factor receptor' → 'egfr', "
+            f"'phosphodiesterase 4A' → 'pde4a', 'B-Raf proto-oncogene' → 'braf', "
+            f"'Janus kinase 2' → 'jak2').\n"
+            f"  - Common full-name variants (e.g., 'phosphodiesterase 4A', "
+            f"'epidermal growth factor receptor').\n"
+            f"  - Literature synonyms (e.g., 'ERBB1' for EGFR; 'PRKCA' for "
+            f"'protein kinase C alpha').\n"
+            f"  - Greek character replacement (e.g., 'α' → 'alpha', 'β' → 'beta').\n"
+            f"DO NOT generate punctuation / spacing variants yourself — the downstream "
+            f"`fetch_compounds` tool automatically matches all hyphen/space combinations via "
+            f"regex (e.g., 'epidermal growth factor receptor' automatically matches "
+            f"'epidermal-growth factor receptor', 'epidermal growth-factor-receptor', etc.).\n"
+            f"Output a comma-separated list of keyword phrases suitable for assay description "
+            f"searches.\n"
+            f"Example: For 'phosphodiesterase 4A', generate: 'pde4a, phosphodiesterase 4A'.\n"
+            f"Example: For 'epidermal growth factor receptor', generate: "
+            f"'egfr, epidermal growth factor receptor, erbb1'."
         )

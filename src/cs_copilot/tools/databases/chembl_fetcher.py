@@ -24,8 +24,13 @@ class ChemblDataFetcher(ABC):
         self,
         keyword: str,
         organism: Optional[str] = None,
+        regex_pattern: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Fetch assays matching keyword and optional organism filter.
+
+        When *regex_pattern* is provided, it is used for case-insensitive
+        regex matching against the assay description instead of plain
+        substring matching on *keyword*.
 
         Returns list of assay dicts with at minimum:
         assay_chembl_id, description, assay_type, assay_organism.
@@ -62,9 +67,12 @@ class RestChemblFetcher(ChemblDataFetcher):
     def __init__(self, ensure_client_fn: Callable):
         self._ensure_client = ensure_client_fn
 
-    def fetch_assays(self, keyword, organism=None):
+    def fetch_assays(self, keyword, organism=None, regex_pattern=None):
         client = self._ensure_client()
-        filter_kwargs: Dict[str, Any] = {"description__icontains": keyword}
+        if regex_pattern is not None:
+            filter_kwargs: Dict[str, Any] = {"description__iregex": regex_pattern}
+        else:
+            filter_kwargs: Dict[str, Any] = {"description__icontains": keyword}
         if organism:
             filter_kwargs["target_organism__icontains"] = organism
         return list(client.assay.filter(**filter_kwargs))
@@ -205,10 +213,39 @@ class SqlChemblFetcher(ChemblDataFetcher):
         logger.info(f"Created SQLite engine for ChEMBL: {db_path}")
         return cls(engine, backend_label="SQLite")
 
-    def fetch_assays(self, keyword, organism=None):
+    def _regex_where(self, column: str, pattern: str) -> tuple[str, Dict[str, Any]]:
+        """Return a SQL WHERE fragment and params for case-insensitive regex."""
+        if self._backend_label == "MySQL":
+            return f"{column} REGEXP :regex_pattern", {"regex_pattern": pattern}
+        elif self._backend_label == "PostgreSQL":
+            return f"{column} ~* :regex_pattern", {"regex_pattern": pattern}
+        else:  # SQLite or unknown
+            return f"regexp(:regex_pattern, {column})", {"regex_pattern": pattern}
+
+    @staticmethod
+    def _ensure_sqlite_regexp(conn) -> None:
+        """Register a Python-based REGEXP function on a raw SQLite connection."""
+        import re as _re
+
+        raw = conn.connection.dbapi_connection
+        raw.create_function(
+            "regexp",
+            2,
+            lambda pat, val: bool(_re.search(pat, val or "", _re.IGNORECASE)),
+        )
+
+    def fetch_assays(self, keyword, organism=None, regex_pattern=None):
         from sqlalchemy import text
 
-        sql = """
+        params: Dict[str, Any] = {}
+
+        if regex_pattern is not None:
+            where_clause, params = self._regex_where("a.description", regex_pattern)
+        else:
+            where_clause = "a.description LIKE :keyword_pattern"
+            params["keyword_pattern"] = f"%{keyword}%"
+
+        sql = f"""
             SELECT
                 a.chembl_id AS assay_chembl_id,
                 a.description,
@@ -217,15 +254,16 @@ class SqlChemblFetcher(ChemblDataFetcher):
                 td.chembl_id AS target_chembl_id
             FROM assays a
             LEFT JOIN target_dictionary td ON a.tid = td.tid
-            WHERE a.description LIKE :keyword_pattern
+            WHERE {where_clause}
         """
-        params: Dict[str, Any] = {"keyword_pattern": f"%{keyword}%"}
 
         if organism:
             sql += " AND td.organism LIKE :organism_pattern"
             params["organism_pattern"] = f"%{organism}%"
 
         with self._engine.connect() as conn:
+            if self._backend_label == "SQLite" and regex_pattern is not None:
+                self._ensure_sqlite_regexp(conn)
             result = conn.execute(text(sql), params)
             return [dict(row._mapping) for row in result]
 

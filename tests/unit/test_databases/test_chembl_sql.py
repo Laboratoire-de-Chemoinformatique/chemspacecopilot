@@ -97,6 +97,38 @@ class TestRestChemblFetcher:
         fetcher = RestChemblFetcher(lambda: Mock())
         fetcher.close()  # Should not raise
 
+    def test_fetch_assays_with_regex(self):
+        """When regex_pattern is passed, should use description__iregex."""
+        mock_client = Mock()
+        mock_client.assay.filter.return_value = [{"assay_chembl_id": "CHEMBL1"}]
+
+        fetcher = RestChemblFetcher(lambda: mock_client)
+        fetcher.fetch_assays(
+            "epidermal growth factor receptor",
+            regex_pattern=r"epidermal[- ]growth[- ]factor[- ]receptor",
+        )
+
+        mock_client.assay.filter.assert_called_with(
+            description__iregex=r"epidermal[- ]growth[- ]factor[- ]receptor"
+        )
+
+    def test_fetch_assays_regex_with_organism(self):
+        """Regex and organism filter should combine correctly."""
+        mock_client = Mock()
+        mock_client.assay.filter.return_value = []
+
+        fetcher = RestChemblFetcher(lambda: mock_client)
+        fetcher.fetch_assays(
+            "PDE4",
+            organism="Homo sapiens",
+            regex_pattern=r"PDE[- ]?4",
+        )
+
+        mock_client.assay.filter.assert_called_with(
+            description__iregex=r"PDE[- ]?4",
+            target_organism__icontains="Homo sapiens",
+        )
+
 
 class TestSqlChemblFetcher:
     """Tests for SqlChemblFetcher with mocked engine."""
@@ -287,6 +319,70 @@ class TestSqlChemblFetcher:
                 with patch("sqlalchemy.create_engine", return_value=MagicMock()):
                     fetcher = SqlChemblFetcher.from_env()
                     assert fetcher._backend_label == "MySQL"
+
+    def test_fetch_assays_with_regex_mysql(self):
+        """MySQL backend should use REGEXP for regex_pattern."""
+        fetcher, conn = self._make_fetcher([])
+        fetcher._backend_label = "MySQL"
+        fetcher.fetch_assays(
+            "epidermal growth factor receptor",
+            regex_pattern=r"epidermal[- ]growth[- ]factor[- ]receptor",
+        )
+
+        call_args = conn.execute.call_args
+        sql_text = str(call_args[0][0])
+        params = call_args[0][1]
+        assert "REGEXP" in sql_text
+        assert params["regex_pattern"] == r"epidermal[- ]growth[- ]factor[- ]receptor"
+        assert "keyword_pattern" not in params
+
+    def test_fetch_assays_with_regex_postgres(self):
+        """PostgreSQL backend should use ~* for regex_pattern."""
+        fetcher, conn = self._make_fetcher([])
+        fetcher._backend_label = "PostgreSQL"
+        fetcher.fetch_assays(
+            "JAK2 kinase",
+            regex_pattern=r"JAK[- ]?2[- ]?kinase",
+        )
+
+        call_args = conn.execute.call_args
+        sql_text = str(call_args[0][0])
+        params = call_args[0][1]
+        assert "~*" in sql_text
+        assert params["regex_pattern"] == r"JAK[- ]?2[- ]?kinase"
+
+    def test_fetch_assays_with_regex_sqlite(self):
+        """SQLite backend should use regexp() function for regex_pattern."""
+        fetcher, conn = self._make_fetcher([])
+        fetcher._backend_label = "SQLite"
+
+        # Mock the connection chain for _ensure_sqlite_regexp
+        mock_dbapi = MagicMock()
+        conn.connection.dbapi_connection = mock_dbapi
+
+        fetcher.fetch_assays(
+            "PDE4A",
+            regex_pattern=r"PDE[- ]?4A",
+        )
+
+        call_args = conn.execute.call_args
+        sql_text = str(call_args[0][0])
+        params = call_args[0][1]
+        assert "regexp(" in sql_text.lower()
+        assert params["regex_pattern"] == r"PDE[- ]?4A"
+        # Verify REGEXP function was registered on the SQLite connection
+        mock_dbapi.create_function.assert_called_once()
+
+    def test_fetch_assays_no_regex_uses_like(self):
+        """Without regex_pattern, SQL backend should use LIKE as before."""
+        fetcher, conn = self._make_fetcher([])
+        fetcher._backend_label = "MySQL"
+        fetcher.fetch_assays("kinase")
+
+        call_args = conn.execute.call_args
+        params = call_args[0][1]
+        assert params["keyword_pattern"] == "%kinase%"
+        assert "regex_pattern" not in params
 
 
 class TestSqlChemblFetcherSQLite:
@@ -547,5 +643,5 @@ class TestBackendSelection:
         result = toolkit.fetch_compounds("kinase")
 
         assert "✅ Fetched" in result
-        mock_fetcher.fetch_assays.assert_called_once_with("kinase", None)
+        mock_fetcher.fetch_assays.assert_called_once_with("kinase", None, regex_pattern=None)
         mock_fetcher.fetch_activities.assert_called_once()

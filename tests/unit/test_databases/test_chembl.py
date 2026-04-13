@@ -4,6 +4,7 @@
 Tests for the ChEMBL database toolkit.
 """
 
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
@@ -615,11 +616,12 @@ class TestChemblToolkit:
         """Test ChEMBL query conversion with valid input."""
         toolkit = ChemblToolkit()
 
-        result = toolkit.convert_to_chembl_query("kinase 2 inhibitor activity")
+        result = toolkit.convert_to_chembl_query("phosphodiesterase 4A")
 
         assert "ChEMBL's `assay_description__icontains` filter" in result
-        assert "kinase 2 inhibitor activity" in result
-        assert "kinase 2" in result  # Example output
+        assert "phosphodiesterase 4A" in result
+        # The new example in the tool's return message uses PDE4A as the abbreviation.
+        assert "pde4" in result.lower()
 
     def test_convert_to_chembl_query_invalid(self):
         """Test ChEMBL query conversion with invalid input."""
@@ -847,6 +849,38 @@ class TestChemblRateLimiting:
         assert toolkit.config.rate_limit == 5.0
         assert toolkit.config.timeout_s == 60.0
 
+    @patch.object(ChemblToolkit, "_ensure_client")
+    @patch("cs_copilot.tools.databases.chembl.S3")
+    def test_fetch_compounds_uses_regex_for_multitoken(self, mock_s3, mock_ensure_client):
+        """A multi-token keyword should produce ONE REST call with iregex."""
+        mock_client = Mock()
+        mock_client.assay.filter.return_value = [{"assay_chembl_id": "CHEMBL1"}]
+        mock_client.activity.filter.return_value.only.return_value = [
+            {
+                "activity_id": 1,
+                "assay_chembl_id": "CHEMBL1",
+                "molecule_chembl_id": "CHEMBL1",
+                "standard_value": 10.0,
+                "canonical_smiles": "CCO",
+            },
+        ]
+        mock_ensure_client.return_value = mock_client
+
+        mock_file = MagicMock()
+        mock_s3.open.return_value.__enter__.return_value = mock_file
+        mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
+
+        toolkit = ChemblToolkit()
+        toolkit.fetch_compounds("epidermal growth factor receptor")
+
+        # Should be called exactly once (not 8 times).
+        assert mock_client.assay.filter.call_count == 1
+        call_kwargs = mock_client.assay.filter.call_args.kwargs
+        assert "description__iregex" in call_kwargs
+        assert "description__icontains" not in call_kwargs
+        assert call_kwargs["description__iregex"] == r"epidermal[- ]growth[- ]factor[- ]receptor"
+
 
 class TestChemblIntegration:
     """Integration tests that test the full toolkit functionality."""
@@ -907,3 +941,92 @@ class TestChemblIntegration:
             # Step 2: Describe dataset
             desc_result = toolkit.describe_dataset("chembl_kinase.csv")
             assert isinstance(desc_result, str)
+
+
+class TestPunctuationRegex:
+    """Test the regex builder for punctuation-variant matching."""
+
+    def test_symmetric_cyclin_dependent(self):
+        """The user's explicit invariant: equivalent spellings yield the same regex."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        a = _build_punctuation_regex("cyclin-dependent kinase 2")
+        b = _build_punctuation_regex("cyclin dependent kinase 2")
+        c = _build_punctuation_regex("cyclin-dependent kinase-2")
+        d = _build_punctuation_regex("cyclin dependent kinase-2")
+
+        assert a == b == c == d
+        assert a == r"cyclin[- ]dependent[- ]kinase[- ]2"
+
+    def test_four_token_required_separator(self):
+        """4-token phrases use required separator and match all hyphen/space combos."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("epidermal growth factor receptor")
+        assert p == r"epidermal[- ]growth[- ]factor[- ]receptor"
+        assert re.search(p, "epidermal growth factor receptor", re.IGNORECASE)
+        assert re.search(p, "epidermal-growth-factor-receptor", re.IGNORECASE)
+        assert re.search(p, "epidermal-growth factor receptor", re.IGNORECASE)
+
+    def test_four_token_does_not_match_concat(self):
+        """4-token phrases require a separator — concatenated form should not match."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("epidermal growth factor receptor")
+        assert not re.search(p, "epidermalgrowthfactorreceptor", re.IGNORECASE)
+
+    def test_two_token_optional_separator(self):
+        """2-token phrases use optional separator, matching space/hyphen/concat."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("serotonin 2A")
+        assert p == r"serotonin[- ]?2A"
+        assert re.search(p, "serotonin 2A", re.IGNORECASE)
+        assert re.search(p, "serotonin-2A", re.IGNORECASE)
+        assert re.search(p, "serotonin2A", re.IGNORECASE)
+
+    def test_compact_5ht2a(self):
+        """Hyphen-separated compact names like 5-HT2A produce optional-sep regex."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("5-HT2A")
+        assert p == r"5[- ]?HT2A"
+        assert re.search(p, "5-HT2A")
+        assert re.search(p, "5 HT2A")
+        assert re.search(p, "5HT2A")
+
+    def test_three_token_optional_separator(self):
+        """3-token phrases also use optional separator."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("B-Raf kinase")
+        assert p == r"B[- ]?Raf[- ]?kinase"
+        assert re.search(p, "B-Raf kinase")
+        assert re.search(p, "B Raf kinase")
+        assert re.search(p, "BRafkinase")
+
+    def test_single_token_returns_none(self):
+        """Single-token inputs return None (caller uses plain icontains)."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        assert _build_punctuation_regex("EGFR") is None
+        assert _build_punctuation_regex("BRAF") is None
+        assert _build_punctuation_regex("PDE4A") is None
+
+    def test_empty_returns_none(self):
+        """Empty and whitespace-only inputs return None."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        assert _build_punctuation_regex("") is None
+        assert _build_punctuation_regex("   ") is None
+
+    def test_metacharacter_escaping(self):
+        """Regex metacharacters in tokens are properly escaped."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("IL-1beta (receptor)")
+        assert p is not None
+        assert r"\(" in p
+        assert r"\)" in p
+        assert re.search(p, "IL-1beta (receptor)", re.IGNORECASE)
+        assert re.search(p, "IL 1beta (receptor)", re.IGNORECASE)
