@@ -502,8 +502,7 @@ def _normalize_landscape_type(landscape_type: str) -> LandscapeType:
     valid_types = set(_LANDSCAPE_REQUIRED_COLUMNS)
     if normalized not in valid_types:
         raise ValueError(
-            f"Unsupported landscape_type '{landscape_type}'. "
-            f"Expected one of: {sorted(valid_types)}"
+            f"Unsupported landscape_type '{landscape_type}'. Expected one of: {sorted(valid_types)}"
         )
     return normalized  # type: ignore[return-value]
 
@@ -975,8 +974,7 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
         df = normalize_smiles_column(df)
     except ValueError as e:
         raise ValueError(
-            f"Dataset must contain a SMILES column. {e}. "
-            f"Expected one of: {_SMILES_COLUMN_VARIANTS}"
+            f"Dataset must contain a SMILES column. {e}. Expected one of: {_SMILES_COLUMN_VARIANTS}"
         ) from e
 
     logger.info(f"Loaded dataset with {original_count} molecules")
@@ -1604,8 +1602,7 @@ def preprocess_gtm_activity_data(
         if classification_column is not None and classification_column.notna().any():
             n_classified_raw = classification_column.notna().sum()
             logger.info(
-                f"Classified activity data from raw values: "
-                f"{n_classified_raw} compounds classified"
+                f"Classified activity data from raw values: {n_classified_raw} compounds classified"
             )
 
             # Fill in gaps using activity_comment for rows that weren't classified
@@ -1808,7 +1805,7 @@ def load_gtm(dataset: str, gtm_model: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     # Validate that the dataset is compatible with the GTM model
     # The responses matrix should have shape (n_molecules, n_nodes)
-    n_molecules = resps.shape[0]  # Number of molecules
+    n_entries = resps.shape[0]  # Number of dataset entries (not necessarily unique molecules)
     n_nodes = resps.shape[1]  # Number of GTM grid points
 
     # Check if the GTM model grid size matches the responses
@@ -1820,7 +1817,9 @@ def load_gtm(dataset: str, gtm_model: str) -> tuple[pd.DataFrame, pd.DataFrame]:
             f"but responses matrix has {n_nodes} points. The model may be corrupted."
         )
 
-    logger.info(f"GTM model loaded successfully: {n_nodes} grid points, {n_molecules} molecules")
+    logger.info(
+        f"GTM model loaded successfully: {n_nodes} grid points, {n_entries} entries"
+    )
 
     # K-nearest neighbors for score calculations
     k_hit = 10
@@ -2021,9 +2020,9 @@ def calculate_map_ruggedness(df, gtm):
     density = get_density_matrix(resps)
 
     size = gtm.num_nodes
-    assert has_integer_sqrt(
-        size
-    ), f"The resps array (len {size}) doesn't have an integer square root"
+    assert has_integer_sqrt(size), (
+        f"The resps array (len {size}) doesn't have an integer square root"
+    )
     side_size = int(math.sqrt(size))
 
     density_grid = density.reshape(side_size, side_size)
@@ -2050,13 +2049,15 @@ def gtm_param_grid(n_samples: int, mode: str = "extended") -> dict:
         ``regularization_coefficient`` — each a sorted list of candidate values.
     """
     k0 = round(math.sqrt(5 * math.sqrt(n_samples)) + 2)
-    m0 = max(3, round(math.sqrt(k0)))
+    m0 = max(3, round(0.4 * k0))
+
+    assert m0 < k0 + 5, f"basis_functions ({m0}) must be smaller than nodes + 5 ({k0 + 5})"
 
     if mode == "heuristic":
         return {
             "nodes": [k0],
             "basis_functions": [m0],
-            "basis_width_factor": [1, 2, 5],
+            "basis_width_factor": [0.5, 1, 2],
             "regularization_coefficient": [1, 10, 100],
         }
 
@@ -2074,13 +2075,13 @@ def gtm_param_grid(n_samples: int, mode: str = "extended") -> dict:
             "basis_functions": sorted(
                 set(
                     [
-                        max(3, m0 - 1),
+                        max(3, m0 - 5),
                         m0,
-                        m0 + 1,
+                        m0 + 5,
                     ]
                 )
             ),
-            "basis_width_factor": [1, 2, 5],
+            "basis_width_factor": [0.5, 1, 2, 5],
             "regularization_coefficient": [0.1, 1, 10, 100],
         }
 
@@ -2352,7 +2353,7 @@ def optimize_gtm_model(
         set_session_gtm_model(agent, gtm, optimized_model_path)
 
         logger.info(f"GTM optimization completed with entropy: {best_score:.1f}")
-        return f"Entropy of the current study: {best_score:.1f} " f"(strategy: {strategy})"
+        return f"Entropy of the current study: {best_score:.1f} (strategy: {strategy})"
 
     except Exception as e:
         logger.error(f"Error in GTM optimization: {e}")
