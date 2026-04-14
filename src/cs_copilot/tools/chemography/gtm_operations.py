@@ -2018,9 +2018,9 @@ def calculate_map_ruggedness(df, gtm):
     density = get_density_matrix(resps)
 
     size = gtm.num_nodes
-    assert has_integer_sqrt(
-        size
-    ), f"The resps array (len {size}) doesn't have an integer square root"
+    assert has_integer_sqrt(size), (
+        f"The resps array (len {size}) doesn't have an integer square root"
+    )
     side_size = int(math.sqrt(size))
 
     density_grid = density.reshape(side_size, side_size)
@@ -2047,7 +2047,7 @@ def gtm_param_grid(n_samples: int, mode: str = "extended") -> dict:
         ``regularization_coefficient`` — each a sorted list of candidate values.
     """
     k0 = round(math.sqrt(5 * math.sqrt(n_samples)) + 2)
-    m0 = max(3, round(0.4 * k0))
+    m0 = max(3, round(0.3 * k0))
 
     assert m0 < k0 + 5, f"basis_functions ({m0}) must be smaller than nodes + 5 ({k0 + 5})"
 
