@@ -1817,9 +1817,7 @@ def load_gtm(dataset: str, gtm_model: str) -> tuple[pd.DataFrame, pd.DataFrame]:
             f"but responses matrix has {n_nodes} points. The model may be corrupted."
         )
 
-    logger.info(
-        f"GTM model loaded successfully: {n_nodes} grid points, {n_entries} entries"
-    )
+    logger.info(f"GTM model loaded successfully: {n_nodes} grid points, {n_entries} entries")
 
     # K-nearest neighbors for score calculations
     k_hit = 10
@@ -2020,9 +2018,9 @@ def calculate_map_ruggedness(df, gtm):
     density = get_density_matrix(resps)
 
     size = gtm.num_nodes
-    assert has_integer_sqrt(size), (
-        f"The resps array (len {size}) doesn't have an integer square root"
-    )
+    assert has_integer_sqrt(
+        size
+    ), f"The resps array (len {size}) doesn't have an integer square root"
     side_size = int(math.sqrt(size))
 
     density_grid = density.reshape(side_size, side_size)
@@ -2064,22 +2062,18 @@ def gtm_param_grid(n_samples: int, mode: str = "extended") -> dict:
     if mode == "extended":
         return {
             "nodes": sorted(
-                set(
-                    [
-                        max(8, k0 - 5),
-                        max(8, k0),
-                        k0 + 5,
-                    ]
-                )
+                {
+                    max(8, k0 - 5),
+                    max(8, k0),
+                    k0 + 5,
+                }
             ),
             "basis_functions": sorted(
-                set(
-                    [
-                        max(3, m0 - 5),
-                        m0,
-                        m0 + 5,
-                    ]
-                )
+                {
+                    max(3, m0 - 5),
+                    m0,
+                    m0 + 5,
+                }
             ),
             "basis_width_factor": [0.5, 1, 2, 5],
             "regularization_coefficient": [0.1, 1, 10, 100],

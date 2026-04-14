@@ -408,8 +408,7 @@ def calc_morgan_fp_batch(
     if mode == "processes":
         chunk_len = _chunk_size(total_rows, worker_count)
         chunks = [
-            smiles_values[start : start + chunk_len]
-            for start in range(0, total_rows, chunk_len)
+            smiles_values[start : start + chunk_len] for start in range(0, total_rows, chunk_len)
         ]
         try:
             with ProcessPoolExecutor(max_workers=worker_count) as executor:
