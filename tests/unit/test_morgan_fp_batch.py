@@ -54,9 +54,7 @@ class TestCalcMorganFpBatch:
         nbits = 256
 
         serial_reference = [calc_morgan_fp(smi, nbits) for smi in smiles]
-        parallel_result = calc_morgan_fp_batch(
-            smiles, nbits, max_workers=3, min_parallel_rows=1
-        )
+        parallel_result = calc_morgan_fp_batch(smiles, nbits, max_workers=3, min_parallel_rows=1)
 
         assert len(parallel_result) == len(serial_reference)
         for parallel_fp, serial_fp in zip(parallel_result, serial_reference, strict=True):
@@ -126,9 +124,7 @@ class TestCalcMorganFpBatch:
                 np.testing.assert_array_equal(got, expected)
 
         messages = [record.getMessage() for record in caplog.records]
-        assert any(
-            "Process-based Morgan fingerprint computation failed" in msg for msg in messages
-        )
+        assert any("Process-based Morgan fingerprint computation failed" in msg for msg in messages)
         assert any("serial_fallback=True" in msg for msg in messages)
 
     def test_summary_logging_reports_counts(self, monkeypatch, caplog):
@@ -140,8 +136,7 @@ class TestCalcMorganFpBatch:
 
         messages = [record.getMessage() for record in caplog.records]
         assert any(
-            "Computing Morgan fingerprints: total_rows=4 mode=processes workers=2 nbits=128"
-            in msg
+            "Computing Morgan fingerprints: total_rows=4 mode=processes workers=2 nbits=128" in msg
             for msg in messages
         )
         assert any(
@@ -169,15 +164,11 @@ class TestEncoderMorganIntegration:
         nbits = 512
 
         encoder = MolecularDescriptorEncoder()
-        matrix = encoder.encode(
-            smiles, descriptor_type="morgan", nbits=nbits
-        )
+        matrix = encoder.encode(smiles, descriptor_type="morgan", nbits=nbits)
 
         assert matrix.shape == (len(smiles), nbits)
         # Serial reference computed directly
-        reference = np.vstack(
-            [calc_morgan_fp(smi, nbits).astype(np.float64) for smi in smiles]
-        )
+        reference = np.vstack([calc_morgan_fp(smi, nbits).astype(np.float64) for smi in smiles])
         np.testing.assert_array_equal(matrix, reference)
 
     def test_encoder_substitutes_zero_vector_for_invalid_smiles(self, monkeypatch, caplog):
