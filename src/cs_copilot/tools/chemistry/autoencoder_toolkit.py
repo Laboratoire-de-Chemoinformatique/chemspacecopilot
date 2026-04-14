@@ -11,10 +11,12 @@ from the latent space.
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 import numpy as np
 import torch
+from agno.agent import Agent
+from rdkit import Chem
 from tqdm import tqdm
 
 from cs_copilot.storage import S3
@@ -27,6 +29,33 @@ from .base_chemistry import BaseChemistryToolkit, ChemistryError
 from .standardize import standardize_smiles
 
 logger = logging.getLogger(__name__)
+
+SampleReturnFormat = Literal["summary", "list"]
+
+
+def _filter_valid_unique_smiles(raw: List[Any]) -> List[str]:
+    """Drop non-string entries, invalid SMILES, and duplicates (by canonical form).
+
+    Gaussian prior sampling produces many invalid/duplicate SMILES; this filter
+    yields the chemically meaningful subset used by downstream analysis.
+    """
+    seen: set = set()
+    out: List[str] = []
+    for s in raw:
+        if not isinstance(s, str) or not s:
+            continue
+        std = standardize_smiles(s)
+        if std is None:
+            continue
+        mol = Chem.MolFromSmiles(std)
+        if mol is None:
+            continue
+        canonical = Chem.MolToSmiles(mol)
+        if canonical in seen:
+            continue
+        seen.add(canonical)
+        out.append(canonical)
+    return out
 
 
 class AutoencoderError(ChemistryError):
@@ -351,7 +380,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
     def sample_from_latent(
         self,
         z: Optional[np.ndarray] = None,
-        n_samples: int = 10,
+        n_samples: int = 5000,
         latent_std: float = 1.0,
         max_len: int = 100,
         temp: float = 1.0,
@@ -364,7 +393,10 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
         Args:
             z: Optional latent vectors (numpy array). If None, samples from Gaussian
-            n_samples: Number of samples to generate (only used if z is None)
+            n_samples: Number of samples to generate when z is None. Default 5000 —
+                the recommended minimum for meaningful chemical-space exploration
+                after validity/uniqueness filtering. Pass a smaller value
+                explicitly for quick demos.
             latent_std: Standard deviation for Gaussian sampling (only used if z is None)
             max_len: Maximum length of generated SMILES
             temp: Temperature for sampling (higher = more random, lower = more deterministic)
@@ -422,26 +454,44 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
     def sample_molecules(
         self,
-        n_samples: int = 10,
+        n_samples: int = 5000,
         latent_std: float = 1.0,
         temperature: float = 1.0,
         decode_mode: str = "sample",
         max_length: int = 100,
-    ) -> List[str]:
+        filter_valid_unique: bool = True,
+        return_format: SampleReturnFormat = "summary",
+        session_key: str = "sampled_molecules",
+        agent: Optional[Agent] = None,
+    ) -> Union[List[str], Dict[str, Any]]:
         """
         Sample new molecules from the latent space using Gaussian prior.
 
         Args:
-            n_samples: Number of molecules to generate
+            n_samples: Number of molecules to generate. Defaults to 5000 for
+                meaningful chemical-space exploration; explicit smaller values
+                are respected.
             latent_std: Standard deviation for Gaussian sampling
             temperature: Temperature for sampling (higher = more random)
             decode_mode: 'greedy' for deterministic, 'sample' for stochastic
             max_length: Maximum length of generated SMILES
+            filter_valid_unique: If True (default), drop non-parseable SMILES
+                and deduplicate by canonical form before returning.
+            return_format: "summary" (default) persists the full list into
+                agent.session_state[session_key] and returns a compact dict with
+                count, preview (first 20), and the session key. "list" returns
+                the raw List[str] directly (legacy behavior — may inflate LLM
+                context with large n_samples).
+            session_key: Key under which the full list is stored in
+                agent.session_state when return_format="summary".
+            agent: Agent instance (auto-injected by agno). Required for
+                "summary" format; if None, gracefully falls back to "list".
 
         Returns:
-            List of generated SMILES strings
+            Dict summary (default) or List[str] (when return_format="list" or
+            no agent available).
         """
-        return self.sample_from_latent(
+        raw = self.sample_from_latent(
             z=None,
             n_samples=n_samples,
             latent_std=latent_std,
@@ -449,6 +499,34 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             decode=decode_mode,
             max_len=max_length,
         )
+
+        sampled = _filter_valid_unique_smiles(raw) if filter_valid_unique else list(raw)
+
+        if return_format == "list" or agent is None:
+            if return_format == "summary" and agent is None:
+                logger.info(
+                    "sample_molecules called with return_format='summary' but no agent "
+                    "was provided; falling back to raw list."
+                )
+            return sampled
+
+        if agent.session_state is None:
+            agent.session_state = {}
+        agent.session_state[session_key] = sampled
+
+        return {
+            "count_attempted": n_samples,
+            "count_returned": len(sampled),
+            "filter_valid_unique": filter_valid_unique,
+            "preview": sampled[:20],
+            "session_key": session_key,
+            "note": (
+                f"Full {len(sampled)}-item SMILES list persisted to "
+                f"agent.session_state['{session_key}']. Retrieve it from session state "
+                f"for downstream analysis (property calculation, clustering, GTM projection, etc.) "
+                f"instead of asking for the whole list inline."
+            ),
+        }
 
     def interpolate_molecules(
         self,

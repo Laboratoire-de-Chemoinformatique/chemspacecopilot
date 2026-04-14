@@ -11,10 +11,11 @@ new peptides from the latent space.
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 import numpy as np
 import torch
+from agno.agent import Agent
 from agno.tools.toolkit import Toolkit
 
 from cs_copilot.tools.constants import (
@@ -23,6 +24,28 @@ from cs_copilot.tools.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+SampleReturnFormat = Literal["summary", "list"]
+
+
+def _filter_valid_unique_peptides(raw: List[Any]) -> List[str]:
+    """Drop non-string/empty entries and deduplicate peptide sequences.
+
+    Vocab-constrained decoding already limits characters to the model's
+    amino-acid alphabet, so this filter mainly removes empty/whitespace
+    outputs and exact duplicates.
+    """
+    seen: set = set()
+    out: List[str] = []
+    for s in raw:
+        if not isinstance(s, str):
+            continue
+        s_norm = s.strip()
+        if not s_norm or s_norm in seen:
+            continue
+        seen.add(s_norm)
+        out.append(s_norm)
+    return out
 
 
 class PeptideWAEError(Exception):
@@ -364,24 +387,41 @@ class PeptideWAEToolkit(Toolkit):
 
     def sample_peptides(
         self,
-        n_samples: int = 10,
+        n_samples: int = 5000,
         latent_std: float = 1.0,
         temperature: float = 1.0,
         decode_mode: str = "categorical",
         max_length: int = 25,
-    ) -> List[str]:
+        filter_valid_unique: bool = True,
+        return_format: SampleReturnFormat = "summary",
+        session_key: str = "sampled_peptides",
+        agent: Optional[Agent] = None,
+    ) -> Union[List[str], Dict[str, Any]]:
         """
         Sample new peptides from the latent space using Gaussian prior.
 
         Args:
-            n_samples: Number of peptides to generate
+            n_samples: Number of peptides to generate. Defaults to 5000 for
+                meaningful peptide-space exploration; pass a smaller value
+                explicitly for quick demos.
             latent_std: Standard deviation for Gaussian sampling
             temperature: Sampling temperature (higher = more random)
             decode_mode: 'categorical' for stochastic, 'greedy' for deterministic
             max_length: Maximum sequence length
+            filter_valid_unique: If True (default), drop empty sequences and
+                deduplicate before returning.
+            return_format: "summary" (default) persists the full list into
+                agent.session_state[session_key] and returns a compact dict with
+                count, preview (first 20), and the session key. "list" returns
+                the raw List[str] directly (may inflate LLM context at large N).
+            session_key: Key under which the full list is stored in
+                agent.session_state when return_format="summary".
+            agent: Agent instance (auto-injected by agno). Required for
+                "summary" format; if None, gracefully falls back to "list".
 
         Returns:
-            List of generated peptide sequences
+            Dict summary (default) or List[str] (when return_format="list" or
+            no agent available).
         """
         if not self.validate_model_loaded():
             raise PeptideWAEError("Model not loaded")
@@ -398,12 +438,38 @@ class PeptideWAEToolkit(Toolkit):
                 temp=temperature,
             )
 
-        predictions = []
+        raw: List[str] = []
         for sample in samples:
             seq_str = self.vocab.to_string(sample, print_special_tokens=False)
-            predictions.append(seq_str)
+            raw.append(seq_str)
 
-        return predictions
+        sampled = _filter_valid_unique_peptides(raw) if filter_valid_unique else list(raw)
+
+        if return_format == "list" or agent is None:
+            if return_format == "summary" and agent is None:
+                logger.info(
+                    "sample_peptides called with return_format='summary' but no agent "
+                    "was provided; falling back to raw list."
+                )
+            return sampled
+
+        if agent.session_state is None:
+            agent.session_state = {}
+        agent.session_state[session_key] = sampled
+
+        return {
+            "count_attempted": n_samples,
+            "count_returned": len(sampled),
+            "filter_valid_unique": filter_valid_unique,
+            "preview": sampled[:20],
+            "session_key": session_key,
+            "note": (
+                f"Full {len(sampled)}-item peptide list persisted to "
+                f"agent.session_state['{session_key}']. Retrieve it from session state "
+                f"for downstream analysis (encoding, clustering, activity prediction, etc.) "
+                f"instead of asking for the whole list inline."
+            ),
+        }
 
     def interpolate_peptides(
         self,

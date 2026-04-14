@@ -55,9 +55,14 @@ def test_autoencoder_toolkit():
             match = "✓" if smiles == reconstructed else "✗"
             print(f"{match} {smiles} -> {reconstructed}")
 
-        # Test sampling
+        # Test sampling (demo: small N, raw output to show every decoded string)
         print(f"\nSampling 5 new molecules...")
-        samples = toolkit.sample_molecules(n_samples=5, temperature=1.0)
+        samples = toolkit.sample_molecules(
+            n_samples=5,
+            temperature=1.0,
+            filter_valid_unique=False,
+            return_format="list",
+        )
         for i, sample in enumerate(samples, 1):
             print(f"{i}. {sample}")
 
