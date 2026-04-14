@@ -47,7 +47,7 @@ from chemographykit.utils.classification import class_density_to_table, get_clas
 from chemographykit.utils.density import density_to_table, get_density_matrix
 from chemographykit.utils.molecules import calculate_latent_coords
 from chemographykit.utils.regression import get_reg_density_matrix, reg_density_to_table
-from optuna.samplers import TPESampler
+from optuna.samplers import GridSampler, TPESampler
 from rdkit.Chem.Scaffolds import MurckoScaffold
 from scipy.ndimage import convolve
 from sklearn.neighbors import NearestNeighbors
@@ -2037,13 +2037,69 @@ def calculate_map_ruggedness(df, gtm):
 # =============================================================================
 
 
-def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
+def gtm_param_grid(n_samples: int, mode: str = "extended") -> dict:
+    """
+    Build a GTM hyperparameter grid scaled to dataset size.
+
+    Args:
+        n_samples: Number of molecules in the dataset.
+        mode: ``"heuristic"`` (compact, 9 combos) or ``"extended"`` (~108 combos).
+
+    Returns:
+        Dict with keys ``nodes``, ``basis_functions``, ``basis_width_factor``,
+        ``regularization_coefficient`` — each a sorted list of candidate values.
+    """
+    k0 = round(math.sqrt(5 * math.sqrt(n_samples)) + 2)
+    m0 = max(3, round(math.sqrt(k0)))
+
+    if mode == "heuristic":
+        return {
+            "nodes": [k0],
+            "basis_functions": [m0],
+            "basis_width_factor": [1, 2, 5],
+            "regularization_coefficient": [1, 10, 100],
+        }
+
+    if mode == "extended":
+        return {
+            "nodes": sorted(
+                set(
+                    [
+                        max(8, k0 - 5),
+                        max(8, k0),
+                        k0 + 5,
+                    ]
+                )
+            ),
+            "basis_functions": sorted(
+                set(
+                    [
+                        max(3, m0 - 1),
+                        m0,
+                        m0 + 1,
+                    ]
+                )
+            ),
+            "basis_width_factor": [1, 2, 5],
+            "regularization_coefficient": [0.1, 1, 10, 100],
+        }
+
+    raise ValueError(f"Unknown mode: {mode!r}. Use 'heuristic' or 'extended'.")
+
+
+def optimize_gtm(
+    df: pd.DataFrame,
+    smiles_column: str = "smi",
+    strategy: str = "low",
+):
     """
     Optimize GTM hyperparameters and fit the final model.
 
     Args:
         df: DataFrame containing SMILES column
         smiles_column: Name of the column containing SMILES (default: 'smi')
+        strategy: Optimization effort level — ``"low"`` (heuristic grid, 9 combos),
+            ``"medium"`` (extended grid, ~108 combos), or ``"high"`` (Optuna TPE, 50 trials).
 
     Returns:
         tuple: (df with descriptors, fitted GTM model, best score)
@@ -2053,12 +2109,43 @@ def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
     df, X, descriptor_column = _compute_descriptors(df, smiles_column=smiles_column)
     df = df[~df[descriptor_column].isna()]
 
-    n_trials_max = 10
-    logger.info(f"Starting GTM optimization with {len(df)} molecules")
+    n_samples = len(df)
+    logger.info(f"Starting GTM optimization with {n_samples} molecules")
     logger.debug(
         f"Sample descriptors from column '{descriptor_column}': {df[descriptor_column].head()}"
     )
     X = X.astype(np.float64)
+
+    # --- Strategy dispatch ---------------------------------------------------
+    if strategy == "low":
+        grid = gtm_param_grid(n_samples, mode="heuristic")
+        search_space = {
+            "nodes_sqrt": grid["nodes"],
+            "basis_sqrt": grid["basis_functions"],
+            "basis_width": grid["basis_width_factor"],
+            "reg_coeff": grid["regularization_coefficient"],
+        }
+        sampler = GridSampler(search_space, seed=42)
+        n_trials_max = math.prod(len(v) for v in search_space.values())
+        logger.info(f"Strategy 'low': heuristic grid search with {n_trials_max} combinations")
+    elif strategy == "medium":
+        grid = gtm_param_grid(n_samples, mode="extended")
+        search_space = {
+            "nodes_sqrt": grid["nodes"],
+            "basis_sqrt": grid["basis_functions"],
+            "basis_width": grid["basis_width_factor"],
+            "reg_coeff": grid["regularization_coefficient"],
+        }
+        sampler = GridSampler(search_space, seed=42)
+        n_trials_max = math.prod(len(v) for v in search_space.values())
+        logger.info(f"Strategy 'medium': extended grid search with {n_trials_max} combinations")
+    elif strategy == "high":
+        search_space = None
+        sampler = TPESampler(seed=42)
+        n_trials_max = 50
+        logger.info(f"Strategy 'high': Optuna TPE with {n_trials_max} trials")
+    else:
+        raise ValueError(f"Unknown strategy: {strategy!r}. Use 'low', 'medium', or 'high'.")
 
     # Check CUDA availability and suppress NVML warning
     device = "cpu"  # Default to CPU to avoid CUDA issues
@@ -2088,14 +2175,21 @@ def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
 
     # Define the objective function for hyperparameter optimization
     def objective(trial):
-        # Suggest hyperparameters
-        n_basis_functions_sqrt = trial.suggest_int("n_basis_functions_sqrt", 5, 25)
-        n_nodes_n_basis_diff = trial.suggest_int("n_nodes_n_basis_diff", 5, 25)
-        basis_width = trial.suggest_float("basis_width", 0.1, 10.0)
-        reg_coeff = trial.suggest_float("reg_coeff", 0.1, 1000.0)
+        if search_space is not None:
+            # Grid strategies (low / medium): discrete categorical values
+            nodes_sqrt = trial.suggest_categorical("nodes_sqrt", search_space["nodes_sqrt"])
+            basis_sqrt = trial.suggest_categorical("basis_sqrt", search_space["basis_sqrt"])
+            basis_width = trial.suggest_categorical("basis_width", search_space["basis_width"])
+            reg_coeff = trial.suggest_categorical("reg_coeff", search_space["reg_coeff"])
+        else:
+            # High strategy: continuous / integer ranges
+            nodes_sqrt = trial.suggest_int("nodes_sqrt", 8, 40)
+            basis_sqrt = trial.suggest_int("basis_sqrt", 3, 15)
+            basis_width = trial.suggest_float("basis_width", 0.1, 10.0)
+            reg_coeff = trial.suggest_float("reg_coeff", 0.1, 1000.0)
 
-        num_basis_functions = n_basis_functions_sqrt**2
-        num_nodes = (n_basis_functions_sqrt + n_nodes_n_basis_diff) ** 2
+        num_basis_functions = basis_sqrt**2
+        num_nodes = nodes_sqrt**2
 
         # Initialize and fit GTM using ChemographyKit
         gtm = GTM(
@@ -2123,7 +2217,7 @@ def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
             return -np.inf
 
     # Initialize study
-    study = optuna.create_study(direction="maximize", sampler=TPESampler(seed=42))
+    study = optuna.create_study(direction="maximize", sampler=sampler)
 
     # Run optimization with proper error handling
     logger.info(f"Running {n_trials_max} optimization trials...")
@@ -2137,16 +2231,16 @@ def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
         logger.error("All optimization trials failed. Using default parameters.")
         # Use conservative default parameters
         best_params = {
-            "n_basis_functions_sqrt": 8,
-            "n_nodes_n_basis_diff": 8,
+            "nodes_sqrt": 16,
+            "basis_sqrt": 8,
             "basis_width": 1.0,
             "reg_coeff": 100.0,
         }
         best_score = 0.0
 
     # Fit final model with best parameters
-    num_basis_functions = best_params["n_basis_functions_sqrt"] ** 2
-    num_nodes = (best_params["n_basis_functions_sqrt"] + best_params["n_nodes_n_basis_diff"]) ** 2
+    num_basis_functions = best_params["basis_sqrt"] ** 2
+    num_nodes = best_params["nodes_sqrt"] ** 2
 
     logger.info(
         f"Fitting final GTM model with {num_nodes} nodes and {num_basis_functions} basis functions"
@@ -2175,7 +2269,12 @@ def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
 
 
 def optimize_gtm_model(
-    df_csv_path: str, dataset_name: str, gtm_name: str, smiles_column: str, agent: Agent
+    df_csv_path: str,
+    dataset_name: str,
+    gtm_name: str,
+    smiles_column: str,
+    agent: Agent,
+    strategy: str = "low",
 ) -> str:
     """
     Load a dataset of SMILES strings, optimize a Generative Topographic Mapping (GTM)
@@ -2188,6 +2287,7 @@ def optimize_gtm_model(
         gtm_name: Key under which the trained GTM model will be saved in agent.session_state
         smiles_column: Name of the column in the CSV that holds SMILES strings
         agent: The agent whose session_state dict will be updated
+        strategy: Optimization effort level — ``"low"``, ``"medium"``, or ``"high"``
 
     Returns:
         Human-readable message reporting the best entropy score achieved
@@ -2237,8 +2337,8 @@ def optimize_gtm_model(
         )
 
         # Optimize GTM model
-        logger.info("Optimizing GTM with entropy")
-        df, gtm, best_score = optimize_gtm(df, smiles_column)
+        logger.info(f"Optimizing GTM with entropy (strategy={strategy})")
+        df, gtm, best_score = optimize_gtm(df, smiles_column, strategy=strategy)
 
         # Store results in agent session
         if agent.session_state is None:
@@ -2252,7 +2352,7 @@ def optimize_gtm_model(
         set_session_gtm_model(agent, gtm, optimized_model_path)
 
         logger.info(f"GTM optimization completed with entropy: {best_score:.1f}")
-        return f"Entropy of the current study: {best_score:.1f}"
+        return f"Entropy of the current study: {best_score:.1f} " f"(strategy: {strategy})"
 
     except Exception as e:
         logger.error(f"Error in GTM optimization: {e}")
@@ -3604,6 +3704,7 @@ SESSION_LATENT_GTM_SCALER_KEY = "_current_latent_gtm_scaler"
 def train_latent_gtm(
     latent_vectors: np.ndarray,
     config: Optional[dict] = None,
+    strategy: str = "low",
 ) -> tuple:
     """
     Train a GTM on pre-computed latent vectors (e.g. from Peptide WAE).
@@ -3615,6 +3716,8 @@ def train_latent_gtm(
         latent_vectors: numpy array of shape (n_samples, latent_dim)
         config: Optional dict with GTM hyperparameters. If None, uses Optuna optimization.
                 Supported keys: n_basis_functions_sqrt, n_nodes_n_basis_diff, basis_width, reg_coeff
+        strategy: Optimization effort level — ``"low"``, ``"medium"``, or ``"high"``.
+            Only used when *config* is None.
 
     Returns:
         tuple: (gtm_model, scaler, best_score) where:
@@ -3676,37 +3779,70 @@ def train_latent_gtm(
         logger.info(f"Latent GTM trained with entropy: {score:.4f}")
         return gtm, scaler, score
 
-    # Optuna optimization
-    n_trials_max = 10
+    # --- Strategy dispatch ---------------------------------------------------
+    if strategy == "low":
+        grid = gtm_param_grid(n_samples, mode="heuristic")
+        search_space = {
+            "nodes_sqrt": grid["nodes"],
+            "basis_sqrt": grid["basis_functions"],
+            "basis_width": grid["basis_width_factor"],
+            "reg_coeff": grid["regularization_coefficient"],
+        }
+        sampler = GridSampler(search_space, seed=42)
+        n_trials_max = math.prod(len(v) for v in search_space.values())
+        logger.info(f"Strategy 'low': heuristic grid search with {n_trials_max} combinations")
+    elif strategy == "medium":
+        grid = gtm_param_grid(n_samples, mode="extended")
+        search_space = {
+            "nodes_sqrt": grid["nodes"],
+            "basis_sqrt": grid["basis_functions"],
+            "basis_width": grid["basis_width_factor"],
+            "reg_coeff": grid["regularization_coefficient"],
+        }
+        sampler = GridSampler(search_space, seed=42)
+        n_trials_max = math.prod(len(v) for v in search_space.values())
+        logger.info(f"Strategy 'medium': extended grid search with {n_trials_max} combinations")
+    elif strategy == "high":
+        search_space = None
+        sampler = TPESampler(seed=42)
+        n_trials_max = 50
+        logger.info(f"Strategy 'high': Optuna TPE with {n_trials_max} trials")
+    else:
+        raise ValueError(f"Unknown strategy: {strategy!r}. Use 'low', 'medium', or 'high'.")
 
     def objective(trial):
-        n_basis_sqrt = trial.suggest_int("n_basis_functions_sqrt", 5, 25)
-        n_diff = trial.suggest_int("n_nodes_n_basis_diff", 5, 25)
-        basis_width = trial.suggest_float("basis_width", 0.1, 10.0)
-        reg_coeff = trial.suggest_float("reg_coeff", 0.1, 1000.0)
+        if search_space is not None:
+            nodes_sqrt = trial.suggest_categorical("nodes_sqrt", search_space["nodes_sqrt"])
+            basis_sqrt = trial.suggest_categorical("basis_sqrt", search_space["basis_sqrt"])
+            bw = trial.suggest_categorical("basis_width", search_space["basis_width"])
+            rc = trial.suggest_categorical("reg_coeff", search_space["reg_coeff"])
+        else:
+            nodes_sqrt = trial.suggest_int("nodes_sqrt", 8, 40)
+            basis_sqrt = trial.suggest_int("basis_sqrt", 3, 15)
+            bw = trial.suggest_float("basis_width", 0.1, 10.0)
+            rc = trial.suggest_float("reg_coeff", 0.1, 1000.0)
 
-        num_basis = n_basis_sqrt**2
-        num_nodes = (n_basis_sqrt + n_diff) ** 2
+        num_basis = basis_sqrt**2
+        num_nodes = nodes_sqrt**2
 
         gtm_trial = GTM(
             num_basis_functions=num_basis,
             num_nodes=num_nodes,
-            basis_width=basis_width,
-            reg_coeff=reg_coeff,
+            basis_width=bw,
+            reg_coeff=rc,
             device=device,
         )
         gtm_trial.fit(torch.from_numpy(X_scaled).to(torch.float64), n_iterations=200)
         resps, _ = gtm_trial.project(torch.from_numpy(X_scaled).to(torch.float64))
         return shannon_entropy(resps.cpu().numpy())
 
-    sampler = TPESampler(seed=42)
-    study = optuna.create_study(direction="maximize", sampler=sampler)
     optuna.logging.set_verbosity(optuna.logging.WARNING)
+    study = optuna.create_study(direction="maximize", sampler=sampler)
     study.optimize(objective, n_trials=n_trials_max)
 
     best = study.best_params
-    num_basis = best["n_basis_functions_sqrt"] ** 2
-    num_nodes = (best["n_basis_functions_sqrt"] + best["n_nodes_n_basis_diff"]) ** 2
+    num_basis = best["basis_sqrt"] ** 2
+    num_nodes = best["nodes_sqrt"] ** 2
 
     gtm = GTM(
         num_basis_functions=num_basis,

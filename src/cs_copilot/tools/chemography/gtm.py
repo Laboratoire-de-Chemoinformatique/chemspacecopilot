@@ -83,6 +83,7 @@ class GTMToolkit(BaseDRToolkit):
         gtm_name: str,
         smiles_column: str,
         agent: Agent,
+        strategy: str = "low",
     ) -> str:
         """
         Load a dataset of SMILES strings, optimize a Generative Topographic Mapping (GTM)
@@ -95,6 +96,10 @@ class GTMToolkit(BaseDRToolkit):
             gtm_name: Key under which the trained GTM model will be saved in agent.session_state
             smiles_column: Name of the column in the CSV that holds SMILES strings
             agent: The agent whose session_state dict will be updated
+            strategy: Optimization effort level. One of:
+                - "low": Heuristic grid search (9 combinations, fastest)
+                - "medium": Extended grid search (up to ~108 combinations, balanced)
+                - "high": Optuna TPE with 50 trials (thorough, slowest)
 
         Returns:
             Human-readable message reporting the best entropy score achieved
@@ -104,7 +109,7 @@ class GTMToolkit(BaseDRToolkit):
             ValueError: If smiles_column is missing
         """
         return gtm_operations.optimize_gtm_model(
-            df_csv_path, dataset_name, gtm_name, smiles_column, agent
+            df_csv_path, dataset_name, gtm_name, smiles_column, agent, strategy=strategy
         )
 
     def calculate_map_ruggedness(self, dataset_name: str, gtm_name: str, agent: Agent) -> str:
@@ -797,6 +802,7 @@ class GTMToolkit(BaseDRToolkit):
         dataset_name: str,
         gtm_name: str,
         agent: Agent,
+        strategy: str = "low",
     ) -> str:
         """
         Train a GTM on pre-computed latent vectors (e.g. from Peptide WAE encoder).
@@ -813,6 +819,7 @@ class GTMToolkit(BaseDRToolkit):
             dataset_name: Key under which the latent DataFrame will be saved in agent.session_state
             gtm_name: Key under which the trained GTM model will be saved in agent.session_state
             agent: The agent whose session_state dict will be updated
+            strategy: Optimization effort level — ``"low"``, ``"medium"``, or ``"high"``
 
         Returns:
             Human-readable message reporting the best entropy score achieved
@@ -834,7 +841,7 @@ class GTMToolkit(BaseDRToolkit):
         logger.info(f"Loaded {X.shape[0]} latent vectors with {X.shape[1]} dimensions")
 
         # Train the GTM
-        gtm_model, scaler, best_score = gtm_operations.train_latent_gtm(X)
+        gtm_model, scaler, best_score = gtm_operations.train_latent_gtm(X, strategy=strategy)
 
         # Store in session state
         if agent.session_state is None:

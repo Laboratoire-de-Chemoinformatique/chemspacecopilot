@@ -8,7 +8,11 @@ across different chemistry-related tools and applications.
 """
 
 import logging
-from typing import Any, Dict, List, Union
+import math
+import os
+import time
+from concurrent.futures import ProcessPoolExecutor
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 from agno.tools.toolkit import Toolkit
@@ -319,6 +323,126 @@ def calc_morgan_fp(smiles: str, nbits: int) -> np.ndarray:
         return None
     fp_generator = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=nbits)
     return fp_generator.GetCountFingerprintAsNumPy(mol)
+
+
+def _resolve_worker_count(max_workers: Optional[int], item_count: int) -> int:
+    if item_count <= 0:
+        return 1
+
+    if max_workers is not None:
+        if max_workers < 1:
+            raise ValueError("max_workers must be at least 1 or None")
+        return min(max_workers, item_count)
+
+    cpu_count = os.cpu_count() or 1
+    return min(item_count, cpu_count)
+
+
+def _chunk_size(item_count: int, worker_count: int) -> int:
+    return max(1, math.ceil(item_count / worker_count))
+
+
+def _morgan_fp_chunk(smiles_values: List[str], nbits: int) -> List[Optional[np.ndarray]]:
+    """Worker: compute Morgan count fingerprints for a chunk of SMILES.
+
+    A single MorganGenerator is reused across the chunk to avoid the per-item
+    construction cost. Must be module-level so ProcessPoolExecutor can pickle it.
+    """
+    fp_generator = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=nbits)
+    results: List[Optional[np.ndarray]] = []
+    for smiles in smiles_values:
+        mol = _smiles_to_mol_or_none(smiles)
+        if mol is None:
+            results.append(None)
+        else:
+            results.append(fp_generator.GetCountFingerprintAsNumPy(mol))
+    return results
+
+
+def calc_morgan_fp_batch(
+    smiles_list: Sequence[str],
+    nbits: int,
+    *,
+    max_workers: Optional[int] = None,
+    min_parallel_rows: int = 64,
+) -> List[Optional[np.ndarray]]:
+    """Compute Morgan count fingerprints for many SMILES in parallel.
+
+    Uses a ``ProcessPoolExecutor`` with chunked dispatch when the workload is
+    large enough to benefit from parallelism; otherwise runs serially. On any
+    executor failure the call falls back to the serial path so the batch still
+    completes.
+
+    Args:
+        smiles_list: Iterable of SMILES strings.
+        nbits: Number of bits for each Morgan fingerprint.
+        max_workers: Maximum number of worker processes. ``None`` uses all
+            detected CPUs (capped at ``len(smiles_list)``).
+        min_parallel_rows: Minimum number of SMILES required to switch from
+            serial to process mode. Defaults to 64.
+
+    Returns:
+        A list the same length as ``smiles_list``. Each entry is a numpy array
+        of shape ``(nbits,)`` or ``None`` when the SMILES cannot be parsed or
+        standardized (mirroring :func:`calc_morgan_fp`).
+    """
+    if min_parallel_rows < 1:
+        raise ValueError("min_parallel_rows must be at least 1")
+
+    smiles_values = list(smiles_list)
+    total_rows = len(smiles_values)
+    worker_count = _resolve_worker_count(max_workers, total_rows)
+    mode = "processes" if total_rows >= min_parallel_rows and worker_count > 1 else "serial"
+    serial_fallback = False
+
+    logger.info(
+        "Computing Morgan fingerprints: total_rows=%d mode=%s workers=%d nbits=%d",
+        total_rows,
+        mode,
+        worker_count,
+        nbits,
+    )
+    started_at = time.perf_counter()
+
+    results: List[Optional[np.ndarray]]
+    if mode == "processes":
+        chunk_len = _chunk_size(total_rows, worker_count)
+        chunks = [
+            smiles_values[start : start + chunk_len]
+            for start in range(0, total_rows, chunk_len)
+        ]
+        try:
+            with ProcessPoolExecutor(max_workers=worker_count) as executor:
+                results = [
+                    fp
+                    for chunk_result in executor.map(
+                        _morgan_fp_chunk, chunks, [nbits] * len(chunks)
+                    )
+                    for fp in chunk_result
+                ]
+        except Exception:
+            logger.warning(
+                "Process-based Morgan fingerprint computation failed; falling back to serial",
+                exc_info=True,
+            )
+            results = _morgan_fp_chunk(smiles_values, nbits)
+            serial_fallback = True
+    else:
+        results = _morgan_fp_chunk(smiles_values, nbits)
+
+    success_count = sum(fp is not None for fp in results)
+    failure_count = total_rows - success_count
+    elapsed_s = time.perf_counter() - started_at
+    logger.info(
+        "Finished Morgan fingerprints: elapsed_s=%.3f success_count=%d "
+        "failure_count=%d serial_fallback=%s",
+        elapsed_s,
+        success_count,
+        failure_count,
+        serial_fallback,
+    )
+
+    return results
 
 
 def calc_fp(smiles: str, fp_generator) -> np.ndarray:

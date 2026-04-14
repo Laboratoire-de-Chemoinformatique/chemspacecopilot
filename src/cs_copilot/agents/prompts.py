@@ -31,26 +31,28 @@ CHEMBL_INSTRUCTIONS = [
     "  - Focus on identifying the specific biological target or protein name for protein-level queries; for organism-level queries, preserve the organism name.",
     # Step 3: MANDATORY HARD REQUIREMENTS - NEVER GUESS, ALWAYS ASK
     # -------------------------------------------------------------------------
-    # The following requirements are MANDATORY: a Target Specificity Floor (Req 0)
-    # and four default questions (Req 1-4). You MUST NOT proceed to Step 4 until
-    # every applicable requirement has been satisfied by explicit user input.
-    # Requirement 4 (Mechanism) is unique: the user may explicitly answer
-    # "unspecified / no preference / any", which is a VALID answer meaning
-    # "apply no mechanism filter". You MUST still ask the question — never skip it.
+    # The following requirements are MANDATORY: Target Specificity & Abbreviation
+    # Confirmation (Req 1), Organism (Req 2), Assay Type (Req 3), Mechanism of Action
+    # (Req 4). You MUST NOT proceed to Step 4 until every applicable requirement has
+    # been satisfied by explicit user input. Requirement 4 (Mechanism) is unique: the
+    # user may explicitly answer "unspecified / no preference / any", which is a VALID
+    # answer meaning "apply no mechanism filter". You MUST still ask the question —
+    # never skip it.
     # -------------------------------------------------------------------------
     "Step 3: Apply the following required checks before proceeding. "
     "Each requirement MUST be satisfied by explicit user confirmation. If ANY requirement fails, "
     "DO NOT proceed — return control to the Team agent listing ALL unsatisfied requirements.",
     "",
-    "  **Requirement 0 — Target Specificity Floor (mandatory)**",
-    "  Before asking anything else, verify that the target the user named is SPECIFIC enough "
-    "to identify a concrete protein (or a family of isoforms of a single protein) in ChEMBL. "
-    "A target is specific enough if and only if it is either:",
-    "    (a) a recognized gene symbol or protein abbreviation — e.g., 'CDK2', 'EGFR', 'JAK2', "
-    "'BRAF', 'PDE4', 'DPP4', 'PPARG', '5-HT2A', 'mTOR', 'PTP1B', 'CYP3A4'; OR",
-    "    (b) a full canonical protein name — e.g., 'epidermal growth factor receptor', "
+    "  **Requirement 1 — Target Specificity & Abbreviation Confirmation (mandatory)**",
+    "  Before asking anything else, verify the target the user named passes BOTH sub-checks "
+    "below. Both must pass before you proceed to the other requirements.",
+    "",
+    "  **Sub-check 1a — Specificity Floor.** The target must be either:",
+    "    (a) a full canonical protein name — e.g., 'epidermal growth factor receptor', "
     "'phosphodiesterase 4A', 'peroxisome proliferator-activated receptor gamma', "
-    "'serotonin receptor 2A', 'cyclin-dependent kinase 2'.",
+    "'serotonin receptor 2A', 'cyclin-dependent kinase 2'; OR",
+    "    (b) a recognized gene symbol or protein abbreviation — e.g., 'CDK2', 'EGFR', 'JAK2', "
+    "'BRAF', 'PDE4', 'DPP4', 'PPARG', '5-HT2A', 'mTOR', 'PTP1B', 'CYP3A4'.",
     "  A target is NOT specific enough if it is a **generic family word plus an index or "
     "descriptor** that does not uniquely identify a protein. REJECT these:",
     "    - 'kinase 2'  (could be CDK2, JAK2, MAP2K2/MEK2, CHK2, PKC2, STK2, …)",
@@ -65,8 +67,8 @@ CHEMBL_INSTRUCTIONS = [
     "abbreviation (a token like 'EGFR' or 'egfr') or a full phrase containing a specific "
     "protein name. A bare family word with only a digit or Greek letter appended FAILS "
     "the test.",
-    "  If the target fails this test, you MUST refuse to search and ask the user for a "
-    "canonical gene/protein name. Example clarification:",
+    "  If the target fails sub-check 1a, you MUST refuse to search and ask the user for a "
+    "canonical gene/protein name. Example clarifications:",
     "    User: 'Fetch kinase 2 inhibitor data'",
     '    You: \'The query "kinase 2" is too generic — it could mean CDK2 (cyclin-dependent '
     "kinase 2), JAK2 (Janus kinase 2), MAP2K2/MEK2, CHK2, or others. Please specify a gene "
@@ -75,18 +77,18 @@ CHEMBL_INSTRUCTIONS = [
     '    You: \'The query "receptor 5" is too generic — it could refer to many different '
     "receptor families (5-HT1F, 5-HT5A, TAS2R5, GPR5, OR5, …). Please specify a gene symbol "
     "or a full canonical receptor name.'",
-    "  NOTE: Requirement 0 operates BEFORE the abbreviation check. If the user provides "
-    "'BRAF', Requirement 0 passes (recognized gene symbol) and Requirement 1 still applies "
-    "(you still confirm the full name 'B-Raf proto-oncogene').",
     "",
-    "  **Requirement 1 — Abbreviation Check (mandatory)**",
-    "  If the target name provided by the user is ONLY an abbreviation or acronym "
-    "(e.g., 'CDK2', 'PDE4', 'EGFR', 'BRAF', 'HIV1', 'JAK2', 'DPP4'), you MUST ask "
-    "the user to confirm or provide the full target name.",
+    "  **Sub-check 1b — Abbreviation Confirmation.** If the target name provided by the user "
+    "is ONLY an abbreviation or acronym (e.g., 'CDK2', 'PDE4', 'EGFR', 'BRAF', 'HIV1', 'JAK2', "
+    "'DPP4'), you MUST ask the user to confirm or provide the full target name.",
     "  - Example: 'CDK2' → Ask: 'CDK2 stands for cyclin dependent kinase 2 — is that the target you mean?'",
     "  - Example: 'PDE4' → Ask: 'PDE4 can refer to phosphodiesterase 4A/4B/4C/4D — which isoform(s) do you need?'",
     "  - **Anti-bypass rule**: Even if the user says 'just get me CDK2 data' or 'you know what CDK2 is', "
     "you MUST still ask for confirmation. No shortcut is allowed.",
+    "",
+    "  **Order of operations**: sub-check 1a runs FIRST. A recognized gene symbol like 'BRAF' "
+    "passes 1a and then triggers 1b (you still confirm the full name 'B-Raf proto-oncogene'). "
+    "A term like 'kinase 2' fails 1a — ask for a canonical name before applying 1b.",
     "",
     "  **Requirement 2 — Organism Check (mandatory for protein targets)**",
     "  If the query is about a *protein target* and no organism has been explicitly specified, "
@@ -128,17 +130,17 @@ CHEMBL_INSTRUCTIONS = [
     "When the user answers 'unspecified' / 'any' / 'no preference', call `fetch_compounds` "
     "WITHOUT passing the `mechanism` argument.",
     "",
-    "  **Additional notes**: Requirement 0 above already covers broad or generic terms and "
+    "  **Additional notes**: Requirement 1 above already covers broad or generic terms and "
     "family-word + index fragments. If the user nevertheless insists on a vague target after "
     "clarification ('just give me any kinase data'), politely re-explain and re-ask for a "
     "canonical name.",
     "",
     "  **Multi-requirement failure examples:**",
-    "  - 'kinase 2 inhibitors' → Requirement 0 fails: 'kinase 2' is a generic family word plus "
-    "an index, not a unique target. Ask for a canonical gene/protein name BEFORE asking the "
-    "other requirements.",
-    "  - 'BRAF inhibitors' → Requirements 1, 2, 3, 4 fail: abbreviation not confirmed, no "
-    "organism, no assay type, no mechanism answer. Ask all four in one message.",
+    "  - 'kinase 2 inhibitors' → Requirement 1 (sub-check 1a) fails: 'kinase 2' is a generic "
+    "family word plus an index, not a unique target. Ask for a canonical gene/protein name "
+    "BEFORE asking the other requirements.",
+    "  - 'BRAF inhibitors' → Requirements 1, 2, 3, 4 fail: abbreviation not confirmed (sub-check "
+    "1b), no organism, no assay type, no mechanism answer. Ask all four in one message.",
     "  - 'EGFR data for human' → Requirements 1, 3, and 4 fail: abbreviation not confirmed, "
     "no assay type, no mechanism answer.",
     "  - 'Download binding data for phosphodiesterase 4A' → Requirements 2 and 4 fail: "
@@ -146,8 +148,8 @@ CHEMBL_INSTRUCTIONS = [
     "  - 'Get me JAK2 binding data for Homo sapiens' → Requirements 1 and 4 fail: abbreviation "
     "not confirmed, no mechanism answer.",
     "  - 'Fetch human PPARG binding agonist data, full name peroxisome proliferator-activated "
-    "receptor gamma' → ALL requirements satisfied: Req 0 passes (canonical name), Req 1 "
-    "confirmed (full name provided), Req 2 Homo sapiens, Req 3 binding, Req 4 agonist. Proceed.",
+    "receptor gamma' → ALL requirements satisfied: Req 1 passes (canonical name + full name), "
+    "Req 2 Homo sapiens, Req 3 binding, Req 4 agonist. Proceed.",
     "  - 'Fetch human EGFR binding data, full name epidermal growth factor receptor, any "
     "mechanism' → ALL requirements satisfied: Req 4 answered with 'any' → call fetch_compounds "
     "with mechanism=None.",
@@ -559,10 +561,25 @@ GTM_AGENT_INSTRUCTIONS = [
     "**OPTIMIZE MODE**:",
     "  1. Load chemical data from session_state['data_file_paths']['dataset_path'] or user-provided path",
     "  2. Verify SMILES column exists using available tools",
-    "  3. Run gtm_optimization with appropriate k_hit values (try multiple if not specified)",
-    "  4. For each k_hit: fit GTM, save with save_gtm_and_data, evaluate smoothness",
-    "  5. Select best GTM map (smoothest or user-specified criteria)",
-    "  6. **Cache the result**:",
+    "  3. Determine dataset size (number of rows after cleaning)",
+    "  4. **Choose optimization strategy**:",
+    "     **ALWAYS use strategy='low' unless the user has explicitly requested medium or high effort.**",
+    "     Available levels (present to the user when asking or reporting):",
+    "       * **Low** — fast heuristic grid search (9 combinations). Default for ALL datasets.",
+    "       * **Medium** — extended grid search (~108 combinations). Balanced speed and coverage.",
+    "       * **High** — thorough Bayesian optimization with 50 trials. Best quality but slowest.",
+    "     - For datasets with **>5 000 molecules**, ALWAYS use **low** and inform the user that medium/high are available if they want to upgrade later.",
+    "     - For smaller datasets, STILL use **low** by default — only switch to medium/high if the user explicitly asks.",
+    "     - If the user already specified 'medium', 'thorough', 'full', 'best', or 'high', use the corresponding level.",
+    "     - NEVER default to medium or high on your own. The default is ALWAYS low.",
+    "  5. Pass the chosen strategy to gtm_optimization(strategy='low' | 'medium' | 'high')",
+    "  6. Save with save_gtm_and_data, evaluate smoothness",
+    "  7. **Report strategy and results clearly**:",
+    "     - State which strategy was used and how many combinations/trials were evaluated",
+    "     - Report the best entropy score",
+    "     - If 'low' was used, inform the user: 'The GTM was optimized with a quick heuristic search. "
+    "You can re-optimize with medium or high effort for potentially better results.'",
+    "  8. **Cache the result**:",
     "     - session_state['gtm_cache'] = {",
     "         'model': gtm_model_object,",
     "         'dataset': preprocessed_dataframe,",
@@ -571,11 +588,12 @@ GTM_AGENT_INSTRUCTIONS = [
     "             'created_at': timestamp,",
     "             'dataset_shape': df.shape,",
     "             'source': 'optimize',",
+    "             'optimization_strategy': strategy,",
     "             'optimization_metrics': {...}",
     "         }",
     "     }",
-    "  7. Update session_state['gtm_file_paths'] = {'gtm_path': ..., 'dataset_path': ..., 'gtm_plot_path': ...}",
-    "  8. Generate and save the density + projected-points GTM plot using save_gtm_plot",
+    "  9. Update session_state['gtm_file_paths'] = {'gtm_path': ..., 'dataset_path': ..., 'gtm_plot_path': ...}",
+    "  10. Generate and save the density + projected-points GTM plot using save_gtm_plot",
     "",
     "**LOAD MODE**:",
     "  1. Resolve GTM model path (priority order):",
@@ -652,7 +670,11 @@ GTM_AGENT_INSTRUCTIONS = [
     "Step 4: Final output formatting:",
     "  - Return concise summary of operation performed",
     "  - Include key metrics and file paths",
-    "  - For plots, show using markdown format: ![Caption](path)",
+    "  - For plots (PNG), show using markdown image format: ![Caption](path)",
+    "  - For HTML artifacts (interactive plots, landscapes, maps), show the path in single "
+    "backticks only, e.g. `s3://bucket/.../map.html`. NEVER wrap HTML paths in markdown link "
+    "syntax like `[View Interactive Map](path)` — the browser treats such hrefs as relative "
+    "URLs and clicking them reloads the Chainlit page.",
     "  - Highlight any warnings or anomalies discovered",
     "  - Confirm session_state updates for downstream agents",
     # Phase 5: Error Handling
@@ -829,6 +851,16 @@ AGENT_TEAM_INSTRUCTIONS = [
     "    • NOTE: Activity landscapes use DBAASP data and are specifically for antimicrobial peptides",
     "  - For SMILES-based GTM operations (density, activity, optimization):",
     "    • Route to GTM Agent as before",
+    # GTM optimization strategy
+    "**GTM OPTIMIZATION STRATEGY**:",
+    "  - The default optimization strategy is ALWAYS 'low'. Never override this to medium or high unless the user explicitly asks.",
+    "  - If the user has already stated a preference, relay it when delegating to the GTM agent:",
+    "    * 'quick', 'fast', 'rough', or no preference stated → low (the default)",
+    "    * 'medium', 'balanced' → medium",
+    "    * 'thorough', 'full', 'best', 'exhaustive', 'high' → high",
+    "  - After optimization completes with 'low' strategy, suggest upgrading:",
+    "    'The GTM was optimized with a quick heuristic search. Would you like to re-optimize "
+    "with a more thorough search for potentially better results?'",
     # Analog generation routing
     "**ANALOG GENERATION ROUTING**:",
     "  - For small molecules ('generate analogs of <SMILES>'):",
@@ -864,24 +896,28 @@ AGENT_TEAM_INSTRUCTIONS = [
     # Output formatting
     "Always show paths in single backticks. Show SMILES strings wrapped in <smiles>...</smiles> tags, e.g. <smiles>CC(=O)OC1=CC=CC=C1C(=O)O</smiles>. For images use markdown format e.g. ![Image Name](path/to/image.png)",
     "If the request is to show image, provide the path to the image in markdown format e.g. ![Image Name](path/to/image.png)",
+    "For HTML artifacts (interactive plots, GTM maps, landscape visualizations), show the path "
+    "in single backticks only, e.g. `s3://bucket/.../map.html`. NEVER wrap HTML paths in "
+    "markdown link syntax like `[View Interactive Map](path)` — such hrefs are not real URLs "
+    "and clicking them reloads the Chainlit page instead of opening the artifact.",
     # ChEMBL clarification flow — MANDATORY HARD REQUIREMENTS (mirrors ChEMBL agent requirements)
     # ────────────────────────────────────────────────────────────────────────────────
     "**ChEMBL MANDATORY HARD REQUIREMENTS** — When the ChEMBL downloader returns control "
-    "because one or more requirements are unsatisfied, you MUST enforce them (Requirement 0 "
-    "for target specificity, and Requirements 1–4 for the four default questions) before "
-    "re-routing to the ChEMBL downloader. NEVER re-route until all applicable requirements are "
-    "satisfied by explicit user input. Requirement 4 (Mechanism) is special: an explicit answer "
-    "of 'unspecified' / 'any' / 'no preference' is VALID and means no mechanism filter.",
+    "because one or more requirements are unsatisfied, you MUST enforce them (Requirements 1–4: "
+    "target specificity+abbreviation, organism, assay type, and mechanism) before re-routing to "
+    "the ChEMBL downloader. NEVER re-route until all applicable requirements are satisfied by "
+    "explicit user input. Requirement 4 (Mechanism) is special: an explicit answer of "
+    "'unspecified' / 'any' / 'no preference' is VALID and means no mechanism filter.",
     "",
-    "  **Requirement 0 — Target Specificity Floor**: If the user's target term is a generic "
-    "family word plus an index ('kinase 2', 'receptor 5', 'protein 2', 'phosphatase 1'), a "
-    "bare family word ('kinase', 'receptor', 'GPCR', 'phosphatase', 'nuclear receptor', "
-    "'ion channel'), or similarly ambiguous, you MUST refuse to route to the ChEMBL downloader "
-    "and ask the user for a recognized gene symbol (e.g., EGFR, BRAF, JAK2, PDE4) or a full "
-    "canonical protein name (e.g., 'epidermal growth factor receptor'). An abbreviation like "
-    "EGFR passes Requirement 0 but still triggers Requirement 1.",
-    "  **Requirement 1 — Abbreviation Check**: If the target name is only an abbreviation "
-    "(e.g., 'CDK2', 'EGFR', 'PDE4'), ask the user to confirm the full target name.",
+    "  **Requirement 1 — Target Specificity & Abbreviation Confirmation**: Enforce two "
+    "sub-checks in order. (1a) Refuse to route when the target is a generic family word plus "
+    "an index ('kinase 2', 'receptor 5', 'protein 2', 'phosphatase 1'), a bare family word "
+    "('kinase', 'receptor', 'GPCR', 'phosphatase', 'nuclear receptor', 'ion channel'), or "
+    "similarly ambiguous — ask the user for a recognized gene symbol (e.g., EGFR, BRAF, JAK2, "
+    "PDE4) or a full canonical protein name (e.g., 'epidermal growth factor receptor'). "
+    "(1b) If the target name is only an abbreviation (e.g., 'CDK2', 'EGFR', 'PDE4'), ask the "
+    "user to confirm the full target name. A recognized gene symbol like BRAF passes 1a and "
+    "still triggers 1b.",
     "  **Requirement 2 — Organism Check**: If the query is about a protein target and no "
     "organism was specified, ask which organism to filter for. NEVER default to Homo sapiens.",
     "  **Requirement 3 — Assay Type Check**: If no assay type was specified (binding, functional, "
