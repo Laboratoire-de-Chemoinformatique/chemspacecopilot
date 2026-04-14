@@ -670,7 +670,11 @@ GTM_AGENT_INSTRUCTIONS = [
     "Step 4: Final output formatting:",
     "  - Return concise summary of operation performed",
     "  - Include key metrics and file paths",
-    "  - For plots, show using markdown format: ![Caption](path)",
+    "  - For plots (PNG), show using markdown image format: ![Caption](path)",
+    "  - For HTML artifacts (interactive plots, landscapes, maps), show the path in single "
+    "backticks only, e.g. `s3://bucket/.../map.html`. NEVER wrap HTML paths in markdown link "
+    "syntax like `[View Interactive Map](path)` — the browser treats such hrefs as relative "
+    "URLs and clicking them reloads the Chainlit page.",
     "  - Highlight any warnings or anomalies discovered",
     "  - Confirm session_state updates for downstream agents",
     # Phase 5: Error Handling
@@ -892,6 +896,10 @@ AGENT_TEAM_INSTRUCTIONS = [
     # Output formatting
     "Always show paths in single backticks. Show SMILES strings wrapped in <smiles>...</smiles> tags, e.g. <smiles>CC(=O)OC1=CC=CC=C1C(=O)O</smiles>. For images use markdown format e.g. ![Image Name](path/to/image.png)",
     "If the request is to show image, provide the path to the image in markdown format e.g. ![Image Name](path/to/image.png)",
+    "For HTML artifacts (interactive plots, GTM maps, landscape visualizations), show the path "
+    "in single backticks only, e.g. `s3://bucket/.../map.html`. NEVER wrap HTML paths in "
+    "markdown link syntax like `[View Interactive Map](path)` — such hrefs are not real URLs "
+    "and clicking them reloads the Chainlit page instead of opening the artifact.",
     # ChEMBL clarification flow — MANDATORY HARD REQUIREMENTS (mirrors ChEMBL agent requirements)
     # ────────────────────────────────────────────────────────────────────────────────
     "**ChEMBL MANDATORY HARD REQUIREMENTS** — When the ChEMBL downloader returns control "
