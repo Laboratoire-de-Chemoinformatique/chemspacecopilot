@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/logo_dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/logo_light.png">
-    <img src="docs/logo_light.png" alt="ChemSpace Copilot Logo" width="200"/>
+    <source media="(prefers-color-scheme: light)" srcset="docs/logo_light_readme.png">
+    <img src="docs/logo_light_readme.png" alt="ChemSpace Copilot Logo" width="200"/>
   </picture>
 </p>
 
