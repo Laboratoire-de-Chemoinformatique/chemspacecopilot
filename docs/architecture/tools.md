@@ -10,7 +10,8 @@ Tools are organized as **Toolkit classes** that inherit from `Toolkit` (Agno fra
 tools/
 ├── databases/          Database integrations
 │   ├── base.py        BaseDatabaseToolkit (abstract)
-│   ├── chembl.py      ChemblToolkit (ChEMBL REST API)
+│   ├── chembl.py      ChemblToolkit (REST API + MySQL backends)
+│   ├── chembl_fetcher.py  RestChemblFetcher / SqlChemblFetcher strategies
 │   └── types.py       Query types and configurations
 │
 ├── chemography/       Dimensionality reduction
@@ -30,6 +31,19 @@ tools/
 ```
 
 Each toolkit registers methods as tools via `self.register(method)`. Agents call these tools via the Agno tool-calling mechanism.
+
+## ChEMBL Backends
+
+The `ChemblToolkit` supports two pluggable data backends via a strategy pattern (`chembl_fetcher.py`):
+
+| Backend | Trigger | Dependency | Use case |
+|---------|---------|------------|----------|
+| **REST API** | Default (no config needed) | `chembl_webresource_client` (included) | Quick setup, always-on access |
+| **MySQL** | Set `CHEMBL_MYSQL_HOST` env var | `pymysql` (`uv sync --extra mysql`) | Faster queries, offline use, full SQL |
+
+Backend is auto-detected: MySQL when `CHEMBL_MYSQL_HOST` is present, REST otherwise. The REST API is always reported as available regardless of active backend.
+
+Download the MySQL dump from the [ChEMBL downloads page](https://chembl.gitbook.io/chembl-interface-documentation/downloads) or the [EBI FTP](https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/latest/).
 
 ## Adding a New Tool
 

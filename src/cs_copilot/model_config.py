@@ -29,7 +29,7 @@ DEFAULT_PROVIDER = "deepseek"
 DEFAULT_MODEL_ID = "deepseek-chat"
 DEFAULT_OLLAMA_HOST = "http://localhost:11434"
 
-VALID_PROVIDERS = ("deepseek", "ollama")
+VALID_PROVIDERS = ("deepseek", "ollama", "openrouter")
 
 
 # ---------------------------------------------------------------------------
@@ -146,14 +146,21 @@ def load_model_from_config(config_path: Optional[str] = None) -> Any:
         from agno.models.ollama import Ollama
 
         host = conf.get("ollama_host", DEFAULT_OLLAMA_HOST)
-        logger.info("Using Ollama model '%s' at %s", model_id, host)
+        logger.info(f"Using Ollama model '{model_id}' at {host}")
         return Ollama(id=model_id, host=host)
+
+    if provider == "openrouter":
+        from agno.models.openrouter import OpenRouter
+
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        logger.info(f"Using OpenRouter model '{model_id}'")
+        return OpenRouter(id=model_id, api_key=api_key)
 
     # provider == "deepseek"
     from agno.models.deepseek import DeepSeek
 
     api_key = os.getenv("DEEPSEEK_API_KEY")
-    logger.info("Using DeepSeek model '%s'", model_id)
+    logger.info(f"Using DeepSeek model '{model_id}'")
     return DeepSeek(id=model_id, api_key=api_key)
 
 

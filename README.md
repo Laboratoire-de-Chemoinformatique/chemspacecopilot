@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/logo_dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/logo_light.png">
-    <img src="docs/logo_light.png" alt="ChemSpace Copilot Logo" width="200"/>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo_dark_readme.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/logo_light_readme.png">
+    <img src="docs/logo_light_readme.png" alt="ChemSpace Copilot" width="720"/>
   </picture>
 </p>
 
@@ -93,12 +93,21 @@ DEEPSEEK_API_KEY=your-api-key-here
 # MODEL_ID=deepseek-chat
 # OLLAMA_HOST=http://localhost:11434
 
-# Optional — S3/MinIO storage (disable with USE_S3=false)
-USE_S3=true
+# Optional — S3/MinIO storage (set USE_S3=true only when you want remote storage)
+USE_S3=false
+# When enabled:
 S3_ENDPOINT_URL=http://localhost:9000
 MINIO_ACCESS_KEY=cs_copilot
 MINIO_SECRET_KEY=chempwd123
 ASSETS_BUCKET=chatbot-assets
+
+# Optional — ChEMBL local MySQL (faster queries, offline use)
+# Download dump: https://chembl.gitbook.io/chembl-interface-documentation/downloads
+# CHEMBL_MYSQL_HOST=localhost
+# CHEMBL_MYSQL_PORT=3306
+# CHEMBL_MYSQL_USER=chembl
+# CHEMBL_MYSQL_PASSWORD=
+# CHEMBL_MYSQL_DATABASE=chembl_36
 ```
 
 The repository also includes a tracked `.modelconf` file. Edit it if you want to switch from the default DeepSeek backend to a local Ollama model.
@@ -177,7 +186,7 @@ The system uses a **Factory Pattern + Registry** for agent creation. The default
 
 | Agent | Role |
 |-------|------|
-| **ChEMBL Downloader** | Downloads and filters bioactivity data from the ChEMBL database |
+| **ChEMBL Downloader** | Downloads and filters bioactivity data from ChEMBL (REST API by default; optional [local MySQL backend](https://chembl.gitbook.io/chembl-interface-documentation/downloads)) |
 | **GTM Agent** | Unified GTM operations: build, load, density analysis, activity landscapes, projection, and GTM sampling support |
 | **Chemoinformatician** | Downstream chemoinformatics analysis including scaffold, similarity, clustering, and SAR workflows |
 | **Report Generator** | Formats analysis results into reports and visual outputs |

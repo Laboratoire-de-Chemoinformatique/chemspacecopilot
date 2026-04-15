@@ -66,6 +66,7 @@ class GTMToolkit(BaseDRToolkit):
         self.register(self.sample_active_nodes)
         self.register(self.sample_by_coordinates)
         self.register(self.create_activity_landscapes)
+        self.register(self.save_gtm_landscape_plot)
         self.register(self.project_data_on_gtm)
         # Latent-space GTM tools (for peptide WAE integration)
         self.register(self.train_gtm_on_latent_space)
@@ -82,6 +83,7 @@ class GTMToolkit(BaseDRToolkit):
         gtm_name: str,
         smiles_column: str,
         agent: Agent,
+        strategy: str = "low",
     ) -> str:
         """
         Load a dataset of SMILES strings, optimize a Generative Topographic Mapping (GTM)
@@ -94,6 +96,10 @@ class GTMToolkit(BaseDRToolkit):
             gtm_name: Key under which the trained GTM model will be saved in agent.session_state
             smiles_column: Name of the column in the CSV that holds SMILES strings
             agent: The agent whose session_state dict will be updated
+            strategy: Optimization effort level. One of:
+                - "low": Heuristic grid search (9 combinations, fastest)
+                - "medium": Extended grid search (up to ~108 combinations, balanced)
+                - "high": Optuna TPE with 50 trials (thorough, slowest)
 
         Returns:
             Human-readable message reporting the best entropy score achieved
@@ -103,7 +109,7 @@ class GTMToolkit(BaseDRToolkit):
             ValueError: If smiles_column is missing
         """
         return gtm_operations.optimize_gtm_model(
-            df_csv_path, dataset_name, gtm_name, smiles_column, agent
+            df_csv_path, dataset_name, gtm_name, smiles_column, agent, strategy=strategy
         )
 
     def calculate_map_ruggedness(self, dataset_name: str, gtm_name: str, agent: Agent) -> str:
@@ -705,6 +711,7 @@ class GTMToolkit(BaseDRToolkit):
         node_threshold: float = 0.1,
         chart_width: int = 600,
         chart_height: int = 600,
+        renderer: Literal["altair", "plotly"] = "altair",
         *,
         agent: Agent | None = None,
         use_default: bool = False,
@@ -720,6 +727,7 @@ class GTMToolkit(BaseDRToolkit):
             node_threshold: Threshold below which nodes are excluded
             chart_width: Width of the output chart (pixels)
             chart_height: Height of the output chart (pixels)
+            renderer: Rendering backend ("altair" or "plotly"). Defaults to "altair".
             agent: Optional Agent instance to check/store session state.
             use_default: If True, force use of default model even if session model exists.
 
@@ -734,7 +742,44 @@ class GTMToolkit(BaseDRToolkit):
             gtm_model, agent=agent, use_default=use_default
         )
         return gtm_operations.create_activity_landscapes_tool(
-            dataset, resolved_model, node_threshold, chart_width, chart_height
+            dataset,
+            resolved_model,
+            node_threshold,
+            chart_width,
+            chart_height,
+            renderer=renderer,
+        )
+
+    def save_gtm_landscape_plot(
+        self,
+        landscape_file: str,
+        landscape_type: Literal["density", "classification", "regression", "query"],
+        renderer: Literal["altair", "plotly"] = "altair",
+        mark_nodes: Optional[List[int]] = None,
+        chart_width: int = 600,
+        chart_height: int = 600,
+    ) -> str:
+        """
+        Render a saved ChemographyKit landscape table as an HTML/PNG plot.
+
+        Args:
+            landscape_file: Path to the landscape CSV table
+            landscape_type: Landscape type to render
+            renderer: Rendering backend to use
+            mark_nodes: Optional list of node identifiers to label
+            chart_width: Width of the output chart (pixels)
+            chart_height: Height of the output chart (pixels)
+
+        Returns:
+            Success message with file paths
+        """
+        return gtm_operations.save_gtm_landscape_plot(
+            landscape_file=landscape_file,
+            landscape_type=landscape_type,
+            renderer=renderer,
+            mark_nodes=mark_nodes,
+            chart_width=chart_width,
+            chart_height=chart_height,
         )
 
     def project_data_on_gtm(self, dataset_file: str, gtm_model_file: str) -> str:
@@ -764,6 +809,7 @@ class GTMToolkit(BaseDRToolkit):
         dataset_name: str,
         gtm_name: str,
         agent: Agent,
+        strategy: str = "low",
     ) -> str:
         """
         Train a GTM on pre-computed latent vectors (e.g. from Peptide WAE encoder).
@@ -780,6 +826,7 @@ class GTMToolkit(BaseDRToolkit):
             dataset_name: Key under which the latent DataFrame will be saved in agent.session_state
             gtm_name: Key under which the trained GTM model will be saved in agent.session_state
             agent: The agent whose session_state dict will be updated
+            strategy: Optimization effort level — ``"low"``, ``"medium"``, or ``"high"``
 
         Returns:
             Human-readable message reporting the best entropy score achieved
@@ -801,7 +848,7 @@ class GTMToolkit(BaseDRToolkit):
         logger.info(f"Loaded {X.shape[0]} latent vectors with {X.shape[1]} dimensions")
 
         # Train the GTM
-        gtm_model, scaler, best_score = gtm_operations.train_latent_gtm(X)
+        gtm_model, scaler, best_score = gtm_operations.train_latent_gtm(X, strategy=strategy)
 
         # Store in session state
         if agent.session_state is None:

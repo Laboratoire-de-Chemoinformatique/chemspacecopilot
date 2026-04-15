@@ -32,6 +32,9 @@ dependencies = [
     "agno==2.1.9",
     "ollama>=0.4.0",
     "chembl-webresource-client>=0.10.9",
+    "SynPlanner>=1.2.1",
+    "pubchempy>=1.0.5",
+    "CairoSVG>=2.8.2",
     "vl-convert-python>=1.8.0",
     "tabulate>=0.9.0",
     "chainlit>=2.8.3",
@@ -43,6 +46,8 @@ dependencies = [
     "marimo>=0.18.4",
     "transformers>=4.57.3",
     "sentence-transformers>=5.2.0",
+    "rich>=13.0.0",
+    "prompt_toolkit>=3.0.0",
 ]
 requires-python = "==3.11.*"
 readme = "README.md"
@@ -58,11 +63,15 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/cs_copilot"]
 
+[project.scripts]
+cscopilot = "cs_copilot.cli:main"
+
 [project.optional-dependencies]
-synplanner = [
-    "SynPlanner>=1.2.1",
-    "pubchempy>=1.0.5",
-    "CairoSVG>=2.8.2",
+mysql = [
+    "pymysql>=1.1.0",
+]
+postgresql = [
+    "psycopg2-binary>=2.9.9",
 ]
 
 [dependency-groups]

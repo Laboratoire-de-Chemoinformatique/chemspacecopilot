@@ -4,11 +4,12 @@
 # Edit the values below or override them with environment variables
 # (MODEL_PROVIDER, MODEL_ID, OLLAMA_HOST).
 
-# provider: "deepseek" (cloud API) or "ollama" (local model)
+# provider: "deepseek" (cloud API), "openrouter" (OpenRouter gateway), or "ollama" (local model)
 provider=deepseek
 
 # Model ID (provider-specific)
-# For deepseek: "deepseek-chat", "deepseek-reasoner", etc.
+# For deepseek: "deepseek-chat", "deepseek-reasoner"
+# For openrouter: any OpenRouter model id, e.g. "deepseek/deepseek-v3.2", "openai/gpt-5-mini"
 # For ollama: any model available on your Ollama instance, e.g. "llama3.1", "qwen2.5:72b"
 model_id=deepseek-chat
 

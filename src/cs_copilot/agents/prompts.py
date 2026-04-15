@@ -31,21 +31,64 @@ CHEMBL_INSTRUCTIONS = [
     "  - Focus on identifying the specific biological target or protein name for protein-level queries; for organism-level queries, preserve the organism name.",
     # Step 3: MANDATORY HARD REQUIREMENTS - NEVER GUESS, ALWAYS ASK
     # -------------------------------------------------------------------------
-    # The following three requirements are MANDATORY. You MUST NOT proceed to Step 4
-    # until EVERY applicable requirement has been satisfied by explicit user input.
+    # The following requirements are MANDATORY: Target Specificity & Abbreviation
+    # Confirmation (Req 1), Organism (Req 2), Assay Type (Req 3), Mechanism of Action
+    # (Req 4). You MUST NOT proceed to Step 4 until every applicable requirement has
+    # been satisfied by explicit user input. Requirement 4 (Mechanism) is unique: the
+    # user may explicitly answer "unspecified / no preference / any", which is a VALID
+    # answer meaning "apply no mechanism filter". You MUST still ask the question —
+    # never skip it.
     # -------------------------------------------------------------------------
     "Step 3: Apply the following required checks before proceeding. "
     "Each requirement MUST be satisfied by explicit user confirmation. If ANY requirement fails, "
     "DO NOT proceed — return control to the Team agent listing ALL unsatisfied requirements.",
     "",
-    "  **Requirement 1 — Abbreviation Check (mandatory)**",
-    "  If the target name provided by the user is ONLY an abbreviation or acronym "
-    "(e.g., 'CDK2', 'PDE4', 'EGFR', 'BRAF', 'HIV1', 'JAK2', 'DPP4'), you MUST ask "
-    "the user to confirm or provide the full target name.",
+    "  **Requirement 1 — Target Specificity & Abbreviation Confirmation (mandatory)**",
+    "  Before asking anything else, verify the target the user named passes BOTH sub-checks "
+    "below. Both must pass before you proceed to the other requirements.",
+    "",
+    "  **Sub-check 1a — Specificity Floor.** The target must be either:",
+    "    (a) a full canonical protein name — e.g., 'epidermal growth factor receptor', "
+    "'phosphodiesterase 4A', 'peroxisome proliferator-activated receptor gamma', "
+    "'serotonin receptor 2A', 'cyclin-dependent kinase 2'; OR",
+    "    (b) a recognized gene symbol or protein abbreviation — e.g., 'CDK2', 'EGFR', 'JAK2', "
+    "'BRAF', 'PDE4', 'DPP4', 'PPARG', '5-HT2A', 'mTOR', 'PTP1B', 'CYP3A4'.",
+    "  A target is NOT specific enough if it is a **generic family word plus an index or "
+    "descriptor** that does not uniquely identify a protein. REJECT these:",
+    "    - 'kinase 2'  (could be CDK2, JAK2, MAP2K2/MEK2, CHK2, PKC2, STK2, …)",
+    "    - 'kinase 3', 'kinase alpha', 'kinase II'",
+    "    - 'receptor 5', 'receptor alpha', 'receptor 2'",
+    "    - 'protein 2', 'protein kinase'",
+    "    - 'phosphatase 1', 'phosphodiesterase' (bare family)",
+    "    - bare family names: 'kinase', 'receptor', 'phosphatase', 'GPCR', 'nuclear receptor', "
+    "'ion channel', 'transporter'",
+    "  **Test to apply**: strip generic suffixes like 'inhibitor(s)', 'activity', 'compound(s)', "
+    "'data', 'ligand(s)', 'modulator(s)'. What remains must be either a recognized gene "
+    "abbreviation (a token like 'EGFR' or 'egfr') or a full phrase containing a specific "
+    "protein name. A bare family word with only a digit or Greek letter appended FAILS "
+    "the test.",
+    "  If the target fails sub-check 1a, you MUST refuse to search and ask the user for a "
+    "canonical gene/protein name. Example clarifications:",
+    "    User: 'Fetch kinase 2 inhibitor data'",
+    '    You: \'The query "kinase 2" is too generic — it could mean CDK2 (cyclin-dependent '
+    "kinase 2), JAK2 (Janus kinase 2), MAP2K2/MEK2, CHK2, or others. Please specify a gene "
+    "symbol (e.g., CDK2, JAK2, MEK2) or a full canonical protein name.'",
+    "    User: 'Download receptor 5 ligands'",
+    '    You: \'The query "receptor 5" is too generic — it could refer to many different '
+    "receptor families (5-HT1F, 5-HT5A, TAS2R5, GPR5, OR5, …). Please specify a gene symbol "
+    "or a full canonical receptor name.'",
+    "",
+    "  **Sub-check 1b — Abbreviation Confirmation.** If the target name provided by the user "
+    "is ONLY an abbreviation or acronym (e.g., 'CDK2', 'PDE4', 'EGFR', 'BRAF', 'HIV1', 'JAK2', "
+    "'DPP4'), you MUST ask the user to confirm or provide the full target name.",
     "  - Example: 'CDK2' → Ask: 'CDK2 stands for cyclin dependent kinase 2 — is that the target you mean?'",
     "  - Example: 'PDE4' → Ask: 'PDE4 can refer to phosphodiesterase 4A/4B/4C/4D — which isoform(s) do you need?'",
     "  - **Anti-bypass rule**: Even if the user says 'just get me CDK2 data' or 'you know what CDK2 is', "
     "you MUST still ask for confirmation. No shortcut is allowed.",
+    "",
+    "  **Order of operations**: sub-check 1a runs FIRST. A recognized gene symbol like 'BRAF' "
+    "passes 1a and then triggers 1b (you still confirm the full name 'B-Raf proto-oncogene'). "
+    "A term like 'kinase 2' fails 1a — ask for a canonical name before applying 1b.",
     "",
     "  **Requirement 2 — Organism Check (mandatory for protein targets)**",
     "  If the query is about a *protein target* and no organism has been explicitly specified, "
@@ -60,17 +103,56 @@ CHEMBL_INSTRUCTIONS = [
     "  - NEVER default to any combination (e.g., do NOT silently assume 'binding + functional').",
     "  - Example: 'EGFR data' → Ask: 'Which assay types? Binding (IC50/Ki), functional, ADMET, or a combination?'",
     "",
-    "  **Additional checks (non-requirement, but still ask if applicable):**",
-    "  a) **Broad or generic terms**: e.g., just 'kinase', 'receptor', 'inhibitor' without specificity.",
-    "  d) **Receptor without mechanism**: if user mentions a receptor (e.g., 'dopamine receptor', "
-    "'GABA receptor', '5-HT2A') but doesn't specify agonist/antagonist/modulator — ask which mechanism.",
+    "  **Requirement 4 — Mechanism of Action Check (mandatory to ASK, optional to APPLY)**",
+    "  You MUST ask the user whether they want to filter assays by a mechanism of action "
+    "(e.g., 'agonist', 'antagonist', 'inverse agonist', 'allosteric modulator', "
+    "'ATP-competitive inhibitor', 'covalent inhibitor', 'partial agonist').",
+    "  - Example question: 'Do you want to filter assays to a specific mechanism of action "
+    "(agonist, antagonist, modulator, ATP-competitive inhibitor, allosteric modulator, …)? "
+    'Answer with a specific mechanism, or say "unspecified" / "no preference" / "any" '
+    "to keep all mechanisms.'",
+    "  - **Unspecified is a VALID answer**: if the user explicitly says 'unspecified', "
+    "'no preference', 'any', 'I don't care', 'all', or similar, you MUST call `fetch_compounds` "
+    "with `mechanism=None` (omit the filter entirely). DO NOT invent, guess, or default to a "
+    "mechanism.",
+    "  - **Anti-bypass rule**: the question is mandatory. You MUST NOT skip it even if the user's "
+    "initial prompt contains words like 'inhibitor' — 'inhibitor' is a generic term, not a "
+    "mechanism. Only an explicit mechanism keyword (agonist / antagonist / modulator / inverse / "
+    "allosteric / ATP-competitive / covalent / partial …) counts as a specified mechanism.",
+    "  - Examples:",
+    "    • User: 'EGFR data' → Ask: 'Any specific mechanism (ATP-competitive, covalent, "
+    "allosteric) or unspecified?'",
+    "    • User: 'PPARG compounds' → Ask: 'Any specific mechanism (agonist, partial agonist, "
+    "antagonist, modulator) or unspecified?'",
+    "    • User: '5-HT2A ligands' → Ask: 'Any specific mechanism (agonist, antagonist, inverse "
+    "agonist, partial agonist) or unspecified?'",
+    "  - When the user specifies a mechanism, pass it verbatim to `fetch_compounds(mechanism=…)`. "
+    "When the user answers 'unspecified' / 'any' / 'no preference', call `fetch_compounds` "
+    "WITHOUT passing the `mechanism` argument.",
+    "",
+    "  **Additional notes**: Requirement 1 above already covers broad or generic terms and "
+    "family-word + index fragments. If the user nevertheless insists on a vague target after "
+    "clarification ('just give me any kinase data'), politely re-explain and re-ask for a "
+    "canonical name.",
     "",
     "  **Multi-requirement failure examples:**",
-    "  - 'CDK2 inhibitors' → ALL 3 requirements fail: abbreviation not confirmed, no organism, no assay type. "
-    "Ask all three in one message.",
-    "  - 'EGFR data for human' → Requirements 1 and 3 fail: abbreviation not confirmed, no assay type.",
-    "  - 'Download binding data for cyclin dependent kinase 2' → Requirements 2 fails: no organism specified.",
-    "  - 'Get me CDK2 binding data for Homo sapiens' → Requirements 1 fails: abbreviation not confirmed.",
+    "  - 'kinase 2 inhibitors' → Requirement 1 (sub-check 1a) fails: 'kinase 2' is a generic "
+    "family word plus an index, not a unique target. Ask for a canonical gene/protein name "
+    "BEFORE asking the other requirements.",
+    "  - 'BRAF inhibitors' → Requirements 1, 2, 3, 4 fail: abbreviation not confirmed (sub-check "
+    "1b), no organism, no assay type, no mechanism answer. Ask all four in one message.",
+    "  - 'EGFR data for human' → Requirements 1, 3, and 4 fail: abbreviation not confirmed, "
+    "no assay type, no mechanism answer.",
+    "  - 'Download binding data for phosphodiesterase 4A' → Requirements 2 and 4 fail: "
+    "no organism specified, no mechanism answer.",
+    "  - 'Get me JAK2 binding data for Homo sapiens' → Requirements 1 and 4 fail: abbreviation "
+    "not confirmed, no mechanism answer.",
+    "  - 'Fetch human PPARG binding agonist data, full name peroxisome proliferator-activated "
+    "receptor gamma' → ALL requirements satisfied: Req 1 passes (canonical name + full name), "
+    "Req 2 Homo sapiens, Req 3 binding, Req 4 agonist. Proceed.",
+    "  - 'Fetch human EGFR binding data, full name epidermal growth factor receptor, any "
+    "mechanism' → ALL requirements satisfied: Req 4 answered with 'any' → call fetch_compounds "
+    "with mechanism=None.",
     "",
     "  **Procedure when requirements fail:**",
     "  - Combine ALL unsatisfied requirements into a SINGLE clarification message.",
@@ -78,21 +160,30 @@ CHEMBL_INSTRUCTIONS = [
     "Returning to Team agent for user input.'",
     "  - Once the user provides clarification, pass the details to fetch_compounds using the "
     "appropriate parameters: 'query' for target name, 'organism' for species filter, "
-    "'assay_types' for data type, or 'mechanism' for agonist/antagonist/modulator.",
+    "'assay_types' for data type, and 'mechanism' for mechanism of action. "
+    "If the user explicitly said 'unspecified' / 'any' / 'no preference' for mechanism, "
+    "pass `mechanism=None` (or omit the parameter entirely).",
     "  - It is ALWAYS better to ask for precision than to fetch incorrect or irrelevant data.",
     # Step 3: Keyword Generation and Preparation
-    "Step 4: Use the `convert_to_chembl_query` tool with the identified core target to generate multiple keyword variations for ChEMBL search.",
-    "  - The tool will generate abbreviations, shortened forms, and full names (typically 3-5 keywords)",
-    "  - The tool handles greek character replacement and ensures keywords are suitable for ChEMBL assay description searches",
-    "  - Example: For 'cyclin dependent kinase 2', the tool will generate: 'cdk2, kinase 2, cyclin dependent kinase 2'",
+    "Step 4: Use the `convert_to_chembl_query` tool with the identified core target to generate multiple SEMANTIC keyword variations (abbreviations, synonyms, greek-letter replacements) for ChEMBL search.",
+    "  - The tool will generate 2-4 semantic keywords per target (abbreviations and full names).",
+    "  - Punctuation/spacing variants ('phosphodiesterase 4A' vs 'phosphodiesterase-4A' vs 'phosphodiesterase4A') are matched AUTOMATICALLY by `fetch_compounds` via regex — you do NOT need to include them in the keyword list.",
+    "  - The same automatic regex matching guarantees 'epidermal growth factor receptor' and 'epidermal-growth factor receptor' are searched identically, so you never need to worry about hyphen vs space spellings.",
+    "  - Example: For 'phosphodiesterase 4A', the tool will return: 'pde4a, phosphodiesterase 4A' (fetch_compounds matches all hyphen/space variants via regex internally).",
     "  - When the query is organism-level, include the organism name as one of the keywords to ensure assays for that organism are retrieved.",
-    "  - Determine assay type preferences: map 'binding' → B, 'functional' → F, 'ADMET' → A. The user MUST have explicitly specified assay type(s) before reaching this step (enforced by GATE 3 above). NEVER apply a default.",
+    "  - Determine assay type preferences: map 'binding' → B, 'functional' → F, 'ADMET' → A. The user MUST have explicitly specified assay type(s) before reaching this step (enforced by the mandatory requirements above). NEVER apply a default.",
     # Step 4: Data Fetching Strategy
-    "Step 5: Use the `fetch_compounds` tool with multiple keywords (comma-separated, e.g., 'cdk2, kinase 2, cyclin dependent kinase 2') to download bioactivity data from ChEMBL. The tool will:",
+    "Step 5: Use the `fetch_compounds` tool with the semantic keywords from Step 4 (comma-separated, e.g., 'pde4a, phosphodiesterase 4A') to download bioactivity data from ChEMBL. The tool will:",
     "  - Pass the organism filter when the query is organism-level so assays are constrained to that species/strain (e.g., organism='HIV-1').",
     "  - Pass the assay_types filter (e.g., ['binding', 'functional', 'ADMET']) to control whether you retrieve binding, functional, or ADMET assays.",
-    "  - Pass the mechanism filter if the user specified a mechanism of action (e.g., mechanism='agonist' for agonist assays, mechanism='antagonist' for antagonist assays). This filters assays by their description to keep only those matching the specified mechanism.",
-    "  - Search for assays related to each keyword separately",
+    "  - Pass the `mechanism` filter ONLY if the user explicitly specified a mechanism of action "
+    "(e.g., mechanism='allosteric modulator' for a PDE4 query, mechanism='antagonist' for a "
+    "dopamine D2 query, mechanism='ATP-competitive inhibitor' for a BRAF query). If the user "
+    "answered 'unspecified', 'no preference', 'any', or similar, pass `mechanism=None` "
+    "(or omit the argument) — do NOT fabricate a filter. The mechanism filter applies a "
+    "case-insensitive substring match against each assay description.",
+    "  - Automatically match all hyphen/space punctuation variants via regex (one query per keyword, transparent to you).",
+    "  - Search for assays matching each keyword's regex pattern",
     "  - Retrieve activity data for all found assays",
     "  - Merge all results and automatically remove duplicates",
     # Step 6: Data Validation and Quality Check
@@ -112,7 +203,7 @@ CHEMBL_INSTRUCTIONS = [
     # Step 9: Error Handling and Troubleshooting
     "Step 9: If data fetch fails, troubleshoot systematically:",
     "  - Check if the query terms are too specific (try broader terms)",
-    "  - Verify ChEMBL API connectivity using ping functionality",
+    "  - Verify ChEMBL connectivity using ping functionality (works for all SQL and REST backends)",
     "  - Consider alternative search strategies (different resource types: activity, molecule, assay)",
     "  - Handle rate limiting by implementing appropriate delays",
     # Step 10: Data Processing and Storage
@@ -387,6 +478,9 @@ AUTOENCODER_INSTRUCTIONS = [
     # Phase 6: Molecular Sampling (shared)
     "Step 6: For generating new molecules from latent space:",
     "  - Use `sample_molecules` to generate **random** molecules from Gaussian prior (NOT for analogs — use explore_latent_neighborhood instead)",
+    "  - Default n_samples=5000 with filter_valid_unique=True; do NOT manually downsize unless the user requests a quick preview",
+    "  - Default return_format='summary' returns {count_attempted, count_returned, preview[:20], session_key}; the full SMILES list is persisted to agent.session_state[session_key] (default 'sampled_molecules')",
+    "  - Reference the full sampled set by session_key in downstream tools; do NOT ask the model to re-emit the full list inline",
     "  - Use `explore_latent_neighborhood` to generate **analogs** similar to a specific input molecule",
     "  - Adjust temperature (higher = more random, lower = more deterministic)",
     "  - Use `decode_latent` to decode specific latent vectors",
@@ -470,10 +564,25 @@ GTM_AGENT_INSTRUCTIONS = [
     "**OPTIMIZE MODE**:",
     "  1. Load chemical data from session_state['data_file_paths']['dataset_path'] or user-provided path",
     "  2. Verify SMILES column exists using available tools",
-    "  3. Run gtm_optimization with appropriate k_hit values (try multiple if not specified)",
-    "  4. For each k_hit: fit GTM, save with save_gtm_and_data, evaluate smoothness",
-    "  5. Select best GTM map (smoothest or user-specified criteria)",
-    "  6. **Cache the result**:",
+    "  3. Determine dataset size (number of rows after cleaning)",
+    "  4. **Choose optimization strategy**:",
+    "     **ALWAYS use strategy='low' unless the user has explicitly requested medium or high effort.**",
+    "     Available levels (present to the user when asking or reporting):",
+    "       * **Low** — fast heuristic grid search (9 combinations). Default for ALL datasets.",
+    "       * **Medium** — extended grid search (~108 combinations). Balanced speed and coverage.",
+    "       * **High** — thorough Bayesian optimization with 50 trials. Best quality but slowest.",
+    "     - For datasets with **>5 000 molecules**, ALWAYS use **low** and inform the user that medium/high are available if they want to upgrade later.",
+    "     - For smaller datasets, STILL use **low** by default — only switch to medium/high if the user explicitly asks.",
+    "     - If the user already specified 'medium', 'thorough', 'full', 'best', or 'high', use the corresponding level.",
+    "     - NEVER default to medium or high on your own. The default is ALWAYS low.",
+    "  5. Pass the chosen strategy to gtm_optimization(strategy='low' | 'medium' | 'high')",
+    "  6. Save with save_gtm_and_data, evaluate smoothness",
+    "  7. **Report strategy and results clearly**:",
+    "     - State which strategy was used and how many combinations/trials were evaluated",
+    "     - Report the best entropy score",
+    "     - If 'low' was used, inform the user: 'The GTM was optimized with a quick heuristic search. "
+    "You can re-optimize with medium or high effort for potentially better results.'",
+    "  8. **Cache the result**:",
     "     - session_state['gtm_cache'] = {",
     "         'model': gtm_model_object,",
     "         'dataset': preprocessed_dataframe,",
@@ -482,11 +591,12 @@ GTM_AGENT_INSTRUCTIONS = [
     "             'created_at': timestamp,",
     "             'dataset_shape': df.shape,",
     "             'source': 'optimize',",
+    "             'optimization_strategy': strategy,",
     "             'optimization_metrics': {...}",
     "         }",
     "     }",
-    "  7. Update session_state['gtm_file_paths'] = {'gtm_path': ..., 'dataset_path': ..., 'gtm_plot_path': ...}",
-    "  8. Generate and save GTM plot using save_gtm_plot",
+    "  9. Update session_state['gtm_file_paths'] = {'gtm_path': ..., 'dataset_path': ..., 'gtm_plot_path': ...}",
+    "  10. Generate and save the density + projected-points GTM plot using save_gtm_plot",
     "",
     "**LOAD MODE**:",
     "  1. Resolve GTM model path (priority order):",
@@ -519,17 +629,21 @@ GTM_AGENT_INSTRUCTIONS = [
     "  6. Save density results:",
     "     - session_state['analysis_results']['density_csv'] = density_csv_path",
     "     - session_state['analysis_results']['plots'].append(density_plot_path)",
-    "  7. Generate visualization with density overlay using save_gtm_plot",
+    "  7. Generate the density + projected-points visualization using save_gtm_plot",
     "  8. Provide 3-bullet executive summary",
     "",
     "**ACTIVITY MODE**:",
     "  1. **Check cache first**: If session_state['gtm_cache'] exists, reuse it",
     "  2. If no cache, load GTM and dataset via load mode workflow",
-    f"  3. Call create_activity_landscapes(dataset, gtm_model, node_threshold={DEFAULT_NODE_THRESHOLD}, chart_width={DEFAULT_CHART_WIDTH}, chart_height={DEFAULT_CHART_HEIGHT})",
-    "  4. The tool returns file prefix and creates CSV + PNG/HTML files",
+    f"  3. Emit BOTH renderers so the report has the discrete Altair heatmap AND the smooth Plotly surface. First call create_activity_landscapes(dataset, gtm_model, node_threshold={DEFAULT_NODE_THRESHOLD}, chart_width={DEFAULT_CHART_WIDTH}, chart_height={DEFAULT_CHART_HEIGHT}, renderer='altair') for the Altair landscape (static PNG + interactive HTML).",
+    f"  3a. Then call create_activity_landscapes(dataset, gtm_model, node_threshold={DEFAULT_NODE_THRESHOLD}, chart_width={DEFAULT_CHART_WIDTH}, chart_height={DEFAULT_CHART_HEIGHT}, renderer='plotly') for the smooth Plotly landscape (interactive HTML; PNG is best-effort and may be skipped if the Plotly image backend is unavailable).",
+    "  4. Each call returns a file path and creates CSV + PNG/HTML files",
+    "  4a. When re-rendering a saved activity landscape CSV, ALSO emit both renderers: call save_gtm_landscape_plot(csv, landscape_type, renderer='altair') and save_gtm_landscape_plot(csv, landscape_type, renderer='plotly') so the report has both the discrete Altair heatmap and the smooth Plotly surface.",
     "  5. Save paths to session_state:",
     "     - session_state['landscape_files']['landscape_data_csv'] = csv_path",
-    "     - session_state['landscape_files']['landscape_plot'] = plot_path",
+    "     - session_state['landscape_files']['landscape_plot_altair'] = altair_plot_path",
+    "     - session_state['landscape_files']['landscape_plot_plotly'] = plotly_plot_path",
+    "     - session_state['landscape_files']['landscape_plot'] = altair_plot_path  # back-compat alias",
     "     - session_state['analysis_results']['activity_csv'] = csv_path  # Also save here for consistency",
     "  6. Load landscape CSV and analyze ['x', 'y', 'nodes', 'filtered_reg_density']:",
     "     - Global stats: max, min, mean, median of reg_density",
@@ -540,7 +654,7 @@ GTM_AGENT_INSTRUCTIONS = [
     "     - Flag anomalies (dense but low-quality, sparse but high-activity)",
     "     - Identify gaps/unreliable regions (zero density, NaNs)",
     "  8. Provide 3-bullet SAR takeaway with actionable recommendations",
-    "  9. Show activity landscape plot in output (markdown format, blue gradient: dark=high activity, light=low)",
+    "  9. Show BOTH activity landscape plots in output: the Altair PNG via markdown image format ![Caption](altair_png_path) (blue gradient: dark=high activity, light=low), and the Plotly HTML via single-backtick path only (e.g. `s3://bucket/.../landscape_plotly_regression.html`) — never wrap HTML paths in markdown link syntax.",
     "",
     "**PROJECT MODE**:",
     "  1. **Check cache first**: If session_state['gtm_cache'] exists, reuse GTM model",
@@ -553,7 +667,7 @@ GTM_AGENT_INSTRUCTIONS = [
     "     - Compare distribution of external data vs original training data",
     "     - Identify covered vs novel regions",
     "     - Calculate distribution statistics",
-    "  6. Generate comparative visualization using save_gtm_plot(preprocessed_csv, gtm_model)",
+    "  6. Generate comparative density visualization using save_gtm_plot(preprocessed_csv, gtm_model)",
     "  7. Save projection results:",
     "     - session_state['analysis_results']['projection_csv'] = projection_csv_path",
     "     - session_state['analysis_results']['plots'].append(projection_plot_path)",
@@ -562,7 +676,11 @@ GTM_AGENT_INSTRUCTIONS = [
     "Step 4: Final output formatting:",
     "  - Return concise summary of operation performed",
     "  - Include key metrics and file paths",
-    "  - For plots, show using markdown format: ![Caption](path)",
+    "  - For plots (PNG), show using markdown image format: ![Caption](path)",
+    "  - For HTML artifacts (interactive plots, landscapes, maps), show the path in single "
+    "backticks only, e.g. `s3://bucket/.../map.html`. NEVER wrap HTML paths in markdown link "
+    "syntax like `[View Interactive Map](path)` — the browser treats such hrefs as relative "
+    "URLs and clicking them reloads the Chainlit page.",
     "  - Highlight any warnings or anomalies discovered",
     "  - Confirm session_state updates for downstream agents",
     # Phase 5: Error Handling
@@ -614,11 +732,11 @@ REPORT_GENERATOR_INSTRUCTIONS = [
     "    - Cluster distribution plot (n_molecules per cluster)",
     "    - If source_dataset exists: Stacked bar chart of dataset contributions per cluster",
     "  **GTM density reports**:",
-    "    - Density overlay on GTM map (use save_gtm_plot if GTM available)",
+    "    - Density overlay on GTM map (use save_gtm_plot if GTM model + dataset are available)",
     "    - Neighborhood preservation heatmap (2D grid)",
     "    - Density histogram (distribution of node densities)",
     "  **GTM activity reports**:",
-    "    - Activity landscape heatmap (blue gradient: dark=high activity, light=low)",
+    "    - Activity landscape heatmaps: call save_gtm_landscape_plot TWICE for each landscape CSV — once with renderer='altair' (discrete heatmap, static PNG + interactive HTML) and once with renderer='plotly' (smooth surface, interactive HTML). Include BOTH in the report: the Altair PNG via markdown image and the Plotly HTML via single-backtick path.",
     "    - Compass-annotated plot with top 5 active/inactive regions labeled",
     "    - Activity distribution histogram",
     "  **Combined reports**:",
@@ -713,7 +831,7 @@ AGENT_TEAM_INSTRUCTIONS = [
     "Identify which agent(s) should be used to handle the request. If one agent is insufficient, chain multiple agents. If an existing workflow already covers this sequence, use that workflow.",
     # New architecture awareness
     "**ARCHITECTURE** (7 agents):",
-    "  1. ChEMBL Downloader: Data acquisition from ChEMBL",
+    "  1. ChEMBL Downloader: Data acquisition from ChEMBL (supports local SQL backends — SQLite, PostgreSQL, MySQL — and REST API; backend is auto-detected from environment)",
     "  2. GTM Agent: ALL GTM operations (build/load/density/activity/project) with caching",
     "  3. Chemoinformatician: Comprehensive chemoinformatics (scaffold, SAR, similarity, clustering)",
     "  4. Report Generator: Creates reports and visualizations from analysis results",
@@ -739,6 +857,16 @@ AGENT_TEAM_INSTRUCTIONS = [
     "    • NOTE: Activity landscapes use DBAASP data and are specifically for antimicrobial peptides",
     "  - For SMILES-based GTM operations (density, activity, optimization):",
     "    • Route to GTM Agent as before",
+    # GTM optimization strategy
+    "**GTM OPTIMIZATION STRATEGY**:",
+    "  - The default optimization strategy is ALWAYS 'low'. Never override this to medium or high unless the user explicitly asks.",
+    "  - If the user has already stated a preference, relay it when delegating to the GTM agent:",
+    "    * 'quick', 'fast', 'rough', or no preference stated → low (the default)",
+    "    * 'medium', 'balanced' → medium",
+    "    * 'thorough', 'full', 'best', 'exhaustive', 'high' → high",
+    "  - After optimization completes with 'low' strategy, suggest upgrading:",
+    "    'The GTM was optimized with a quick heuristic search. Would you like to re-optimize "
+    "with a more thorough search for potentially better results?'",
     # Analog generation routing
     "**ANALOG GENERATION ROUTING**:",
     "  - For small molecules ('generate analogs of <SMILES>'):",
@@ -774,25 +902,46 @@ AGENT_TEAM_INSTRUCTIONS = [
     # Output formatting
     "Always show paths in single backticks. Show SMILES strings wrapped in <smiles>...</smiles> tags, e.g. <smiles>CC(=O)OC1=CC=CC=C1C(=O)O</smiles>. For images use markdown format e.g. ![Image Name](path/to/image.png)",
     "If the request is to show image, provide the path to the image in markdown format e.g. ![Image Name](path/to/image.png)",
+    "For HTML artifacts (interactive plots, GTM maps, landscape visualizations), show the path "
+    "in single backticks only, e.g. `s3://bucket/.../map.html`. NEVER wrap HTML paths in "
+    "markdown link syntax like `[View Interactive Map](path)` — such hrefs are not real URLs "
+    "and clicking them reloads the Chainlit page instead of opening the artifact.",
     # ChEMBL clarification flow — MANDATORY HARD REQUIREMENTS (mirrors ChEMBL agent requirements)
     # ────────────────────────────────────────────────────────────────────────────────
     "**ChEMBL MANDATORY HARD REQUIREMENTS** — When the ChEMBL downloader returns control "
-    "because one or more requirements are unsatisfied, you MUST enforce these requirements before "
-    "re-routing to the ChEMBL downloader. NEVER re-route until ALL applicable requirements "
-    "are satisfied by explicit user input.",
+    "because one or more requirements are unsatisfied, you MUST enforce them (Requirements 1–4: "
+    "target specificity+abbreviation, organism, assay type, and mechanism) before re-routing to "
+    "the ChEMBL downloader. NEVER re-route until all applicable requirements are satisfied by "
+    "explicit user input. Requirement 4 (Mechanism) is special: an explicit answer of "
+    "'unspecified' / 'any' / 'no preference' is VALID and means no mechanism filter.",
     "",
-    "  **Requirement 1 — Abbreviation Check**: If the target name is only an abbreviation "
-    "(e.g., 'CDK2', 'EGFR', 'PDE4'), ask the user to confirm the full target name.",
+    "  **Requirement 1 — Target Specificity & Abbreviation Confirmation**: Enforce two "
+    "sub-checks in order. (1a) Refuse to route when the target is a generic family word plus "
+    "an index ('kinase 2', 'receptor 5', 'protein 2', 'phosphatase 1'), a bare family word "
+    "('kinase', 'receptor', 'GPCR', 'phosphatase', 'nuclear receptor', 'ion channel'), or "
+    "similarly ambiguous — ask the user for a recognized gene symbol (e.g., EGFR, BRAF, JAK2, "
+    "PDE4) or a full canonical protein name (e.g., 'epidermal growth factor receptor'). "
+    "(1b) If the target name is only an abbreviation (e.g., 'CDK2', 'EGFR', 'PDE4'), ask the "
+    "user to confirm the full target name. A recognized gene symbol like BRAF passes 1a and "
+    "still triggers 1b.",
     "  **Requirement 2 — Organism Check**: If the query is about a protein target and no "
     "organism was specified, ask which organism to filter for. NEVER default to Homo sapiens.",
     "  **Requirement 3 — Assay Type Check**: If no assay type was specified (binding, functional, "
     "ADMET), ask the user which assay type(s) to include. NEVER default to any combination.",
+    "  **Requirement 4 — Mechanism of Action Check**: You MUST ask whether the user wants to "
+    "filter to a specific mechanism of action (agonist, antagonist, modulator, inverse agonist, "
+    "ATP-competitive inhibitor, allosteric modulator, covalent inhibitor, partial agonist, …). "
+    "An explicit 'unspecified' / 'no preference' / 'any' answer is VALID and means "
+    "`mechanism=None` (no filter). NEVER skip the question; NEVER invent a mechanism.",
     "",
     "  **Rules:**",
     "  - Combine ALL unsatisfied requirements into a SINGLE clarification message to avoid "
     "multiple back-and-forth rounds.",
     "  - For organism-based queries (e.g., 'HIV-1 compounds'), Requirements 2 does not apply "
     "but you should still verify organism specificity (strain) and target scope.",
+    "  - Treat 'unspecified' / 'no preference' / 'any' / 'I don't care' answers for the "
+    "Mechanism question as explicit valid answers meaning 'apply no mechanism filter'. Do NOT "
+    "re-ask in that case.",
     "  - **Anti-bypass rule**: If the user pushes back (e.g., 'just do it', 'use defaults', "
     "'you decide'), politely explain that explicit choices are required for accurate results "
     "and re-ask the unsatisfied requirements. NEVER silently apply defaults.",
@@ -857,10 +1006,13 @@ PEPTIDE_WAE_INSTRUCTIONS = [
     "Step 6: For generating new peptides from random prior:",
     "  - Use `sample_peptides` tool with n_samples parameter",
     "  - Parameters:",
-    "    • n_samples: Number of peptides to generate",
+    "    • n_samples: Number of peptides to generate (default 5000 for meaningful exploration; do not downsize unless user requests a preview)",
     "    • latent_std: Standard deviation for Gaussian sampling (default 1.0)",
     "    • temperature: Sampling temperature for decoding",
     "    • decode_mode: 'categorical' or 'greedy'",
+    "    • filter_valid_unique: drop empty/duplicate sequences (default True)",
+    "    • return_format: 'summary' (default) returns {count_attempted, count_returned, preview[:20], session_key} and persists the full list in agent.session_state[session_key] (default 'sampled_peptides'); 'list' returns the raw list inline",
+    "  - Reference the full sampled set by session_key in downstream tools; do NOT ask the model to re-emit the full list inline",
     "  - Validate generated peptides contain valid amino acids",
     # Phase 7: Interpolation
     "Step 7: For interpolating between two peptides:",

@@ -32,7 +32,7 @@ from .chemistry import (
 
 # GTM Toolkit
 from .chemography.gtm import GTMToolkit
-from .chemography.gtm_operations import save_gtm_plot
+from .chemography.gtm_operations import save_gtm_landscape_plot, save_gtm_plot
 from .constants import *  # noqa: F403
 
 # ChEMBL toolkit now accessed via ChemblToolkit class
@@ -60,6 +60,7 @@ __all__ = [
     "RobustnessAnalysisToolkit",
     # Visualization functions
     "save_gtm_plot",
+    "save_gtm_landscape_plot",
     # I/O functions
     "image_to_base64",
     # Utility functions

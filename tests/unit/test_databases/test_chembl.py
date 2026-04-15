@@ -4,6 +4,8 @@
 Tests for the ChEMBL database toolkit.
 """
 
+import re
+from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pandas as pd
@@ -295,7 +297,7 @@ class TestChemblToolkit:
         """Test successful compound fetching."""
         # Mock ChEMBL client
         mock_client = Mock()
-        # Mock assay search
+        # Mock assay search - use plain list for proper list() iteration
         mock_assays = [{"assay_chembl_id": "CHEMBL1"}, {"assay_chembl_id": "CHEMBL2"}]
         mock_client.assay.filter.return_value = mock_assays
 
@@ -323,6 +325,7 @@ class TestChemblToolkit:
         mock_file = MagicMock()
         mock_s3.open.return_value.__enter__.return_value = mock_file
         mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
 
         toolkit = ChemblToolkit()
         result = toolkit.fetch_compounds("kinase", max_records=100)
@@ -344,7 +347,7 @@ class TestChemblToolkit:
         """Test compound fetching when no assays found."""
         # Mock ChEMBL client
         mock_client = Mock()
-        # Mock empty assay search
+        # Mock empty assay search - use plain list for proper list() iteration
         mock_client.assay.filter.return_value = []
         mock_ensure_client.return_value = mock_client
 
@@ -387,6 +390,7 @@ class TestChemblToolkit:
         mock_file = MagicMock()
         mock_s3.open.return_value.__enter__.return_value = mock_file
         mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
 
         toolkit = ChemblToolkit()
         result = toolkit.fetch_compounds(
@@ -405,6 +409,52 @@ class TestChemblToolkit:
         mock_client.activity.filter.assert_called_with(
             assay_chembl_id__in=["CHEMBL1", "CHEMBL2"], assay_type__in=["B", "F"]
         )
+
+    @patch.object(ChemblToolkit, "_ensure_client")
+    def test_fetch_compounds_uses_local_storage_by_default(
+        self, mock_ensure_client, monkeypatch, tmp_path
+    ):
+        """Ambient AWS credentials should not switch ChEMBL dataset saves to S3."""
+        from cs_copilot.storage import S3
+
+        mock_client = Mock()
+        mock_client.assay.filter.return_value = [{"assay_chembl_id": "CHEMBL1"}]
+        mock_client.activity.filter.return_value.only.return_value = [
+            {
+                "activity_id": 1,
+                "assay_chembl_id": "CHEMBL1",
+                "molecule_chembl_id": "CHEMBL1",
+                "standard_value": 10.0,
+                "canonical_smiles": "CCO",
+            }
+        ]
+        mock_ensure_client.return_value = mock_client
+
+        monkeypatch.chdir(tmp_path)
+        for key in (
+            "USE_S3",
+            "S3_ENDPOINT_URL",
+            "MINIO_ENDPOINT",
+            "MINIO_ENDPOINT_URL",
+            "MINIO_ACCESS_KEY",
+            "MINIO_SECRET_KEY",
+        ):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test-key")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
+        monkeypatch.setenv("ASSETS_BUCKET", "test-bucket")
+
+        original_prefix = S3.prefix
+        S3.prefix = "sessions/test-session"
+        try:
+            result = ChemblToolkit().fetch_compounds("kinase", max_records=100)
+        finally:
+            S3.prefix = original_prefix
+
+        expected_path = Path("data") / "sessions" / "test-session" / "chembl_kinase.csv"
+        assert (tmp_path / expected_path).exists()
+        assert "Saved locally" in result
+        assert str(expected_path) in result
 
     def test_fetch_compounds_invalid_query(self):
         """Test compound fetching with invalid query."""
@@ -453,6 +503,7 @@ class TestChemblToolkit:
         mock_file = MagicMock()
         mock_s3.open.return_value.__enter__.return_value = mock_file
         mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
 
         toolkit = ChemblToolkit()
         # This should not raise an error - empty dict should be coerced to empty list
@@ -531,6 +582,7 @@ class TestChemblToolkit:
         mock_file = MagicMock()
         mock_s3.open.return_value.__enter__.return_value = mock_file
         mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
 
         toolkit = ChemblToolkit()
         # Patch _save_chembl_data to capture the DataFrame
@@ -564,11 +616,12 @@ class TestChemblToolkit:
         """Test ChEMBL query conversion with valid input."""
         toolkit = ChemblToolkit()
 
-        result = toolkit.convert_to_chembl_query("kinase 2 inhibitor activity")
+        result = toolkit.convert_to_chembl_query("phosphodiesterase 4A")
 
         assert "ChEMBL's `assay_description__icontains` filter" in result
-        assert "kinase 2 inhibitor activity" in result
-        assert "kinase 2" in result  # Example output
+        assert "phosphodiesterase 4A" in result
+        # The new example in the tool's return message uses PDE4A as the abbreviation.
+        assert "pde4" in result.lower()
 
     def test_convert_to_chembl_query_invalid(self):
         """Test ChEMBL query conversion with invalid input."""
@@ -586,6 +639,7 @@ class TestChemblToolkit:
         # Mock CSV file
         mock_csv_file = Mock()
         mock_s3.open.return_value.__enter__.return_value = mock_csv_file
+        mock_s3.path.side_effect = lambda rel: rel
 
         with patch("pandas.read_csv") as mock_read_csv:
             mock_df = pd.DataFrame(
@@ -605,6 +659,7 @@ class TestChemblToolkit:
         """Test dataset description with empty file."""
         mock_csv_file = Mock()
         mock_s3.open.return_value.__enter__.return_value = mock_csv_file
+        mock_s3.path.side_effect = lambda rel: rel
 
         with patch("pandas.read_csv") as mock_read_csv:
             mock_read_csv.return_value = pd.DataFrame()  # Empty DataFrame
@@ -794,6 +849,38 @@ class TestChemblRateLimiting:
         assert toolkit.config.rate_limit == 5.0
         assert toolkit.config.timeout_s == 60.0
 
+    @patch.object(ChemblToolkit, "_ensure_client")
+    @patch("cs_copilot.tools.databases.chembl.S3")
+    def test_fetch_compounds_uses_regex_for_multitoken(self, mock_s3, mock_ensure_client):
+        """A multi-token keyword should produce ONE REST call with iregex."""
+        mock_client = Mock()
+        mock_client.assay.filter.return_value = [{"assay_chembl_id": "CHEMBL1"}]
+        mock_client.activity.filter.return_value.only.return_value = [
+            {
+                "activity_id": 1,
+                "assay_chembl_id": "CHEMBL1",
+                "molecule_chembl_id": "CHEMBL1",
+                "standard_value": 10.0,
+                "canonical_smiles": "CCO",
+            },
+        ]
+        mock_ensure_client.return_value = mock_client
+
+        mock_file = MagicMock()
+        mock_s3.open.return_value.__enter__.return_value = mock_file
+        mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
+
+        toolkit = ChemblToolkit()
+        toolkit.fetch_compounds("epidermal growth factor receptor")
+
+        # Should be called exactly once (not 8 times).
+        assert mock_client.assay.filter.call_count == 1
+        call_kwargs = mock_client.assay.filter.call_args.kwargs
+        assert "description__iregex" in call_kwargs
+        assert "description__icontains" not in call_kwargs
+        assert call_kwargs["description__iregex"] == r"epidermal[- ]growth[- ]factor[- ]receptor"
+
 
 class TestChemblIntegration:
     """Integration tests that test the full toolkit functionality."""
@@ -831,6 +918,7 @@ class TestChemblIntegration:
         mock_context2.__exit__.return_value = False
 
         mock_s3.open.side_effect = [mock_context1, mock_context2]
+        mock_s3.path.side_effect = lambda rel: rel
 
         # Mock pandas operations
         with patch("pandas.read_csv") as mock_read_csv:
@@ -853,3 +941,120 @@ class TestChemblIntegration:
             # Step 2: Describe dataset
             desc_result = toolkit.describe_dataset("chembl_kinase.csv")
             assert isinstance(desc_result, str)
+
+
+class TestPunctuationRegex:
+    """Test the regex builder for punctuation-variant matching."""
+
+    def test_symmetric_cyclin_dependent(self):
+        """The user's explicit invariant: equivalent spellings yield the same regex."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        a = _build_punctuation_regex("cyclin-dependent kinase 2")
+        b = _build_punctuation_regex("cyclin dependent kinase 2")
+        c = _build_punctuation_regex("cyclin-dependent kinase-2")
+        d = _build_punctuation_regex("cyclin dependent kinase-2")
+
+        assert a == b == c == d
+        assert a == r"cyclin[- ]dependent[- ]kinase[- ]2"
+
+    def test_four_token_required_separator(self):
+        """4-token phrases use required separator and match all hyphen/space combos."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("epidermal growth factor receptor")
+        assert p == r"epidermal[- ]growth[- ]factor[- ]receptor"
+        assert re.search(p, "epidermal growth factor receptor", re.IGNORECASE)
+        assert re.search(p, "epidermal-growth-factor-receptor", re.IGNORECASE)
+        assert re.search(p, "epidermal-growth factor receptor", re.IGNORECASE)
+
+    def test_four_token_does_not_match_concat(self):
+        """4-token phrases require a separator — concatenated form should not match."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("epidermal growth factor receptor")
+        assert not re.search(p, "epidermalgrowthfactorreceptor", re.IGNORECASE)
+
+    def test_two_token_optional_separator(self):
+        """2-token phrases use optional separator, matching space/hyphen/concat."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("serotonin 2A")
+        assert p == r"serotonin[- ]?2A"
+        assert re.search(p, "serotonin 2A", re.IGNORECASE)
+        assert re.search(p, "serotonin-2A", re.IGNORECASE)
+        assert re.search(p, "serotonin2A", re.IGNORECASE)
+
+    def test_compact_5ht2a(self):
+        """Hyphen-separated compact names like 5-HT2A sub-split at letter→digit."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("5-HT2A")
+        # "HT2A" sub-splits to ["HT", "2A"] → 3 total tokens → optional sep
+        assert p == r"5[- ]?HT[- ]?2A"
+        assert re.search(p, "5-HT2A")
+        assert re.search(p, "5 HT2A")
+        assert re.search(p, "5HT2A")
+        assert re.search(p, "5-HT-2A")
+
+    def test_three_token_optional_separator(self):
+        """3-token phrases also use optional separator."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("B-Raf kinase")
+        assert p == r"B[- ]?Raf[- ]?kinase"
+        assert re.search(p, "B-Raf kinase")
+        assert re.search(p, "B Raf kinase")
+        assert re.search(p, "BRafkinase")
+
+    def test_single_token_no_boundary_returns_none(self):
+        """All-letter tokens with no letter→digit boundary return None."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        assert _build_punctuation_regex("EGFR") is None
+        assert _build_punctuation_regex("BRAF") is None
+        assert _build_punctuation_regex("kinase") is None
+
+    def test_single_token_letter_digit_split(self):
+        """Single tokens with letter→digit boundaries produce a regex."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        # CDK2 → ["CDK", "2"] → CDK[- ]?2
+        p = _build_punctuation_regex("CDK2")
+        assert p == r"CDK[- ]?2"
+        assert re.search(p, "CDK2", re.IGNORECASE)
+        assert re.search(p, "CDK-2", re.IGNORECASE)
+        assert re.search(p, "CDK 2", re.IGNORECASE)
+
+        # PDE4A → ["PDE", "4A"] → PDE[- ]?4A
+        p = _build_punctuation_regex("PDE4A")
+        assert p == r"PDE[- ]?4A"
+        assert re.search(p, "PDE4A", re.IGNORECASE)
+        assert re.search(p, "PDE-4A", re.IGNORECASE)
+        assert re.search(p, "PDE 4A", re.IGNORECASE)
+
+        # JAK2 → ["JAK", "2"]
+        p = _build_punctuation_regex("JAK2")
+        assert p == r"JAK[- ]?2"
+
+        # IL6 → ["IL", "6"]
+        p = _build_punctuation_regex("IL6")
+        assert p == r"IL[- ]?6"
+
+    def test_empty_returns_none(self):
+        """Empty and whitespace-only inputs return None."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        assert _build_punctuation_regex("") is None
+        assert _build_punctuation_regex("   ") is None
+
+    def test_metacharacter_escaping(self):
+        """Regex metacharacters in tokens are properly escaped."""
+        from cs_copilot.tools.databases.chembl import _build_punctuation_regex
+
+        p = _build_punctuation_regex("IL-1beta (receptor)")
+        assert p is not None
+        assert r"\(" in p
+        assert r"\)" in p
+        assert re.search(p, "IL-1beta (receptor)", re.IGNORECASE)
+        assert re.search(p, "IL 1beta (receptor)", re.IGNORECASE)

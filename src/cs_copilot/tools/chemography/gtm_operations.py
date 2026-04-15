@@ -16,6 +16,7 @@ Functions are organized into categories:
 import base64
 import gzip
 import math
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -33,14 +34,20 @@ from chemographykit.gtm import GTM
 from chemographykit.plots.altair_landscapes import (
     altair_discrete_class_landscape,
     altair_discrete_density_landscape,
+    altair_discrete_query_landscape,
     altair_discrete_regression_landscape,
     altair_points_chart,
+)
+from chemographykit.plots.plotly_landscapes import (
+    plotly_discrete_class_landscape,
+    plotly_smooth_density_landscape,
+    plotly_smooth_regression_landscape,
 )
 from chemographykit.utils.classification import class_density_to_table, get_class_density_matrix
 from chemographykit.utils.density import density_to_table, get_density_matrix
 from chemographykit.utils.molecules import calculate_latent_coords
 from chemographykit.utils.regression import get_reg_density_matrix, reg_density_to_table
-from optuna.samplers import TPESampler
+from optuna.samplers import GridSampler, TPESampler
 from rdkit.Chem.Scaffolds import MurckoScaffold
 from scipy.ndimage import convolve
 from sklearn.neighbors import NearestNeighbors
@@ -88,6 +95,17 @@ SESSION_GTM_MODEL_PATH_KEY = "_current_gtm_model_path"
 
 # Standard SMILES column name variations to check (in priority order)
 _SMILES_COLUMN_VARIANTS = [SMILES_COLUMN, "SMILES", "smiles", "Smiles"]
+LandscapeType = Literal["density", "classification", "regression", "query"]
+LandscapeRenderer = Literal["altair", "plotly"]
+
+_LANDSCAPE_REQUIRED_COLUMNS: dict[str, set[str]] = {
+    "density": {"x", "y", "nodes", "density", "filtered_density"},
+    "classification": {"x", "y", "nodes", "density"},
+    "regression": {"x", "y", "nodes", "density", "filtered_reg_density"},
+    "query": {"x", "y", "nodes", "density", "criteria_satisfied"},
+}
+
+_PLOTLY_SUPPORTED_LANDSCAPES = {"density", "classification", "regression"}
 
 
 def find_smiles_column(df: pd.DataFrame) -> str:
@@ -269,6 +287,12 @@ def resolve_gtm_model_path(
 
     Returns:
         Resolved path to the GTM model file
+
+    Raises:
+        FileNotFoundError: If no explicit path was provided and the default
+            model could not be located in the local cache or downloaded from
+            HuggingFace. The error message lists every source that was tried
+            and why it failed.
     """
     # Priority 1: Explicit file path (unless use_default is True)
     if gtm_file and not use_default:
@@ -285,9 +309,7 @@ def resolve_gtm_model_path(
     # Priority 3: Default model resolution
     logger.debug("Resolving default GTM model path")
 
-    # Try S3 assets first (check for any .pkl.gz file)
-    # This is a placeholder - actual S3 discovery would need to be implemented
-    # based on your S3 storage structure
+    tried: list[str] = []
 
     # Try default directory
     default_path = Path(DEFAULT_GTM_MODEL_PATH).expanduser()
@@ -300,6 +322,11 @@ def resolve_gtm_model_path(
                 model_path = str(matches[0])
                 logger.info(f"Found default GTM model at: {model_path}")
                 return model_path
+        tried.append(
+            f"default cache {default_path} " f"(no files matching {list(GTM_MODEL_SUFFIXES)})"
+        )
+    else:
+        tried.append(f"default cache {default_path} (directory does not exist)")
 
     # Try Hugging Face download
     try:
@@ -323,14 +350,27 @@ def resolve_gtm_model_path(
                 logger.info(f"Downloaded GTM model to: {model_path}")
                 return model_path
 
+        tried.append(
+            f"HuggingFace repo {HUGGINGFACE_GTM_REPO} "
+            f"(download succeeded but no files matching {list(GTM_MODEL_SUFFIXES)})"
+        )
     except ImportError:
         logger.warning("huggingface_hub not available, cannot download from HuggingFace")
+        tried.append("HuggingFace (huggingface_hub package not installed)")
     except Exception as e:
         logger.warning(f"Failed to download from HuggingFace: {e}")
+        tried.append(f"HuggingFace repo {HUGGINGFACE_GTM_REPO} ({e})")
 
-    # If nothing worked, return the default path (may not exist)
-    logger.warning(f"Could not resolve GTM model, using default path: {default_path}")
-    return str(default_path)
+    bullets = "\n  - ".join(tried)
+    raise FileNotFoundError(
+        "Could not resolve a default GTM model. Tried:\n"
+        f"  - {bullets}\n"
+        "Fix by one of:\n"
+        "  - Pass an explicit model path via the `gtm_file`/`gtm_model` argument.\n"
+        f"  - Place a GTM model file (e.g. *.pkl.gz) in {default_path}.\n"
+        f"  - Ensure the HuggingFace repo {HUGGINGFACE_GTM_REPO} exists and is accessible "
+        "(run `huggingface-cli login` if it is gated)."
+    )
 
 
 def load_gtm_model(gtm_model_path: str) -> Any:
@@ -444,6 +484,230 @@ def configure_chart(
         gradientVerticalMaxLength=600,
         gradientThickness=30,
         tickCount=6,
+    )
+
+
+@contextmanager
+def _disable_altair_max_rows():
+    """Temporarily disable Altair's dataset row limit during chart serialization."""
+    with alt.data_transformers.disable_max_rows():
+        yield
+
+
+def _write_chart_outputs(chart: alt.Chart, html_path: str, png_path: str) -> None:
+    """Write HTML and PNG chart outputs while bypassing Altair's default row cap."""
+    with _disable_altair_max_rows():
+        with S3.open(html_path, "w") as sf:
+            sf.write(chart.to_html())
+
+        with S3.open(png_path, "wb") as sf:
+            chart.save(sf, format="png")
+
+
+def _write_plotly_outputs(fig, html_path: str, png_path: str) -> bool:
+    """Write Plotly HTML output and PNG when the image backend is available."""
+    with S3.open(html_path, "w") as sf:
+        fig.write_html(sf, include_plotlyjs="cdn", full_html=True)
+
+    try:
+        with S3.open(png_path, "wb") as sf:
+            fig.write_image(sf, format="png")
+        return True
+    except Exception as exc:
+        logger.warning(f"Skipping Plotly PNG export for {png_path}: {exc}")
+        return False
+
+
+def _normalize_landscape_type(landscape_type: str) -> LandscapeType:
+    """Validate and normalize the requested ChemographyKit landscape type."""
+    normalized = landscape_type.strip().lower()
+    valid_types = set(_LANDSCAPE_REQUIRED_COLUMNS)
+    if normalized not in valid_types:
+        raise ValueError(
+            f"Unsupported landscape_type '{landscape_type}'. Expected one of: {sorted(valid_types)}"
+        )
+    return normalized  # type: ignore[return-value]
+
+
+def _normalize_landscape_renderer(renderer: str) -> LandscapeRenderer:
+    """Validate and normalize the requested landscape renderer."""
+    normalized = renderer.strip().lower()
+    valid_renderers = {"altair", "plotly"}
+    if normalized not in valid_renderers:
+        raise ValueError(
+            f"Unsupported renderer '{renderer}'. Expected one of: {sorted(valid_renderers)}"
+        )
+    return normalized  # type: ignore[return-value]
+
+
+def _load_landscape_table(landscape_file: str) -> pd.DataFrame:
+    """Load a saved GTM landscape table from local or S3-backed storage."""
+    if not landscape_file:
+        raise ValueError("landscape_file cannot be empty")
+
+    with S3.open(landscape_file, "r") as sf:
+        source_table = _read_csv_flexible(sf)
+
+    for col in ("x", "y", "nodes"):
+        if col in source_table.columns:
+            source_table[col] = pd.to_numeric(source_table[col], errors="raise").astype(int)
+
+    return source_table
+
+
+def _validate_landscape_table(source_table: pd.DataFrame, landscape_type: LandscapeType) -> None:
+    """Ensure the landscape table contains the columns required by ChemographyKit."""
+    required_columns = _LANDSCAPE_REQUIRED_COLUMNS[landscape_type]
+    missing_columns = sorted(required_columns - set(source_table.columns))
+    if missing_columns:
+        raise ValueError(
+            f"Landscape table for '{landscape_type}' is missing required columns: "
+            f"{missing_columns}. Available columns: {list(source_table.columns)}"
+        )
+
+    if landscape_type == "classification":
+        _resolve_classification_columns(source_table)
+
+
+def _resolve_classification_columns(source_table: pd.DataFrame) -> dict[str, str]:
+    """Infer ChemographyKit classification probability and density columns."""
+    explicit_columns = {
+        "first_prob": "first_class_prob",
+        "second_prob": "second_class_prob",
+        "first_density": "first_class_density",
+        "second_density": "second_class_density",
+    }
+    if all(column in source_table.columns for column in explicit_columns.values()):
+        return explicit_columns
+
+    prob_columns = [
+        column
+        for column in source_table.columns
+        if column.endswith("_prob") and column not in {"first_class_prob", "second_class_prob"}
+    ]
+    density_columns = [
+        column
+        for column in source_table.columns
+        if column.endswith("_density")
+        and column
+        not in {"density", "filtered_density", "first_class_density", "second_class_density"}
+    ]
+
+    if len(prob_columns) < 2 or len(density_columns) < 2:
+        raise ValueError(
+            "Classification landscape table must include either "
+            "first_class_prob/second_class_prob/first_class_density/second_class_density "
+            "or at least two *_prob and two *_density columns."
+        )
+
+    prob_columns = sorted(prob_columns)
+    density_columns = sorted(density_columns)
+    prob_prefixes = {column[: -len("_prob")]: column for column in prob_columns}
+    density_prefixes = {column[: -len("_density")]: column for column in density_columns}
+    shared_prefixes = sorted(prefix for prefix in prob_prefixes if prefix in density_prefixes)
+
+    if len(shared_prefixes) < 2:
+        raise ValueError(
+            "Could not pair classification probability and density columns by class prefix. "
+            f"Probability columns: {prob_columns}; density columns: {density_columns}"
+        )
+
+    first_prefix, second_prefix = shared_prefixes[:2]
+    return {
+        "first_prob": prob_prefixes[first_prefix],
+        "second_prob": prob_prefixes[second_prefix],
+        "first_density": density_prefixes[first_prefix],
+        "second_density": density_prefixes[second_prefix],
+    }
+
+
+def _classification_labels(columns: dict[str, str]) -> tuple[str, str]:
+    """Derive human-readable class labels from resolved classification column names."""
+    explicit_labels = {
+        "first_class_prob": "Inactive",
+        "second_class_prob": "Active",
+    }
+    if columns["first_prob"] in explicit_labels and columns["second_prob"] in explicit_labels:
+        return explicit_labels[columns["first_prob"]], explicit_labels[columns["second_prob"]]
+
+    def _label(column_name: str, suffix: str) -> str:
+        return column_name[: -len(suffix)].replace("_", " ").strip().title()
+
+    return _label(columns["first_prob"], "_prob"), _label(columns["second_prob"], "_prob")
+
+
+def _build_node_labels_layer(
+    source_table: pd.DataFrame, mark_nodes: Optional[List[int]]
+) -> alt.Chart | None:
+    """Create a text layer labeling selected GTM nodes."""
+    if not mark_nodes:
+        return None
+
+    return (
+        alt.Chart(source_table)
+        .mark_text(align="left", baseline="middle", dx=1)
+        .encode(
+            x="x:Q",
+            y=alt.Y("y:Q", scale=alt.Scale(reverse=True)),
+            text=alt.condition(
+                alt.FieldOneOfPredicate(field="nodes", oneOf=mark_nodes),
+                "nodes:Q",
+                alt.value(""),
+            ),
+        )
+    )
+
+
+def _create_altair_landscape_chart(
+    source_table: pd.DataFrame, landscape_type: LandscapeType, title: str
+) -> alt.Chart:
+    """Dispatch to the appropriate ChemographyKit Altair landscape renderer."""
+    if landscape_type == "density":
+        return altair_discrete_density_landscape(source_table, title=title)
+    if landscape_type == "classification":
+        classification_columns = _resolve_classification_columns(source_table)
+        first_label, second_label = _classification_labels(classification_columns)
+        return altair_discrete_class_landscape(
+            source_table,
+            title=title,
+            first_class_prob_column_name=classification_columns["first_prob"],
+            second_class_prob_column_name=classification_columns["second_prob"],
+            first_class_density_column_name=classification_columns["first_density"],
+            second_class_density_column_name=classification_columns["second_density"],
+            first_class_label=first_label,
+            second_class_label=second_label,
+        )
+    if landscape_type == "regression":
+        return altair_discrete_regression_landscape(source_table, title=title)
+    return altair_discrete_query_landscape(source_table, title=title)
+
+
+def _create_plotly_landscape_figure(
+    source_table: pd.DataFrame, landscape_type: LandscapeType, title: str
+):
+    """Dispatch to the appropriate ChemographyKit Plotly landscape renderer."""
+    if landscape_type not in _PLOTLY_SUPPORTED_LANDSCAPES:
+        raise ValueError(
+            f"Plotly landscapes are only available for {sorted(_PLOTLY_SUPPORTED_LANDSCAPES)}. "
+            f"Received: '{landscape_type}'."
+        )
+
+    if landscape_type == "density":
+        return plotly_smooth_density_landscape(source_table, title=title)
+    if landscape_type == "regression":
+        return plotly_smooth_regression_landscape(source_table, title=title)
+
+    classification_columns = _resolve_classification_columns(source_table)
+    first_label, second_label = _classification_labels(classification_columns)
+    return plotly_discrete_class_landscape(
+        source_table,
+        title=title,
+        first_class_prob_column_name=classification_columns["first_prob"],
+        second_class_prob_column_name=classification_columns["second_prob"],
+        first_class_density_column_name=classification_columns["first_density"],
+        second_class_density_column_name=classification_columns["second_density"],
+        first_class_label=first_label,
+        second_class_label=second_label,
     )
 
 
@@ -608,9 +872,16 @@ def data_load_and_prep(dataset: str, gtm_model: str):
 
     gtm = None
     try:
-        with S3.open(gtm_saved_file, "rb") as f:
-            with gzip.open(f, "rb") as gz:
-                gtm = dill.load(gz)
+        try:
+            with S3.open(gtm_saved_file, "rb") as f:
+                with gzip.open(f, "rb") as gz:
+                    gtm = dill.load(gz)
+        except gzip.BadGzipFile:
+            # File is not actually gzipped (e.g. a plain .pkl from HuggingFace);
+            # fall back to loading as a regular pickle.
+            logger.warning(f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file.")
+            with S3.open(gtm_saved_file, "rb") as f:
+                gtm = dill.load(f)
     except ModuleNotFoundError as e:
         logger.error(f"Error loading GTM model: {e}")
         raise
@@ -686,9 +957,16 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
     # -------------------------------------------------------------------------
     logger.debug("Loading GTM model for compatibility check...")
     try:
-        with S3.open(gtm_saved_file, "rb") as f:
-            with gzip.open(f, "rb") as gz:
-                gtm = dill.load(gz)
+        try:
+            with S3.open(gtm_saved_file, "rb") as f:
+                with gzip.open(f, "rb") as gz:
+                    gtm = dill.load(gz)
+        except gzip.BadGzipFile:
+            # File is not actually gzipped (e.g. a plain .pkl from HuggingFace);
+            # fall back to loading as a regular pickle.
+            logger.warning(f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file.")
+            with S3.open(gtm_saved_file, "rb") as f:
+                gtm = dill.load(f)
     except FileNotFoundError as e:
         raise FileNotFoundError(f"GTM model file not found: {gtm_saved_file}") from e
     except ModuleNotFoundError as e:
@@ -732,8 +1010,7 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
         df = normalize_smiles_column(df)
     except ValueError as e:
         raise ValueError(
-            f"Dataset must contain a SMILES column. {e}. "
-            f"Expected one of: {_SMILES_COLUMN_VARIANTS}"
+            f"Dataset must contain a SMILES column. {e}. Expected one of: {_SMILES_COLUMN_VARIANTS}"
         ) from e
 
     logger.info(f"Loaded dataset with {original_count} molecules")
@@ -853,6 +1130,27 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
     return " ".join(summary_parts)
 
 
+def _detect_activity_landscape_type(
+    source_activity: pd.DataFrame,
+) -> Literal["classification", "regression"]:
+    """Infer whether an activity landscape table is classification or regression.
+
+    Regression tables contain ``filtered_reg_density``; classification tables
+    contain at least two ``*_prob`` columns (e.g. ``active_prob``/``inactive_prob``
+    or ``first_class_prob``/``second_class_prob``).
+    """
+    if "filtered_reg_density" in source_activity.columns:
+        return "regression"
+    prob_columns = [c for c in source_activity.columns if c.endswith("_prob")]
+    if len(prob_columns) >= 2:
+        return "classification"
+    raise ValueError(
+        "Could not infer activity landscape type. Expected either "
+        "'filtered_reg_density' (regression) or at least two '*_prob' columns "
+        f"(classification). Got columns: {list(source_activity.columns)}"
+    )
+
+
 def create_activity_landscapes(
     source_activity: pd.DataFrame,
     node_threshold: float = 0.1,
@@ -860,33 +1158,61 @@ def create_activity_landscapes(
     chart_height: int = 600,
 ) -> alt.Chart:
     """
-    Create density and neighborhood preservation landscapes from GTM responses.
+    Create an Altair activity landscape (classification or regression, auto-detected).
 
     Args:
-        source_activity (pd.DataFrame): Activity data.
-        node_threshold (float): Threshold value for node density filtering.
-                               Nodes with density below this value will be excluded.
+        source_activity (pd.DataFrame): Activity landscape table.
+        node_threshold (float): Threshold value for node density filtering. Kept
+            for signature symmetry; filtering is already applied upstream by
+            ``preprocess_gtm_activity_data``.
         chart_width (int): Width of the output chart in pixels.
         chart_height (int): Height of the output chart in pixels.
 
     Returns:
         alt.Chart: Altair chart showing the activity landscape.
     """
-    # Creation of both density, magnification and neighborhood preservation landscapes
-
-    # Configure and save the chart
-    if "prob" in source_activity.columns:
-        chart = altair_discrete_class_landscape(
-            source_activity, title="Classification Activity landscape"
+    detected_type = _detect_activity_landscape_type(source_activity)
+    if detected_type == "classification":
+        chart = _create_altair_landscape_chart(
+            source_activity, "classification", title="Classification Activity landscape"
         )
-        chart = configure_chart(chart, chart_width, chart_height)
     else:
         chart = altair_discrete_regression_landscape(
             source_activity, title="Regression Activity landscape"
         )
-        chart = configure_chart(chart, chart_width, chart_height)
-
+    chart = configure_chart(chart, chart_width, chart_height)
     return chart
+
+
+def create_activity_landscapes_plotly(
+    source_activity: pd.DataFrame,
+    node_threshold: float = 0.1,
+    chart_width: int = DEFAULT_CHART_WIDTH,
+    chart_height: int = DEFAULT_CHART_HEIGHT,
+):
+    """
+    Create a Plotly activity landscape (classification or regression, auto-detected).
+
+    Args:
+        source_activity (pd.DataFrame): Activity landscape table.
+        node_threshold (float): Threshold value for node density filtering. Kept
+            for signature symmetry; filtering is already applied upstream by
+            ``preprocess_gtm_activity_data``.
+        chart_width (int): Width of the output figure in pixels.
+        chart_height (int): Height of the output figure in pixels.
+
+    Returns:
+        plotly.graph_objs.Figure: Plotly figure showing the activity landscape.
+    """
+    detected_type = _detect_activity_landscape_type(source_activity)
+    title = (
+        "Classification Activity landscape"
+        if detected_type == "classification"
+        else "Regression Activity landscape"
+    )
+    fig = _create_plotly_landscape_figure(source_activity, detected_type, title=title)
+    fig.update_layout(width=chart_width, height=chart_height)
+    return fig
 
 
 def _convert_to_nm(value: float, units: str) -> float | None:
@@ -1361,8 +1687,7 @@ def preprocess_gtm_activity_data(
         if classification_column is not None and classification_column.notna().any():
             n_classified_raw = classification_column.notna().sum()
             logger.info(
-                f"Classified activity data from raw values: "
-                f"{n_classified_raw} compounds classified"
+                f"Classified activity data from raw values: {n_classified_raw} compounds classified"
             )
 
             # Fill in gaps using activity_comment for rows that weren't classified
@@ -1565,7 +1890,7 @@ def load_gtm(dataset: str, gtm_model: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     # Validate that the dataset is compatible with the GTM model
     # The responses matrix should have shape (n_molecules, n_nodes)
-    n_molecules = resps.shape[0]  # Number of molecules
+    n_entries = resps.shape[0]  # Number of dataset entries (not necessarily unique molecules)
     n_nodes = resps.shape[1]  # Number of GTM grid points
 
     # Check if the GTM model grid size matches the responses
@@ -1577,7 +1902,7 @@ def load_gtm(dataset: str, gtm_model: str) -> tuple[pd.DataFrame, pd.DataFrame]:
             f"but responses matrix has {n_nodes} points. The model may be corrupted."
         )
 
-    logger.info(f"GTM model loaded successfully: {n_nodes} grid points, {n_molecules} molecules")
+    logger.info(f"GTM model loaded successfully: {n_nodes} grid points, {n_entries} entries")
 
     # K-nearest neighbors for score calculations
     k_hit = 10
@@ -1794,13 +2119,67 @@ def calculate_map_ruggedness(df, gtm):
 # =============================================================================
 
 
-def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
+def gtm_param_grid(n_samples: int, mode: str = "extended") -> dict:
+    """
+    Build a GTM hyperparameter grid scaled to dataset size.
+
+    Args:
+        n_samples: Number of molecules in the dataset.
+        mode: ``"heuristic"`` (compact, 9 combos) or ``"extended"`` (~108 combos).
+
+    Returns:
+        Dict with keys ``nodes``, ``basis_functions``, ``basis_width_factor``,
+        ``regularization_coefficient`` — each a sorted list of candidate values.
+    """
+    k0 = round(math.sqrt(5 * math.sqrt(n_samples)) + 2)
+    m0 = max(3, round(0.3 * k0))
+
+    assert m0 < k0 + 5, f"basis_functions ({m0}) must be smaller than nodes + 5 ({k0 + 5})"
+
+    if mode == "heuristic":
+        return {
+            "nodes": [k0],
+            "basis_functions": [m0],
+            "basis_width_factor": [0.5, 1, 2],
+            "regularization_coefficient": [1, 10, 100],
+        }
+
+    if mode == "extended":
+        return {
+            "nodes": sorted(
+                {
+                    max(8, k0 - 5),
+                    max(8, k0),
+                    k0 + 5,
+                }
+            ),
+            "basis_functions": sorted(
+                {
+                    max(3, m0 - 5),
+                    m0,
+                    m0 + 5,
+                }
+            ),
+            "basis_width_factor": [0.5, 1, 2, 5],
+            "regularization_coefficient": [0.1, 1, 10, 100],
+        }
+
+    raise ValueError(f"Unknown mode: {mode!r}. Use 'heuristic' or 'extended'.")
+
+
+def optimize_gtm(
+    df: pd.DataFrame,
+    smiles_column: str = "smi",
+    strategy: str = "low",
+):
     """
     Optimize GTM hyperparameters and fit the final model.
 
     Args:
         df: DataFrame containing SMILES column
         smiles_column: Name of the column containing SMILES (default: 'smi')
+        strategy: Optimization effort level — ``"low"`` (heuristic grid, 9 combos),
+            ``"medium"`` (extended grid, ~108 combos), or ``"high"`` (Optuna TPE, 50 trials).
 
     Returns:
         tuple: (df with descriptors, fitted GTM model, best score)
@@ -1810,12 +2189,43 @@ def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
     df, X, descriptor_column = _compute_descriptors(df, smiles_column=smiles_column)
     df = df[~df[descriptor_column].isna()]
 
-    n_trials_max = 10
-    logger.info(f"Starting GTM optimization with {len(df)} molecules")
+    n_samples = len(df)
+    logger.info(f"Starting GTM optimization with {n_samples} molecules")
     logger.debug(
         f"Sample descriptors from column '{descriptor_column}': {df[descriptor_column].head()}"
     )
     X = X.astype(np.float64)
+
+    # --- Strategy dispatch ---------------------------------------------------
+    if strategy == "low":
+        grid = gtm_param_grid(n_samples, mode="heuristic")
+        search_space = {
+            "nodes_sqrt": grid["nodes"],
+            "basis_sqrt": grid["basis_functions"],
+            "basis_width": grid["basis_width_factor"],
+            "reg_coeff": grid["regularization_coefficient"],
+        }
+        sampler = GridSampler(search_space, seed=42)
+        n_trials_max = math.prod(len(v) for v in search_space.values())
+        logger.info(f"Strategy 'low': heuristic grid search with {n_trials_max} combinations")
+    elif strategy == "medium":
+        grid = gtm_param_grid(n_samples, mode="extended")
+        search_space = {
+            "nodes_sqrt": grid["nodes"],
+            "basis_sqrt": grid["basis_functions"],
+            "basis_width": grid["basis_width_factor"],
+            "reg_coeff": grid["regularization_coefficient"],
+        }
+        sampler = GridSampler(search_space, seed=42)
+        n_trials_max = math.prod(len(v) for v in search_space.values())
+        logger.info(f"Strategy 'medium': extended grid search with {n_trials_max} combinations")
+    elif strategy == "high":
+        search_space = None
+        sampler = TPESampler(seed=42)
+        n_trials_max = 50
+        logger.info(f"Strategy 'high': Optuna TPE with {n_trials_max} trials")
+    else:
+        raise ValueError(f"Unknown strategy: {strategy!r}. Use 'low', 'medium', or 'high'.")
 
     # Check CUDA availability and suppress NVML warning
     device = "cpu"  # Default to CPU to avoid CUDA issues
@@ -1845,14 +2255,21 @@ def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
 
     # Define the objective function for hyperparameter optimization
     def objective(trial):
-        # Suggest hyperparameters
-        n_basis_functions_sqrt = trial.suggest_int("n_basis_functions_sqrt", 5, 25)
-        n_nodes_n_basis_diff = trial.suggest_int("n_nodes_n_basis_diff", 5, 25)
-        basis_width = trial.suggest_float("basis_width", 0.1, 10.0)
-        reg_coeff = trial.suggest_float("reg_coeff", 0.1, 1000.0)
+        if search_space is not None:
+            # Grid strategies (low / medium): discrete categorical values
+            nodes_sqrt = trial.suggest_categorical("nodes_sqrt", search_space["nodes_sqrt"])
+            basis_sqrt = trial.suggest_categorical("basis_sqrt", search_space["basis_sqrt"])
+            basis_width = trial.suggest_categorical("basis_width", search_space["basis_width"])
+            reg_coeff = trial.suggest_categorical("reg_coeff", search_space["reg_coeff"])
+        else:
+            # High strategy: continuous / integer ranges
+            nodes_sqrt = trial.suggest_int("nodes_sqrt", 8, 40)
+            basis_sqrt = trial.suggest_int("basis_sqrt", 3, 15)
+            basis_width = trial.suggest_float("basis_width", 0.1, 10.0)
+            reg_coeff = trial.suggest_float("reg_coeff", 0.1, 1000.0)
 
-        num_basis_functions = n_basis_functions_sqrt**2
-        num_nodes = (n_basis_functions_sqrt + n_nodes_n_basis_diff) ** 2
+        num_basis_functions = basis_sqrt**2
+        num_nodes = nodes_sqrt**2
 
         # Initialize and fit GTM using ChemographyKit
         gtm = GTM(
@@ -1880,7 +2297,7 @@ def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
             return -np.inf
 
     # Initialize study
-    study = optuna.create_study(direction="maximize", sampler=TPESampler(seed=42))
+    study = optuna.create_study(direction="maximize", sampler=sampler)
 
     # Run optimization with proper error handling
     logger.info(f"Running {n_trials_max} optimization trials...")
@@ -1894,16 +2311,16 @@ def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
         logger.error("All optimization trials failed. Using default parameters.")
         # Use conservative default parameters
         best_params = {
-            "n_basis_functions_sqrt": 8,
-            "n_nodes_n_basis_diff": 8,
+            "nodes_sqrt": 16,
+            "basis_sqrt": 8,
             "basis_width": 1.0,
             "reg_coeff": 100.0,
         }
         best_score = 0.0
 
     # Fit final model with best parameters
-    num_basis_functions = best_params["n_basis_functions_sqrt"] ** 2
-    num_nodes = (best_params["n_basis_functions_sqrt"] + best_params["n_nodes_n_basis_diff"]) ** 2
+    num_basis_functions = best_params["basis_sqrt"] ** 2
+    num_nodes = best_params["nodes_sqrt"] ** 2
 
     logger.info(
         f"Fitting final GTM model with {num_nodes} nodes and {num_basis_functions} basis functions"
@@ -1932,7 +2349,12 @@ def optimize_gtm(df: pd.DataFrame, smiles_column: str = "smi"):
 
 
 def optimize_gtm_model(
-    df_csv_path: str, dataset_name: str, gtm_name: str, smiles_column: str, agent: Agent
+    df_csv_path: str,
+    dataset_name: str,
+    gtm_name: str,
+    smiles_column: str,
+    agent: Agent,
+    strategy: str = "low",
 ) -> str:
     """
     Load a dataset of SMILES strings, optimize a Generative Topographic Mapping (GTM)
@@ -1945,6 +2367,7 @@ def optimize_gtm_model(
         gtm_name: Key under which the trained GTM model will be saved in agent.session_state
         smiles_column: Name of the column in the CSV that holds SMILES strings
         agent: The agent whose session_state dict will be updated
+        strategy: Optimization effort level — ``"low"``, ``"medium"``, or ``"high"``
 
     Returns:
         Human-readable message reporting the best entropy score achieved
@@ -1994,8 +2417,8 @@ def optimize_gtm_model(
         )
 
         # Optimize GTM model
-        logger.info("Optimizing GTM with entropy")
-        df, gtm, best_score = optimize_gtm(df, smiles_column)
+        logger.info(f"Optimizing GTM with entropy (strategy={strategy})")
+        df, gtm, best_score = optimize_gtm(df, smiles_column, strategy=strategy)
 
         # Store results in agent session
         if agent.session_state is None:
@@ -2009,7 +2432,7 @@ def optimize_gtm_model(
         set_session_gtm_model(agent, gtm, optimized_model_path)
 
         logger.info(f"GTM optimization completed with entropy: {best_score:.1f}")
-        return f"Entropy of the current study: {best_score:.1f}"
+        return f"Entropy of the current study: {best_score:.1f} (strategy: {strategy})"
 
     except Exception as e:
         logger.error(f"Error in GTM optimization: {e}")
@@ -2268,6 +2691,7 @@ def create_activity_landscapes_tool(
     node_threshold: float = DEFAULT_NODE_THRESHOLD,
     chart_width: int = DEFAULT_CHART_WIDTH,
     chart_height: int = DEFAULT_CHART_HEIGHT,
+    renderer: LandscapeRenderer = "altair",
 ) -> str:
     """
     Create activity landscapes from GTM model and dataset.
@@ -2278,6 +2702,7 @@ def create_activity_landscapes_tool(
         node_threshold: Threshold below which nodes are excluded
         chart_width: Width of the output chart (pixels)
         chart_height: Height of the output chart (pixels)
+        renderer: Rendering backend ("altair" or "plotly"). Defaults to "altair".
 
     Returns:
         Success message with file paths
@@ -2298,40 +2723,61 @@ def create_activity_landscapes_tool(
     validate_positive_int(chart_width, "chart_width")
     validate_positive_int(chart_height, "chart_height")
 
-    logger.info(f"Creating activity landscapes for {dataset} with model {gtm_model}")
+    normalized_renderer = _normalize_landscape_renderer(renderer)
+
+    logger.info(
+        f"Creating {normalized_renderer} activity landscapes for {dataset} "
+        f"with model {gtm_model}"
+    )
 
     try:
         # Process the data
         source_activity = preprocess_gtm_activity_data(
             dataset, gtm_model, node_threshold=node_threshold
         )
+        detected_type = _detect_activity_landscape_type(source_activity)
 
-        # Create the chart
-        chart = create_activity_landscapes(
-            source_activity, node_threshold, chart_width, chart_height
+        # Generate output paths (embed renderer + detected type so altair/plotly
+        # variants produced in the same run do not collide).
+        s3_base = (
+            f"{Path(dataset).stem}_gtm_activity_landscape_" f"{normalized_renderer}_{detected_type}"
         )
-
-        # Generate output paths
-        s3_base = f"{Path(dataset).stem}_gtm_activity_landscape"
         s3_html = f"{s3_base}{HTML_EXTENSION}"
         s3_png = f"{s3_base}{PNG_EXTENSION}"
 
-        # Save files
-        logger.debug(f"Saving activity landscape charts to {s3_html} and {s3_png}")
+        logger.debug(
+            f"Saving {normalized_renderer} {detected_type} activity landscape to "
+            f"{s3_html} and {s3_png}"
+        )
 
-        # Save HTML version
-        with S3.open(s3_html, "w") as sf:
-            sf.write(chart.to_html())
+        if normalized_renderer == "altair":
+            chart = create_activity_landscapes(
+                source_activity, node_threshold, chart_width, chart_height
+            )
+            _write_chart_outputs(chart, s3_html, s3_png)
+            png_written = True
+        else:
+            fig = create_activity_landscapes_plotly(
+                source_activity, node_threshold, chart_width, chart_height
+            )
+            png_written = _write_plotly_outputs(fig, s3_html, s3_png)
 
-        # Save PNG version
-        with S3.open(s3_png, "wb") as sf:
-            chart.save(sf, format="png")
-
-        logger.info(f"Successfully created activity landscapes: {s3_html}, {s3_png}")
-        return f"GTM activity landscape saved to S3: `{S3.path(s3_html)}` and `{S3.path(s3_png)}`"
+        logger.info(
+            f"Successfully created {normalized_renderer} {detected_type} activity landscape"
+        )
+        if png_written:
+            return (
+                f"{normalized_renderer.capitalize()} {detected_type} activity landscape "
+                f"saved to S3: `{S3.path(s3_html)}` and `{S3.path(s3_png)}`"
+            )
+        return (
+            f"{normalized_renderer.capitalize()} {detected_type} activity landscape "
+            f"saved to S3: `{S3.path(s3_html)}`. PNG export was skipped because "
+            f"the Plotly image backend is unavailable."
+        )
 
     except Exception as e:
-        logger.error(f"Error creating activity landscapes: {e}")
+        logger.error(f"Error creating {normalized_renderer} activity landscapes: {e}")
         raise
 
 
@@ -2393,22 +2839,10 @@ def save_gtm_plot(
 
         # Create optional labels layer for marked nodes
         layers = [density_chart, points]
-        if mark_nodes:
+        labels = _build_node_labels_layer(source, mark_nodes)
+        if labels is not None:
             logger.debug(f"Adding labels for {len(mark_nodes)} marked nodes")
-            text = (
-                alt.Chart(source_mols)
-                .mark_text(align="left", baseline="middle", dx=1)
-                .encode(
-                    x="x:Q",
-                    y=alt.Y("y:Q", scale=alt.Scale(reverse=True)),
-                    text=alt.condition(
-                        alt.FieldOneOfPredicate(field="node_index", oneOf=mark_nodes),
-                        "node_index:Q",
-                        alt.value(""),
-                    ),
-                )
-            )
-            layers.append(text)
+            layers.append(labels)
 
         # Combine and configure chart
         chart = alt.layer(*layers).properties(
@@ -2427,18 +2861,94 @@ def save_gtm_plot(
 
         # Save files
         logger.debug(f"Saving GTM plot to {s3_html} and {s3_png}")
-
-        with S3.open(s3_html, "w") as sf:
-            sf.write(chart.to_html())
-
-        with S3.open(s3_png, "wb") as sf:
-            chart.save(sf, format="png")
+        _write_chart_outputs(chart, s3_html, s3_png)
 
         logger.info(f"Successfully created GTM plot: {s3_html}, {s3_png}")
         return f"GTM plot saved to S3: `{S3.path(s3_html)}` and `{S3.path(s3_png)}`"
 
     except Exception as e:
         logger.error(f"Error creating GTM plot: {e}")
+        raise
+
+
+def save_gtm_landscape_plot(
+    landscape_file: str,
+    landscape_type: LandscapeType,
+    renderer: LandscapeRenderer = "altair",
+    mark_nodes: Optional[List[int]] = None,
+    chart_width: int = DEFAULT_CHART_WIDTH,
+    chart_height: int = DEFAULT_CHART_HEIGHT,
+) -> str:
+    """
+    Generate and save a ChemographyKit landscape plot from a saved landscape table.
+
+    Args:
+        landscape_file: Path to a CSV containing a GTM landscape table
+        landscape_type: ChemographyKit landscape type to render
+        renderer: Rendering backend ("altair" or "plotly")
+        mark_nodes: Optional list of node indices to label on the plot
+        chart_width: Width of the output chart (pixels)
+        chart_height: Height of the output chart (pixels)
+
+    Returns:
+        Success message with file paths
+    """
+    normalized_type = _normalize_landscape_type(landscape_type)
+    normalized_renderer = _normalize_landscape_renderer(renderer)
+    validate_positive_int(chart_width, "chart_width")
+    validate_positive_int(chart_height, "chart_height")
+
+    if mark_nodes is not None and not isinstance(mark_nodes, list):
+        raise ValueError("mark_nodes must be a list or None")
+
+    logger.info(
+        f"Creating {normalized_renderer} {normalized_type} landscape plot from {landscape_file}"
+    )
+
+    try:
+        source_table = _load_landscape_table(landscape_file)
+        _validate_landscape_table(source_table, normalized_type)
+
+        title = f"{Path(landscape_file).stem} ({normalized_renderer} {normalized_type})"
+        base_path = f"{Path(landscape_file).with_suffix('')}_{normalized_renderer}_{normalized_type}_landscape"
+        html_path = f"{base_path}{HTML_EXTENSION}"
+        png_path = f"{base_path}{PNG_EXTENSION}"
+
+        logger.debug(
+            f"Saving {normalized_renderer} {normalized_type} landscape plot to "
+            f"{html_path} and {png_path}"
+        )
+
+        if normalized_renderer == "altair":
+            chart = _create_altair_landscape_chart(source_table, normalized_type, title=title)
+            labels = _build_node_labels_layer(source_table, mark_nodes)
+            if labels is not None:
+                chart = alt.layer(chart, labels)
+
+            chart = configure_chart(chart, chart_width, chart_height)
+            _write_chart_outputs(chart, html_path, png_path)
+            png_written = True
+        else:
+            if mark_nodes:
+                logger.warning("mark_nodes is ignored for Plotly landscape plots")
+            fig = _create_plotly_landscape_figure(source_table, normalized_type, title=title)
+            fig.update_layout(width=chart_width, height=chart_height)
+            png_written = _write_plotly_outputs(fig, html_path, png_path)
+
+        logger.info(f"Successfully created {normalized_renderer} {normalized_type} landscape plot")
+        if png_written:
+            return (
+                f"{normalized_renderer.capitalize()} {normalized_type} landscape saved to S3: "
+                f"`{S3.path(html_path)}` and `{S3.path(png_path)}`"
+            )
+        return (
+            f"{normalized_renderer.capitalize()} {normalized_type} landscape saved to S3: "
+            f"`{S3.path(html_path)}`. PNG export was skipped because the Plotly image backend "
+            f"is unavailable."
+        )
+
+    except Exception as e:
+        logger.error(f"Error creating {normalized_renderer} {normalized_type} landscape plot: {e}")
         raise
 
 
@@ -3304,6 +3814,7 @@ SESSION_LATENT_GTM_SCALER_KEY = "_current_latent_gtm_scaler"
 def train_latent_gtm(
     latent_vectors: np.ndarray,
     config: Optional[dict] = None,
+    strategy: str = "low",
 ) -> tuple:
     """
     Train a GTM on pre-computed latent vectors (e.g. from Peptide WAE).
@@ -3315,6 +3826,8 @@ def train_latent_gtm(
         latent_vectors: numpy array of shape (n_samples, latent_dim)
         config: Optional dict with GTM hyperparameters. If None, uses Optuna optimization.
                 Supported keys: n_basis_functions_sqrt, n_nodes_n_basis_diff, basis_width, reg_coeff
+        strategy: Optimization effort level — ``"low"``, ``"medium"``, or ``"high"``.
+            Only used when *config* is None.
 
     Returns:
         tuple: (gtm_model, scaler, best_score) where:
@@ -3376,37 +3889,70 @@ def train_latent_gtm(
         logger.info(f"Latent GTM trained with entropy: {score:.4f}")
         return gtm, scaler, score
 
-    # Optuna optimization
-    n_trials_max = 10
+    # --- Strategy dispatch ---------------------------------------------------
+    if strategy == "low":
+        grid = gtm_param_grid(n_samples, mode="heuristic")
+        search_space = {
+            "nodes_sqrt": grid["nodes"],
+            "basis_sqrt": grid["basis_functions"],
+            "basis_width": grid["basis_width_factor"],
+            "reg_coeff": grid["regularization_coefficient"],
+        }
+        sampler = GridSampler(search_space, seed=42)
+        n_trials_max = math.prod(len(v) for v in search_space.values())
+        logger.info(f"Strategy 'low': heuristic grid search with {n_trials_max} combinations")
+    elif strategy == "medium":
+        grid = gtm_param_grid(n_samples, mode="extended")
+        search_space = {
+            "nodes_sqrt": grid["nodes"],
+            "basis_sqrt": grid["basis_functions"],
+            "basis_width": grid["basis_width_factor"],
+            "reg_coeff": grid["regularization_coefficient"],
+        }
+        sampler = GridSampler(search_space, seed=42)
+        n_trials_max = math.prod(len(v) for v in search_space.values())
+        logger.info(f"Strategy 'medium': extended grid search with {n_trials_max} combinations")
+    elif strategy == "high":
+        search_space = None
+        sampler = TPESampler(seed=42)
+        n_trials_max = 50
+        logger.info(f"Strategy 'high': Optuna TPE with {n_trials_max} trials")
+    else:
+        raise ValueError(f"Unknown strategy: {strategy!r}. Use 'low', 'medium', or 'high'.")
 
     def objective(trial):
-        n_basis_sqrt = trial.suggest_int("n_basis_functions_sqrt", 5, 25)
-        n_diff = trial.suggest_int("n_nodes_n_basis_diff", 5, 25)
-        basis_width = trial.suggest_float("basis_width", 0.1, 10.0)
-        reg_coeff = trial.suggest_float("reg_coeff", 0.1, 1000.0)
+        if search_space is not None:
+            nodes_sqrt = trial.suggest_categorical("nodes_sqrt", search_space["nodes_sqrt"])
+            basis_sqrt = trial.suggest_categorical("basis_sqrt", search_space["basis_sqrt"])
+            bw = trial.suggest_categorical("basis_width", search_space["basis_width"])
+            rc = trial.suggest_categorical("reg_coeff", search_space["reg_coeff"])
+        else:
+            nodes_sqrt = trial.suggest_int("nodes_sqrt", 8, 40)
+            basis_sqrt = trial.suggest_int("basis_sqrt", 3, 15)
+            bw = trial.suggest_float("basis_width", 0.1, 10.0)
+            rc = trial.suggest_float("reg_coeff", 0.1, 1000.0)
 
-        num_basis = n_basis_sqrt**2
-        num_nodes = (n_basis_sqrt + n_diff) ** 2
+        num_basis = basis_sqrt**2
+        num_nodes = nodes_sqrt**2
 
         gtm_trial = GTM(
             num_basis_functions=num_basis,
             num_nodes=num_nodes,
-            basis_width=basis_width,
-            reg_coeff=reg_coeff,
+            basis_width=bw,
+            reg_coeff=rc,
             device=device,
         )
         gtm_trial.fit(torch.from_numpy(X_scaled).to(torch.float64), n_iterations=200)
         resps, _ = gtm_trial.project(torch.from_numpy(X_scaled).to(torch.float64))
         return shannon_entropy(resps.cpu().numpy())
 
-    sampler = TPESampler(seed=42)
-    study = optuna.create_study(direction="maximize", sampler=sampler)
     optuna.logging.set_verbosity(optuna.logging.WARNING)
+    study = optuna.create_study(direction="maximize", sampler=sampler)
     study.optimize(objective, n_trials=n_trials_max)
 
     best = study.best_params
-    num_basis = best["n_basis_functions_sqrt"] ** 2
-    num_nodes = (best["n_basis_functions_sqrt"] + best["n_nodes_n_basis_diff"]) ** 2
+    num_basis = best["basis_sqrt"] ** 2
+    num_nodes = best["nodes_sqrt"] ** 2
 
     gtm = GTM(
         num_basis_functions=num_basis,
@@ -3623,11 +4169,7 @@ def create_peptide_activity_landscapes_tool(
             png_path = f"{base}{PNG_EXTENSION}"
             csv_path = f"{base}{CSV_EXTENSION}"
 
-            with S3.open(html_path, "w") as sf:
-                sf.write(chart.to_html())
-
-            with S3.open(png_path, "wb") as sf:
-                chart.save(sf, format="png")
+            _write_chart_outputs(chart, html_path, png_path)
 
             with S3.open(csv_path, "w") as sf:
                 landscape_table.to_csv(sf, index=False)

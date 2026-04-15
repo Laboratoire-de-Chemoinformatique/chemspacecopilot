@@ -62,6 +62,23 @@ if [ "$MODEL_PROVIDER" = "ollama" ]; then
     fi
     export OLLAMA_HOST
     echo "📌 Ollama host: $OLLAMA_HOST"
+elif [ "$MODEL_PROVIDER" = "openrouter" ]; then
+    # OpenRouter (cloud gateway) — API key is required
+    if [ -z "$OPENROUTER_API_KEY" ] || [ "$OPENROUTER_API_KEY" = "your-openrouter-api-key-here" ]; then
+        echo ""
+        echo "OPENROUTER_API_KEY is required for OpenRouter provider. Enter it now (not saved to disk):"
+        read -rs OPENROUTER_API_KEY
+        echo ""
+        if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "❌ Error: OPENROUTER_API_KEY is empty"
+            echo "Create .env from .env.example and set OPENROUTER_API_KEY, or run this script and enter the key when prompted."
+            exit 1
+        fi
+        export OPENROUTER_API_KEY
+        echo "✅ Using API key from this session (not stored in .env)"
+    else
+        export OPENROUTER_API_KEY
+    fi
 else
     # DeepSeek (cloud API) — API key is required
     if [ -z "$DEEPSEEK_API_KEY" ] || [ "$DEEPSEEK_API_KEY" = "your-deepseek-api-key-here" ]; then

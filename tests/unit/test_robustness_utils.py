@@ -32,6 +32,12 @@ class TestResponseParser:
         files = ResponseParser.extract_files(text)
         assert "chembl_12345.csv" in files
 
+    def test_extract_files_local_pattern(self):
+        """Test file extraction with 'Saved locally:' pattern."""
+        text = "Saved locally: `data/sessions/test-session/chembl_12345.csv`"
+        files = ResponseParser.extract_files(text)
+        assert "data/sessions/test-session/chembl_12345.csv" in files
+
     def test_extract_files_pattern2(self):
         """Test file extraction with 'saved to' pattern."""
         text = "Data saved to `dataset.csv` successfully"

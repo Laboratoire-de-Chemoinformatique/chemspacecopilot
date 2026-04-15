@@ -12,12 +12,14 @@ import datetime
 import logging
 import os
 import uuid
+from pathlib import Path, PurePosixPath
 
 import fsspec
 
 from .config import get_s3_config, is_s3_enabled
 
 logger = logging.getLogger(__name__)
+LOCAL_STORAGE_ROOT = Path("data")
 
 # Generate a per-run session ID when SESSION_ID is unset or blank
 _ENV_SESSION_ID = os.getenv("SESSION_ID")
@@ -72,16 +74,16 @@ class S3:
     @classmethod
     def path(cls, rel: str) -> str:
         """
-        Convert a relative path to an S3 URL.
+        Convert a relative path to an S3 URL or local session path.
 
-        If an absolute S3 URL is provided (starts with s3://),
-        it is returned unchanged.
+        Explicit S3 and local paths are returned unchanged. Relative paths are
+        resolved against the active backend.
 
         Args:
             rel: Relative path or absolute S3 URL
 
         Returns:
-            str: Full S3 URL
+            str: Full S3 URL or local path
 
         Examples:
         ---------
@@ -91,13 +93,15 @@ class S3:
         >>> S3.path("s3://mybucket/data.csv")
         's3://mybucket/data.csv'
         """
-        # If an absolute S3 URL is provided, pass it through unchanged
-        if isinstance(rel, str) and rel.startswith("s3://"):
+        if cls._is_s3_url(rel) or cls._is_explicit_local_path(rel):
             return rel
 
-        # Always produce a URL; works with fsspec & pandas
         config = get_s3_config()
-        return f"s3://{config.bucket_name}/{cls.prefix}/{rel}".strip("/")
+        if not is_s3_enabled():
+            return os.fspath(cls._local_session_path(rel))
+
+        key = PurePosixPath(cls.prefix.strip("/")) / str(rel).lstrip("/")
+        return f"s3://{config.bucket_name}/{key.as_posix()}"
 
     @classmethod
     def open(cls, rel: str, mode: str = "rb"):
@@ -135,23 +139,38 @@ class S3:
         ...     df = pd.read_csv(f)
         """
         config = get_s3_config()
-        use_s3 = is_s3_enabled()
 
-        # 1) Absolute S3 URL → open as-is
-        if isinstance(rel, str) and rel.startswith("s3://"):
+        if cls._is_s3_url(rel):
             return fsspec.open(rel, mode=mode, **config.to_storage_options())
 
-        # 2) Explicit local files (absolute paths or file://) → always open locally
-        if isinstance(rel, str) and (rel.startswith("/") or rel.startswith("file://")):
+        if cls._is_explicit_local_path(rel):
             if rel.startswith("file://"):
                 return fsspec.open(rel, mode=mode)
-            return builtins.open(rel, mode)
+            return cls._open_local_path(Path(rel), mode)
 
-        # 3) If S3 is disabled, allow relative local file access
-        if not use_s3:
-            if isinstance(rel, str) and rel.startswith("file://"):
-                return fsspec.open(rel, mode=mode)
-            return builtins.open(rel, mode)
+        if not is_s3_enabled():
+            return cls._open_local_path(cls._local_session_path(rel), mode)
 
-        # 4) Otherwise treat as a key relative to the session prefix and force S3
         return fsspec.open(cls.path(rel), mode=mode, **config.to_storage_options())
+
+    @staticmethod
+    def _is_s3_url(path: str) -> bool:
+        return isinstance(path, str) and path.startswith("s3://")
+
+    @staticmethod
+    def _is_explicit_local_path(path: str) -> bool:
+        return isinstance(path, str) and (path.startswith("/") or path.startswith("file://"))
+
+    @classmethod
+    def _local_session_path(cls, rel: str) -> Path:
+        return LOCAL_STORAGE_ROOT / Path(cls.prefix.strip("/")) / Path(rel)
+
+    @staticmethod
+    def _is_write_mode(mode: str) -> bool:
+        return any(flag in mode for flag in ("w", "a", "x", "+"))
+
+    @classmethod
+    def _open_local_path(cls, path: Path, mode: str):
+        if cls._is_write_mode(mode):
+            path.parent.mkdir(parents=True, exist_ok=True)
+        return builtins.open(path, mode)

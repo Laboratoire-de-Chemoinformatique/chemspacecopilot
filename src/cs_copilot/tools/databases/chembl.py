@@ -5,6 +5,7 @@ ChEMBL-specific database toolkit implementation.
 """
 
 import logging
+import re
 import time
 from typing import Any, Dict, Optional, Sequence
 
@@ -16,7 +17,70 @@ from cs_copilot.tools.chemistry.standardize import standardize_smiles_column
 from cs_copilot.tools.io.utils import validate_positive_int
 
 from .base import BaseDatabaseToolkit, DatabaseError, NotFound, RateLimited, ValidationError
+from .chembl_fetcher import ChemblDataFetcher, RestChemblFetcher, SqlChemblFetcher
 from .types import DBConfig, PaginationMode, QueryParams, ResultPage
+
+# Any run of hyphens or whitespace counts as a single token separator.
+_HYPHEN_OR_SPACE_RUN = re.compile(r"[-\s]+")
+
+# Letter→digit boundary (e.g. "CDK2" → "CDK|2", "PDE4A" → "PDE|4A").
+# Only splits where a letter is immediately followed by a digit; the
+# digit and any trailing letters stay together as one unit.
+_LETTER_DIGIT_BOUNDARY = re.compile(r"(?<=[a-zA-Z])(?=\d)")
+
+
+def _build_punctuation_regex(keyword: str) -> str | None:
+    """Build a regex that matches all hyphen/space variants of *keyword*.
+
+    Returns ``None`` when the keyword cannot be split into multiple
+    parts, signalling the caller to use plain substring matching.
+
+    **Two splitting passes**:
+
+    1. Split on explicit hyphens/spaces (``_HYPHEN_OR_SPACE_RUN``).
+    2. Sub-split each resulting token at letter→digit boundaries
+       (``_LETTER_DIGIT_BOUNDARY``), so ``"CDK2"`` → ``["CDK", "2"]``
+       and ``"PDE4A"`` → ``["PDE", "4A"]``.
+
+    This means single-token abbreviations like ``CDK2`` now produce a
+    regex (``CDK[- ]?2``) that matches ``CDK2``, ``CDK-2``, and
+    ``CDK 2``.
+
+    **Symmetry guarantee**: inputs that tokenize identically across both
+    passes produce the same regex.
+
+    For *n* ≤ 3 final tokens the separator is ``[- ]?`` (optional),
+    covering the concat form (e.g. ``"CDK2"`` from ``"CDK-2"``).
+    For *n* ≥ 4 tokens the separator is ``[- ]`` (required).
+
+    Uses ``[- ]`` (literal hyphen + space) rather than ``[-\\s]`` for
+    maximum SQL dialect compatibility.
+
+    Each token is ``re.escape``'d to handle metacharacters.
+    """
+    if not keyword:
+        return None
+    base = keyword.strip()
+    if not base:
+        return None
+
+    # Pass 1: split on explicit hyphens/spaces.
+    raw_tokens = [t for t in _HYPHEN_OR_SPACE_RUN.split(base) if t]
+    if not raw_tokens:
+        return None
+
+    # Pass 2: sub-split each token at letter→digit boundaries.
+    tokens: list[str] = []
+    for t in raw_tokens:
+        parts = _LETTER_DIGIT_BOUNDARY.split(t)
+        tokens.extend(p for p in parts if p)
+
+    if len(tokens) <= 1:
+        return None
+    escaped = [re.escape(t) for t in tokens]
+    sep = "[- ]?" if len(tokens) <= 3 else "[- ]"
+    return sep.join(escaped)
+
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +89,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
     """
     ChEMBL-specific database toolkit implementation.
 
-    Provides access to ChEMBL database through their web API,
-    handling ChEMBL-specific query formats, pagination, and data structures.
+    Supports multiple SQL backends (SQLite, PostgreSQL, MySQL) and the ChEMBL
+    REST API.  The backend is selected automatically based on environment
+    configuration.
     """
 
     # ChEMBL-specific constants
@@ -57,29 +122,58 @@ class ChemblToolkit(BaseDatabaseToolkit):
         "target_chembl_id",
     ]
 
-    def __init__(self, config: Optional[DBConfig] = None, **toolkit_kwargs):
+    def __init__(
+        self,
+        config: Optional[DBConfig] = None,
+        backend: str = "auto",
+        **toolkit_kwargs,
+    ):
         """
         Initialize ChEMBL toolkit.
 
         Args:
             config: Database configuration (optional, uses defaults if not provided)
+            backend: Data source backend. One of:
+                - "auto": Auto-detect from env vars (SQLite > PostgreSQL > MySQL > REST)
+                - "rest": Force REST API (chembl_webresource_client)
+                - "mysql": Force MySQL database
+                - "postgresql": Force PostgreSQL database
+                - "sqlite": Force SQLite database
             **toolkit_kwargs: Additional arguments for Agno Toolkit
         """
+        resolved = self._resolve_backend(backend)
+        self._active_backend = resolved
+        is_sql = resolved in ("mysql", "postgresql", "sqlite")
+
         if config is None:
             config = DBConfig(
                 uri=self.BASE_URL,
                 timeout_s=30.0,
                 retries=3,
                 page_size=100,
-                rate_limit=10.0,  # ChEMBL rate limit
+                rate_limit=10.0,
+                supports_sql=is_sql,
                 supports_http_api=True,
                 pagination_mode=PaginationMode.OFFSET_LIMIT,
             )
 
-        # Set default instructions if not provided
+        _BACKEND_LABELS = {
+            "mysql": "Connected to a LOCAL MySQL ChEMBL database",
+            "postgresql": "Connected to a LOCAL PostgreSQL ChEMBL database",
+            "sqlite": "Connected to a LOCAL SQLite ChEMBL database",
+        }
         if "instructions" not in toolkit_kwargs:
+            if resolved in _BACKEND_LABELS:
+                backend_label = (
+                    f"Active backend: {_BACKEND_LABELS[resolved]}. "
+                    "The ChEMBL REST API is also available as a fallback."
+                )
+            else:
+                backend_label = "Active backend: Using the ChEMBL REST API."
             toolkit_kwargs["instructions"] = (
-                "ChEMBL database toolkit for fetching compound bioactivity data, generating EDA reports, and analyzing chemical datasets."
+                "ChEMBL database toolkit for fetching compound bioactivity data, "
+                "generating EDA reports, and analyzing chemical datasets. "
+                f"{backend_label}"
             )
 
         super().__init__(
@@ -89,6 +183,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         )
         self._client = None  # Will be initialized lazily
         self._client_init_error = None  # Store initialization error if any
+        self._fetcher = self._create_fetcher(resolved)
         self.register(self.fetch_compounds)
         self.register(self.describe_dataset)
         self.register(self.convert_to_chembl_query)
@@ -110,6 +205,36 @@ class ChemblToolkit(BaseDatabaseToolkit):
             raise DatabaseError(f"ChEMBL client unavailable: {self._client_init_error}")
         return self._client
 
+    @staticmethod
+    def _resolve_backend(backend: str) -> str:
+        """Resolve 'auto' to a concrete backend name."""
+        import os
+
+        if backend == "auto":
+            if os.getenv("CHEMBL_SQLITE_PATH"):
+                return "sqlite"
+            if os.getenv("CHEMBL_PG_HOST"):
+                return "postgresql"
+            if os.getenv("CHEMBL_MYSQL_HOST"):
+                return "mysql"
+            return "rest"
+        valid = ("rest", "mysql", "postgresql", "sqlite")
+        if backend in valid:
+            return backend
+        raise ValueError(
+            f"Unknown ChEMBL backend: {backend!r}. Use one of: {', '.join(valid)}, or 'auto'."
+        )
+
+    def _create_fetcher(self, backend: str) -> ChemblDataFetcher:
+        """Create the data fetcher for an already-resolved backend."""
+        if backend == "mysql":
+            return SqlChemblFetcher.from_mysql_env()
+        if backend == "postgresql":
+            return SqlChemblFetcher.from_postgres_env()
+        if backend == "sqlite":
+            return SqlChemblFetcher.from_sqlite()
+        return RestChemblFetcher(self._ensure_client)
+
     def _get_resource_client(self, resource: str):
         client = self._ensure_client()
         try:
@@ -118,25 +243,29 @@ class ChemblToolkit(BaseDatabaseToolkit):
             raise ValidationError(f"Unsupported ChEMBL resource: {resource}") from exc
 
     def connect(self) -> None:
-        """Connect to ChEMBL API (validate access)."""
+        """Connect to ChEMBL data source (validate access)."""
         try:
-            client = self._ensure_client()
-            list(client.target.filter(target_chembl_id="CHEMBL1").only(["target_chembl_id"])[:1])
+            self._fetcher.connect()
             self._connected = True
-            logger.info("Connected to ChEMBL API successfully")
+            logger.info("Connected to ChEMBL successfully")
         except Exception as e:
             self._connected = False
-            logger.error(f"Failed to connect to ChEMBL API: {e}")
+            logger.error(f"Failed to connect to ChEMBL: {e}")
             raise DatabaseError(f"ChEMBL connection failed: {e}") from e
 
     def ping(self) -> bool:
-        """Test ChEMBL API connectivity."""
+        """Test ChEMBL data source connectivity."""
         try:
-            client = self._ensure_client()
-            return client.status is not None
+            return self._fetcher.ping()
         except Exception as e:
             logger.warning(f"ChEMBL ping failed: {e}")
             return False
+
+    def get_capabilities(self) -> Dict[str, Any]:
+        """Get information about database capabilities including the active backend."""
+        caps = super().get_capabilities()
+        caps["active_backend"] = self._active_backend
+        return caps
 
     def query(self, params: QueryParams) -> ResultPage:
         """
@@ -329,13 +458,14 @@ class ChemblToolkit(BaseDatabaseToolkit):
         assay_type_codes = self._normalize_assay_types(default_assay_types)
 
         # Parse multiple keywords from query string
-        keywords = [kw.strip() for kw in query.split(",") if kw.strip()]
-        if not keywords:
+        raw_keywords = [kw.strip() for kw in query.split(",") if kw.strip()]
+        if not raw_keywords:
             raise ValueError("query must contain at least one non-empty keyword")
+
+        keywords: list[str] = raw_keywords
 
         logger.info(f"Fetching ChEMBL compounds for {len(keywords)} keyword(s): {keywords}")
 
-        client = self._ensure_client()
         all_dataframes = []
         all_assay_ids = set()  # Track unique assays across all keywords
 
@@ -345,13 +475,11 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 logger.info(f"Processing keyword: '{keyword}'")
 
                 # Step 1: Fetch assays for this keyword
-                logger.debug(f"Fetching assays from ChEMBL for keyword: '{keyword}'")
+                regex = _build_punctuation_regex(keyword)
+                if regex:
+                    logger.debug(f"Using regex for '{keyword}': {regex}")
 
-                assay_filter_kwargs: Dict[str, Any] = {"description__icontains": keyword}
-                if organism:
-                    assay_filter_kwargs["target_organism__icontains"] = organism
-
-                assays = list(client.assay.filter(**assay_filter_kwargs))
+                assays = self._fetcher.fetch_assays(keyword, organism, regex_pattern=regex)
 
                 if mechanism:
                     mechanism_lower = mechanism.lower()
@@ -375,16 +503,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
                 # Step 2: Fetch activities for these assays
                 logger.debug(f"Fetching activities from ChEMBL for keyword: '{keyword}'")
-                activity_filter_kwargs: Dict[str, Any] = {"assay_chembl_id__in": assay_ids}
 
-                if assay_type_codes:
-                    activity_filter_kwargs["assay_type__in"] = assay_type_codes
-
-                activity_query = client.activity.filter(**activity_filter_kwargs).only(
-                    self.ACTIVITY_FIELDS
+                activities = self._fetcher.fetch_activities(
+                    assay_ids, assay_type_codes, self.ACTIVITY_FIELDS
                 )
-
-                activities = list(activity_query)
 
                 if not activities:
                     logger.warning(f"No activity data found for keyword: {keyword}")
@@ -444,7 +566,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
             if std_dropped:
                 logger.info(f"Dropped {std_dropped} records with unstandardizable SMILES")
 
-            # Step 6: Save to S3
+            # Step 6: Save dataset
             # Create filename from all keywords
             query_slug = "_".join(
                 [kw.replace(" ", "_") for kw in keywords[:3]]
@@ -536,14 +658,15 @@ class ChemblToolkit(BaseDatabaseToolkit):
         )
 
     def _save_chembl_data(self, df: pd.DataFrame, query: str) -> str:
-        """Save ChEMBL data to S3 and return filename."""
+        """Save ChEMBL data and return the resolved storage path."""
         filename = f"chembl_{query.replace(' ', '_')}.csv"
+        saved_path = S3.path(filename)
 
         try:
             with S3.open(filename, "w") as f:
                 df.to_csv(f, index=False)
-            logger.info(f"Saved ChEMBL data to {filename}")
-            return filename
+            logger.info(f"Saved ChEMBL data to {saved_path}")
+            return saved_path
         except Exception as e:
             logger.error(f"Error saving ChEMBL data: {e}")
             raise
@@ -566,9 +689,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
         )
 
         keywords_str = ", ".join([f"'{kw}'" for kw in keywords])
+        save_label = "Saved to S3" if filename.startswith("s3://") else "Saved locally"
         message = (
             f"✅ Fetched {len(df)} records from {len(keywords)} keyword(s): {keywords_str}\n"
-            f"📄 Saved to S3: `{filename}`\n"
+            f"📄 {save_label}: `{filename}`\n"
         )
 
         if total_assays > 0:
@@ -633,29 +757,47 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
     def convert_to_chembl_query(self, natural_prompt: str) -> str:
         """
-        Generate multiple keyword variations from a target description for ChEMBL assay description searches.
+        Generate multiple semantic keyword variations from a target description
+        for ChEMBL assay description searches.
+
+        The returned instruction directs the LLM to focus on **semantic**
+        variants (abbreviations, synonyms, Greek letter replacement).
+        Punctuation and hyphenation variants (``"epidermal growth factor
+        receptor"`` vs ``"epidermal-growth-factor receptor"`` vs
+        ``"epidermal growth factor-receptor"``) are automatically matched
+        downstream by ``fetch_compounds`` via a regex built by
+        :func:`_build_punctuation_regex` — the LLM should NOT spend
+        its keyword budget on them.
 
         Args:
-            natural_prompt: Target description (should already have generic terms removed in previous steps)
+            natural_prompt: Target description (should already have generic
+                terms removed in previous steps)
 
         Returns:
-            Formatted instruction for generating multiple ChEMBL search keywords
-
-        Example:
-            >>> convert_to_chembl_query("cyclin dependent kinase 2")
-            Returns instruction to generate multiple keywords like: 'cdk2', 'kinase 2', 'cyclin dependent kinase 2'
+            Formatted instruction for generating ChEMBL search keywords
         """
         if not natural_prompt or not isinstance(natural_prompt, str):
             raise ValueError("natural_prompt must be a non-empty string")
 
         return (
             f"You are preparing queries for ChEMBL's `assay_description__icontains` filter.\n"
-            f"Given this target description: '{natural_prompt.strip()}', generate multiple keyword variations (typically 3-5) that are likely to appear in ChEMBL assay descriptions.\n"
-            f"Include:\n"
-            f"  - Abbreviations (e.g., 'cyclin dependent kinase 2' → 'cdk2')\n"
-            f"  - Shortened forms (e.g., 'kinase 2')\n"
-            f"  - Full names or common variations\n"
-            f"Replace greek characters with their English names (e.g., 'α' → 'alpha', 'β' → 'beta').\n"
-            f"Output a comma-separated list of keyword phrases suitable for searching assay descriptions.\n"
-            f"Example: For 'cyclin dependent kinase 2', generate: 'cdk2, kinase 2, cyclin dependent kinase 2'"
+            f"Given this target description: '{natural_prompt.strip()}', generate multiple "
+            f"SEMANTIC keyword variations (typically 2-4). Focus on:\n"
+            f"  - Gene symbols / abbreviations (e.g., 'epidermal growth factor receptor' → 'egfr', "
+            f"'phosphodiesterase 4A' → 'pde4a', 'B-Raf proto-oncogene' → 'braf', "
+            f"'Janus kinase 2' → 'jak2').\n"
+            f"  - Common full-name variants (e.g., 'phosphodiesterase 4A', "
+            f"'epidermal growth factor receptor').\n"
+            f"  - Literature synonyms (e.g., 'ERBB1' for EGFR; 'PRKCA' for "
+            f"'protein kinase C alpha').\n"
+            f"  - Greek character replacement (e.g., 'α' → 'alpha', 'β' → 'beta').\n"
+            f"DO NOT generate punctuation / spacing variants yourself — the downstream "
+            f"`fetch_compounds` tool automatically matches all hyphen/space combinations via "
+            f"regex (e.g., 'epidermal growth factor receptor' automatically matches "
+            f"'epidermal-growth factor receptor', 'epidermal growth-factor-receptor', etc.).\n"
+            f"Output a comma-separated list of keyword phrases suitable for assay description "
+            f"searches.\n"
+            f"Example: For 'phosphodiesterase 4A', generate: 'pde4a, phosphodiesterase 4A'.\n"
+            f"Example: For 'epidermal growth factor receptor', generate: "
+            f"'egfr, epidermal growth factor receptor, erbb1'."
         )

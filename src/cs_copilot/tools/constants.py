@@ -82,7 +82,7 @@ HUGGINGFACE_PEPTIDE_WAE_REPO = "axelrolov/wae_peptides"
 
 # GTM model defaults
 DEFAULT_GTM_MODEL_PATH = os.path.expanduser("~/.cache/cs_copilot/models/gtm")
-HUGGINGFACE_GTM_REPO = "axelrolov/cs_copilot-gtm"
+HUGGINGFACE_GTM_REPO = "axelrolov/chemspacecopilot-gtm"
 
 # DBAASP antimicrobial peptide data
 DEFAULT_DBAASP_DATA_PATH = os.path.expanduser("~/.cache/cs_copilot/data/dbaasp_data.csv")

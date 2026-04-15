@@ -25,7 +25,7 @@ S3.open("/tmp/data.csv", "r")
 ## Key Features
 
 - **Session ID**: Auto-generated (timestamp + UUID) or env-configured
-- **Backend Toggle**: S3/MinIO when `USE_S3=true`, local filesystem when `false`
+- **Backend Toggle**: Local filesystem by default; S3/MinIO only when `USE_S3=true`
 - **Configuration Fallbacks**: Supports multiple env var names (MINIO_ENDPOINT, S3_ENDPOINT_URL, etc.)
 
 ## Integration Pattern

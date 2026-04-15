@@ -22,6 +22,7 @@ from cs_copilot.tools import (
     PointerPandasTools,
     SynPlannerToolkit,
     # SessionToolkit,
+    save_gtm_landscape_plot,
     save_gtm_plot,
 )
 from cs_copilot.tools.analysis import RobustnessAnalysisToolkit
@@ -307,6 +308,8 @@ class ChEMBLDownloaderFactory(BaseAgentFactory):
             name="chembl_agent",
             description="""
             You are a specialized agent for downloading and processing bioactivity data from the ChEMBL database.
+            You support multiple backends: local SQL databases (SQLite, PostgreSQL, or MySQL — used when configured) and the ChEMBL REST API.
+            The backend is selected automatically — you do not need to worry about which one is active.
             Your role is to query ChEMBL based on user requests (e.g., protein targets, compound types),
             retrieve relevant bioactivity data, validate data quality, and prepare structured datasets
             for downstream cheminformatics analysis.
@@ -524,6 +527,7 @@ class GTMAgentFactory(BaseAgentFactory):
             tools=[
                 GTMToolkit(),
                 PointerPandasTools(),
+                save_gtm_landscape_plot,
                 save_gtm_plot,
             ],
             instructions=GTM_AGENT_INSTRUCTIONS,
@@ -531,7 +535,9 @@ class GTMAgentFactory(BaseAgentFactory):
                 "gtm_cache": {
                     "model": None,
                     "dataset": None,
-                    "metadata": {},
+                    "metadata": {
+                        "optimization_strategy": None,
+                    },
                 },
                 "gtm_file_paths": {
                     "gtm_path": None,
@@ -605,6 +611,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
             """,
             tools=[
                 PointerPandasTools(),
+                save_gtm_landscape_plot,  # For saved GTM landscape tables
                 save_gtm_plot,  # For GTM-specific visualizations
                 # Plotting libraries (matplotlib, seaborn) available via Python environment
             ],
@@ -737,6 +744,7 @@ class PeptideWAEFactory(BaseAgentFactory):
                 PeptideWAEToolkit(),
                 GTMToolkit(),
                 PointerPandasTools(),
+                save_gtm_landscape_plot,
                 save_gtm_plot,
             ],
             instructions=PEPTIDE_WAE_INSTRUCTIONS,

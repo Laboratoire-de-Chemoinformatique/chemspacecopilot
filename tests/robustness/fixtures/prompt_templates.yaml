@@ -1,30 +1,30 @@
 prompts:
   full_pipeline:
-    base: "Fetch kinase 2 inhibitor data, prepare GTM, describe the density landscape, prepare and describe the activity landscape, choose the most dense nodes and analyze the chemotypes in them. What assays do they correspond to? Are actives/inactives well separated? Summarize in detail."
+    base: "Fetch CDK2 inhibitor data, prepare GTM, describe the density landscape, prepare and describe the activity landscape, choose the most dense nodes and analyze the chemotypes in them. What assays do they correspond to? Are actives/inactives well separated? Summarize in detail."
     variations:
       - "Retrieve bioactivity data for cyclin-dependent kinase 2 inhibitors from ChEMBL. Construct a GTM projection. Characterize the density distribution across the manifold. Generate activity landscape visualizations and provide detailed analysis. Identify high-density regions and perform scaffold decomposition. Report assay distributions and evaluate class separation. Provide comprehensive summary."
       - "Get CDK2 inhibitor data. Build GTM map. Show density + activity landscapes. Find dense nodes, analyze chemotypes + assays. Check active/inactive separation. Write summary."
-      - "Can you download kinase 2 inhibitor data and build a GTM with 50 hits? What does the density landscape look like? How about activity? Which nodes are most populated? What scaffolds appear there and which assays? Are actives and inactives in different regions? Please summarize everything."
-      - "First, download kinase 2 inhibitor bioactivity data. Second, optimize a GTM model. Third, analyze and describe the density patterns. Fourth, create activity landscape plots and describe them. Fifth, identify the densest nodes. Sixth, analyze what chemotypes are present in those nodes. Seventh, determine which assays they belong to. Eighth, assess whether active and inactive compounds are separated. Finally, prepare a detailed summary."
+      - "Can you download CDK2 inhibitor data and build a GTM with 50 hits? What does the density landscape look like? How about activity? Which nodes are most populated? What scaffolds appear there and which assays? Are actives and inactives in different regions? Please summarize everything."
+      - "First, download CDK2 inhibitor bioactivity data. Second, optimize a GTM model. Third, analyze and describe the density patterns. Fourth, create activity landscape plots and describe them. Fifth, identify the densest nodes. Sixth, analyze what chemotypes are present in those nodes. Seventh, determine which assays they belong to. Eighth, assess whether active and inactive compounds are separated. Finally, prepare a detailed summary."
       - "I need a complete analysis of CDK2 inhibitors: fetch the data, map it with GTM, show me where compounds cluster (density), show me where active compounds are (activity landscape), tell me what chemical scaffolds dominate the dense regions, which assays produced this data, whether actives and inactives occupy different areas, and summarize all findings."
-      - "Hi! I'm interested in kinase 2 inhibitors. Could you pull that data for me and create a GTM map using 50 neighbors? Then show me the density landscape and activity landscape. After that, pick the nodes with the most compounds and tell me what chemotypes are there. I also want to know about the assays and whether active vs inactive compounds are in separate regions. Thanks, and please give me a thorough summary!"
-      - "Please conduct a comprehensive chemoinformatics analysis: (1) query ChEMBL for kinase 2 inhibitor bioactivity; (2) apply GTM dimensionality reduction; (3) characterize the density topology; (4) visualize SAR through activity landscapes; (5) perform chemotype enrichment analysis on high-density nodes; (6) annotate assay provenance; (7) evaluate spatial clustering of bioactive vs. inactive molecules; (8) synthesize findings in detailed report."
-      - "Please do the following:\n   - Fetch kinase 2 inhibitor data\n   - Prepare GTM\n   - Describe density landscape\n   - Describe activity landscape\n   - Find most dense nodes\n   - Analyze chemotypes in those nodes\n   - Identify corresponding assays\n   - Check if actives/inactives are well separated\n   - Provide detailed summary"
+      - "Hi! I'm interested in CDK2 inhibitors. Could you pull that data for me and create a GTM map using 50 neighbors? Then show me the density landscape and activity landscape. After that, pick the nodes with the most compounds and tell me what chemotypes are there. I also want to know about the assays and whether active vs inactive compounds are in separate regions. Thanks, and please give me a thorough summary!"
+      - "Please conduct a comprehensive chemoinformatics analysis: (1) query ChEMBL for CDK2 inhibitor bioactivity; (2) apply GTM dimensionality reduction; (3) characterize the density topology; (4) visualize SAR through activity landscapes; (5) perform chemotype enrichment analysis on high-density nodes; (6) annotate assay provenance; (7) evaluate spatial clustering of bioactive vs. inactive molecules; (8) synthesize findings in detailed report."
+      - "Please do the following:\n   - Fetch CDK2 inhibitor data\n   - Prepare GTM\n   - Describe density landscape\n   - Describe activity landscape\n   - Find most dense nodes\n   - Analyze chemotypes in those nodes\n   - Identify corresponding assays\n   - Check if actives/inactives are well separated\n   - Provide detailed summary"
       - "I would like you to retrieve compound bioactivity data from the ChEMBL database specifically for kinase 2 (cyclin-dependent kinase 2) inhibitors. Once you have the data, please build a Generative Topographic Mapping model. After the map is built, I need you to analyze and describe what the density landscape looks like - where are the dense and sparse regions. Then create the activity landscape visualization and describe the patterns you see there. Next, identify which nodes on the map have the highest density of compounds. For those dense nodes, perform a chemotype analysis to understand what chemical scaffolds are present. I also want to know which assays contributed compounds to these regions. Additionally, please evaluate whether the active compounds are well separated from the inactive ones on the map. Finally, prepare a comprehensive, detailed summary of all your findings."
-      - "kinase 2 inhibitors: get data, GTM, density map, activity map, dense nodes -> chemotypes + assays, actives vs inactives separated?, summary"
+      - "CDK2 inhibitors: get data, GTM, density map, activity map, dense nodes -> chemotypes + assays, actives vs inactives separated?, summary"
 
   chembl_download:
-    base: "Download kinase 2 inhibitor data from ChEMBL"
+    base: "Download CDK2 inhibitor data from ChEMBL"
     variations:
       - "Fetch CDK2 bioactivity data from ChEMBL database"
       - "Retrieve cyclin-dependent kinase 2 inhibitor compounds from ChEMBL"
-      - "Get kinase 2 inhibitor bioactivity information from ChEMBL"
+      - "Get CDK2 inhibitor bioactivity information from ChEMBL"
       - "Pull down ChEMBL data for CDK2 inhibitors"
-      - "Can you download kinase 2 inhibitor data for me?"
+      - "Can you download CDK2 inhibitor data for me?"
       - "I need ChEMBL bioactivity data on cyclin dependent kinase 2 inhibitors"
-      - "Query ChEMBL for kinase 2 inhibitor activity"
-      - "Fetch kinase-2 inhibitor dataset from ChEMBL"
-      - "Get me the ChEMBL compounds and activities for kinase 2 inhibition"
+      - "Query ChEMBL for CDK2 inhibitor activity"
+      - "Fetch CDK2 inhibitor dataset from ChEMBL"
+      - "Get me the ChEMBL compounds and activities for CDK2 inhibition"
       - "cdk2 inhibitors from chembl"
 
   chembl_interactivity:
@@ -116,6 +116,41 @@ prompts:
           - "Pull pIC50 inhibition assay rows for human HIV 1 reverse transcriptase"
           - "Get ChEMBL pIC50 inhibition data for HIV 1 RT (human)"
           - "Download human immunodeficiency virus 1 reverse transcriptase pIC50 inhibition measurements"
+
+  chembl_specificity_floor:
+    base_prompts:
+      - base: "Fetch kinase 2 inhibitor data from ChEMBL"
+        requires_clarification: true
+        variations:
+          - "Download kinase 2 inhibitor activity"
+          - "Get kinase-2 inhibitors from ChEMBL"
+          - "Pull bioactivity for kinase 2"
+          - "ChEMBL data for kinase 2"
+          - "I need kinase 2 inhibitor compounds"
+      - base: "Retrieve receptor 5 ligands from ChEMBL"
+        requires_clarification: true
+        variations:
+          - "Get receptor 5 ligand data"
+          - "Download receptor 5 binders"
+          - "Pull receptor 5 compounds"
+          - "ChEMBL entries for receptor 5"
+          - "I want receptor 5 ligands"
+      - base: "Download protein kinase inhibitor data"
+        requires_clarification: true
+        variations:
+          - "Fetch protein kinase inhibitors from ChEMBL"
+          - "Get bare protein kinase activity"
+          - "Pull protein kinase compound data"
+          - "Retrieve protein kinase inhibitors"
+          - "ChEMBL data for protein kinase"
+      - base: "Get GPCR ligand data"
+        requires_clarification: true
+        variations:
+          - "Download GPCR compounds"
+          - "Fetch GPCR binders from ChEMBL"
+          - "Pull GPCR ligands"
+          - "ChEMBL entries for GPCRs"
+          - "I need GPCR activity data"
 
   gtm_optimization:
     base: "Build a GTM map"
