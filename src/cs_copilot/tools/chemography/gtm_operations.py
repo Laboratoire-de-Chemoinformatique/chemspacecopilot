@@ -323,8 +323,7 @@ def resolve_gtm_model_path(
                 logger.info(f"Found default GTM model at: {model_path}")
                 return model_path
         tried.append(
-            f"default cache {default_path} "
-            f"(no files matching {list(GTM_MODEL_SUFFIXES)})"
+            f"default cache {default_path} " f"(no files matching {list(GTM_MODEL_SUFFIXES)})"
         )
     else:
         tried.append(f"default cache {default_path} (directory does not exist)")
@@ -880,9 +879,7 @@ def data_load_and_prep(dataset: str, gtm_model: str):
         except gzip.BadGzipFile:
             # File is not actually gzipped (e.g. a plain .pkl from HuggingFace);
             # fall back to loading as a regular pickle.
-            logger.warning(
-                f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file."
-            )
+            logger.warning(f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file.")
             with S3.open(gtm_saved_file, "rb") as f:
                 gtm = dill.load(f)
     except ModuleNotFoundError as e:
@@ -967,9 +964,7 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
         except gzip.BadGzipFile:
             # File is not actually gzipped (e.g. a plain .pkl from HuggingFace);
             # fall back to loading as a regular pickle.
-            logger.warning(
-                f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file."
-            )
+            logger.warning(f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file.")
             with S3.open(gtm_saved_file, "rb") as f:
                 gtm = dill.load(f)
     except FileNotFoundError as e:
@@ -2108,9 +2103,9 @@ def calculate_map_ruggedness(df, gtm):
     density = get_density_matrix(resps)
 
     size = gtm.num_nodes
-    assert has_integer_sqrt(size), (
-        f"The resps array (len {size}) doesn't have an integer square root"
-    )
+    assert has_integer_sqrt(
+        size
+    ), f"The resps array (len {size}) doesn't have an integer square root"
     side_size = int(math.sqrt(size))
 
     density_grid = density.reshape(side_size, side_size)
@@ -2745,8 +2740,7 @@ def create_activity_landscapes_tool(
         # Generate output paths (embed renderer + detected type so altair/plotly
         # variants produced in the same run do not collide).
         s3_base = (
-            f"{Path(dataset).stem}_gtm_activity_landscape_"
-            f"{normalized_renderer}_{detected_type}"
+            f"{Path(dataset).stem}_gtm_activity_landscape_" f"{normalized_renderer}_{detected_type}"
         )
         s3_html = f"{s3_base}{HTML_EXTENSION}"
         s3_png = f"{s3_base}{PNG_EXTENSION}"
