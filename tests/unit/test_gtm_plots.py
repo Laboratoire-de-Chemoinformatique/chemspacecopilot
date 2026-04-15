@@ -444,8 +444,7 @@ def test_detect_activity_landscape_type():
     """_detect_activity_landscape_type picks regression/classification from columns."""
 
     assert (
-        gtm_operations._detect_activity_landscape_type(_regression_activity_table())
-        == "regression"
+        gtm_operations._detect_activity_landscape_type(_regression_activity_table()) == "regression"
     )
     assert (
         gtm_operations._detect_activity_landscape_type(_classification_activity_table())
