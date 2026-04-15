@@ -32,6 +32,9 @@ dependencies = [
     "agno==2.1.9",
     "ollama>=0.4.0",
     "chembl-webresource-client>=0.10.9",
+    "SynPlanner>=1.2.1",
+    "pubchempy>=1.0.5",
+    "CairoSVG>=2.8.2",
     "vl-convert-python>=1.8.0",
     "tabulate>=0.9.0",
     "chainlit>=2.8.3",
@@ -69,11 +72,6 @@ mysql = [
 ]
 postgresql = [
     "psycopg2-binary>=2.9.9",
-]
-synplanner = [
-    "SynPlanner>=1.2.1",
-    "pubchempy>=1.0.5",
-    "CairoSVG>=2.8.2",
 ]
 
 [dependency-groups]
