@@ -711,6 +711,7 @@ class GTMToolkit(BaseDRToolkit):
         node_threshold: float = 0.1,
         chart_width: int = 600,
         chart_height: int = 600,
+        renderer: Literal["altair", "plotly"] = "altair",
         *,
         agent: Agent | None = None,
         use_default: bool = False,
@@ -726,6 +727,7 @@ class GTMToolkit(BaseDRToolkit):
             node_threshold: Threshold below which nodes are excluded
             chart_width: Width of the output chart (pixels)
             chart_height: Height of the output chart (pixels)
+            renderer: Rendering backend ("altair" or "plotly"). Defaults to "altair".
             agent: Optional Agent instance to check/store session state.
             use_default: If True, force use of default model even if session model exists.
 
@@ -740,7 +742,12 @@ class GTMToolkit(BaseDRToolkit):
             gtm_model, agent=agent, use_default=use_default
         )
         return gtm_operations.create_activity_landscapes_tool(
-            dataset, resolved_model, node_threshold, chart_width, chart_height
+            dataset,
+            resolved_model,
+            node_threshold,
+            chart_width,
+            chart_height,
+            renderer=renderer,
         )
 
     def save_gtm_landscape_plot(
