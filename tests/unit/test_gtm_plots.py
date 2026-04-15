@@ -646,3 +646,33 @@ def test_gtm_toolkit_create_activity_landscapes_forwards_renderer(monkeypatch):
 
     assert captured["renderer"] == "plotly"
     assert captured["gtm_model"] == "resolved/model.pkl.gz"
+
+
+def test_resolve_gtm_model_path_raises_when_no_source_available(monkeypatch, tmp_path):
+    """When every resolution strategy fails, raise a clear FileNotFoundError.
+
+    Guards against regressing to the old behavior of silently returning the
+    default cache *directory*, which downstream code would then mangle into a
+    bogus ``<cache>/gtm.pkl.gz`` path and surface a confusing file-not-found
+    error far from the real cause.
+    """
+
+    empty_cache = tmp_path / "empty_gtm_cache"
+    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_MODEL_PATH", str(empty_cache))
+
+    fake_hf = ModuleType("huggingface_hub")
+
+    def _fail_download(**_kwargs):
+        raise RuntimeError("404 Repository Not Found")
+
+    fake_hf.snapshot_download = _fail_download
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hf)
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        gtm_operations.resolve_gtm_model_path(use_default=True)
+
+    message = str(exc_info.value)
+    assert "Could not resolve a default GTM model" in message
+    assert str(empty_cache) in message
+    assert "404 Repository Not Found" in message
+    assert gtm_operations.HUGGINGFACE_GTM_REPO in message
