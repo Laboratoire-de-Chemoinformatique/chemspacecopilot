@@ -1,5 +1,7 @@
 FROM python:3.11-slim
 
+ARG TARGETARCH
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -29,26 +31,34 @@ COPY pyproject.toml uv.lock README.md ./
 
 # Install third-party dependencies only (not the local project) so this
 # expensive layer is cached independently of source-code changes.
-# The SynPlanner family has no aarch64 Linux wheels; skip them all.
+# The SynPlanner family has no aarch64 Linux wheels; skip them only on arm64.
 # SynPlanner is lazy-loaded so it is never imported unless a retrosynthesis
 # tool is explicitly invoked.
-RUN uv sync --frozen --no-dev --no-install-project \
-    --no-install-package synplanner \
-    --no-install-package cgrtools-stable \
-    --no-install-package chython-synplan \
-    --no-install-package chytorch-synplan \
-    --no-install-package chytorch-rxnmap-synplan
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+        uv sync --frozen --no-dev --no-install-project \
+            --no-install-package synplanner \
+            --no-install-package cgrtools-stable \
+            --no-install-package chython-synplan \
+            --no-install-package chytorch-synplan \
+            --no-install-package chytorch-rxnmap-synplan; \
+    else \
+        uv sync --frozen --no-dev --no-install-project; \
+    fi
 
 # Application source
 COPY . .
 
 # Install the local cs_copilot package into the already-populated venv
-RUN uv sync --frozen --no-dev \
-    --no-install-package synplanner \
-    --no-install-package cgrtools-stable \
-    --no-install-package chython-synplan \
-    --no-install-package chytorch-synplan \
-    --no-install-package chytorch-rxnmap-synplan
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+        uv sync --frozen --no-dev \
+            --no-install-package synplanner \
+            --no-install-package cgrtools-stable \
+            --no-install-package chython-synplan \
+            --no-install-package chytorch-synplan \
+            --no-install-package chytorch-rxnmap-synplan; \
+    else \
+        uv sync --frozen --no-dev; \
+    fi
 
 # Prisma / Node dependencies
 COPY package.json ./
