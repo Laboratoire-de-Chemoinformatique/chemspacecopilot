@@ -405,3 +405,244 @@ def test_gtm_toolkit_registers_save_gtm_landscape_plot():
 
     toolkit = GTMToolkit()
     assert "save_gtm_landscape_plot" in _tool_names(toolkit)
+
+
+# ---------------------------------------------------------------------------
+# create_activity_landscapes renderer dispatch
+# ---------------------------------------------------------------------------
+
+
+def _regression_activity_table() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "x": [1, 1, 2, 2],
+            "y": [1, 2, 1, 2],
+            "nodes": [0, 1, 2, 3],
+            "density": [1.0, 2.0, 3.0, 4.0],
+            "filtered_reg_density": [5.0, 6.0, 7.0, 8.0],
+        }
+    )
+
+
+def _classification_activity_table() -> pd.DataFrame:
+    # Mirrors what class_density_to_table emits for sorted(["active", "inactive"]).
+    return pd.DataFrame(
+        {
+            "x": [1, 1, 2, 2],
+            "y": [1, 2, 1, 2],
+            "nodes": [0, 1, 2, 3],
+            "density": [1.0, 2.0, 3.0, 4.0],
+            "active_prob": [0.1, 0.2, 0.3, 0.4],
+            "inactive_prob": [0.9, 0.8, 0.7, 0.6],
+            "active_density": [1.0, 1.0, 1.0, 1.0],
+            "inactive_density": [2.0, 2.0, 2.0, 2.0],
+        }
+    )
+
+
+def test_detect_activity_landscape_type():
+    """_detect_activity_landscape_type picks regression/classification from columns."""
+
+    assert (
+        gtm_operations._detect_activity_landscape_type(_regression_activity_table())
+        == "regression"
+    )
+    assert (
+        gtm_operations._detect_activity_landscape_type(_classification_activity_table())
+        == "classification"
+    )
+    with pytest.raises(ValueError, match="Could not infer activity landscape type"):
+        gtm_operations._detect_activity_landscape_type(
+            pd.DataFrame({"x": [1], "y": [1], "nodes": [0], "density": [1.0]})
+        )
+
+
+def test_create_activity_landscapes_defaults_to_altair(monkeypatch):
+    """Without a renderer arg, create_activity_landscapes_tool uses the Altair path."""
+
+    calls = {}
+
+    monkeypatch.setattr(
+        gtm_operations,
+        "preprocess_gtm_activity_data",
+        lambda *_args, **_kwargs: _regression_activity_table(),
+    )
+
+    def _fake_renderer(source_table, title="", **kwargs):
+        calls["renderer"] = "altair_discrete_regression_landscape"
+        calls["title"] = title
+        return alt.Chart(pd.DataFrame({"x": [1], "y": [1]})).mark_rect()
+
+    monkeypatch.setattr(gtm_operations, "altair_discrete_regression_landscape", _fake_renderer)
+
+    def _fake_write(chart, html_path, png_path):
+        calls["html_path"] = html_path
+        calls["png_path"] = png_path
+
+    monkeypatch.setattr(gtm_operations, "_write_chart_outputs", _fake_write)
+
+    result = gtm_operations.create_activity_landscapes_tool("dataset.csv", "model.pkl.gz")
+
+    assert calls["renderer"] == "altair_discrete_regression_landscape"
+    assert calls["html_path"].endswith("dataset_gtm_activity_landscape_altair_regression.html")
+    assert calls["png_path"].endswith("dataset_gtm_activity_landscape_altair_regression.png")
+    assert "altair" in result.lower()
+    assert "regression" in result.lower()
+
+
+def test_create_activity_landscapes_plotly_regression(monkeypatch):
+    """renderer='plotly' routes to plotly_smooth_regression_landscape."""
+
+    calls = {}
+
+    monkeypatch.setattr(
+        gtm_operations,
+        "preprocess_gtm_activity_data",
+        lambda *_args, **_kwargs: _regression_activity_table(),
+    )
+
+    class _DummyFigure:
+        def update_layout(self, **kwargs):
+            calls["layout"] = kwargs
+
+    def _fake_renderer(source_table, title="", **kwargs):
+        calls["renderer"] = "plotly_smooth_regression_landscape"
+        calls["title"] = title
+        return _DummyFigure()
+
+    monkeypatch.setattr(gtm_operations, "plotly_smooth_regression_landscape", _fake_renderer)
+
+    def _fake_write(fig, html_path, png_path):
+        calls["html_path"] = html_path
+        calls["png_path"] = png_path
+        return True
+
+    monkeypatch.setattr(gtm_operations, "_write_plotly_outputs", _fake_write)
+
+    result = gtm_operations.create_activity_landscapes_tool(
+        "dataset.csv", "model.pkl.gz", renderer="plotly"
+    )
+
+    assert calls["renderer"] == "plotly_smooth_regression_landscape"
+    assert calls["layout"] == {"width": 600, "height": 600}
+    assert calls["html_path"].endswith("dataset_gtm_activity_landscape_plotly_regression.html")
+    assert calls["png_path"].endswith("dataset_gtm_activity_landscape_plotly_regression.png")
+    assert "plotly" in result.lower()
+    assert "regression" in result.lower()
+
+
+def test_create_activity_landscapes_plotly_classification_uses_resolved_columns(monkeypatch):
+    """Plotly classification dispatch resolves active/inactive columns and derives labels."""
+
+    calls = {}
+
+    monkeypatch.setattr(
+        gtm_operations,
+        "preprocess_gtm_activity_data",
+        lambda *_args, **_kwargs: _classification_activity_table(),
+    )
+
+    class _DummyFigure:
+        def update_layout(self, **kwargs):
+            calls["layout"] = kwargs
+
+    def _fake_renderer(source_table, title="", **kwargs):
+        calls["renderer"] = "plotly_discrete_class_landscape"
+        calls["title"] = title
+        calls["kwargs"] = kwargs
+        return _DummyFigure()
+
+    monkeypatch.setattr(gtm_operations, "plotly_discrete_class_landscape", _fake_renderer)
+    monkeypatch.setattr(
+        gtm_operations,
+        "_write_plotly_outputs",
+        lambda *_args, **_kwargs: True,
+    )
+
+    result = gtm_operations.create_activity_landscapes_tool(
+        "dataset.csv", "model.pkl.gz", renderer="plotly"
+    )
+
+    kwargs = calls["kwargs"]
+    # sorted(["active", "inactive"]) -> "active" first, "inactive" second
+    assert kwargs["first_class_prob_column_name"] == "active_prob"
+    assert kwargs["second_class_prob_column_name"] == "inactive_prob"
+    assert kwargs["first_class_density_column_name"] == "active_density"
+    assert kwargs["second_class_density_column_name"] == "inactive_density"
+    # _classification_labels fallback derives title-cased labels from the prefix
+    assert kwargs["first_class_label"] == "Active"
+    assert kwargs["second_class_label"] == "Inactive"
+    assert "plotly" in result.lower()
+    assert "classification" in result.lower()
+
+
+def test_create_activity_landscapes_plotly_png_backend_missing(monkeypatch):
+    """When the Plotly image backend is missing, return a degraded HTML-only success."""
+
+    monkeypatch.setattr(
+        gtm_operations,
+        "preprocess_gtm_activity_data",
+        lambda *_args, **_kwargs: _regression_activity_table(),
+    )
+
+    class _DummyFigure:
+        def update_layout(self, **kwargs):
+            return None
+
+    monkeypatch.setattr(
+        gtm_operations,
+        "plotly_smooth_regression_landscape",
+        lambda *_args, **_kwargs: _DummyFigure(),
+    )
+    monkeypatch.setattr(gtm_operations, "_write_plotly_outputs", lambda *_args, **_kwargs: False)
+
+    result = gtm_operations.create_activity_landscapes_tool(
+        "dataset.csv", "model.pkl.gz", renderer="plotly"
+    )
+
+    assert "PNG export was skipped" in result
+
+
+def test_create_activity_landscapes_rejects_invalid_renderer():
+    """Unknown renderers are rejected by _normalize_landscape_renderer."""
+
+    with pytest.raises(ValueError, match="Unsupported renderer"):
+        gtm_operations.create_activity_landscapes_tool(
+            "dataset.csv", "model.pkl.gz", renderer="foo"
+        )
+
+
+def test_gtm_toolkit_create_activity_landscapes_forwards_renderer(monkeypatch):
+    """GTMToolkit.create_activity_landscapes forwards renderer to the tool."""
+
+    captured = {}
+
+    def _fake_resolve(gtm_model, *, agent=None, use_default=False):
+        return "resolved/model.pkl.gz"
+
+    def _fake_tool(
+        dataset,
+        gtm_model,
+        node_threshold,
+        chart_width,
+        chart_height,
+        *,
+        renderer,
+    ):
+        captured["dataset"] = dataset
+        captured["gtm_model"] = gtm_model
+        captured["renderer"] = renderer
+        return "ok"
+
+    monkeypatch.setattr(gtm_operations, "resolve_gtm_model_path", _fake_resolve)
+    monkeypatch.setattr(gtm_operations, "create_activity_landscapes_tool", _fake_tool)
+
+    toolkit = GTMToolkit()
+    toolkit.create_activity_landscapes(
+        "dataset.csv",
+        gtm_model="ignored.pkl.gz",
+        renderer="plotly",
+    )
+
+    assert captured["renderer"] == "plotly"
+    assert captured["gtm_model"] == "resolved/model.pkl.gz"

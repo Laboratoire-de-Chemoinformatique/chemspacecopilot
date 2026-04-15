@@ -1094,6 +1094,27 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
     return " ".join(summary_parts)
 
 
+def _detect_activity_landscape_type(
+    source_activity: pd.DataFrame,
+) -> Literal["classification", "regression"]:
+    """Infer whether an activity landscape table is classification or regression.
+
+    Regression tables contain ``filtered_reg_density``; classification tables
+    contain at least two ``*_prob`` columns (e.g. ``active_prob``/``inactive_prob``
+    or ``first_class_prob``/``second_class_prob``).
+    """
+    if "filtered_reg_density" in source_activity.columns:
+        return "regression"
+    prob_columns = [c for c in source_activity.columns if c.endswith("_prob")]
+    if len(prob_columns) >= 2:
+        return "classification"
+    raise ValueError(
+        "Could not infer activity landscape type. Expected either "
+        "'filtered_reg_density' (regression) or at least two '*_prob' columns "
+        f"(classification). Got columns: {list(source_activity.columns)}"
+    )
+
+
 def create_activity_landscapes(
     source_activity: pd.DataFrame,
     node_threshold: float = 0.1,
@@ -1101,33 +1122,61 @@ def create_activity_landscapes(
     chart_height: int = 600,
 ) -> alt.Chart:
     """
-    Create density and neighborhood preservation landscapes from GTM responses.
+    Create an Altair activity landscape (classification or regression, auto-detected).
 
     Args:
-        source_activity (pd.DataFrame): Activity data.
-        node_threshold (float): Threshold value for node density filtering.
-                               Nodes with density below this value will be excluded.
+        source_activity (pd.DataFrame): Activity landscape table.
+        node_threshold (float): Threshold value for node density filtering. Kept
+            for signature symmetry; filtering is already applied upstream by
+            ``preprocess_gtm_activity_data``.
         chart_width (int): Width of the output chart in pixels.
         chart_height (int): Height of the output chart in pixels.
 
     Returns:
         alt.Chart: Altair chart showing the activity landscape.
     """
-    # Creation of both density, magnification and neighborhood preservation landscapes
-
-    # Configure and save the chart
-    if "prob" in source_activity.columns:
-        chart = altair_discrete_class_landscape(
-            source_activity, title="Classification Activity landscape"
+    detected_type = _detect_activity_landscape_type(source_activity)
+    if detected_type == "classification":
+        chart = _create_altair_landscape_chart(
+            source_activity, "classification", title="Classification Activity landscape"
         )
-        chart = configure_chart(chart, chart_width, chart_height)
     else:
         chart = altair_discrete_regression_landscape(
             source_activity, title="Regression Activity landscape"
         )
-        chart = configure_chart(chart, chart_width, chart_height)
-
+    chart = configure_chart(chart, chart_width, chart_height)
     return chart
+
+
+def create_activity_landscapes_plotly(
+    source_activity: pd.DataFrame,
+    node_threshold: float = 0.1,
+    chart_width: int = DEFAULT_CHART_WIDTH,
+    chart_height: int = DEFAULT_CHART_HEIGHT,
+):
+    """
+    Create a Plotly activity landscape (classification or regression, auto-detected).
+
+    Args:
+        source_activity (pd.DataFrame): Activity landscape table.
+        node_threshold (float): Threshold value for node density filtering. Kept
+            for signature symmetry; filtering is already applied upstream by
+            ``preprocess_gtm_activity_data``.
+        chart_width (int): Width of the output figure in pixels.
+        chart_height (int): Height of the output figure in pixels.
+
+    Returns:
+        plotly.graph_objs.Figure: Plotly figure showing the activity landscape.
+    """
+    detected_type = _detect_activity_landscape_type(source_activity)
+    title = (
+        "Classification Activity landscape"
+        if detected_type == "classification"
+        else "Regression Activity landscape"
+    )
+    fig = _create_plotly_landscape_figure(source_activity, detected_type, title=title)
+    fig.update_layout(width=chart_width, height=chart_height)
+    return fig
 
 
 def _convert_to_nm(value: float, units: str) -> float | None:
@@ -2606,6 +2655,7 @@ def create_activity_landscapes_tool(
     node_threshold: float = DEFAULT_NODE_THRESHOLD,
     chart_width: int = DEFAULT_CHART_WIDTH,
     chart_height: int = DEFAULT_CHART_HEIGHT,
+    renderer: LandscapeRenderer = "altair",
 ) -> str:
     """
     Create activity landscapes from GTM model and dataset.
@@ -2616,6 +2666,7 @@ def create_activity_landscapes_tool(
         node_threshold: Threshold below which nodes are excluded
         chart_width: Width of the output chart (pixels)
         chart_height: Height of the output chart (pixels)
+        renderer: Rendering backend ("altair" or "plotly"). Defaults to "altair".
 
     Returns:
         Success message with file paths
@@ -2636,33 +2687,62 @@ def create_activity_landscapes_tool(
     validate_positive_int(chart_width, "chart_width")
     validate_positive_int(chart_height, "chart_height")
 
-    logger.info(f"Creating activity landscapes for {dataset} with model {gtm_model}")
+    normalized_renderer = _normalize_landscape_renderer(renderer)
+
+    logger.info(
+        f"Creating {normalized_renderer} activity landscapes for {dataset} "
+        f"with model {gtm_model}"
+    )
 
     try:
         # Process the data
         source_activity = preprocess_gtm_activity_data(
             dataset, gtm_model, node_threshold=node_threshold
         )
+        detected_type = _detect_activity_landscape_type(source_activity)
 
-        # Create the chart
-        chart = create_activity_landscapes(
-            source_activity, node_threshold, chart_width, chart_height
+        # Generate output paths (embed renderer + detected type so altair/plotly
+        # variants produced in the same run do not collide).
+        s3_base = (
+            f"{Path(dataset).stem}_gtm_activity_landscape_"
+            f"{normalized_renderer}_{detected_type}"
         )
-
-        # Generate output paths
-        s3_base = f"{Path(dataset).stem}_gtm_activity_landscape"
         s3_html = f"{s3_base}{HTML_EXTENSION}"
         s3_png = f"{s3_base}{PNG_EXTENSION}"
 
-        # Save files
-        logger.debug(f"Saving activity landscape charts to {s3_html} and {s3_png}")
-        _write_chart_outputs(chart, s3_html, s3_png)
+        logger.debug(
+            f"Saving {normalized_renderer} {detected_type} activity landscape to "
+            f"{s3_html} and {s3_png}"
+        )
 
-        logger.info(f"Successfully created activity landscapes: {s3_html}, {s3_png}")
-        return f"GTM activity landscape saved to S3: `{S3.path(s3_html)}` and `{S3.path(s3_png)}`"
+        if normalized_renderer == "altair":
+            chart = create_activity_landscapes(
+                source_activity, node_threshold, chart_width, chart_height
+            )
+            _write_chart_outputs(chart, s3_html, s3_png)
+            png_written = True
+        else:
+            fig = create_activity_landscapes_plotly(
+                source_activity, node_threshold, chart_width, chart_height
+            )
+            png_written = _write_plotly_outputs(fig, s3_html, s3_png)
+
+        logger.info(
+            f"Successfully created {normalized_renderer} {detected_type} activity landscape"
+        )
+        if png_written:
+            return (
+                f"{normalized_renderer.capitalize()} {detected_type} activity landscape "
+                f"saved to S3: `{S3.path(s3_html)}` and `{S3.path(s3_png)}`"
+            )
+        return (
+            f"{normalized_renderer.capitalize()} {detected_type} activity landscape "
+            f"saved to S3: `{S3.path(s3_html)}`. PNG export was skipped because "
+            f"the Plotly image backend is unavailable."
+        )
 
     except Exception as e:
-        logger.error(f"Error creating activity landscapes: {e}")
+        logger.error(f"Error creating {normalized_renderer} activity landscapes: {e}")
         raise
 
 
