@@ -873,6 +873,7 @@ dependencies = [
     { name = "accelerate" },
     { name = "agno" },
     { name = "asyncpg" },
+    { name = "cairosvg" },
     { name = "chainlit" },
     { name = "chembl-webresource-client" },
     { name = "chemographykit" },
@@ -893,6 +894,7 @@ dependencies = [
     { name = "optuna" },
     { name = "pandarallel" },
     { name = "prompt-toolkit" },
+    { name = "pubchempy" },
     { name = "pypdf" },
     { name = "rdkit" },
     { name = "requests" },
@@ -901,6 +903,7 @@ dependencies = [
     { name = "seaborn" },
     { name = "sentence-transformers" },
     { name = "sqlalchemy" },
+    { name = "synplanner" },
     { name = "tabulate" },
     { name = "tantivy" },
     { name = "torch" },
@@ -917,11 +920,6 @@ mysql = [
 ]
 postgresql = [
     { name = "psycopg2-binary" },
-]
-synplanner = [
-    { name = "cairosvg" },
-    { name = "pubchempy" },
-    { name = "synplanner" },
 ]
 
 [package.dev-dependencies]
@@ -945,7 +943,7 @@ requires-dist = [
     { name = "accelerate", specifier = ">=1.11.0" },
     { name = "agno", specifier = "==2.1.9" },
     { name = "asyncpg", specifier = ">=0.30.0" },
-    { name = "cairosvg", marker = "extra == 'synplanner'", specifier = ">=2.8.2" },
+    { name = "cairosvg", specifier = ">=2.8.2" },
     { name = "chainlit", specifier = ">=2.8.3" },
     { name = "chembl-webresource-client", specifier = ">=0.10.9" },
     { name = "chemographykit", specifier = ">=0.1.0" },
@@ -967,7 +965,7 @@ requires-dist = [
     { name = "pandarallel", specifier = ">=1.6.5" },
     { name = "prompt-toolkit", specifier = ">=3.0.0" },
     { name = "psycopg2-binary", marker = "extra == 'postgresql'", specifier = ">=2.9.9" },
-    { name = "pubchempy", marker = "extra == 'synplanner'", specifier = ">=1.0.5" },
+    { name = "pubchempy", specifier = ">=1.0.5" },
     { name = "pymysql", marker = "extra == 'mysql'", specifier = ">=1.1.0" },
     { name = "pypdf", specifier = ">=6.1.2" },
     { name = "rdkit", specifier = ">=2025.9.1" },
@@ -977,7 +975,7 @@ requires-dist = [
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "sentence-transformers", specifier = ">=5.2.0" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
-    { name = "synplanner", marker = "extra == 'synplanner'", specifier = ">=1.2.1" },
+    { name = "synplanner", specifier = ">=1.2.1" },
     { name = "tabulate", specifier = ">=0.9.0" },
     { name = "tantivy", specifier = ">=0.25.0" },
     { name = "torch", specifier = ">=2.9.0" },
@@ -987,7 +985,7 @@ requires-dist = [
     { name = "ugtm", specifier = ">=2.1.0.post2" },
     { name = "vl-convert-python", specifier = ">=1.8.0" },
 ]
-provides-extras = ["mysql", "postgresql", "synplanner"]
+provides-extras = ["mysql", "postgresql"]
 
 [package.metadata.requires-dev]
 dev = [
