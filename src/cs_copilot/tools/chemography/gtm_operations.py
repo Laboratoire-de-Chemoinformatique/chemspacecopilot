@@ -287,6 +287,12 @@ def resolve_gtm_model_path(
 
     Returns:
         Resolved path to the GTM model file
+
+    Raises:
+        FileNotFoundError: If no explicit path was provided and the default
+            model could not be located in the local cache or downloaded from
+            HuggingFace. The error message lists every source that was tried
+            and why it failed.
     """
     # Priority 1: Explicit file path (unless use_default is True)
     if gtm_file and not use_default:
@@ -303,9 +309,7 @@ def resolve_gtm_model_path(
     # Priority 3: Default model resolution
     logger.debug("Resolving default GTM model path")
 
-    # Try S3 assets first (check for any .pkl.gz file)
-    # This is a placeholder - actual S3 discovery would need to be implemented
-    # based on your S3 storage structure
+    tried: list[str] = []
 
     # Try default directory
     default_path = Path(DEFAULT_GTM_MODEL_PATH).expanduser()
@@ -318,6 +322,12 @@ def resolve_gtm_model_path(
                 model_path = str(matches[0])
                 logger.info(f"Found default GTM model at: {model_path}")
                 return model_path
+        tried.append(
+            f"default cache {default_path} "
+            f"(no files matching {list(GTM_MODEL_SUFFIXES)})"
+        )
+    else:
+        tried.append(f"default cache {default_path} (directory does not exist)")
 
     # Try Hugging Face download
     try:
@@ -341,14 +351,27 @@ def resolve_gtm_model_path(
                 logger.info(f"Downloaded GTM model to: {model_path}")
                 return model_path
 
+        tried.append(
+            f"HuggingFace repo {HUGGINGFACE_GTM_REPO} "
+            f"(download succeeded but no files matching {list(GTM_MODEL_SUFFIXES)})"
+        )
     except ImportError:
         logger.warning("huggingface_hub not available, cannot download from HuggingFace")
+        tried.append("HuggingFace (huggingface_hub package not installed)")
     except Exception as e:
         logger.warning(f"Failed to download from HuggingFace: {e}")
+        tried.append(f"HuggingFace repo {HUGGINGFACE_GTM_REPO} ({e})")
 
-    # If nothing worked, return the default path (may not exist)
-    logger.warning(f"Could not resolve GTM model, using default path: {default_path}")
-    return str(default_path)
+    bullets = "\n  - ".join(tried)
+    raise FileNotFoundError(
+        "Could not resolve a default GTM model. Tried:\n"
+        f"  - {bullets}\n"
+        "Fix by one of:\n"
+        "  - Pass an explicit model path via the `gtm_file`/`gtm_model` argument.\n"
+        f"  - Place a GTM model file (e.g. *.pkl.gz) in {default_path}.\n"
+        f"  - Ensure the HuggingFace repo {HUGGINGFACE_GTM_REPO} exists and is accessible "
+        "(run `huggingface-cli login` if it is gated)."
+    )
 
 
 def load_gtm_model(gtm_model_path: str) -> Any:
@@ -850,9 +873,18 @@ def data_load_and_prep(dataset: str, gtm_model: str):
 
     gtm = None
     try:
-        with S3.open(gtm_saved_file, "rb") as f:
-            with gzip.open(f, "rb") as gz:
-                gtm = dill.load(gz)
+        try:
+            with S3.open(gtm_saved_file, "rb") as f:
+                with gzip.open(f, "rb") as gz:
+                    gtm = dill.load(gz)
+        except gzip.BadGzipFile:
+            # File is not actually gzipped (e.g. a plain .pkl from HuggingFace);
+            # fall back to loading as a regular pickle.
+            logger.warning(
+                f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file."
+            )
+            with S3.open(gtm_saved_file, "rb") as f:
+                gtm = dill.load(f)
     except ModuleNotFoundError as e:
         logger.error(f"Error loading GTM model: {e}")
         raise
@@ -928,9 +960,18 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
     # -------------------------------------------------------------------------
     logger.debug("Loading GTM model for compatibility check...")
     try:
-        with S3.open(gtm_saved_file, "rb") as f:
-            with gzip.open(f, "rb") as gz:
-                gtm = dill.load(gz)
+        try:
+            with S3.open(gtm_saved_file, "rb") as f:
+                with gzip.open(f, "rb") as gz:
+                    gtm = dill.load(gz)
+        except gzip.BadGzipFile:
+            # File is not actually gzipped (e.g. a plain .pkl from HuggingFace);
+            # fall back to loading as a regular pickle.
+            logger.warning(
+                f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file."
+            )
+            with S3.open(gtm_saved_file, "rb") as f:
+                gtm = dill.load(f)
     except FileNotFoundError as e:
         raise FileNotFoundError(f"GTM model file not found: {gtm_saved_file}") from e
     except ModuleNotFoundError as e:
