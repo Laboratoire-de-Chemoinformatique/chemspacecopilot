@@ -24,6 +24,7 @@ from cs_copilot.tools import (
     # SessionToolkit,
     save_gtm_landscape_plot,
     save_gtm_plot,
+    save_markdown_report,
 )
 from cs_copilot.tools.analysis import RobustnessAnalysisToolkit
 
@@ -613,6 +614,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
                 PointerPandasTools(),
                 save_gtm_landscape_plot,  # For saved GTM landscape tables
                 save_gtm_plot,  # For GTM-specific visualizations
+                save_markdown_report,  # Persists the final markdown report
                 # Plotting libraries (matplotlib, seaborn) available via Python environment
             ],
             instructions=REPORT_GENERATOR_INSTRUCTIONS,
