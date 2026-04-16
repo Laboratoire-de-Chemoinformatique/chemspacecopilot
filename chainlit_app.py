@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 import chainlit as cl
-from chainlit.input_widget import Switch
+from chainlit.input_widget import Switch, Select
 from chainlit.types import ThreadDict
 from dotenv import load_dotenv
 
@@ -98,10 +98,20 @@ async def on_chat_start():
                 label="Show Tool Calls",
                 initial=True,
             ),
+            Select(
+                id="map",
+                label="Map for Chemography",
+                # values=["New map in this session", "Universal Map"],
+                items={
+                    "New map in this session": "new_map",
+                    "Universal Map": "universal_map",
+                    },
+                initial_value="new_map",
+            )
         ]
     ).send()
     cl.user_session.set("show_tool_calls", settings["show_tool_calls"])
-
+    cl.user_session.set("map", settings["map"])
 
 @cl.on_chat_resume
 async def on_chat_resume(thread: ThreadDict):
@@ -130,16 +140,23 @@ async def on_chat_resume(thread: ThreadDict):
                 label="Show Tool Calls",
                 initial=True,
             ),
+            Select(
+                id="map",
+                label="Map for Chemography",
+                values=["new_map", "universal_map"],
+                initial_index=0,
+            )
         ]
     ).send()
     cl.user_session.set("show_tool_calls", settings["show_tool_calls"])
+    cl.user_session.set("map", settings["map"])
 
 
 @cl.on_settings_update
 async def on_settings_update(settings):
     """Handle settings updates from the UI."""
     cl.user_session.set("show_tool_calls", settings["show_tool_calls"])
-
+    cl.user_session.set("map", settings["map"])
 
 # Note: on_chat_end can cause issues with some Chainlit versions
 # Session cleanup is handled automatically by Chainlit
