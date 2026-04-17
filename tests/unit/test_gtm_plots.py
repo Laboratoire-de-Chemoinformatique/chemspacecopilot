@@ -79,9 +79,11 @@ def test_save_gtm_plot_supports_large_point_datasets(monkeypatch, tmp_path):
     )
     responsibilities = np.full((n_rows, 4), 0.25)
 
-    monkeypatch.setattr(gtm_operations, "load_gtm", lambda *_: (density_table, None))
+    monkeypatch.setattr(gtm_operations, "load_gtm", lambda *_args, **_kwargs: (density_table, None))
     monkeypatch.setattr(
-        gtm_operations, "data_load_and_prep", lambda *_: (None, df.copy(), None, responsibilities)
+        gtm_operations,
+        "data_load_and_prep",
+        lambda *_args, **_kwargs: (None, df.copy(), None, responsibilities),
     )
     monkeypatch.setattr(gtm_operations, "calculate_latent_coords", lambda *_args, **_kwargs: coords)
     monkeypatch.setattr(
@@ -627,6 +629,8 @@ def test_gtm_toolkit_create_activity_landscapes_forwards_renderer(monkeypatch):
         chart_height,
         *,
         renderer,
+        descriptor_type=None,
+        agent=None,
     ):
         captured["dataset"] = dataset
         captured["gtm_model"] = gtm_model
