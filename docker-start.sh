@@ -180,6 +180,16 @@ echo ""
 echo "✅ Configuration validated"
 echo ""
 
+# Auto-detect GPU and pick compose override
+GPU_OVERRIDE=""
+if docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi &>/dev/null 2>&1; then
+    echo "🖥️  GPU detected — CUDA acceleration enabled"
+else
+    echo "⚠️  No GPU detected — falling back to CPU mode"
+    GPU_OVERRIDE="-f docker-compose.cpu.yml"
+fi
+echo ""
+
 # Check if running in development or production mode
 echo "Select mode:"
 echo "1) Production (default)"
@@ -189,21 +199,21 @@ read -p "Enter choice [1-2]: " mode_choice
 # Avoid Compose v1 "recreate" path that can raise KeyError: 'ContainerConfig' with newer Docker Engine
 # (see docker/compose#11693). Down then up uses "create" instead of "recreate".
 if [ "$mode_choice" = "2" ]; then
-    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans 2>/dev/null || true
+    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml $GPU_OVERRIDE down --remove-orphans 2>/dev/null || true
 else
-    $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
+    $COMPOSE_CMD -f docker-compose.yml $GPU_OVERRIDE down --remove-orphans 2>/dev/null || true
 fi
 
 if [ "$mode_choice" = "2" ]; then
     echo ""
     echo "🔧 Starting in DEVELOPMENT mode..."
     echo ""
-    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml up -d
+    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml $GPU_OVERRIDE up -d
 else
     echo ""
     echo "🚀 Starting in PRODUCTION mode..."
     echo ""
-    $COMPOSE_CMD up -d
+    $COMPOSE_CMD -f docker-compose.yml $GPU_OVERRIDE up -d
 fi
 
 echo ""

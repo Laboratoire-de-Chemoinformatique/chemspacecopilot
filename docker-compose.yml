@@ -37,6 +37,10 @@ services:
 
       # Database Configuration (for Chainlit history)
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/chainlit
+
+      # GPU Configuration
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     volumes:
       # Persistent storage for SQLite databases
       - ./data:/app/data
@@ -51,6 +55,13 @@ services:
         condition: service_completed_successfully
       chainlit-db-init:
         condition: service_completed_successfully
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: unless-stopped
     networks:
       - cs_copilot-network
