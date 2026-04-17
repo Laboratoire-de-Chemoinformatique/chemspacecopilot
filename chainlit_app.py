@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 import chainlit as cl
-from chainlit.input_widget import Switch
+from chainlit.input_widget import Switch, Select
 from chainlit.types import ThreadDict
 from dotenv import load_dotenv
 
@@ -48,6 +48,27 @@ def verify_password(username: str, password: str) -> bool:
 def get_user_role(username: str) -> str:
     """Get user role for authorization."""
     return USERS.get(username, {}).get("role", "guest")
+
+
+# ---------- Session map settings helper ------------------------------------ #
+def _apply_map_settings(session_agent, map_choice: str) -> None:
+    """Propagate the selected map to the team's session_state.
+
+    When the user picks the Universal Map, molecular descriptors default to
+    autoencoder embeddings (compatible with the HuggingFace GTM model).
+    Otherwise, the project keeps its historical Morgan-fingerprint default.
+    """
+    if session_agent is None:
+        return
+
+    if getattr(session_agent, "session_state", None) is None:
+        session_agent.session_state = {}
+
+    map_type = map_choice if map_choice in ("new_map", "universal_map") else "new_map"
+    session_agent.session_state["map_type"] = map_type
+    session_agent.session_state["default_descriptor"] = (
+        "autoencoder" if map_type == "universal_map" else "morgan"
+    )
 
 
 # ---------- Authentication Callback ---------------------------------------- #
@@ -98,10 +119,21 @@ async def on_chat_start():
                 label="Show Tool Calls",
                 initial=True,
             ),
+            Select(
+                id="map",
+                label="Map for Chemography",
+                # values=["New map in this session", "Universal Map"],
+                items={
+                    "New map in this session": "new_map",
+                    "Universal Map": "universal_map",
+                    },
+                initial_value="new_map",
+            )
         ]
     ).send()
     cl.user_session.set("show_tool_calls", settings["show_tool_calls"])
-
+    cl.user_session.set("map", settings["map"])
+    _apply_map_settings(session_agent, settings["map"])
 
 @cl.on_chat_resume
 async def on_chat_resume(thread: ThreadDict):
@@ -122,7 +154,8 @@ async def on_chat_resume(thread: ThreadDict):
         cl.user_session.set("agent", session_agent)
         cl.user_session.set("session_initialized", True)
 
-    # Restore ChatSettings on resume
+    # Restore ChatSettings on resume (mirror on_chat_start so the widget format
+    # and default match exactly).
     settings = await cl.ChatSettings(
         [
             Switch(
@@ -130,16 +163,28 @@ async def on_chat_resume(thread: ThreadDict):
                 label="Show Tool Calls",
                 initial=True,
             ),
+            Select(
+                id="map",
+                label="Map for Chemography",
+                items={
+                    "New map in this session": "new_map",
+                    "Universal Map": "universal_map",
+                },
+                initial_value="new_map",
+            )
         ]
     ).send()
     cl.user_session.set("show_tool_calls", settings["show_tool_calls"])
+    cl.user_session.set("map", settings["map"])
+    _apply_map_settings(cl.user_session.get("agent"), settings["map"])
 
 
 @cl.on_settings_update
 async def on_settings_update(settings):
     """Handle settings updates from the UI."""
     cl.user_session.set("show_tool_calls", settings["show_tool_calls"])
-
+    cl.user_session.set("map", settings["map"])
+    _apply_map_settings(cl.user_session.get("agent"), settings["map"])
 
 # Note: on_chat_end can cause issues with some Chainlit versions
 # Session cleanup is handled automatically by Chainlit
@@ -739,6 +784,10 @@ async def main(user_msg: cl.Message):
                 show_members_responses=False,
             )
             cl.user_session.set("agent", session_agent)
+
+        # Re-apply map settings so the agent's session_state is up to date
+        # even when a fresh agent was just created above.
+        _apply_map_settings(session_agent, cl.user_session.get("map") or "new_map")
 
         # Handle file uploads if present
         # Debug: Check multiple possible locations for files

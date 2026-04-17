@@ -93,6 +93,13 @@ logger = setup_logging(suppress_warnings=True, suppress_tqdm=True)
 SESSION_GTM_MODEL_KEY = "_current_gtm_model"
 SESSION_GTM_MODEL_PATH_KEY = "_current_gtm_model_path"
 
+# Session state keys for map selection (set by the Chainlit UI via chainlit_app.py)
+SESSION_MAP_TYPE_KEY = "map_type"
+SESSION_DESCRIPTOR_TYPE_KEY = "default_descriptor"
+
+# Recognized value for the "Universal Map" UI selection.
+UNIVERSAL_MAP_VALUE = "universal_map"
+
 # Standard SMILES column name variations to check (in priority order)
 _SMILES_COLUMN_VARIANTS = [SMILES_COLUMN, "SMILES", "smiles", "Smiles"]
 LandscapeType = Literal["density", "classification", "regression", "query"]
@@ -266,6 +273,36 @@ def set_session_gtm_model(agent: Optional[Agent], gtm_model: Any, model_path: st
     agent.session_state[SESSION_GTM_MODEL_PATH_KEY] = model_path
 
 
+def get_session_map_type(agent: Optional[Agent]) -> Optional[str]:
+    """Return the session-scoped map selection (``"new_map"`` / ``"universal_map"``).
+
+    Set by the Chainlit UI in ``chainlit_app._apply_map_settings``. Returns
+    ``None`` when no selection is available.
+    """
+    if agent is None or agent.session_state is None:
+        return None
+    value = agent.session_state.get(SESSION_MAP_TYPE_KEY)
+    return value if isinstance(value, str) else None
+
+
+def get_session_descriptor_type(
+    agent: Optional[Agent],
+    explicit: Optional[str] = None,
+) -> str:
+    """Resolve the descriptor backend to use for this session.
+
+    Priority: explicit argument → agent ``session_state['default_descriptor']``
+    → module-level :data:`DEFAULT_DESCRIPTOR_TYPE`.
+    """
+    if explicit:
+        return explicit
+    if agent is not None and agent.session_state is not None:
+        candidate = agent.session_state.get(SESSION_DESCRIPTOR_TYPE_KEY)
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return DEFAULT_DESCRIPTOR_TYPE
+
+
 def resolve_gtm_model_path(
     gtm_file: Optional[str] = None,
     *,
@@ -294,6 +331,16 @@ def resolve_gtm_model_path(
             HuggingFace. The error message lists every source that was tried
             and why it failed.
     """
+    # Auto-escalate to default when the session is configured to use the
+    # Universal Map and the caller did not supply an explicit path. This lets
+    # agents transparently project onto the HuggingFace model without having
+    # to pass ``use_default=True`` everywhere.
+    if not use_default and not gtm_file and get_session_map_type(agent) == UNIVERSAL_MAP_VALUE:
+        logger.info(
+            "Session map_type='universal_map' detected; forcing default GTM model resolution."
+        )
+        use_default = True
+
     # Priority 1: Explicit file path (unless use_default is True)
     if gtm_file and not use_default:
         logger.debug(f"Using explicit GTM model path: {gtm_file}")
@@ -842,7 +889,13 @@ def _compute_descriptors(
     return df, X, column_name
 
 
-def data_load_and_prep(dataset: str, gtm_model: str):
+def data_load_and_prep(
+    dataset: str,
+    gtm_model: str,
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
+):
     """
     Load GTM model and dataset from S3 storage, prepare descriptors and projections.
 
@@ -853,6 +906,12 @@ def data_load_and_prep(dataset: str, gtm_model: str):
     Args:
         dataset: Path to dataset CSV file (can be S3 URL, local path, or relative path)
         gtm_model: Path to GTM model file (can be S3 URL, local path, or relative path)
+        descriptor_type: Optional descriptor backend override (e.g. ``"morgan"`` or
+            ``"autoencoder"``). When ``None``, the descriptor is resolved from the
+            agent's session state (``default_descriptor``) and falls back to the
+            module default.
+        agent: Optional agent whose ``session_state`` is consulted for the
+            descriptor backend when ``descriptor_type`` is not explicitly passed.
 
     Returns:
         tuple: (gtm, df, X, resps) where:
@@ -896,8 +955,11 @@ def data_load_and_prep(dataset: str, gtm_model: str):
     df = standardize_smiles_column(df, SMILES_COLUMN)
     df = df.dropna(subset=[SMILES_COLUMN]).reset_index(drop=True)
 
-    # Compute descriptors using autoencoder by default
-    df, X, _ = _compute_descriptors(df, smiles_column=SMILES_COLUMN)
+    # Compute descriptors using the resolved descriptor type (session-aware).
+    effective_descriptor = get_session_descriptor_type(agent, descriptor_type)
+    df, X, _ = _compute_descriptors(
+        df, smiles_column=SMILES_COLUMN, descriptor_type=effective_descriptor
+    )
 
     df = df.rename(columns={"assay_chembl_id": "source"})
     resps, _ = gtm.project(torch.from_numpy(X).to(torch.double))
@@ -908,7 +970,13 @@ def data_load_and_prep(dataset: str, gtm_model: str):
     return gtm, df, X, resps
 
 
-def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
+def project_data_on_gtm(
+    dataset_file: str,
+    gtm_model_file: str,
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
+) -> str:
     """
     Preprocess a dataset for projection onto an existing GTM map.
 
@@ -1055,7 +1123,10 @@ def project_data_on_gtm(dataset_file: str, gtm_model_file: str) -> str:
     # Step 4: Compute descriptors and validate compatibility via trial projection
     # -------------------------------------------------------------------------
     logger.debug("Computing molecular descriptors...")
-    df_valid, X, descriptor_col = _compute_descriptors(df_valid, smiles_column=SMILES_COLUMN)
+    effective_descriptor = get_session_descriptor_type(agent, descriptor_type)
+    df_valid, X, descriptor_col = _compute_descriptors(
+        df_valid, smiles_column=SMILES_COLUMN, descriptor_type=effective_descriptor
+    )
 
     # Validate descriptor compatibility by doing a trial projection
     logger.debug("Validating descriptor compatibility with GTM model...")
@@ -1623,7 +1694,12 @@ def get_activity_column(
 
 
 def preprocess_gtm_activity_data(
-    dataset: str, gtm_model: str, node_threshold: float = DEFAULT_NODE_THRESHOLD
+    dataset: str,
+    gtm_model: str,
+    node_threshold: float = DEFAULT_NODE_THRESHOLD,
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
 ) -> pd.DataFrame:
     """
     Preprocess GTM activity data and generate activity landscapes.
@@ -1662,7 +1738,9 @@ def preprocess_gtm_activity_data(
     logger.info(f"Preprocessing GTM activity data: dataset={dataset}, model={gtm_model}")
 
     # Load GTM model and prepare data (includes descriptors and projections)
-    gtm, df, X, resps = data_load_and_prep(dataset, gtm_model)
+    gtm, df, X, resps = data_load_and_prep(
+        dataset, gtm_model, descriptor_type=descriptor_type, agent=agent
+    )
     logger.debug(f"Loaded dataset with {len(df)} molecules and {resps.shape[1]} GTM nodes")
 
     # Try to get regression activity column first
@@ -1875,7 +1953,13 @@ def preprocess_gtm_activity_data(
     return results[0] if results else None
 
 
-def load_gtm(dataset: str, gtm_model: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_gtm(
+    dataset: str,
+    gtm_model: str,
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Load GTM model and compute density and neighborhood preservation landscapes.
 
@@ -1886,7 +1970,9 @@ def load_gtm(dataset: str, gtm_model: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     Returns:
         tuple: (source density DataFrame, source neighborhood preservation DataFrame)
     """
-    gtm, df, X, resps = data_load_and_prep(dataset, gtm_model)
+    gtm, df, X, resps = data_load_and_prep(
+        dataset, gtm_model, descriptor_type=descriptor_type, agent=agent
+    )
 
     # Validate that the dataset is compatible with the GTM model
     # The responses matrix should have shape (n_molecules, n_nodes)
@@ -2171,6 +2257,9 @@ def optimize_gtm(
     df: pd.DataFrame,
     smiles_column: str = "smi",
     strategy: str = "low",
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
 ):
     """
     Optimize GTM hyperparameters and fit the final model.
@@ -2185,8 +2274,11 @@ def optimize_gtm(
         tuple: (df with descriptors, fitted GTM model, best score)
     """
 
-    # Compute descriptors using autoencoder by default
-    df, X, descriptor_column = _compute_descriptors(df, smiles_column=smiles_column)
+    # Compute descriptors using the resolved descriptor type (session-aware).
+    effective_descriptor = get_session_descriptor_type(agent, descriptor_type)
+    df, X, descriptor_column = _compute_descriptors(
+        df, smiles_column=smiles_column, descriptor_type=effective_descriptor
+    )
     df = df[~df[descriptor_column].isna()]
 
     n_samples = len(df)
@@ -2355,6 +2447,8 @@ def optimize_gtm_model(
     smiles_column: str,
     agent: Agent,
     strategy: str = "low",
+    *,
+    descriptor_type: Optional[str] = None,
 ) -> str:
     """
     Load a dataset of SMILES strings, optimize a Generative Topographic Mapping (GTM)
@@ -2418,7 +2512,13 @@ def optimize_gtm_model(
 
         # Optimize GTM model
         logger.info(f"Optimizing GTM with entropy (strategy={strategy})")
-        df, gtm, best_score = optimize_gtm(df, smiles_column, strategy=strategy)
+        df, gtm, best_score = optimize_gtm(
+            df,
+            smiles_column,
+            strategy=strategy,
+            descriptor_type=descriptor_type,
+            agent=agent,
+        )
 
         # Store results in agent session
         if agent.session_state is None:
@@ -2626,7 +2726,13 @@ def load_dataframe_from_session(dataframe_name: str, session_key: str, agent: Ag
         raise
 
 
-def load_gtm_density_matrix(dataset_file: str, gtm_file: str) -> str:
+def load_gtm_density_matrix(
+    dataset_file: str,
+    gtm_file: str,
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
+) -> str:
     """
     Load GTM model and dataset from S3 storage, return density matrix information.
 
@@ -2667,7 +2773,7 @@ def load_gtm_density_matrix(dataset_file: str, gtm_file: str) -> str:
 
     try:
         # Load GTM model and dataset using S3 client (with automatic fallback to local filesystem)
-        source, _ = load_gtm(dataset_file, gtm_file)
+        source, _ = load_gtm(dataset_file, gtm_file, descriptor_type=descriptor_type, agent=agent)
 
         if source is None or source.empty:
             raise ValueError("Loaded density matrix is empty")
@@ -2692,6 +2798,9 @@ def create_activity_landscapes_tool(
     chart_width: int = DEFAULT_CHART_WIDTH,
     chart_height: int = DEFAULT_CHART_HEIGHT,
     renderer: LandscapeRenderer = "altair",
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
 ) -> str:
     """
     Create activity landscapes from GTM model and dataset.
@@ -2733,7 +2842,11 @@ def create_activity_landscapes_tool(
     try:
         # Process the data
         source_activity = preprocess_gtm_activity_data(
-            dataset, gtm_model, node_threshold=node_threshold
+            dataset,
+            gtm_model,
+            node_threshold=node_threshold,
+            descriptor_type=descriptor_type,
+            agent=agent,
         )
         detected_type = _detect_activity_landscape_type(source_activity)
 
@@ -2782,7 +2895,12 @@ def create_activity_landscapes_tool(
 
 
 def save_gtm_plot(
-    dataset_file: str, gtm_model_file: str, mark_nodes: Optional[List[int]] = None
+    dataset_file: str,
+    gtm_model_file: str,
+    mark_nodes: Optional[List[int]] = None,
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
 ) -> str:
     """
     Generate and save a GTM density + points plot (HTML and PNG).
@@ -2816,8 +2934,12 @@ def save_gtm_plot(
 
         # Load data and prepare
         logger.debug("Loading GTM data and preparing coordinates")
-        source, _ = load_gtm(dataset_file, gtm_model_file)
-        _, df, _, resps = data_load_and_prep(dataset_file, gtm_model_file)
+        source, _ = load_gtm(
+            dataset_file, gtm_model_file, descriptor_type=descriptor_type, agent=agent
+        )
+        _, df, _, resps = data_load_and_prep(
+            dataset_file, gtm_model_file, descriptor_type=descriptor_type, agent=agent
+        )
 
         # Compute charts and molecule info
         density_chart = altair_discrete_density_landscape(source, title=model_header)
@@ -2975,7 +3097,12 @@ class GTMData:
 
 
 def load_and_prepare_gtm_data_with_model(
-    dataset: str, gtm_model_path: str, gtm_model: Any
+    dataset: str,
+    gtm_model_path: str,
+    gtm_model: Any,
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
 ) -> GTMData:
     """
     Load dataset and project onto a pre-loaded GTM model, compute coordinates, and prepare source_mols.
@@ -3020,8 +3147,11 @@ def load_and_prepare_gtm_data_with_model(
         df = standardize_smiles_column(df, SMILES_COLUMN)
         df = df.dropna(subset=[SMILES_COLUMN]).reset_index(drop=True)
 
-        # Compute descriptors using autoencoder by default
-        df, X, _ = _compute_descriptors(df, smiles_column=SMILES_COLUMN)
+        # Compute descriptors using the resolved descriptor type (session-aware).
+        effective_descriptor = get_session_descriptor_type(agent, descriptor_type)
+        df, X, _ = _compute_descriptors(
+            df, smiles_column=SMILES_COLUMN, descriptor_type=effective_descriptor
+        )
         df = df.rename(columns={"assay_chembl_id": "source"})
 
         # Project onto the GTM model
@@ -3200,7 +3330,12 @@ def populate_gtm_data_from_latent_vectors(
 
 
 def load_and_prepare_gtm_data(
-    dataset: str, gtm_model: str, *, compute_density: bool = False
+    dataset: str,
+    gtm_model: str,
+    *,
+    compute_density: bool = False,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
 ) -> GTMData:
     """
     Load GTM model and molecular data from S3 storage, compute coordinates, and prepare source_mols.
@@ -3233,8 +3368,12 @@ def load_and_prepare_gtm_data(
         data = GTMData()
 
         # Load GTM and dataset
-        data.gtm, data.df, _, data.resps = data_load_and_prep(dataset, gtm_model)
-        data.source, data.source_NB = load_gtm(dataset, gtm_model)
+        data.gtm, data.df, _, data.resps = data_load_and_prep(
+            dataset, gtm_model, descriptor_type=descriptor_type, agent=agent
+        )
+        data.source, data.source_NB = load_gtm(
+            dataset, gtm_model, descriptor_type=descriptor_type, agent=agent
+        )
 
         # Ensure source coordinates are integers (defensive: handle any float conversion)
         if "x" in data.source.columns:
