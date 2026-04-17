@@ -335,11 +335,7 @@ def resolve_gtm_model_path(
     # Universal Map and the caller did not supply an explicit path. This lets
     # agents transparently project onto the HuggingFace model without having
     # to pass ``use_default=True`` everywhere.
-    if (
-        not use_default
-        and not gtm_file
-        and get_session_map_type(agent) == UNIVERSAL_MAP_VALUE
-    ):
+    if not use_default and not gtm_file and get_session_map_type(agent) == UNIVERSAL_MAP_VALUE:
         logger.info(
             "Session map_type='universal_map' detected; forcing default GTM model resolution."
         )
@@ -2777,9 +2773,7 @@ def load_gtm_density_matrix(
 
     try:
         # Load GTM model and dataset using S3 client (with automatic fallback to local filesystem)
-        source, _ = load_gtm(
-            dataset_file, gtm_file, descriptor_type=descriptor_type, agent=agent
-        )
+        source, _ = load_gtm(dataset_file, gtm_file, descriptor_type=descriptor_type, agent=agent)
 
         if source is None or source.empty:
             raise ValueError("Loaded density matrix is empty")
