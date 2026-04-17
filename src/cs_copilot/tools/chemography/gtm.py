@@ -34,6 +34,21 @@ class GTMError(DRToolkitError):
     pass
 
 
+def _auto_use_default(agent: Optional[Agent], use_default: bool) -> bool:
+    """Escalate to ``use_default=True`` when the session is pinned to the Universal Map.
+
+    Explicit caller overrides (``use_default=True``) always win. When the user
+    selected ``"Universal Map"`` in the Chainlit settings, every GTM operation
+    should default to the pretrained HuggingFace model unless the caller
+    explicitly provides a file path + ``use_default=False``.
+    """
+    if use_default:
+        return True
+    if gtm_operations.get_session_map_type(agent) == gtm_operations.UNIVERSAL_MAP_VALUE:
+        return True
+    return False
+
+
 class GTMToolkit(BaseDRToolkit):
     """
     GTM-specific dimensionality reduction toolkit for chemical data analysis.
@@ -84,6 +99,7 @@ class GTMToolkit(BaseDRToolkit):
         smiles_column: str,
         agent: Agent,
         strategy: str = "low",
+        descriptor_type: Optional[str] = None,
     ) -> str:
         """
         Load a dataset of SMILES strings, optimize a Generative Topographic Mapping (GTM)
@@ -109,7 +125,13 @@ class GTMToolkit(BaseDRToolkit):
             ValueError: If smiles_column is missing
         """
         return gtm_operations.optimize_gtm_model(
-            df_csv_path, dataset_name, gtm_name, smiles_column, agent, strategy=strategy
+            df_csv_path,
+            dataset_name,
+            gtm_name,
+            smiles_column,
+            agent,
+            strategy=strategy,
+            descriptor_type=descriptor_type,
         )
 
     def calculate_map_ruggedness(self, dataset_name: str, gtm_name: str, agent: Agent) -> str:
@@ -190,6 +212,8 @@ class GTMToolkit(BaseDRToolkit):
                 activity tables, and lookup maps when the source data is
                 available.
         """
+        use_default = _auto_use_default(agent, use_default)
+
         # First check if we already have the model in session state
         session_model = gtm_operations.get_session_gtm_model(agent)
         if session_model is not None and not use_default:
@@ -225,6 +249,7 @@ class GTMToolkit(BaseDRToolkit):
         *,
         agent: Agent | None = None,
         use_default: bool = False,
+        descriptor_type: Optional[str] = None,
     ) -> str:
         """
         Load GTM model and dataset, return density matrix information.
@@ -244,10 +269,13 @@ class GTMToolkit(BaseDRToolkit):
             FileNotFoundError: If either file doesn't exist
             ValueError: If files are invalid or empty
         """
+        use_default = _auto_use_default(agent, use_default)
         resolved_model = gtm_operations.resolve_gtm_model_path(
             gtm_file, agent=agent, use_default=use_default
         )
-        return gtm_operations.load_gtm_density_matrix(dataset_file, resolved_model)
+        return gtm_operations.load_gtm_density_matrix(
+            dataset_file, resolved_model, descriptor_type=descriptor_type, agent=agent
+        )
 
     def load_and_prep_data(
         self,
@@ -256,6 +284,7 @@ class GTMToolkit(BaseDRToolkit):
         *,
         agent: Agent | None = None,
         use_default: bool = False,
+        descriptor_type: Optional[str] = None,
     ) -> str:
         """
         Load GTM model and molecular data, compute coordinates, and prepare source_mols.
@@ -277,6 +306,8 @@ class GTMToolkit(BaseDRToolkit):
             ValueError: If dataset or gtm_model paths are invalid
             FileNotFoundError: If files don't exist
         """
+        use_default = _auto_use_default(agent, use_default)
+
         # Check if we have a session model and use it if available (unless use_default=True)
         session_model = gtm_operations.get_session_gtm_model(agent)
         if session_model is not None and not use_default:
@@ -299,7 +330,11 @@ class GTMToolkit(BaseDRToolkit):
 
         # Project dataset onto the model (using the resolved model path for data_load_and_prep)
         self._gtm_data = gtm_operations.load_and_prepare_gtm_data_with_model(
-            dataset, resolved_model, gtm_for_projection
+            dataset,
+            resolved_model,
+            gtm_for_projection,
+            descriptor_type=descriptor_type,
+            agent=agent,
         )
         return (
             f"dataset {dataset} projected onto gtm model {resolved_model} and successfully loaded"
@@ -715,6 +750,7 @@ class GTMToolkit(BaseDRToolkit):
         *,
         agent: Agent | None = None,
         use_default: bool = False,
+        descriptor_type: Optional[str] = None,
     ) -> str:
         """
         Create activity landscapes from GTM model and dataset.
@@ -738,6 +774,7 @@ class GTMToolkit(BaseDRToolkit):
             ValueError: If inputs are invalid
             FileNotFoundError: If dataset or model files don't exist
         """
+        use_default = _auto_use_default(agent, use_default)
         resolved_model = gtm_operations.resolve_gtm_model_path(
             gtm_model, agent=agent, use_default=use_default
         )
@@ -748,6 +785,8 @@ class GTMToolkit(BaseDRToolkit):
             chart_width,
             chart_height,
             renderer=renderer,
+            descriptor_type=descriptor_type,
+            agent=agent,
         )
 
     def save_gtm_landscape_plot(
@@ -782,7 +821,15 @@ class GTMToolkit(BaseDRToolkit):
             chart_height=chart_height,
         )
 
-    def project_data_on_gtm(self, dataset_file: str, gtm_model_file: str) -> str:
+    def project_data_on_gtm(
+        self,
+        dataset_file: str,
+        gtm_model_file: str | None = None,
+        *,
+        agent: Agent | None = None,
+        use_default: bool = False,
+        descriptor_type: Optional[str] = None,
+    ) -> str:
         """
         Preprocess a new dataset for projection onto an existing GTM map.
 
@@ -792,12 +839,29 @@ class GTMToolkit(BaseDRToolkit):
 
         Args:
             dataset_file: Path to CSV with a SMILES column ('smi', 'SMILES', etc.)
-            gtm_model_file: Path to the GTM model file (.pkl.gz)
+            gtm_model_file: Optional path to a GTM model (.pkl.gz). When omitted
+                (or when ``use_default=True`` / the session is pinned to the
+                Universal Map), falls back to the pretrained HuggingFace model.
+            agent: Optional Agent instance to check/store session state.
+            use_default: If True, force use of default model even when an
+                explicit path is provided.
+            descriptor_type: Optional descriptor backend override. When omitted,
+                resolves from the agent's session state (``"autoencoder"`` for
+                the Universal Map, ``"morgan"`` otherwise).
 
         Returns:
             Summary with path to preprocessed dataset CSV
         """
-        return gtm_operations.project_data_on_gtm(dataset_file, gtm_model_file)
+        use_default = _auto_use_default(agent, use_default)
+        resolved_model = gtm_operations.resolve_gtm_model_path(
+            gtm_model_file, agent=agent, use_default=use_default
+        )
+        return gtm_operations.project_data_on_gtm(
+            dataset_file,
+            resolved_model,
+            descriptor_type=descriptor_type,
+            agent=agent,
+        )
 
     # =========================================================================
     # Latent-Space GTM Tools (for Peptide WAE integration)
