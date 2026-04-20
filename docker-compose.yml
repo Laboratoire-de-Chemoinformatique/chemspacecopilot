@@ -38,6 +38,15 @@ services:
       # Database Configuration (for Chainlit history)
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/chainlit
 
+      # Chainlit storage client (MinIO) – required for persistent file/image elements
+      # These mirror the MinIO credentials above but use the env var names that
+      # Chainlit's ChainlitDataLayer reads (APP_AWS_* / DEV_AWS_ENDPOINT / BUCKET_NAME).
+      - BUCKET_NAME=${ASSETS_BUCKET:-chatbot-assets}
+      - APP_AWS_REGION=${AWS_REGION:-us-east-1}
+      - APP_AWS_ACCESS_KEY=${MINIO_ACCESS_KEY:-cs_copilot}
+      - APP_AWS_SECRET_KEY=${MINIO_SECRET_KEY:-chempwd123}
+      - DEV_AWS_ENDPOINT=${S3_ENDPOINT_URL:-http://minio:9000}
+
       # GPU Configuration
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility

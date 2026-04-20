@@ -26,28 +26,32 @@ from cs_copilot.tools.io.formatting import smiles_to_png_bytes
 
 load_dotenv()
 
+# Ensure the data/ directory exists (used by Agno for its SQLite session DB).
+# The Dockerfile creates /app/data; this handles local runs outside Docker.
+Path("data").mkdir(exist_ok=True)
+
 # Set up logger
 logger = logging.getLogger(__name__)
 
-# # ---------- User Management System ----------------------------------------- #
-# # Simple in-memory user storage (in production, use a proper database)
-# USERS = {
-#     "admin": {"password_hash": hashlib.sha256("admin123".encode()).hexdigest(), "role": "admin"},
-# }
+# ---------- User Management System ----------------------------------------- #
+# Simple in-memory user storage (in production, use a proper database)
+USERS = {
+    "admin": {"password_hash": hashlib.sha256("admin123".encode()).hexdigest(), "role": "admin"},
+}
 
 
-# def verify_password(username: str, password: str) -> bool:
-#     """Verify user credentials against stored users."""
-#     if username not in USERS:
-#         return False
+def verify_password(username: str, password: str) -> bool:
+    """Verify user credentials against stored users."""
+    if username not in USERS:
+        return False
 
-#     password_hash = hashlib.sha256(password.encode()).hexdigest()
-#     return USERS[username]["password_hash"] == password_hash
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    return USERS[username]["password_hash"] == password_hash
 
 
-# def get_user_role(username: str) -> str:
-#     """Get user role for authorization."""
-#     return USERS.get(username, {}).get("role", "guest")
+def get_user_role(username: str) -> str:
+    """Get user role for authorization."""
+    return USERS.get(username, {}).get("role", "guest")
 
 
 # ---------- Session map settings helper ------------------------------------ #
@@ -71,18 +75,18 @@ def _apply_map_settings(session_agent, map_choice: str) -> None:
     )
 
 
-# # ---------- Authentication Callback ---------------------------------------- #
-# @cl.password_auth_callback
-# async def auth_callback(username: str, password: str) -> cl.User | None:
-#     """Authenticate users based on username and password."""
-#     if verify_password(username, password):
-#         return cl.User(
-#             identifier=username,
-#             display_name=username.title(),
-#             metadata={"role": get_user_role(username), "username": username},
-#         )
-#     else:
-#         return None
+# ---------- Authentication Callback ---------------------------------------- #
+@cl.password_auth_callback
+async def auth_callback(username: str, password: str) -> cl.User | None:
+    """Authenticate users based on username and password."""
+    if verify_password(username, password):
+        return cl.User(
+            identifier=username,
+            display_name=username.title(),
+            metadata={"role": get_user_role(username), "username": username},
+        )
+    else:
+        return None
 
 
 # ❶ Instantiate the LLM (configured via .modelconf or MODEL_PROVIDER env var)
@@ -154,8 +158,30 @@ async def on_chat_resume(thread: ThreadDict):
         cl.user_session.set("agent", session_agent)
         cl.user_session.set("session_initialized", True)
 
-    # Restore ChatSettings on resume (mirror on_chat_start so the widget format
-    # and default match exactly).
+    session_agent = cl.user_session.get("agent")
+
+    # Restore session state from Agno's persisted DB so that map settings and
+    # uploaded_files are recovered without the agent having to run first.
+    restored_map = "new_map"
+    if thread_id and session_agent is not None:
+        try:
+            team_session = session_agent.get_session(session_id=thread_id)
+            if team_session and team_session.session_data:
+                saved_state = team_session.session_data.get("session_state", {})
+                if saved_state:
+                    restored_map = saved_state.get("map_type", "new_map")
+                    # Seed the in-memory session_state from the DB so the agent
+                    # doesn't lose uploaded_files or other state before the first arun.
+                    session_agent.session_state = saved_state.copy()
+                    logger.info(
+                        f"Restored Agno session state for thread {thread_id}: "
+                        f"map={restored_map}, "
+                        f"files={list(saved_state.get('uploaded_files', {}).keys())}"
+                    )
+        except Exception as e:
+            logger.warning(f"Could not restore Agno session state for thread {thread_id}: {e}")
+
+    # Restore ChatSettings on resume using the persisted map selection.
     settings = await cl.ChatSettings(
         [
             Switch(
@@ -170,13 +196,13 @@ async def on_chat_resume(thread: ThreadDict):
                     "New map in this session": "new_map",
                     "Universal Map": "universal_map",
                 },
-                initial_value="new_map",
+                initial_value=restored_map,
             )
         ]
     ).send()
     cl.user_session.set("show_tool_calls", settings["show_tool_calls"])
     cl.user_session.set("map", settings["map"])
-    _apply_map_settings(cl.user_session.get("agent"), settings["map"])
+    _apply_map_settings(session_agent, settings["map"])
 
 
 @cl.on_settings_update
@@ -313,6 +339,21 @@ async def _create_streaming_message() -> cl.Message:
     return msg
 
 
+async def _finalize_message(msg: cl.Message | None) -> None:
+    """Persist the accumulated streaming content to the database.
+
+    ``stream_token()`` accumulates content in memory and pushes it to the
+    client via websocket, but never writes it back to the DB.  Calling
+    ``update()`` after streaming ends ensures the final text is persisted so
+    that resumed sessions display the assistant's messages.
+    """
+    if msg is None:
+        return
+    # Only update messages that were actually sent and have content.
+    if getattr(msg, "id", None) and msg.content:
+        await msg.update()
+
+
 async def _stream_text_to_message(text: str, msg: cl.Message):
     """Stream text to message, handling SMILES with cl.Image when interrupted"""
     if not text:
@@ -348,6 +389,7 @@ async def _stream_text_to_message(text: str, msg: cl.Message):
                 logger.debug(f"Created data URL from PNG (size: {len(b64)} chars)")
                 img_el = cl.Image(url=data_url, name=smi, display="inline")
                 logger.debug(f"Created cl.Image element for SMILES: '{smi}'")
+                await _finalize_message(msg)
                 await cl.Message(content=f"`{smi}`", elements=[img_el]).send()
                 logger.info(f"Sent SMILES image message for: '{smi}'")
                 # Return new streaming message for continuation
@@ -528,6 +570,7 @@ async def _stream_line_with_elements(
         if assistant is None:
             assistant = await _create_streaming_message()
         await _stream_text_to_message(line, assistant)
+        await _finalize_message(assistant)
         return await _image_bubble_streaming(caption.strip(), src)
 
     # 2) inline markdown images and <file> tags, preserving order
@@ -541,10 +584,12 @@ async def _stream_line_with_elements(
         image_alt, image_src, file_src = m.groups()
         if image_src is not None:
             logger.info(f"Relay detected markdown image: alt='{image_alt}', src='{image_src}'")
+            await _finalize_message(assistant)
             assistant = await _image_bubble_streaming(image_alt, image_src)
         elif file_src is not None:
             normalized_file_src = file_src.strip()
             logger.info("Relay detected file tag: '%s'", normalized_file_src)
+            await _finalize_message(assistant)
             assistant = await _file_bubble_streaming(normalized_file_src)
 
         pos = m.end()
@@ -558,30 +603,6 @@ async def _stream_line_with_elements(
         assistant = new_assistant
 
     return assistant
-
-
-# async def _update_message_for_persistence(msg: cl.Message, full_content: str):
-#     """Update message with complete content for proper persistence"""
-#     # Process the full content to ensure proper persistence with SMILES images
-#     processed_content = _process_content_for_persistence(full_content)
-#     if processed_content != msg.content:
-#         msg.content = processed_content
-#         await msg.update()
-
-# def _process_content_for_persistence(content: str) -> str:
-#     """Process content to ensure proper persistence with SMILES tokens only"""
-#     content_parts = []
-
-#     def persistence_callback(text_part, is_smiles, smiles_string):
-#         if is_smiles:
-#             # Add SMILES token only (images are handled separately with cl.Image)
-#             content_parts.append(text_part)
-#         else:
-#             # Add regular text
-#             content_parts.append(text_part)
-
-#     _process_smiles_in_text(content, persistence_callback)
-#     return "".join(content_parts)
 
 
 async def _send_text_with_smiles(text: str):
@@ -705,8 +726,6 @@ async def relay(stream):
     assistant = None  # Will be created when we have content
     current_step = None  # active tool Step
     buf = ""  # accumulate until newline
-    full_content = ""  # collect all content for final message
-
     # Check if tool calls should be displayed
     show_tool_calls = cl.user_session.get("show_tool_calls", True)
 
@@ -737,9 +756,6 @@ async def relay(stream):
         if not text:
             continue
 
-        # Collect for persistence
-        full_content += text
-
         buf += text
         while "\n" in buf:  # process complete lines
             line, buf = buf.split("\n", 1)
@@ -749,9 +765,8 @@ async def relay(stream):
     if buf:
         assistant = await _stream_line_with_elements(buf, assistant, append_newline=False)
 
-    # # Update the final message with complete content for persistence
-    # if assistant and full_content.strip():
-    #     await _update_message_for_persistence(assistant, full_content)
+    # Persist the final streaming message so resumed sessions show the text.
+    await _finalize_message(assistant)
 
 
 # ---------- Chainlit entry-point ------------------------------------------- #

@@ -7,5 +7,5 @@ Agent instructions and prompts are now in prompts.py.
 """
 
 # Database Configuration
-CS_COPILOT_MEMORY_DB = "cs_copilot_memory.db"
+CS_COPILOT_MEMORY_DB = "data/cs_copilot_memory.db"
 CS_COPILOT_MEMORY_TABLE = "cs_copilot_memory"
