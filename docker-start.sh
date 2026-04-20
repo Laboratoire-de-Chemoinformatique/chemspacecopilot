@@ -177,6 +177,35 @@ export POSTGRES_PORT
 echo "📌 PostgreSQL will use port $POSTGRES_PORT (5432-5441 fallback)"
 echo ""
 
+# ChEMBL SQLite database (optional)
+if [ -z "$CHEMBL_SQLITE_PATH" ]; then
+    echo "Enter path to ChEMBL SQLite file on this machine (or press Enter to skip):"
+    read -r CHEMBL_SQLITE_PATH
+fi
+
+CHEMBL_OVERRIDE=""
+if [ -n "$CHEMBL_SQLITE_PATH" ]; then
+    if [ ! -f "$CHEMBL_SQLITE_PATH" ]; then
+        echo "❌ Error: ChEMBL SQLite file not found: $CHEMBL_SQLITE_PATH"
+        exit 1
+    fi
+    cat > docker-compose.chembl-local.yml <<EOF
+version: '3.8'
+services:
+  chainlit-app:
+    environment:
+      - CHEMBL_SQLITE_PATH=/app/chembl/chembl.db
+    volumes:
+      - ${CHEMBL_SQLITE_PATH}:/app/chembl/chembl.db:ro
+EOF
+    CHEMBL_OVERRIDE="-f docker-compose.chembl-local.yml"
+    echo "📌 ChEMBL SQLite: $CHEMBL_SQLITE_PATH → /app/chembl/chembl.db (read-only)"
+else
+    rm -f docker-compose.chembl-local.yml
+    echo "📌 ChEMBL SQLite: not configured (using REST API fallback)"
+fi
+echo ""
+
 echo "✅ Configuration validated"
 echo ""
 
@@ -199,21 +228,21 @@ read -p "Enter choice [1-2]: " mode_choice
 # Avoid Compose v1 "recreate" path that can raise KeyError: 'ContainerConfig' with newer Docker Engine
 # (see docker/compose#11693). Down then up uses "create" instead of "recreate".
 if [ "$mode_choice" = "2" ]; then
-    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml $GPU_OVERRIDE down --remove-orphans 2>/dev/null || true
+    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml $CHEMBL_OVERRIDE $GPU_OVERRIDE down --remove-orphans 2>/dev/null || true
 else
-    $COMPOSE_CMD -f docker-compose.yml $GPU_OVERRIDE down --remove-orphans 2>/dev/null || true
+    $COMPOSE_CMD -f docker-compose.yml $CHEMBL_OVERRIDE $GPU_OVERRIDE down --remove-orphans 2>/dev/null || true
 fi
 
 if [ "$mode_choice" = "2" ]; then
     echo ""
     echo "🔧 Starting in DEVELOPMENT mode..."
     echo ""
-    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml $GPU_OVERRIDE up -d
+    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml $CHEMBL_OVERRIDE $GPU_OVERRIDE up -d
 else
     echo ""
     echo "🚀 Starting in PRODUCTION mode..."
     echo ""
-    $COMPOSE_CMD -f docker-compose.yml $GPU_OVERRIDE up -d
+    $COMPOSE_CMD -f docker-compose.yml $CHEMBL_OVERRIDE $GPU_OVERRIDE up -d
 fi
 
 echo ""
