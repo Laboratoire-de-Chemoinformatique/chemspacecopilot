@@ -29,25 +29,25 @@ load_dotenv()
 # Set up logger
 logger = logging.getLogger(__name__)
 
-# ---------- User Management System ----------------------------------------- #
-# Simple in-memory user storage (in production, use a proper database)
-USERS = {
-    "admin": {"password_hash": hashlib.sha256("admin123".encode()).hexdigest(), "role": "admin"},
-}
+# # ---------- User Management System ----------------------------------------- #
+# # Simple in-memory user storage (in production, use a proper database)
+# USERS = {
+#     "admin": {"password_hash": hashlib.sha256("admin123".encode()).hexdigest(), "role": "admin"},
+# }
 
 
-def verify_password(username: str, password: str) -> bool:
-    """Verify user credentials against stored users."""
-    if username not in USERS:
-        return False
+# def verify_password(username: str, password: str) -> bool:
+#     """Verify user credentials against stored users."""
+#     if username not in USERS:
+#         return False
 
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
-    return USERS[username]["password_hash"] == password_hash
+#     password_hash = hashlib.sha256(password.encode()).hexdigest()
+#     return USERS[username]["password_hash"] == password_hash
 
 
-def get_user_role(username: str) -> str:
-    """Get user role for authorization."""
-    return USERS.get(username, {}).get("role", "guest")
+# def get_user_role(username: str) -> str:
+#     """Get user role for authorization."""
+#     return USERS.get(username, {}).get("role", "guest")
 
 
 # ---------- Session map settings helper ------------------------------------ #
@@ -71,18 +71,18 @@ def _apply_map_settings(session_agent, map_choice: str) -> None:
     )
 
 
-# ---------- Authentication Callback ---------------------------------------- #
-@cl.password_auth_callback
-async def auth_callback(username: str, password: str) -> cl.User | None:
-    """Authenticate users based on username and password."""
-    if verify_password(username, password):
-        return cl.User(
-            identifier=username,
-            display_name=username.title(),
-            metadata={"role": get_user_role(username), "username": username},
-        )
-    else:
-        return None
+# # ---------- Authentication Callback ---------------------------------------- #
+# @cl.password_auth_callback
+# async def auth_callback(username: str, password: str) -> cl.User | None:
+#     """Authenticate users based on username and password."""
+#     if verify_password(username, password):
+#         return cl.User(
+#             identifier=username,
+#             display_name=username.title(),
+#             metadata={"role": get_user_role(username), "username": username},
+#         )
+#     else:
+#         return None
 
 
 # ❶ Instantiate the LLM (configured via .modelconf or MODEL_PROVIDER env var)
