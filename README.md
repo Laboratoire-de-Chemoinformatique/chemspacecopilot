@@ -75,6 +75,12 @@ docker compose build chainlit-app
 
 Access the application at **http://localhost:8000**
 
+To remove the docker-compose installation and rebuild it from scratch use:
+```bash
+docker compose down --volumes --remove-orphans --rmi all
+```
+WARNING! This would wipe all the previously generated assets on S3 and the previously run sessions of the chatbot.
+
 See the [Docker guide](docs/getting-started/docker.md) for the full Docker deployment guide.
 
 ### Option 2: Local Installation
