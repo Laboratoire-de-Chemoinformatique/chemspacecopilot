@@ -36,6 +36,23 @@ else
     echo "📄 No .env file (optional). Copy .env.example to .env for file-based config."
 fi
 
+# Detect host architecture and export TARGETARCH so docker-compose.yml can
+# forward it to the Dockerfile build arg. On DGX Spark (aarch64) this
+# triggers the NVIDIA NGC PyTorch base with a CUDA-enabled torch build.
+case "$(uname -m)" in
+    aarch64|arm64)
+        export TARGETARCH=arm64
+        ;;
+    x86_64|amd64)
+        export TARGETARCH=amd64
+        ;;
+    *)
+        export TARGETARCH=amd64
+        echo "⚠️  Unknown host arch $(uname -m); defaulting TARGETARCH=amd64"
+        ;;
+esac
+echo "📌 Build target arch: $TARGETARCH"
+
 # Agno telemetry status
 if [ "${AGNO_TELEMETRY:-false}" = "true" ]; then
     echo "📡 Agno telemetry: ENABLED"
