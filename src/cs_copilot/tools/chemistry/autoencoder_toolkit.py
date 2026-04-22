@@ -254,13 +254,13 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
             # Use S3.open() for loading - handles both S3 URLs and local paths transparently
             with S3.open(config_path, "rb") as f:
-                self.config = torch.load(f, weights_only=False)
+                self.config = torch.load(f, weights_only=False, map_location=self.device)
 
             with S3.open(vocab_path, "rb") as f:
-                self.vocab = torch.load(f, weights_only=False)
+                self.vocab = torch.load(f, weights_only=False, map_location=self.device)
 
             with S3.open(model_path, "rb") as f:
-                model_state = torch.load(f, weights_only=False)
+                model_state = torch.load(f, weights_only=False, map_location=self.device)
 
             # Initialize and load the model
             self.model = LSTMAutoencoder(self.vocab, self.config)
