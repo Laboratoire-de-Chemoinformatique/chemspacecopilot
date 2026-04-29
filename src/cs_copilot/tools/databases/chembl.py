@@ -134,14 +134,20 @@ class ChemblToolkit(BaseDatabaseToolkit):
         Args:
             config: Database configuration (optional, uses defaults if not provided)
             backend: Data source backend. One of:
-                - "auto": Auto-detect from env vars (SQLite > PostgreSQL > MySQL > REST)
+                - "auto": Auto-detect from env vars (SQLite > PostgreSQL > MySQL > REST).
+                  If an optional SQL driver is missing, fall back to the next candidate.
                 - "rest": Force REST API (chembl_webresource_client)
                 - "mysql": Force MySQL database
                 - "postgresql": Force PostgreSQL database
                 - "sqlite": Force SQLite database
             **toolkit_kwargs: Additional arguments for Agno Toolkit
         """
-        resolved = self._resolve_backend(backend)
+        if backend == "auto":
+            resolved, fetcher = self._create_auto_fetcher()
+        else:
+            resolved = self._resolve_backend(backend)
+            fetcher = self._create_fetcher(resolved)
+
         self._active_backend = resolved
         is_sql = resolved in ("mysql", "postgresql", "sqlite")
 
@@ -183,7 +189,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         )
         self._client = None  # Will be initialized lazily
         self._client_init_error = None  # Store initialization error if any
-        self._fetcher = self._create_fetcher(resolved)
+        self._fetcher = fetcher
         self.register(self.fetch_compounds)
         self.register(self.describe_dataset)
         self.register(self.convert_to_chembl_query)
@@ -224,6 +230,43 @@ class ChemblToolkit(BaseDatabaseToolkit):
         raise ValueError(
             f"Unknown ChEMBL backend: {backend!r}. Use one of: {', '.join(valid)}, or 'auto'."
         )
+
+    @staticmethod
+    def _auto_backend_candidates() -> list[str]:
+        """Return backend candidates for auto-detection in priority order."""
+        import os
+
+        candidates: list[str] = []
+        if os.getenv("CHEMBL_SQLITE_PATH"):
+            candidates.append("sqlite")
+        if os.getenv("CHEMBL_PG_HOST"):
+            candidates.append("postgresql")
+        if os.getenv("CHEMBL_MYSQL_HOST"):
+            candidates.append("mysql")
+        candidates.append("rest")
+        return candidates
+
+    def _create_auto_fetcher(self) -> tuple[str, ChemblDataFetcher]:
+        """Create the first usable backend for auto mode.
+
+        Optional SQL backends are tried in priority order. Missing database
+        driver packages do not abort startup; they trigger a fallback to the
+        next candidate, ending with the REST API.
+        """
+        for candidate in self._auto_backend_candidates():
+            try:
+                return candidate, self._create_fetcher(candidate)
+            except ImportError as exc:
+                logger.warning(
+                    "ChEMBL backend %s unavailable during auto-detection (%s). "
+                    "Trying the next backend.",
+                    candidate,
+                    exc,
+                )
+
+        # The REST fetcher is expected to be always constructible, so reaching
+        # this point would indicate an internal bug rather than configuration.
+        raise RuntimeError("Failed to create any ChEMBL backend during auto-detection.")
 
     def _create_fetcher(self, backend: str) -> ChemblDataFetcher:
         """Create the data fetcher for an already-resolved backend."""

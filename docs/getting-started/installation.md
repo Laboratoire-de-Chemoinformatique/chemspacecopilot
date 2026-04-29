@@ -106,9 +106,9 @@ By default the ChEMBL Downloader agent queries the [ChEMBL REST API](https://www
 
 1. Download the MySQL dump from the [ChEMBL downloads page](https://chembl.gitbook.io/chembl-interface-documentation/downloads) or directly from the [EBI FTP](https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/latest/).
 2. Load the dump into a MySQL 8+ server.
-3. Install the optional MySQL driver:
+3. Install project dependencies (MySQL support is included):
    ```bash
-   uv sync --extra mysql
+   uv sync
    ```
 4. Set the environment variables:
    ```bash

@@ -511,6 +511,51 @@ class TestBackendSelection:
             ChemblToolkit(backend="auto")
             assert mock_from_mysql.called
 
+    @patch.object(
+        SqlChemblFetcher,
+        "from_mysql_env",
+        side_effect=ImportError("pymysql is required for MySQL backend"),
+    )
+    def test_auto_falls_back_to_rest_when_mysql_driver_missing(self, mock_from_mysql):
+        with patch.dict(os.environ, {"CHEMBL_MYSQL_HOST": "localhost"}, clear=False):
+            self._clear_chembl_env()
+            os.environ["CHEMBL_MYSQL_HOST"] = "localhost"
+            toolkit = ChemblToolkit(backend="auto")
+
+        assert mock_from_mysql.called
+        assert isinstance(toolkit._fetcher, RestChemblFetcher)
+        assert toolkit._active_backend == "rest"
+        assert toolkit.config.supports_sql is False
+
+    @patch.object(SqlChemblFetcher, "from_mysql_env")
+    @patch.object(
+        SqlChemblFetcher,
+        "from_postgres_env",
+        side_effect=ImportError("psycopg2 is required for PostgreSQL backend"),
+    )
+    def test_auto_falls_back_from_postgresql_to_mysql(self, mock_from_pg, mock_from_mysql):
+        mock_from_mysql.return_value = MagicMock(spec=SqlChemblFetcher)
+        env = {"CHEMBL_PG_HOST": "localhost", "CHEMBL_MYSQL_HOST": "localhost"}
+        with patch.dict(os.environ, env, clear=False):
+            self._clear_chembl_env()
+            os.environ.update(env)
+            toolkit = ChemblToolkit(backend="auto")
+
+        assert mock_from_pg.called
+        assert mock_from_mysql.called
+        assert toolkit._active_backend == "mysql"
+
+    @patch.object(
+        SqlChemblFetcher,
+        "from_mysql_env",
+        side_effect=ImportError("pymysql is required for MySQL backend"),
+    )
+    def test_explicit_mysql_backend_still_raises_when_driver_missing(self, mock_from_mysql):
+        with pytest.raises(ImportError, match="pymysql is required for MySQL backend"):
+            ChemblToolkit(backend="mysql")
+
+        assert mock_from_mysql.called
+
     @patch.object(SqlChemblFetcher, "from_sqlite")
     def test_auto_detects_sqlite_from_env(self, mock_from_sqlite):
         mock_from_sqlite.return_value = MagicMock(spec=SqlChemblFetcher)
