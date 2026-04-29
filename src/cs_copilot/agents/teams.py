@@ -11,6 +11,8 @@ from agno.db.sqlite import SqliteDb  # ✅ v2.1.x style DB import
 from agno.models.base import Model  # Agno v2 base class
 from agno.team import Team
 
+from cs_copilot.utils.resources import analyze_resources
+
 from .config import CS_COPILOT_MEMORY_DB  # optional now; kept for compatibility
 from .factories import AgentCreationError
 from .prompts import AGENT_TEAM_INSTRUCTIONS
@@ -61,6 +63,10 @@ def get_cs_copilot_agent_team(
             # NOTE: CS_COPILOT_MEMORY_TABLE is not required by SqliteDb.
             # Agno manages its own tables for sessions/memories. Kept import for compat.
         )
+
+    # Probe runtime environment (GPU, CPU, RAM, databases, cached models)
+    resource_profile = analyze_resources()
+    logger.info("Resource profile: %s", resource_profile)
 
     # Common agent parameters supplied by the factory
     agent_params = {
@@ -132,6 +138,7 @@ def get_cs_copilot_agent_team(
         store_tool_messages=enable_memory,  # persist tool results
         store_media=enable_memory,  # persist any media if used
         # Session state (always enabled for within-session data passing)
+        session_state={"resource_profile": resource_profile},
         add_session_state_to_context=True,
         enable_agentic_state=True,
         # Prompting

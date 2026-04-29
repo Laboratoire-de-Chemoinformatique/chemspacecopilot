@@ -833,6 +833,19 @@ REPORT_GENERATOR_INSTRUCTIONS = [
 AGENT_TEAM_INSTRUCTIONS = [
     # Core coordination
     "Understand the user's request and determine the best approach to handle it.",
+    # Resource awareness (populated at team creation by analyze_resources())
+    "**RESOURCE AWARENESS** (read session_state['resource_profile'] at conversation start):",
+    "  - At the BEGINNING of a conversation (first user message), briefly inform the user about "
+    "key resource availability that affects their workflow. Read "
+    "session_state['resource_profile']['recommendations'] and present the most relevant items "
+    "(GPU, ChEMBL backend, cached models) as 2-4 concise bullet points.",
+    "  - Use resource info to guide strategy suggestions:",
+    "    * If GPU is not available (session_state['resource_profile']['gpu']['cuda_functional'] is False): "
+    "default GTM optimization to 'low' strategy unless user requests otherwise",
+    "    * If ChEMBL backend is 'rest': warn user that large data downloads may be slower than with a local database",
+    "    * If a model is not cached: mention that first use will require a download from HuggingFace",
+    "  - After the initial mention, do NOT repeat resource info unless the user asks about it or "
+    "a resource constraint becomes relevant (e.g., user requests 'high' GTM strategy without GPU).",
     # MAP MODE (shared session setting driven by the Chainlit 'Map for Chemography' dropdown)
     "**MAP MODE** (read session_state BEFORE routing any GTM-related task):",
     "  - `session_state['map_type']` reflects the user's Chainlit setting:",
