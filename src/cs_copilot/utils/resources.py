@@ -192,8 +192,7 @@ def _build_recommendations(profile: Dict[str, Any]) -> List[str]:
         )
     elif gpu["available"]:
         recs.append(
-            "CUDA reported available but not functional -- computations "
-            "will fall back to CPU."
+            "CUDA reported available but not functional -- computations " "will fall back to CPU."
         )
     else:
         recs.append(

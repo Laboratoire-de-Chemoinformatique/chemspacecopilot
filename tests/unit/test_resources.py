@@ -155,9 +155,7 @@ class TestDetectChemblBackend:
     def test_postgresql(self):
         env = {"CHEMBL_PG_HOST": "localhost"}
         with patch.dict("os.environ", env, clear=False):
-            with patch(
-                "cs_copilot.utils.resources._optional_driver_available", return_value=True
-            ):
+            with patch("cs_copilot.utils.resources._optional_driver_available", return_value=True):
                 with patch.dict("os.environ", {"CHEMBL_SQLITE_PATH": ""}, clear=False):
                     result = _detect_chembl_backend()
         assert result["backend"] == "postgresql"
@@ -184,9 +182,7 @@ class TestDetectChemblBackend:
             {**env, "CHEMBL_SQLITE_PATH": "", "CHEMBL_PG_HOST": ""},
             clear=False,
         ):
-            with patch(
-                "cs_copilot.utils.resources._optional_driver_available", return_value=True
-            ):
+            with patch("cs_copilot.utils.resources._optional_driver_available", return_value=True):
                 result = _detect_chembl_backend()
         assert result["backend"] == "mysql"
 
@@ -197,9 +193,7 @@ class TestDetectChemblBackend:
             {**env, "CHEMBL_SQLITE_PATH": "", "CHEMBL_PG_HOST": ""},
             clear=False,
         ):
-            with patch(
-                "cs_copilot.utils.resources._optional_driver_available", return_value=False
-            ):
+            with patch("cs_copilot.utils.resources._optional_driver_available", return_value=False):
                 result = _detect_chembl_backend()
         assert result["backend"] == "rest"
         assert "pymysql" in result["description"]
@@ -284,7 +278,12 @@ class TestBuildRecommendations:
             "ram": {"total_gb": 64.0, "available_gb": 48.0},
             "chembl_backend": {"backend": "sqlite", "description": "Local SQLite ChEMBL database"},
             "storage_backend": {"backend": "local", "bucket": None},
-            "cached_models": {"autoencoder": True, "peptide_wae": True, "gtm": True, "dbaasp_data": True},
+            "cached_models": {
+                "autoencoder": True,
+                "peptide_wae": True,
+                "gtm": True,
+                "dbaasp_data": True,
+            },
         }
         recs = _build_recommendations(profile)
         assert any("GPU detected" in r and "NVIDIA A100" in r for r in recs)
@@ -297,7 +296,12 @@ class TestBuildRecommendations:
             "ram": {"total_gb": 16.0, "available_gb": 8.0},
             "chembl_backend": {"backend": "rest", "description": "ChEMBL REST API"},
             "storage_backend": {"backend": "local", "bucket": None},
-            "cached_models": {"autoencoder": False, "peptide_wae": False, "gtm": False, "dbaasp_data": False},
+            "cached_models": {
+                "autoencoder": False,
+                "peptide_wae": False,
+                "gtm": False,
+                "dbaasp_data": False,
+            },
         }
         recs = _build_recommendations(profile)
         assert any("No GPU" in r for r in recs)
@@ -311,7 +315,12 @@ class TestBuildRecommendations:
             "ram": {"total_gb": None, "available_gb": None},
             "chembl_backend": {"backend": "sqlite", "description": "Local SQLite ChEMBL database"},
             "storage_backend": {"backend": "local", "bucket": None},
-            "cached_models": {"autoencoder": True, "peptide_wae": True, "gtm": True, "dbaasp_data": True},
+            "cached_models": {
+                "autoencoder": True,
+                "peptide_wae": True,
+                "gtm": True,
+                "dbaasp_data": True,
+            },
         }
         recs = _build_recommendations(profile)
         assert not any("not cached" in r.lower() for r in recs)
