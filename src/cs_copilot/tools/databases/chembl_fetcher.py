@@ -140,7 +140,7 @@ class SqlChemblFetcher(ChemblDataFetcher):
             import pymysql  # noqa: F401
         except ImportError:
             raise ImportError(
-                "pymysql is required for MySQL backend. Install it with: uv sync --extra mysql"
+                "pymysql is required for MySQL backend. Install project dependencies with: uv sync"
             ) from None
 
         from sqlalchemy import create_engine

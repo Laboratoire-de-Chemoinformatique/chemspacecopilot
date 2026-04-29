@@ -91,27 +91,48 @@ def _detect_ram() -> Dict[str, Optional[float]]:
         return {"total_gb": None, "available_gb": None}
 
 
+def _optional_driver_available(module_name: str) -> bool:
+    """Return True when an optional database driver can be imported."""
+    import importlib.util
+
+    return importlib.util.find_spec(module_name) is not None
+
+
 def _detect_chembl_backend() -> Dict[str, str]:
     """Detect configured ChEMBL backend from environment variables.
 
     Mirrors the priority cascade in chembl.py _resolve_backend:
-    SQLite > PostgreSQL > MySQL > REST API.
+    SQLite > PostgreSQL > MySQL > REST API. When an optional SQL driver is
+    missing, the next fallback backend is reported instead.
     """
+    missing_driver_notes: List[str] = []
+
     if os.getenv("CHEMBL_SQLITE_PATH"):
         return {
             "backend": "sqlite",
             "description": "Local SQLite ChEMBL database",
         }
     if os.getenv("CHEMBL_PG_HOST"):
-        return {
-            "backend": "postgresql",
-            "description": "Local PostgreSQL ChEMBL database",
-        }
+        if _optional_driver_available("psycopg2"):
+            return {
+                "backend": "postgresql",
+                "description": "Local PostgreSQL ChEMBL database",
+            }
+        missing_driver_notes.append("PostgreSQL configured but psycopg2 is not installed")
     if os.getenv("CHEMBL_MYSQL_HOST"):
+        if _optional_driver_available("pymysql"):
+            return {
+                "backend": "mysql",
+                "description": "Local MySQL ChEMBL database",
+            }
+        missing_driver_notes.append("MySQL configured but pymysql is not installed")
+
+    if missing_driver_notes:
         return {
-            "backend": "mysql",
-            "description": "Local MySQL ChEMBL database",
+            "backend": "rest",
+            "description": "ChEMBL REST API (" + "; ".join(missing_driver_notes) + ")",
         }
+
     return {
         "backend": "rest",
         "description": "ChEMBL REST API (no local database configured)",

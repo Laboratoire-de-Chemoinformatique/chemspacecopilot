@@ -13,13 +13,11 @@ from cs_copilot.utils.resources import (
     _detect_cached_models,
     _detect_chembl_backend,
     _detect_cpu,
-    _detect_gpu,
     _detect_ram,
     _detect_storage_backend,
     _dir_has_files,
     analyze_resources,
 )
-
 
 # ---------------------------------------------------------------------------
 # _detect_gpu
@@ -157,9 +155,27 @@ class TestDetectChemblBackend:
     def test_postgresql(self):
         env = {"CHEMBL_PG_HOST": "localhost"}
         with patch.dict("os.environ", env, clear=False):
-            with patch.dict("os.environ", {"CHEMBL_SQLITE_PATH": ""}, clear=False):
-                result = _detect_chembl_backend()
+            with patch(
+                "cs_copilot.utils.resources._optional_driver_available", return_value=True
+            ):
+                with patch.dict("os.environ", {"CHEMBL_SQLITE_PATH": ""}, clear=False):
+                    result = _detect_chembl_backend()
         assert result["backend"] == "postgresql"
+
+    def test_postgresql_falls_back_to_mysql_when_pg_driver_missing(self):
+        env = {"CHEMBL_PG_HOST": "localhost", "CHEMBL_MYSQL_HOST": "localhost"}
+
+        def has_driver(module_name: str) -> bool:
+            return module_name == "pymysql"
+
+        with patch.dict("os.environ", env, clear=False):
+            with patch(
+                "cs_copilot.utils.resources._optional_driver_available",
+                side_effect=has_driver,
+            ):
+                with patch.dict("os.environ", {"CHEMBL_SQLITE_PATH": ""}, clear=False):
+                    result = _detect_chembl_backend()
+        assert result["backend"] == "mysql"
 
     def test_mysql(self):
         env = {"CHEMBL_MYSQL_HOST": "localhost"}
@@ -168,8 +184,25 @@ class TestDetectChemblBackend:
             {**env, "CHEMBL_SQLITE_PATH": "", "CHEMBL_PG_HOST": ""},
             clear=False,
         ):
-            result = _detect_chembl_backend()
+            with patch(
+                "cs_copilot.utils.resources._optional_driver_available", return_value=True
+            ):
+                result = _detect_chembl_backend()
         assert result["backend"] == "mysql"
+
+    def test_mysql_falls_back_to_rest_when_driver_missing(self):
+        env = {"CHEMBL_MYSQL_HOST": "localhost"}
+        with patch.dict(
+            "os.environ",
+            {**env, "CHEMBL_SQLITE_PATH": "", "CHEMBL_PG_HOST": ""},
+            clear=False,
+        ):
+            with patch(
+                "cs_copilot.utils.resources._optional_driver_available", return_value=False
+            ):
+                result = _detect_chembl_backend()
+        assert result["backend"] == "rest"
+        assert "pymysql" in result["description"]
 
     def test_rest_fallback(self):
         with patch.dict(

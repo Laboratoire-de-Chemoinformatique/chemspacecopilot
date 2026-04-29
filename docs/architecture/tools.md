@@ -39,7 +39,7 @@ The `ChemblToolkit` supports two pluggable data backends via a strategy pattern 
 | Backend | Trigger | Dependency | Use case |
 |---------|---------|------------|----------|
 | **REST API** | Default (no config needed) | `chembl_webresource_client` (included) | Quick setup, always-on access |
-| **MySQL** | Set `CHEMBL_MYSQL_HOST` env var | `pymysql` (`uv sync --extra mysql`) | Faster queries, offline use, full SQL |
+| **MySQL** | Set `CHEMBL_MYSQL_HOST` env var | `pymysql` (included in `uv sync`) | Faster queries, offline use, full SQL |
 
 Backend is auto-detected: MySQL when `CHEMBL_MYSQL_HOST` is present, REST otherwise. The REST API is always reported as available regardless of active backend.
 
