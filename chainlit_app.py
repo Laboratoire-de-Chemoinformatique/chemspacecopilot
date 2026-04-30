@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 import chainlit as cl
-from chainlit.input_widget import Switch, Select
+from chainlit.input_widget import Select, Switch
 from chainlit.types import ThreadDict
 from dotenv import load_dotenv
 
@@ -58,7 +58,7 @@ def get_user_role(username: str) -> str:
 def _apply_map_settings(session_agent, map_choice: str) -> None:
     """Propagate the selected map to the team's session_state.
 
-    When the user picks the Universal Map, molecular descriptors default to
+    When the user picks the Default Map, molecular descriptors default to
     autoencoder embeddings (compatible with the HuggingFace GTM model).
     Otherwise, the project keeps its historical Morgan-fingerprint default.
     """
@@ -68,10 +68,10 @@ def _apply_map_settings(session_agent, map_choice: str) -> None:
     if getattr(session_agent, "session_state", None) is None:
         session_agent.session_state = {}
 
-    map_type = map_choice if map_choice in ("new_map", "universal_map") else "new_map"
+    map_type = map_choice if map_choice in ("new_map", "default_map") else "new_map"
     session_agent.session_state["map_type"] = map_type
     session_agent.session_state["default_descriptor"] = (
-        "autoencoder" if map_type == "universal_map" else "morgan"
+        "autoencoder" if map_type == "default_map" else "morgan"
     )
 
 
@@ -126,10 +126,10 @@ async def on_chat_start():
             Select(
                 id="map",
                 label="Map for Chemography",
-                # values=["New map in this session", "Universal Map"],
+                # values=["New map in this session", "Default Map"],
                 items={
                     "New map in this session": "new_map",
-                    "Universal Map": "universal_map",
+                    "Default Map": "default_map",
                     },
                 initial_value="new_map",
             )
@@ -194,7 +194,7 @@ async def on_chat_resume(thread: ThreadDict):
                 label="Map for Chemography",
                 items={
                     "New map in this session": "new_map",
-                    "Universal Map": "universal_map",
+                    "Default Map": "default_map",
                 },
                 initial_value=restored_map,
             )

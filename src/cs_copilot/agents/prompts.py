@@ -458,7 +458,7 @@ AUTOENCODER_INSTRUCTIONS = [
     "    • If cache exists and valid: Reuse cached GTM model and dataset (skip loading)",
     "    • If no cache: Load GTM using `load_gtm_model_only(gtm_file)` and prepare data with `load_and_prep_data(dataset, gtm_model)`",
     "    • Follow path priority: (1) S3 assets, (2) default model repository, (3) HuggingFace",
-    "    • **Universal Map awareness**: if `session_state['map_type'] == 'universal_map'`, use `descriptor_type='autoencoder'` and fall back to `use_default=True` ONLY when the current session does not already have an active GTM. Once a GTM is loaded into the session, keep reusing that session map for all GTM operations. Do not train a new GTM in this mode unless the user explicitly asks.",
+    "    • **Default Map awareness**: if `session_state['map_type'] == 'default_map'`, use `descriptor_type='autoencoder'` and fall back to `use_default=True` ONLY when the current session does not already have an active GTM. Once a GTM is loaded into the session, keep reusing that session map for all GTM operations. Do not train a new GTM in this mode unless the user explicitly asks.",
     # Phase 3: GTM Sampling Strategies (GTM-guided mode only)
     "Step 3: [GTM-guided mode] Sample molecules from GTM maps using targeted strategies:",
     "  - Use `sample_dense_nodes(top_n=..., sample_size=..., return_format='smiles')` to sample from chemically well-explored regions",
@@ -547,22 +547,22 @@ GTM_AGENT_INSTRUCTIONS = [
     # SESSION MAP SELECTION (read from session_state BEFORE choosing a mode)
     "**SESSION MAP SELECTION** (CRITICAL — read session_state BEFORE choosing a mode):",
     "  - Inspect `session_state['map_type']`. Two values are possible:",
-    "      * `'universal_map'` — the user pinned the pretrained HuggingFace Universal Map "
+    "      * `'default_map'` — the user pinned the pretrained HuggingFace Default Map "
     "in the Chainlit settings (default descriptor: `'autoencoder'`).",
     "      * `'new_map'` (or missing) — the user wants to train / reuse a session-local "
     "map (default descriptor: `'morgan'`, current behaviour).",
-    "  - When `map_type == 'universal_map'`:",
+    "  - When `map_type == 'default_map'`:",
     "      * Do NOT run **OPTIMIZE mode** unless the user explicitly asks to build / train / "
-    "optimize a new map. If they do, warn them first that this overrides the Universal Map "
+    "optimize a new map. If they do, warn them first that this overrides the Default Map "
     "selection for the remainder of the session and confirm before proceeding.",
     "      * For LOAD / DENSITY / ACTIVITY / PROJECT modes, prefer the GTM already stored in "
-    "the current session. If no session GTM exists yet, seed the session from the Universal "
+    "the current session. If no session GTM exists yet, seed the session from the Default "
     "Map by using `descriptor_type='autoencoder'` and, when needed, `use_default=True`:",
     "          - first load: `load_gtm_model_only(use_default=True)`",
     "          - once loaded: reuse the session GTM for `load_and_prep_data`, "
     "`load_gtm_get_density_matrix`, `create_activity_landscapes`, and `project_data_on_gtm`",
     "      * Do not train or re-optimize a GTM unless the user explicitly overrides the "
-    "Universal Map selection.",
+    "Default Map selection.",
     "  - When `map_type == 'new_map'` (or missing): keep the historical behaviour described "
     "below (build or reuse a session-trained map using Morgan fingerprints by default).",
     # Phase 1: Operation Mode Detection
@@ -849,18 +849,18 @@ AGENT_TEAM_INSTRUCTIONS = [
     # MAP MODE (shared session setting driven by the Chainlit 'Map for Chemography' dropdown)
     "**MAP MODE** (read session_state BEFORE routing any GTM-related task):",
     "  - `session_state['map_type']` reflects the user's Chainlit setting:",
-    "      * `'universal_map'` — project ALL datasets onto the pretrained HuggingFace "
-    "Universal Map (descriptor: `'autoencoder'`).",
+    "      * `'default_map'` — project ALL datasets onto the pretrained HuggingFace "
+    "Default Map (descriptor: `'autoencoder'`).",
     "      * `'new_map'` (or missing) — train/reuse a session-local GTM (descriptor: "
     "`'morgan'`). This is the DEFAULT.",
-    "  - When `map_type == 'universal_map'`:",
+    "  - When `map_type == 'default_map'`:",
     "      * The default response to any GTM-flavoured request ('plot my data on a GTM', "
     "'density map', 'activity landscape', 'where does this dataset sit') is to PROJECT "
     "the user's data onto the current session GTM. If the session has no GTM yet, seed it "
-    "from the Universal Map and use `descriptor_type='autoencoder'`.",
+    "from the Default Map and use `descriptor_type='autoencoder'`.",
     "      * Do NOT delegate an OPTIMIZE/train request unless the user EXPLICITLY asks to "
     "'build', 'train', or 'optimize' a new GTM. If they do, warn them that this overrides "
-    "the Universal Map selection and get explicit confirmation before proceeding.",
+    "the Default Map selection and get explicit confirmation before proceeding.",
     "  - When `map_type == 'new_map'` (or missing): keep current behaviour (build or reuse "
     "a session-trained map with Morgan fingerprints).",
     # Initial clarification flow (only for ambiguous requests)
