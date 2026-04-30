@@ -35,13 +35,16 @@ class GTMError(DRToolkitError):
 
 
 def _auto_use_default(agent: Optional[Agent], use_default: bool) -> bool:
-    """Escalate to ``use_default=True`` when the session is pinned to the Universal Map.
+    """Escalate to ``use_default=True`` only when the session has no active GTM yet.
 
-    Explicit caller overrides (``use_default=True``) always win. When the user
-    selected ``"Universal Map"`` in the Chainlit settings, every GTM operation
-    should default to the pretrained HuggingFace model unless the caller
-    explicitly provides a file path + ``use_default=False``.
+    The session's current GTM selection is the source of truth. When the user
+    selected ``"Universal Map"`` in the Chainlit settings, GTM operations
+    should fall back to the pretrained HuggingFace model only until a concrete
+    session GTM has been loaded. After that, every GTM operation should keep
+    using the current session map.
     """
+    if gtm_operations.has_session_gtm_selection(agent):
+        return False
     if use_default:
         return True
     if gtm_operations.get_session_map_type(agent) == gtm_operations.UNIVERSAL_MAP_VALUE:
