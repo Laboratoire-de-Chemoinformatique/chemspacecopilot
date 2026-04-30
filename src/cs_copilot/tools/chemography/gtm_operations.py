@@ -97,8 +97,8 @@ SESSION_GTM_MODEL_PATH_KEY = "_current_gtm_model_path"
 SESSION_MAP_TYPE_KEY = "map_type"
 SESSION_DESCRIPTOR_TYPE_KEY = "default_descriptor"
 
-# Recognized value for the "Universal Map" UI selection.
-UNIVERSAL_MAP_VALUE = "universal_map"
+# Recognized value for the "Default Map" UI selection.
+DEFAULT_MAP_VALUE = "default_map"
 
 # Standard SMILES column name variations to check (in priority order)
 _SMILES_COLUMN_VARIANTS = [SMILES_COLUMN, "SMILES", "smiles", "Smiles"]
@@ -254,6 +254,20 @@ def get_session_gtm_model(agent: Optional[Agent]) -> Optional[Any]:
     return agent.session_state.get(SESSION_GTM_MODEL_KEY)
 
 
+def get_session_gtm_model_path(agent: Optional[Agent]) -> Optional[str]:
+    """Return the current session's GTM model path, if one is recorded."""
+    if agent is None or agent.session_state is None:
+        return None
+
+    value = agent.session_state.get(SESSION_GTM_MODEL_PATH_KEY)
+    return value if isinstance(value, str) and value else None
+
+
+def has_session_gtm_selection(agent: Optional[Agent]) -> bool:
+    """Whether the current session already has an active GTM model or model path."""
+    return get_session_gtm_model(agent) is not None or get_session_gtm_model_path(agent) is not None
+
+
 def set_session_gtm_model(agent: Optional[Agent], gtm_model: Any, model_path: str) -> None:
     """
     Store the GTM model in agent session state.
@@ -274,7 +288,7 @@ def set_session_gtm_model(agent: Optional[Agent], gtm_model: Any, model_path: st
 
 
 def get_session_map_type(agent: Optional[Agent]) -> Optional[str]:
-    """Return the session-scoped map selection (``"new_map"`` / ``"universal_map"``).
+    """Return the session-scoped map selection (``"new_map"`` / ``"default_map"``).
 
     Set by the Chainlit UI in ``chainlit_app._apply_map_settings``. Returns
     ``None`` when no selection is available.
@@ -313,8 +327,11 @@ def resolve_gtm_model_path(
     """
     Resolve GTM model path with priority:
     1. Explicit file path if provided and use_default=False
-    2. Session state model path if available and use_default=False
+    2. Session state model path if available
     3. Default model path (S3 assets, default directory, Hugging Face)
+
+    ``use_default=True`` only bypasses an explicit ``gtm_file``. It does not
+    override the current session's GTM selection.
 
     Args:
         gtm_file: Optional explicit path to a GTM model file
@@ -331,27 +348,32 @@ def resolve_gtm_model_path(
             HuggingFace. The error message lists every source that was tried
             and why it failed.
     """
-    # Auto-escalate to default when the session is configured to use the
-    # Universal Map and the caller did not supply an explicit path. This lets
-    # agents transparently project onto the HuggingFace model without having
-    # to pass ``use_default=True`` everywhere.
-    if not use_default and not gtm_file and get_session_map_type(agent) == UNIVERSAL_MAP_VALUE:
-        logger.info(
-            "Session map_type='universal_map' detected; forcing default GTM model resolution."
-        )
-        use_default = True
-
     # Priority 1: Explicit file path (unless use_default is True)
     if gtm_file and not use_default:
         logger.debug(f"Using explicit GTM model path: {gtm_file}")
         return gtm_file
 
-    # Priority 2: Session state model (unless use_default is True)
-    if agent is not None and agent.session_state is not None:
-        session_model_path = agent.session_state.get(SESSION_GTM_MODEL_PATH_KEY)
-        if session_model_path and not use_default:
-            logger.debug(f"Using session state GTM model path: {session_model_path}")
-            return session_model_path
+    # Priority 2: Current session map selection. This must win over the
+    # default-map fallback so that once a map is active in the session,
+    # all downstream GTM operations stay pinned to it.
+    session_model_path = get_session_gtm_model_path(agent)
+    if session_model_path and not gtm_file:
+        logger.debug(f"Using session state GTM model path: {session_model_path}")
+        return session_model_path
+
+    # Auto-escalate to the Default Map only when the session is
+    # configured for it and no session-local GTM has been selected yet.
+    if (
+        not use_default
+        and not gtm_file
+        and not session_model_path
+        and get_session_map_type(agent) == DEFAULT_MAP_VALUE
+    ):
+        logger.info(
+            "Session map_type='default_map' detected with no active session GTM; "
+            "forcing default GTM model resolution."
+        )
+        use_default = True
 
     # Priority 3: Default model resolution
     logger.debug("Resolving default GTM model path")

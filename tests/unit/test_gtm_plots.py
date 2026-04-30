@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import altair as alt
 import numpy as np
@@ -679,3 +679,65 @@ def test_resolve_gtm_model_path_raises_when_no_source_available(monkeypatch, tmp
     assert str(empty_cache) in message
     assert "404 Repository Not Found" in message
     assert gtm_operations.HUGGINGFACE_GTM_REPO in message
+
+
+def test_resolve_gtm_model_path_prefers_current_session_map_over_default(monkeypatch):
+    """A session-selected GTM must win over the default-map fallback."""
+
+    agent = SimpleNamespace(
+        session_state={
+            gtm_operations.SESSION_MAP_TYPE_KEY: gtm_operations.DEFAULT_MAP_VALUE,
+            gtm_operations.SESSION_GTM_MODEL_PATH_KEY: "session/current_map.pkl.gz",
+        }
+    )
+
+    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_MODEL_PATH", "/should/not/be/used")
+
+    resolved = gtm_operations.resolve_gtm_model_path(agent=agent, use_default=True)
+
+    assert resolved == "session/current_map.pkl.gz"
+
+
+def test_resolve_gtm_model_path_uses_default_when_default_map_session_has_no_current_map(
+    monkeypatch, tmp_path
+):
+    """Default-map sessions should still fall back to the default model when empty."""
+
+    default_dir = tmp_path / "gtm_cache"
+    default_dir.mkdir()
+    default_model = default_dir / "default.pkl.gz"
+    default_model.write_text("placeholder")
+    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_MODEL_PATH", str(default_dir))
+
+    agent = SimpleNamespace(
+        session_state={gtm_operations.SESSION_MAP_TYPE_KEY: gtm_operations.DEFAULT_MAP_VALUE}
+    )
+
+    resolved = gtm_operations.resolve_gtm_model_path(agent=agent)
+
+    assert resolved == str(default_model)
+
+
+def test_load_gtm_model_only_prefers_current_session_model_over_use_default(monkeypatch):
+    """Explicit use_default should not displace the GTM already active in the session."""
+
+    session_model = object()
+    agent = SimpleNamespace(
+        session_state={
+            gtm_operations.SESSION_MAP_TYPE_KEY: gtm_operations.DEFAULT_MAP_VALUE,
+            gtm_operations.SESSION_GTM_MODEL_KEY: session_model,
+            gtm_operations.SESSION_GTM_MODEL_PATH_KEY: "session/current_map.pkl.gz",
+        }
+    )
+
+    def _unexpected(*_args, **_kwargs):
+        raise AssertionError("default/model resolution should not run when session GTM exists")
+
+    monkeypatch.setattr(gtm_operations, "resolve_gtm_model_path", _unexpected)
+    monkeypatch.setattr(gtm_operations, "load_gtm_model", _unexpected)
+
+    toolkit = GTMToolkit()
+    result = toolkit.load_gtm_model_only(agent=agent, use_default=True)
+
+    assert toolkit._gtm_data.gtm is session_model
+    assert "session/current_map.pkl.gz" in result
