@@ -255,3 +255,119 @@ def test_normalise_routes_empty():
     assert toolkit._normalise_routes(None) == []
     assert toolkit._normalise_routes([]) == []
     assert toolkit._normalise_routes("not a list") == []
+
+
+class _FakeTree:
+    def __init__(self, winning_nodes):
+        self.winning_nodes = winning_nodes
+        self.curr_iteration = 12
+        self.curr_time = 1.2345
+        self.curr_tree_size = 7
+        self.nodes_depth = {1: 0, 2: 1, 3: 2}
+
+    def __len__(self):
+        return self.curr_tree_size - 1
+
+    def route_score(self, node_id):
+        return 0.7
+
+    def route_to_node(self, node_id):
+        return []
+
+
+def _patch_planning_dependencies(monkeypatch, toolkit):
+    monkeypatch.setattr(toolkit, "_load_synplanner_components", lambda: None)
+    monkeypatch.setattr(toolkit, "_generate_route_visualizations", lambda *args, **kwargs: [])
+    monkeypatch.setattr(toolkit, "get_basic_descriptors", lambda smiles: {})
+
+
+def test_build_search_profiles_use_synplanner_documented_baseline():
+    toolkit = SynPlannerToolkit()
+
+    profiles = toolkit._build_search_profiles()
+    standard = profiles[0]
+    broader = next(profile for profile in profiles if profile.name == "broader_expansion")
+    exploratory = next(profile for profile in profiles if profile.name == "exploratory_uct")
+
+    assert standard.name == "standard"
+    assert standard.tree_config["max_iterations"] == 100
+    assert standard.tree_config["max_tree_size"] == 10000
+    assert standard.tree_config["max_time"] == 120
+    assert standard.tree_config["max_depth"] == 9
+    assert standard.tree_config["search_strategy"] == "expansion_first"
+    assert standard.tree_config["ucb_type"] == "uct"
+    assert standard.tree_config["c_ucb"] == 0.1
+    assert standard.tree_config["min_mol_size"] == 6
+    assert standard.tree_config["epsilon"] == 0.0
+    assert standard.tree_config["silent"] is True
+    assert standard.policy_config["top_rules"] == 50
+    assert standard.policy_config["rule_prob_threshold"] == 0.0
+    assert broader.policy_config["top_rules"] == 100
+    assert broader.policy_config["rule_prob_threshold"] == 0.0
+    assert exploratory.tree_config["c_ucb"] == 0.5
+    assert exploratory.tree_config["epsilon"] == 0.1
+
+
+def test_plan_synthesis_stops_when_standard_profile_finds_route(monkeypatch):
+    toolkit = SynPlannerToolkit()
+    _patch_planning_dependencies(monkeypatch, toolkit)
+    calls = []
+
+    def fake_create_tree(smiles, profile=None):
+        calls.append(profile.name)
+        return _FakeTree([42])
+
+    monkeypatch.setattr(toolkit, "_create_and_search_tree", fake_create_tree)
+
+    plan = toolkit.plan_synthesis("CCO")
+
+    assert calls == ["standard"]
+    assert len(plan["routes"]) == 1
+    assert plan["successful_attempt"] == "standard"
+    assert plan["llm_fallback_allowed"] is False
+    assert len(plan["attempts"]) == 1
+    assert plan["attempts"][0]["route_count"] == 1
+    assert "raw" not in plan
+
+
+def test_plan_synthesis_retries_until_later_profile_finds_route(monkeypatch):
+    toolkit = SynPlannerToolkit()
+    _patch_planning_dependencies(monkeypatch, toolkit)
+    calls = []
+
+    def fake_create_tree(smiles, profile=None):
+        calls.append(profile.name)
+        winning_nodes = [42] if profile.name == "broader_expansion" else []
+        return _FakeTree(winning_nodes)
+
+    monkeypatch.setattr(toolkit, "_create_and_search_tree", fake_create_tree)
+
+    plan = toolkit.plan_synthesis("CCO")
+
+    assert calls == ["standard", "longer_search", "deeper_search", "broader_expansion"]
+    assert len(plan["routes"]) == 1
+    assert plan["successful_attempt"] == "broader_expansion"
+    assert plan["llm_fallback_allowed"] is False
+    assert [attempt["route_count"] for attempt in plan["attempts"]] == [0, 0, 0, 1]
+    assert plan["attempts"][-1]["parameters"]["policy"]["top_rules"] == 100
+
+
+def test_plan_synthesis_all_profiles_fail_allows_llm_fallback(monkeypatch):
+    toolkit = SynPlannerToolkit()
+    _patch_planning_dependencies(monkeypatch, toolkit)
+    calls = []
+
+    def fake_create_tree(smiles, profile=None):
+        calls.append(profile.name)
+        return _FakeTree([])
+
+    monkeypatch.setattr(toolkit, "_create_and_search_tree", fake_create_tree)
+
+    plan = toolkit.plan_synthesis("CCO")
+
+    assert plan["routes"] == []
+    assert plan["successful_attempt"] is None
+    assert plan["llm_fallback_allowed"] is True
+    assert calls == [attempt["profile"] for attempt in plan["attempts"]]
+    assert calls[-1] == "evaluation_first"
+    assert all("tree" not in attempt for attempt in plan["attempts"])

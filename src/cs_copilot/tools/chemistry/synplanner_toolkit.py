@@ -78,6 +78,15 @@ class _NormalisedStep:
         }
 
 
+@dataclass(frozen=True)
+class _SearchProfile:
+    """SynPlanner search configuration for one planning attempt."""
+
+    name: str
+    tree_config: Dict[str, Any]
+    policy_config: Dict[str, Any]
+
+
 class SynPlannerToolkit(BaseChemistryToolkit):
     """Expose SynPlanner retrosynthesis routines as a toolkit."""
 
@@ -96,9 +105,14 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         prefer_gpu: bool = False,
         default_top_k: int = 3,
         data_folder: Optional[str] = None,
-        max_iterations: int = 300,
+        max_iterations: int = 100,
+        max_tree_size: int = 10000,
         max_time: int = 120,
         max_depth: int = 9,
+        min_mol_size: int = 6,
+        top_rules: int = 50,
+        rule_prob_threshold: float = 0.0,
+        enable_retry_profiles: bool = True,
     ) -> None:
         """Initialise the toolkit and register exposed tools.
 
@@ -107,8 +121,13 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             default_top_k: Default number of routes to return
             data_folder: Path to SynPlanner data folder (if None, will try to use default locations)
             max_iterations: Maximum number of search iterations for Tree
+            max_tree_size: Maximum number of nodes in the search tree
             max_time: Maximum search time in seconds for Tree
             max_depth: Maximum depth of the search tree
+            min_mol_size: Molecules at or below this size are treated as building blocks
+            top_rules: Number of top policy-network reaction rules to consider
+            rule_prob_threshold: Minimum policy probability for selected reaction rules
+            enable_retry_profiles: Whether to retry with broader profiles when no routes are found
         """
 
         super().__init__(name="synplanner")
@@ -116,8 +135,13 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         self.default_top_k = default_top_k
         self.data_folder = data_folder
         self.max_iterations = max_iterations
+        self.max_tree_size = max_tree_size
         self.max_time = max_time
         self.max_depth = max_depth
+        self.min_mol_size = min_mol_size
+        self.top_rules = top_rules
+        self.rule_prob_threshold = rule_prob_threshold
+        self.enable_retry_profiles = enable_retry_profiles
         self._synplanner_module: Optional[Any] = None
         self._reaction_rules: Optional[Any] = None
         self._building_blocks: Optional[Any] = None
@@ -460,14 +484,44 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         self._load_synplanner_components()
 
         request_top_k = top_k if top_k is not None else self.default_top_k
-        tree = self._create_and_search_tree(smiles)
-        raw_routes = self._extract_routes_from_tree(tree, request_top_k)
+        attempts: List[Dict[str, Any]] = []
+        tree = None
+        raw_routes: List[Any] = []
+        successful_attempt: Optional[str] = None
+
+        profiles = self._build_search_profiles()
+        for profile in profiles:
+            try:
+                attempt_tree = self._create_and_search_tree(smiles, profile=profile)
+                attempt_routes = self._extract_routes_from_tree(attempt_tree, request_top_k)
+                attempts.append(self._summarise_attempt(profile, attempt_tree, attempt_routes))
+            except SynPlannerError as exc:
+                attempts.append(self._summarise_attempt(profile, error=exc))
+                logger.warning("SynPlanner attempt '%s' failed: %s", profile.name, exc)
+                continue
+
+            if attempt_routes:
+                tree = attempt_tree
+                raw_routes = attempt_routes
+                successful_attempt = profile.name
+                break
+
         routes = self._normalise_routes(raw_routes)
 
         # Generate visualizations for routes (stored separately to avoid context overflow)
-        route_visualizations = self._generate_route_visualizations(tree, raw_routes, agent=agent)
+        route_visualizations = []
+        if tree is not None and raw_routes:
+            route_visualizations = self._generate_route_visualizations(
+                tree, raw_routes, agent=agent
+            )
 
         descriptors = self.get_basic_descriptors(smiles)
+        completed_no_route_attempts = [
+            attempt for attempt in attempts if attempt.get("stop_reason") == "no_routes"
+        ]
+        llm_fallback_allowed = (
+            not routes and len(attempts) == len(profiles) and bool(completed_no_route_attempts)
+        )
 
         # Store full plan with visualizations for later retrieval
         full_plan = {
@@ -479,6 +533,9 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             "raw": raw_routes,
             "visualizations": route_visualizations,
             "descriptors": descriptors,
+            "attempts": attempts,
+            "successful_attempt": successful_attempt,
+            "llm_fallback_allowed": llm_fallback_allowed,
         }
         self._last_plan = full_plan
 
@@ -493,12 +550,187 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             "descriptors": descriptors,
             "visualization_available": len(route_visualizations) > 0,
             "num_visualizations": len(route_visualizations),
+            "attempts": attempts,
+            "successful_attempt": successful_attempt,
+            "llm_fallback_allowed": llm_fallback_allowed,
         }
 
         return plan
 
-    def _create_and_search_tree(self, smiles: str) -> Any:
+    def _build_search_profiles(self) -> List[_SearchProfile]:
+        """Return ordered SynPlanner attempts from documented defaults to broader retries."""
+        base_tree_config = {
+            "max_iterations": self.max_iterations,
+            "max_tree_size": self.max_tree_size,
+            "max_time": self.max_time,
+            "max_depth": self.max_depth,
+            "search_strategy": "expansion_first",
+            "ucb_type": "uct",
+            "c_ucb": 0.1,
+            "backprop_type": "muzero",
+            "init_node_value": 0.5,
+            "min_mol_size": self.min_mol_size,
+            "epsilon": 0.0,
+            "silent": True,
+        }
+        base_policy_config = {
+            "top_rules": self.top_rules,
+            "rule_prob_threshold": self.rule_prob_threshold,
+        }
+
+        def profile(
+            name: str,
+            tree_updates: Optional[Dict[str, Any]] = None,
+            policy_updates: Optional[Dict[str, Any]] = None,
+        ) -> _SearchProfile:
+            tree_config = {**base_tree_config, **(tree_updates or {})}
+            policy_config = {**base_policy_config, **(policy_updates or {})}
+            return _SearchProfile(name=name, tree_config=tree_config, policy_config=policy_config)
+
+        profiles = [
+            profile("standard"),
+        ]
+
+        if not self.enable_retry_profiles:
+            return profiles
+
+        longer_iterations = max(self.max_iterations * 3, 300)
+        deeper_iterations = max(self.max_iterations * 5, 500)
+        broader_top_rules = max(self.top_rules * 2, 100)
+
+        profiles.extend(
+            [
+                profile(
+                    "longer_search",
+                    {
+                        "max_iterations": longer_iterations,
+                        "max_time": max(self.max_time * 2, 240),
+                    },
+                ),
+                profile(
+                    "deeper_search",
+                    {
+                        "max_iterations": deeper_iterations,
+                        "max_time": max(self.max_time * 3, 360),
+                        "max_depth": max(self.max_depth + 3, 12),
+                    },
+                ),
+                profile(
+                    "broader_expansion",
+                    {
+                        "max_iterations": deeper_iterations,
+                        "max_time": max(self.max_time * 3, 360),
+                        "max_depth": max(self.max_depth + 3, 12),
+                    },
+                    {"top_rules": broader_top_rules, "rule_prob_threshold": 0.0},
+                ),
+                profile(
+                    "exploratory_uct",
+                    {
+                        "max_iterations": max(self.max_iterations * 8, 800),
+                        "max_time": max(self.max_time * 4, 480),
+                        "max_depth": max(self.max_depth + 3, 12),
+                        "c_ucb": 0.5,
+                        "epsilon": 0.1,
+                    },
+                    {"top_rules": broader_top_rules, "rule_prob_threshold": 0.0},
+                ),
+                profile(
+                    "evaluation_first",
+                    {
+                        "max_iterations": max(self.max_iterations * 8, 800),
+                        "max_time": max(self.max_time * 4, 480),
+                        "max_depth": max(self.max_depth + 3, 12),
+                        "search_strategy": "evaluation_first",
+                    },
+                    {"top_rules": broader_top_rules, "rule_prob_threshold": 0.0},
+                ),
+            ]
+        )
+
+        return profiles
+
+    def _apply_policy_config(self, policy_config: Dict[str, Any]) -> None:
+        """Apply per-attempt policy-network parameters to the loaded SynPlanner function."""
+        if self._policy_network is None:
+            return
+
+        config = getattr(self._policy_network, "config", None)
+        if config is None:
+            return
+
+        for key, value in policy_config.items():
+            setattr(config, key, value)
+
+    def _summarise_attempt(
+        self,
+        profile: _SearchProfile,
+        tree: Optional[Any] = None,
+        raw_routes: Optional[List[Any]] = None,
+        error: Optional[Exception] = None,
+    ) -> Dict[str, Any]:
+        route_count = len(raw_routes or [])
+        summary: Dict[str, Any] = {
+            "profile": profile.name,
+            "route_count": route_count,
+            "stop_reason": "routes_found" if route_count else "no_routes",
+            "parameters": {
+                "tree": dict(profile.tree_config),
+                "policy": dict(profile.policy_config),
+            },
+        }
+
+        if tree is not None:
+            summary.update(
+                {
+                    "iterations": getattr(tree, "curr_iteration", None),
+                    "tree_size": self._safe_tree_size(tree),
+                    "search_time": self._safe_search_time(tree),
+                    "max_depth_reached": self._safe_max_depth(tree),
+                }
+            )
+
+        if error is not None:
+            summary["stop_reason"] = "error"
+            summary["error"] = str(error)
+
+        return summary
+
+    @staticmethod
+    def _safe_tree_size(tree: Any) -> Optional[int]:
+        try:
+            return len(tree)
+        except Exception:
+            size = getattr(tree, "curr_tree_size", None)
+            if isinstance(size, int):
+                return size
+            return None
+
+    @staticmethod
+    def _safe_search_time(tree: Any) -> Optional[float]:
+        search_time = getattr(tree, "curr_time", None)
+        if search_time is None:
+            return None
+        try:
+            return round(float(search_time), 3)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _safe_max_depth(tree: Any) -> Optional[int]:
+        nodes_depth = getattr(tree, "nodes_depth", None)
+        if not isinstance(nodes_depth, dict) or not nodes_depth:
+            return None
+        try:
+            return max(nodes_depth.values())
+        except ValueError:
+            return None
+
+    def _create_and_search_tree(self, smiles: str, profile: Optional[_SearchProfile] = None) -> Any:
         """Create a SynPlanner Tree and run the search."""
+        if profile is None:
+            profile = self._build_search_profiles()[0]
+
         try:
             from synplan.chem.utils import mol_from_smiles as synplan_mol_from_smiles
             from synplan.mcts.tree import Tree
@@ -515,24 +747,18 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         except Exception as exc:
             raise SynPlannerError(f"Failed to parse SMILES '{smiles}': {exc}") from exc
 
+        self._apply_policy_config(profile.policy_config)
+
         # Create tree configuration
-        tree_config = TreeConfig(
-            search_strategy="expansion_first",
-            max_iterations=self.max_iterations,
-            max_time=self.max_time,
-            max_depth=self.max_depth,
-            min_mol_size=1,
-            init_node_value=0.5,
-            ucb_type="uct",
-            c_ucb=0.1,
-        )
+        tree_config = TreeConfig(**profile.tree_config)
 
         # Create evaluation function (rollout-based)
         eval_config = RolloutEvaluationConfig(
             policy_network=self._policy_network,
             reaction_rules=self._reaction_rules,
             building_blocks=self._building_blocks,
-            max_depth=self.max_depth,
+            min_mol_size=profile.tree_config["min_mol_size"],
+            max_depth=profile.tree_config["max_depth"],
         )
         evaluation_function = load_evaluation_function(eval_config)
 
@@ -910,12 +1136,30 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             plan = self._last_plan
 
         if not plan["routes"]:
-            return f"SynPlanner did not return any retrosynthetic routes for {plan['smiles']}"
+            attempts = plan.get("attempts", [])
+            fallback_note = (
+                " LLM fallback is allowed, but any route should be clearly marked as not "
+                "SynPlanner-validated."
+                if plan.get("llm_fallback_allowed")
+                else ""
+            )
+            return (
+                f"SynPlanner did not return any retrosynthetic routes for {plan['smiles']} "
+                f"after {len(attempts)} search attempt(s).{fallback_note}"
+            )
 
         lines = [
             f"Retrosynthetic proposal for {plan['query']} ({plan['smiles']}):",
             "",
         ]
+        successful_attempt = plan.get("successful_attempt")
+        attempts = plan.get("attempts", [])
+        if successful_attempt:
+            lines.append(
+                f"SynPlanner found this route with the '{successful_attempt}' profile "
+                f"after {len(attempts)} search attempt(s)."
+            )
+            lines.append("")
 
         best_route = plan["routes"][0]
         score = best_route.get("score")
@@ -969,6 +1213,9 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                 "smiles": plan["smiles"],
                 "message": "No route visualizations available. No routes were found or visualization generation failed.",
                 "visualizations": [],
+                "attempts": plan.get("attempts", []),
+                "successful_attempt": plan.get("successful_attempt"),
+                "llm_fallback_allowed": plan.get("llm_fallback_allowed", False),
             }
 
         # Format visualizations with route information (excluding large SVG/base64 data)
@@ -1005,6 +1252,9 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             "visualizations": formatted_viz,
             "png_paths": png_paths_from_session,
             "svg_paths": svg_paths_from_session,
+            "attempts": plan.get("attempts", []),
+            "successful_attempt": plan.get("successful_attempt"),
+            "llm_fallback_allowed": plan.get("llm_fallback_allowed", False),
         }
 
 

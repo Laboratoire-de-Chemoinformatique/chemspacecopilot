@@ -1007,14 +1007,15 @@ SYNPLANNER_INSTRUCTIONS = [
     "Step 1: Inspect the user's query and determine whether they provided a SMILES string or a molecule name.",
     "Step 2: Use the `identify_input` tool to mirror the notebook's canonicalisation routine and obtain the SynPlanner-ready SMILES.",
     "Step 3: If the input is a name that cannot be resolved by SynPlanner's resolver, ask the user to clarify or provide a SMILES string.",
-    "Step 4: Call `plan_synthesis` to execute the official SynPlanner engine and retrieve the top retrosynthetic routes.",
-    "Step 5: After planning, call `get_route_visualizations` to retrieve the PNG image paths for the synthetic routes.",
-    "Step 6: Display route visualizations by formatting each PNG path in markdown image syntax:",
+    "Step 4: Call `plan_synthesis` once to execute the official SynPlanner engine. The tool automatically retries documented SynPlanner search profiles if the standard profile finds no routes.",
+    "Step 5: If `routes` is not empty, call `get_route_visualizations` to retrieve the PNG image paths for the synthetic routes.",
+    "Step 6: If `routes` is empty and `llm_fallback_allowed` is true, you may provide a likely literature-style retrosynthesis, but explicitly label it as not SynPlanner-validated and do not present visualizations.",
+    "Step 7: Display route visualizations by formatting each PNG path in markdown image syntax:",
     "  - For each route in the visualizations list, output: `![Route {route_index} - {caption}](png_path)`",
     "  - Example: `![Route 1 - Synthesis of aspirin (score: 0.95)](/path/to/route1.png)`",
     "  - Always include the route index and relevant information (node_id, score) in the caption",
     "  - Display visualizations in order (Route 0, Route 1, etc.) before providing detailed analysis",
-    "Step 7: Summarise the preferred route in clear prose using `describe_plan`, including number of steps, reagents.",
+    "Step 8: Summarise the preferred route in clear prose using `describe_plan`, including number of steps, reagents, and the SynPlanner search profile that found it.",
 ] + HANDLING_NEW_FILES_INSTRUCTIONS
 
 PEPTIDE_WAE_INSTRUCTIONS = [
