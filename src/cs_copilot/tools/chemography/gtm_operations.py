@@ -15,8 +15,10 @@ Functions are organized into categories:
 
 import base64
 import gzip
+import hashlib
 import math
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -97,6 +99,7 @@ logger = setup_logging(suppress_warnings=True, suppress_tqdm=True)
 # Session state key for storing the current GTM model
 SESSION_GTM_MODEL_KEY = "_current_gtm_model"
 SESSION_GTM_MODEL_PATH_KEY = "_current_gtm_model_path"
+SESSION_GTM_PREPARED_DATASET_CACHE_KEY = "_gtm_prepared_dataset_cache"
 
 # Session state keys for map selection (set by the Chainlit UI via chainlit_app.py)
 SESSION_MAP_TYPE_KEY = "map_type"
@@ -119,6 +122,19 @@ _LANDSCAPE_REQUIRED_COLUMNS: dict[str, set[str]] = {
 }
 
 _PLOTLY_SUPPORTED_LANDSCAPES = {"density", "classification", "regression"}
+RAW_SMILES_COLUMN = "raw_smiles"
+RAW_SMILES_INPUT_COLUMN = "raw_smiles_input"
+
+
+@dataclass
+class _PreparedGTMData:
+    df: pd.DataFrame
+    X: np.ndarray
+    descriptor_column: str
+    effective_descriptor: str
+    initial_size: int
+    final_size: int
+    cache_hit: bool = False
 
 
 def find_smiles_column(df: pd.DataFrame) -> str:
@@ -322,6 +338,125 @@ def get_session_descriptor_type(
         if isinstance(candidate, str) and candidate:
             return candidate
     return DEFAULT_DESCRIPTOR_TYPE
+
+
+def _copy_prepared_gtm_data(prepared: _PreparedGTMData, *, cache_hit: bool) -> _PreparedGTMData:
+    """Return isolated copies so callers cannot mutate cached prepared data."""
+
+    return _PreparedGTMData(
+        df=prepared.df.copy(deep=True),
+        X=prepared.X.copy(),
+        descriptor_column=prepared.descriptor_column,
+        effective_descriptor=prepared.effective_descriptor,
+        initial_size=prepared.initial_size,
+        final_size=prepared.final_size,
+        cache_hit=cache_hit,
+    )
+
+
+def _get_gtm_prepared_dataset_cache(
+    agent: Optional[Agent],
+) -> Optional[dict[tuple, _PreparedGTMData]]:
+    if agent is None:
+        return None
+    if agent.session_state is None:
+        agent.session_state = {}
+
+    cache = agent.session_state.get(SESSION_GTM_PREPARED_DATASET_CACHE_KEY)
+    if not isinstance(cache, dict):
+        cache = {}
+        agent.session_state[SESSION_GTM_PREPARED_DATASET_CACHE_KEY] = cache
+    return cache
+
+
+def _dataframe_fingerprint(df: pd.DataFrame) -> str:
+    """Build a stable fingerprint for the raw input table before preprocessing."""
+
+    hasher = hashlib.sha256()
+    hasher.update(str(tuple(df.columns)).encode("utf-8"))
+    hasher.update(str(tuple(str(dtype) for dtype in df.dtypes)).encode("utf-8"))
+    hasher.update(str(df.shape).encode("utf-8"))
+    try:
+        row_hashes = pd.util.hash_pandas_object(df, index=True).to_numpy()
+        hasher.update(row_hashes.tobytes())
+    except TypeError:
+        content = df.to_json(orient="split", date_format="iso", default_handler=str)
+        hasher.update(content.encode("utf-8"))
+    return hasher.hexdigest()
+
+
+def _raw_smiles_column_name(columns: Iterable[str], smiles_column: str) -> str:
+    existing = set(columns)
+    if RAW_SMILES_COLUMN not in existing and smiles_column != RAW_SMILES_COLUMN:
+        return RAW_SMILES_COLUMN
+
+    if RAW_SMILES_INPUT_COLUMN not in existing and smiles_column != RAW_SMILES_INPUT_COLUMN:
+        return RAW_SMILES_INPUT_COLUMN
+
+    suffix = 1
+    while True:
+        candidate = f"{RAW_SMILES_INPUT_COLUMN}_{suffix}"
+        if candidate not in existing and candidate != smiles_column:
+            return candidate
+        suffix += 1
+
+
+def _prepare_gtm_training_data(
+    df: pd.DataFrame,
+    smiles_column: str,
+    *,
+    dataset_identifier: str,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
+) -> _PreparedGTMData:
+    if smiles_column not in df.columns:
+        raise ValueError(
+            f"Column '{smiles_column}' not found in dataset. Available columns: {list(df.columns)}"
+        )
+
+    effective_descriptor = get_session_descriptor_type(agent, descriptor_type)
+    fingerprint = _dataframe_fingerprint(df)
+    cache_key = (str(dataset_identifier), smiles_column, effective_descriptor, fingerprint)
+    cache = _get_gtm_prepared_dataset_cache(agent)
+
+    if cache is not None and cache_key in cache:
+        logger.info(
+            "Using cached GTM preprocessing for dataset=%s, smiles_column=%s, descriptor=%s",
+            dataset_identifier,
+            smiles_column,
+            effective_descriptor,
+        )
+        return _copy_prepared_gtm_data(cache[cache_key], cache_hit=True)
+
+    initial_size = len(df)
+    prepared_df = df.copy()
+    raw_smiles_column = _raw_smiles_column_name(prepared_df.columns, smiles_column)
+    prepared_df[raw_smiles_column] = prepared_df[smiles_column]
+    prepared_df = prepared_df.dropna(subset=[smiles_column])
+    prepared_df = standardize_smiles_column(prepared_df, smiles_column)
+    prepared_df = prepared_df.dropna(subset=[smiles_column]).reset_index(drop=True)
+    final_size = len(prepared_df)
+
+    if final_size == 0:
+        raise ValueError(f"No valid SMILES found in column '{smiles_column}'")
+
+    prepared_df, X, descriptor_column = _compute_descriptors(
+        prepared_df, smiles_column=smiles_column, descriptor_type=effective_descriptor
+    )
+
+    prepared = _PreparedGTMData(
+        df=prepared_df,
+        X=X,
+        descriptor_column=descriptor_column,
+        effective_descriptor=effective_descriptor,
+        initial_size=initial_size,
+        final_size=final_size,
+    )
+
+    if cache is not None:
+        cache[cache_key] = _copy_prepared_gtm_data(prepared, cache_hit=False)
+
+    return _copy_prepared_gtm_data(prepared, cache_hit=False)
 
 
 def resolve_gtm_model_path(
@@ -2288,6 +2423,8 @@ def optimize_gtm(
     *,
     descriptor_type: Optional[str] = None,
     agent: Optional[Agent] = None,
+    X: Optional[np.ndarray] = None,
+    descriptor_column: Optional[str] = None,
 ):
     """
     Optimize GTM hyperparameters and fit the final model.
@@ -2302,12 +2439,31 @@ def optimize_gtm(
         tuple: (df with descriptors, fitted GTM model, best score)
     """
 
-    # Compute descriptors using the resolved descriptor type (session-aware).
-    effective_descriptor = get_session_descriptor_type(agent, descriptor_type)
-    df, X, descriptor_column = _compute_descriptors(
-        df, smiles_column=smiles_column, descriptor_type=effective_descriptor
-    )
-    df = df[~df[descriptor_column].isna()]
+    if X is None:
+        # Compute descriptors using the resolved descriptor type (session-aware).
+        effective_descriptor = get_session_descriptor_type(agent, descriptor_type)
+        df, X, descriptor_column = _compute_descriptors(
+            df, smiles_column=smiles_column, descriptor_type=effective_descriptor
+        )
+    else:
+        X = np.asarray(X)
+        if len(df) != X.shape[0]:
+            raise ValueError(
+                f"Precomputed descriptor matrix row count ({X.shape[0]}) does not match "
+                f"DataFrame row count ({len(df)})"
+            )
+        if descriptor_column is None:
+            effective_descriptor = get_session_descriptor_type(agent, descriptor_type)
+            encoder = MolecularDescriptorEncoder(default_descriptor=effective_descriptor)
+            descriptor_column = encoder.column_name()
+        if descriptor_column not in df.columns:
+            df = df.copy()
+            df[descriptor_column] = [vec.tolist() for vec in X]
+
+    valid_descriptor_mask = ~df[descriptor_column].isna()
+    if not valid_descriptor_mask.all():
+        df = df[valid_descriptor_mask].reset_index(drop=True)
+        X = X[valid_descriptor_mask.to_numpy()]
 
     n_samples = len(df)
     logger.info(f"Starting GTM optimization with {n_samples} molecules")
@@ -2518,34 +2674,29 @@ def optimize_gtm_model(
 
         logger.info(f"Loaded dataset with shape {df.shape}")
 
-        # Validate SMILES column exists
-        if smiles_column not in df.columns:
-            raise ValueError(
-                f"Column '{smiles_column}' not found in dataset. Available columns: {list(df.columns)}"
-            )
-
-        # Clean the data
-        initial_size = len(df)
-        df = df.dropna(subset=[smiles_column])
-        df = standardize_smiles_column(df, smiles_column)
-        df = df.dropna(subset=[smiles_column]).reset_index(drop=True)
-        final_size = len(df)
-
-        if final_size == 0:
-            raise ValueError(f"No valid SMILES found in column '{smiles_column}'")
+        prepared = _prepare_gtm_training_data(
+            df,
+            smiles_column,
+            dataset_identifier=df_csv_path,
+            descriptor_type=descriptor_type,
+            agent=agent,
+        )
 
         logger.info(
-            f"Cleaned dataset: {initial_size} -> {final_size} rows ({initial_size - final_size} rows dropped)"
+            f"Cleaned dataset: {prepared.initial_size} -> {prepared.final_size} rows "
+            f"({prepared.initial_size - prepared.final_size} rows dropped)"
         )
 
         # Optimize GTM model
         logger.info(f"Optimizing GTM with entropy (strategy={strategy})")
         df, gtm, best_score = optimize_gtm(
-            df,
+            prepared.df,
             smiles_column,
             strategy=strategy,
-            descriptor_type=descriptor_type,
+            descriptor_type=prepared.effective_descriptor,
             agent=agent,
+            X=prepared.X,
+            descriptor_column=prepared.descriptor_column,
         )
 
         # Store results in agent session
