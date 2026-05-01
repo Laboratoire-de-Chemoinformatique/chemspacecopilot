@@ -12,6 +12,11 @@ import pandas as pd
 from agno.tools.pandas import PandasTools
 
 from cs_copilot.storage import S3
+from cs_copilot.tools.chemistry.smiles_columns import (
+    find_smiles_column_name,
+    format_smiles_column_expectation,
+    smiles_column_exact_names,
+)
 from cs_copilot.tools.chemistry.standardize import standardize_smiles_column
 from cs_copilot.tools.constants import MAX_COL_WIDTH, SAMPLE_COLS, SAMPLE_ROWS
 
@@ -792,8 +797,8 @@ class PointerPandasTools(PandasTools):
             df_path: Path to the CSV file (S3 or local) or name of existing DataFrame
             cluster_col: Name of column to use as cluster_id. If None, auto-detects from:
                         ['node_index', 'cluster_id', 'cluster', 'group', 'class', 'label']
-            smiles_col: Name of SMILES column. If None, auto-detects from:
-                       ['smiles', 'SMILES', 'canonical_smiles', 'Smiles']
+            smiles_col: Name of SMILES column. If None, auto-detects exact common
+                       names first, then column names containing 'smiles'.
             activity_col: Name of activity column. If None, auto-detects from:
                          ['activity', 'pIC50', 'pKi', 'standard_value', 'value']
 
@@ -816,7 +821,8 @@ class PointerPandasTools(PandasTools):
             normalize_for_analysis(df_path="molecules.csv")
         """
         # Auto-detect column name patterns
-        SMILES_PATTERNS = ["smiles", "SMILES", "canonical_smiles", "Smiles", "smi"]
+        SMILES_PATTERNS = smiles_column_exact_names("smiles")
+        SMILES_EXPECTATION = format_smiles_column_expectation(SMILES_PATTERNS)
         CLUSTER_PATTERNS = [
             "node_index",
             "cluster_id",
@@ -846,14 +852,11 @@ class PointerPandasTools(PandasTools):
         if smiles_col and smiles_col in df.columns:
             smiles_found = smiles_col
         else:
-            for pattern in SMILES_PATTERNS:
-                if pattern in df.columns:
-                    smiles_found = pattern
-                    break
+            smiles_found = find_smiles_column_name(df.columns, exact_names=SMILES_PATTERNS)
 
         if not smiles_found:
             raise ValueError(
-                f"No SMILES column found. Expected one of {SMILES_PATTERNS}. "
+                f"No SMILES column found. Expected {SMILES_EXPECTATION}. "
                 f"Available columns: {list(df.columns)}"
             )
 

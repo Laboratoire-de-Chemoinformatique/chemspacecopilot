@@ -60,6 +60,11 @@ from ..chemistry.descriptors import (
     DEFAULT_DESCRIPTOR_TYPE,
     MolecularDescriptorEncoder,
 )
+from ..chemistry.smiles_columns import (
+    find_smiles_column_name,
+    format_smiles_column_expectation,
+    smiles_column_exact_names,
+)
 from ..chemistry.standardize import standardize_smiles, standardize_smiles_column
 from ..constants import (
     CSV_EXTENSION,
@@ -100,8 +105,9 @@ SESSION_DESCRIPTOR_TYPE_KEY = "default_descriptor"
 # Recognized value for the "Default Map" UI selection.
 DEFAULT_MAP_VALUE = "default_map"
 
-# Standard SMILES column name variations to check (in priority order)
-_SMILES_COLUMN_VARIANTS = [SMILES_COLUMN, "SMILES", "smiles", "Smiles"]
+# Standard SMILES column name variations to check exactly before fuzzy matching.
+_SMILES_COLUMN_VARIANTS = smiles_column_exact_names(SMILES_COLUMN)
+_SMILES_COLUMN_EXPECTATION = format_smiles_column_expectation(_SMILES_COLUMN_VARIANTS)
 LandscapeType = Literal["density", "classification", "regression", "query"]
 LandscapeRenderer = Literal["altair", "plotly"]
 
@@ -119,7 +125,8 @@ def find_smiles_column(df: pd.DataFrame) -> str:
     """
     Find and return the SMILES column name in a DataFrame.
 
-    Checks for common SMILES column name variations and returns the first match.
+    Checks exact common SMILES column names first, then accepts any column name
+    containing ``smiles`` case-insensitively.
 
     Args:
         df: DataFrame to search for SMILES column
@@ -130,14 +137,14 @@ def find_smiles_column(df: pd.DataFrame) -> str:
     Raises:
         ValueError: If no SMILES column is found
     """
-    for col_name in _SMILES_COLUMN_VARIANTS:
-        if col_name in df.columns:
-            return col_name
+    smiles_column = find_smiles_column_name(df.columns, exact_names=_SMILES_COLUMN_VARIANTS)
+    if smiles_column is not None:
+        return smiles_column
 
     raise ValueError(
         f"No SMILES column found in DataFrame. "
         f"Available columns: {list(df.columns)}. "
-        f"Expected one of: {_SMILES_COLUMN_VARIANTS}"
+        f"Expected {_SMILES_COLUMN_EXPECTATION}"
     )
 
 

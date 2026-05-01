@@ -269,3 +269,36 @@ class TestPointerPandasTools:
         assert isinstance(result, dict)
         assert result["IC50"] == 2
         assert result["Ki"] == 1
+
+    def test_normalize_for_analysis_detects_derived_smiles_column(self, tools):
+        """Test normalize_for_analysis detects SMILES columns by containment."""
+        tools.dataframes["derived_smiles_df"] = pd.DataFrame(
+            {
+                "standardized_smiles": ["CCO", "CCN"],
+                "node_index": [1, 2],
+                "standard_value": [10.0, 20.0],
+            }
+        )
+
+        result = tools.normalize_for_analysis("derived_smiles_df")
+        normalized = tools.dataframes[result["dataframe_name"]]
+
+        assert result["columns_mapped"]["smiles"] == "standardized_smiles"
+        assert result["columns_mapped"]["cluster_id"] == "node_index"
+        assert result["columns_mapped"]["activity"] == "standard_value"
+        assert normalized["smiles"].tolist() == ["CCO", "CCN"]
+
+    def test_normalize_for_analysis_prefers_exact_smiles_column(self, tools):
+        """Test normalize_for_analysis does not remap when exact smiles exists."""
+        tools.dataframes["exact_smiles_df"] = pd.DataFrame(
+            {
+                "canonical_smiles": ["CCN"],
+                "smiles": ["CCO"],
+            }
+        )
+
+        result = tools.normalize_for_analysis("exact_smiles_df")
+        normalized = tools.dataframes[result["dataframe_name"]]
+
+        assert "smiles" not in result["columns_mapped"]
+        assert normalized["smiles"].tolist() == ["CCO"]
