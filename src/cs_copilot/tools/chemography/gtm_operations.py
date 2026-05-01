@@ -878,12 +878,11 @@ def _compute_descriptors(
     Compute molecular descriptors for a DataFrame column of SMILES strings.
 
     This helper function centralizes descriptor computation to avoid code duplication.
-    Uses autoencoder encoding by default.
 
     Args:
         df: DataFrame containing SMILES strings
         smiles_column: Name of the column containing SMILES strings
-        descriptor_type: Type of descriptor to compute (None = autoencoder by default)
+        descriptor_type: Type of descriptor to compute (None = resolved from defaults)
         descriptor_column: Name for the descriptor column (None = determined by encoder)
 
     Returns:
@@ -2161,13 +2160,13 @@ def calculate_map_ruggedness(df, gtm):
     Calculate the Topographic Ruggedness Index (TRI) for a GTM density map.
 
     Args:
-        df: DataFrame with descriptor column (autoencoder by default)
+        df: DataFrame with descriptor column
         gtm: Fitted GTM model
 
     Returns:
         str: TRI value as formatted string
     """
-    # Find descriptor column - prefer autoencoder, fall back to any descriptor column
+    # Find the default descriptor column, then fall back to any descriptor-like column
     encoder = MolecularDescriptorEncoder()
     descriptor_column = encoder.column_name()
 

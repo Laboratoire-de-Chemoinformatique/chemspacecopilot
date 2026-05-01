@@ -23,9 +23,9 @@ class MolecularDescriptorEncoder:
     """Factory-style encoder for generating molecular descriptor vectors.
 
     The encoder provides a simple interface that supports multiple descriptor
-    backends (autoencoder embeddings, Morgan fingerprints, ...). Autoencoder
-    embeddings are used by default, but alternative descriptors can be requested
-    via the ``descriptor_type`` argument when calling :meth:`encode`.
+    backends (autoencoder embeddings, Morgan fingerprints, ...). Alternative
+    descriptors can be requested via the ``descriptor_type`` argument when
+    calling :meth:`encode`.
     """
 
     _ALIASES: Dict[str, str] = {
