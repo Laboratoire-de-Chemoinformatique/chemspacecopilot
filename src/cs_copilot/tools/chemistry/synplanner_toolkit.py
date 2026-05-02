@@ -467,6 +467,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         top_k: Optional[int] = None,
         llm_smiles_guess: Optional[str] = None,
         agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Run the SynPlanner retrosynthesis engine for the given query.
 
@@ -475,6 +476,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             top_k: Number of top routes to return
             llm_smiles_guess: Optional SMILES guess from LLM
             agent: Optional agent instance for storing PNG paths in session state
+            session_state: Optional injected session state shared by the team
         """
 
         info = self.identify_input(query, llm_smiles_guess=llm_smiles_guess)
@@ -512,7 +514,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         route_visualizations = []
         if tree is not None and raw_routes:
             route_visualizations = self._generate_route_visualizations(
-                tree, raw_routes, agent=agent
+                tree, raw_routes, agent=agent, session_state=session_state
             )
 
         descriptors = self.get_basic_descriptors(smiles)
@@ -554,6 +556,12 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             "successful_attempt": successful_attempt,
             "llm_fallback_allowed": llm_fallback_allowed,
         }
+
+        report_plan = self._store_report_ready_plan(
+            agent, session_state, plan, route_visualizations
+        )
+        plan["synthesis_report_data"] = report_plan
+        full_plan["synthesis_report_data"] = report_plan
 
         return plan
 
@@ -695,6 +703,67 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             summary["error"] = str(error)
 
         return summary
+
+    def _store_report_ready_plan(
+        self,
+        agent: Optional[Agent],
+        session_state: Optional[Dict[str, Any]],
+        plan: Dict[str, Any],
+        visualizations: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Persist compact SynPlanner output for the Report Generator agent."""
+        report_plan = self._build_report_ready_plan(plan, visualizations)
+
+        if session_state is not None:
+            session_state["synplanner_plan"] = report_plan
+
+        if agent is not None:
+            if agent.session_state is None:
+                agent.session_state = {}
+            agent.session_state["synplanner_plan"] = report_plan
+
+        return report_plan
+
+    def _build_report_ready_plan(
+        self,
+        plan: Dict[str, Any],
+        visualizations: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Build the compact SynPlanner payload used by reports and tool returns."""
+        return {
+            "query": plan.get("query"),
+            "source": plan.get("source"),
+            "smiles": plan.get("smiles"),
+            "top_k": plan.get("top_k"),
+            "routes": plan.get("routes", []),
+            "descriptors": plan.get("descriptors", {}),
+            "attempts": plan.get("attempts", []),
+            "successful_attempt": plan.get("successful_attempt"),
+            "llm_fallback_allowed": plan.get("llm_fallback_allowed", False),
+            "visualization_available": plan.get("visualization_available", False),
+            "num_visualizations": plan.get("num_visualizations", 0),
+            "visualizations": self._compact_visualizations(visualizations or []),
+        }
+
+    @staticmethod
+    def _compact_visualizations(visualizations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Keep only report-safe visualization metadata and file paths."""
+        compact = []
+        for idx, viz in enumerate(visualizations):
+            node_id = viz.get("node_id")
+            score = viz.get("score")
+            compact.append(
+                {
+                    "route_index": idx,
+                    "node_id": node_id,
+                    "score": score,
+                    "png_path": viz.get("png_path"),
+                    "svg_path": viz.get("svg_path"),
+                    "caption": f"Route from node #{node_id}"
+                    + (f" (score: {score:.3f})" if score is not None else ""),
+                }
+            )
+        return compact
 
     @staticmethod
     def _safe_tree_size(tree: Any) -> Optional[int]:
@@ -1016,7 +1085,11 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         return self._export_crisp(svg_string, output_path)
 
     def _generate_route_visualizations(
-        self, tree: Any, raw_routes: List[Any], agent: Optional[Agent] = None
+        self,
+        tree: Any,
+        raw_routes: List[Any],
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Generate SVG visualizations for routes, save both SVG and PNG, and store paths in session state.
 
@@ -1024,6 +1097,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             tree: The SynPlanner Tree object
             raw_routes: List of route data dictionaries with node_id and tree references
             agent: Optional agent instance for storing paths in session state
+            session_state: Optional injected session state shared by the team
 
         Returns:
             List of dictionaries containing visualization data for each route
@@ -1100,16 +1174,27 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                 logger.warning(f"Failed to generate visualization for route node {node_id}: {exc}")
                 continue
 
-        # Store paths in agent session state if available
+        # Store paths in both possible state carriers. Agno propagates the injected
+        # session_state between team members; direct agent calls use agent.session_state.
+        state_targets = []
+        if session_state is not None:
+            state_targets.append(session_state)
         if agent is not None:
             if agent.session_state is None:
                 agent.session_state = {}
+            if agent.session_state is not session_state:
+                state_targets.append(agent.session_state)
+
+        for state in state_targets:
             if png_paths:
-                agent.session_state["synplanner_route_png_paths"] = png_paths
-                logger.info(f"Stored {len(png_paths)} PNG paths in session state")
+                state["synplanner_route_png_paths"] = png_paths
             if svg_paths:
-                agent.session_state["synplanner_route_svg_paths"] = svg_paths
-                logger.info(f"Stored {len(svg_paths)} SVG paths in session state")
+                state["synplanner_route_svg_paths"] = svg_paths
+
+        if png_paths:
+            logger.info(f"Stored {len(png_paths)} PNG paths in session state")
+        if svg_paths:
+            logger.info(f"Stored {len(svg_paths)} SVG paths in session state")
 
         return visualizations
 
@@ -1186,6 +1271,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         top_k: Optional[int] = None,
         llm_smiles_guess: Optional[str] = None,
         agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Get route visualizations (PNG and SVG image paths) for the synthesis plan.
 
@@ -1197,17 +1283,33 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             top_k: Number of top routes to return
             llm_smiles_guess: Optional SMILES guess from LLM
             agent: Optional agent instance for storing paths in session state
+            session_state: Optional injected session state shared by the team
         """
         if self._last_plan is None or self._last_plan.get("query") != query:
-            plan = self.plan_synthesis(
-                query, top_k=top_k, llm_smiles_guess=llm_smiles_guess, agent=agent
+            generated_plan = self.plan_synthesis(
+                query,
+                top_k=top_k,
+                llm_smiles_guess=llm_smiles_guess,
+                agent=agent,
+                session_state=session_state,
             )
+            plan = self._last_plan or generated_plan
         else:
             plan = self._last_plan
 
         visualizations = plan.get("visualizations", [])
 
         if not visualizations:
+            report_plan = self._store_report_ready_plan(
+                agent,
+                session_state,
+                {
+                    **plan,
+                    "visualization_available": False,
+                    "num_visualizations": 0,
+                },
+                [],
+            )
             return {
                 "query": plan["query"],
                 "smiles": plan["smiles"],
@@ -1216,6 +1318,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                 "attempts": plan.get("attempts", []),
                 "successful_attempt": plan.get("successful_attempt"),
                 "llm_fallback_allowed": plan.get("llm_fallback_allowed", False),
+                "synthesis_report_data": report_plan,
             }
 
         # Format visualizations with route information (excluding large SVG/base64 data)
@@ -1241,9 +1344,27 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         # Get paths from session state if available
         png_paths_from_session = None
         svg_paths_from_session = None
+        if session_state is not None:
+            png_paths_from_session = session_state.get("synplanner_route_png_paths")
+            svg_paths_from_session = session_state.get("synplanner_route_svg_paths")
         if agent is not None and agent.session_state is not None:
-            png_paths_from_session = agent.session_state.get("synplanner_route_png_paths")
-            svg_paths_from_session = agent.session_state.get("synplanner_route_svg_paths")
+            png_paths_from_session = png_paths_from_session or agent.session_state.get(
+                "synplanner_route_png_paths"
+            )
+            svg_paths_from_session = svg_paths_from_session or agent.session_state.get(
+                "synplanner_route_svg_paths"
+            )
+
+        report_plan = self._store_report_ready_plan(
+            agent,
+            session_state,
+            {
+                **plan,
+                "visualization_available": True,
+                "num_visualizations": len(formatted_viz),
+            },
+            formatted_viz,
+        )
 
         return {
             "query": plan["query"],
@@ -1255,6 +1376,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             "attempts": plan.get("attempts", []),
             "successful_attempt": plan.get("successful_attempt"),
             "llm_fallback_allowed": plan.get("llm_fallback_allowed", False),
+            "synthesis_report_data": report_plan,
         }
 
 

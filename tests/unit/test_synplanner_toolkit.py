@@ -371,3 +371,137 @@ def test_plan_synthesis_all_profiles_fail_allows_llm_fallback(monkeypatch):
     assert calls == [attempt["profile"] for attempt in plan["attempts"]]
     assert calls[-1] == "evaluation_first"
     assert all("tree" not in attempt for attempt in plan["attempts"])
+
+
+def test_plan_synthesis_stores_report_ready_session_state(monkeypatch):
+    toolkit = SynPlannerToolkit()
+    _patch_planning_dependencies(monkeypatch, toolkit)
+    agent = types.SimpleNamespace(session_state={})
+    session_state = {}
+
+    monkeypatch.setattr(
+        toolkit, "_create_and_search_tree", lambda smiles, profile=None: _FakeTree([42])
+    )
+
+    plan = toolkit.plan_synthesis("CCO", agent=agent, session_state=session_state)
+
+    report_plan = agent.session_state["synplanner_plan"]
+    assert session_state["synplanner_plan"] == report_plan
+    assert plan["synthesis_report_data"] == report_plan
+    assert report_plan["query"] == "CCO"
+    assert report_plan["smiles"] == "CCO"
+    assert len(report_plan["routes"]) == 1
+    assert report_plan["successful_attempt"] == "standard"
+    assert report_plan["llm_fallback_allowed"] is False
+    assert report_plan["visualizations"] == []
+    assert "raw" not in report_plan
+    assert "tree" not in report_plan
+
+
+def test_plan_synthesis_stores_report_state_without_agent(monkeypatch):
+    toolkit = SynPlannerToolkit()
+    _patch_planning_dependencies(monkeypatch, toolkit)
+    session_state = {}
+
+    monkeypatch.setattr(
+        toolkit, "_create_and_search_tree", lambda smiles, profile=None: _FakeTree([42])
+    )
+
+    plan = toolkit.plan_synthesis("CCO", session_state=session_state)
+
+    report_plan = session_state["synplanner_plan"]
+    assert plan["synthesis_report_data"] == report_plan
+    assert report_plan["smiles"] == "CCO"
+    assert len(report_plan["routes"]) == 1
+
+
+def test_plan_synthesis_stores_no_route_report_state(monkeypatch):
+    toolkit = SynPlannerToolkit()
+    _patch_planning_dependencies(monkeypatch, toolkit)
+    agent = types.SimpleNamespace(session_state={})
+    session_state = {}
+
+    monkeypatch.setattr(
+        toolkit, "_create_and_search_tree", lambda smiles, profile=None: _FakeTree([])
+    )
+
+    plan = toolkit.plan_synthesis("CCO", agent=agent, session_state=session_state)
+
+    report_plan = agent.session_state["synplanner_plan"]
+    assert session_state["synplanner_plan"] == report_plan
+    assert plan["synthesis_report_data"] == report_plan
+    assert report_plan["routes"] == []
+    assert report_plan["successful_attempt"] is None
+    assert report_plan["llm_fallback_allowed"] is True
+    assert report_plan["attempts"]
+    assert all("tree" not in attempt for attempt in report_plan["attempts"])
+
+
+def test_plan_synthesis_keeps_large_visualization_payloads_out_of_report_state(monkeypatch):
+    toolkit = SynPlannerToolkit()
+    agent = types.SimpleNamespace(session_state={})
+    session_state = {}
+    large_visualization = {
+        "node_id": 42,
+        "score": 0.7,
+        "svg": "<svg>large payload</svg>",
+        "svg_data_url": "data:image/svg+xml;base64,large-payload",
+        "png_path": "s3://bucket/sessions/test/synplanner_route_42.png",
+        "svg_path": "s3://bucket/sessions/test/synplanner_route_42.svg",
+    }
+
+    monkeypatch.setattr(toolkit, "_load_synplanner_components", lambda: None)
+    monkeypatch.setattr(toolkit, "get_basic_descriptors", lambda smiles: {})
+    monkeypatch.setattr(
+        toolkit, "_create_and_search_tree", lambda smiles, profile=None: _FakeTree([42])
+    )
+    monkeypatch.setattr(
+        toolkit,
+        "_generate_route_visualizations",
+        lambda *args, **kwargs: [large_visualization],
+    )
+
+    plan = toolkit.plan_synthesis("CCO", agent=agent, session_state=session_state)
+
+    report_viz = agent.session_state["synplanner_plan"]["visualizations"][0]
+    assert session_state["synplanner_plan"] == agent.session_state["synplanner_plan"]
+    assert plan["synthesis_report_data"] == agent.session_state["synplanner_plan"]
+    assert report_viz["png_path"] == large_visualization["png_path"]
+    assert report_viz["svg_path"] == large_visualization["svg_path"]
+    assert "svg" not in report_viz
+    assert "svg_data_url" not in report_viz
+
+
+def test_get_route_visualizations_updates_report_ready_session_state(monkeypatch):
+    toolkit = SynPlannerToolkit()
+    _patch_planning_dependencies(monkeypatch, toolkit)
+    agent = types.SimpleNamespace(session_state={})
+    session_state = {}
+
+    monkeypatch.setattr(
+        toolkit, "_create_and_search_tree", lambda smiles, profile=None: _FakeTree([42])
+    )
+    toolkit.plan_synthesis("CCO", agent=agent, session_state=session_state)
+
+    toolkit._last_plan["visualizations"] = [
+        {
+            "node_id": 42,
+            "score": 0.7,
+            "svg": "<svg>large payload</svg>",
+            "svg_data_url": "data:image/svg+xml;base64,large-payload",
+            "png_path": "s3://bucket/sessions/test/synplanner_route_42.png",
+            "svg_path": "s3://bucket/sessions/test/synplanner_route_42.svg",
+        }
+    ]
+
+    result = toolkit.get_route_visualizations("CCO", agent=agent, session_state=session_state)
+
+    assert result["num_routes"] == 1
+    report_plan = agent.session_state["synplanner_plan"]
+    assert session_state["synplanner_plan"] == report_plan
+    assert result["synthesis_report_data"] == report_plan
+    assert report_plan["visualization_available"] is True
+    assert report_plan["num_visualizations"] == 1
+    assert report_plan["visualizations"][0]["png_path"].endswith("synplanner_route_42.png")
+    assert "svg" not in report_plan["visualizations"][0]
+    assert "svg_data_url" not in report_plan["visualizations"][0]
