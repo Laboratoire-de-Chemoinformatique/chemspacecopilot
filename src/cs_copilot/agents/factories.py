@@ -25,6 +25,7 @@ from cs_copilot.tools import (
     save_gtm_landscape_plot,
     save_gtm_plot,
     save_markdown_report,
+    save_rich_report,
 )
 from cs_copilot.tools.analysis import RobustnessAnalysisToolkit
 
@@ -589,7 +590,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
             in a clear, actionable manner.
 
             Capabilities:
-            - **Multi-format reports**: Generate markdown, HTML, or text reports
+            - **Multi-format reports**: Generate image-rich HTML/PDF reports and markdown fallbacks
             - **Visualization creation**: Produce publication-quality plots and charts
             - **Template-based formatting**: Consistent structure across different report types
             - **Flexible input handling**: Works with results from any analysis agent
@@ -598,7 +599,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
             - Chemotype analysis: Scaffold distributions, similarity heatmaps, cluster comparisons
             - GTM density: Density overlays, neighborhood preservation, coverage analysis
             - GTM activity/SAR: Activity landscapes, potency hotspots, structure-activity insights
-            - Autoencoder generation: Generated molecules, diversity metrics, similarity analyses
+            - Analog generation: Generated molecules, map context, diversity metrics, similarity analyses
             - Combined reports: Multi-analysis integration with comparative visualizations
 
             Key Features:
@@ -614,6 +615,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
                 PointerPandasTools(),
                 save_gtm_landscape_plot,  # For saved GTM landscape tables
                 save_gtm_plot,  # For GTM-specific visualizations
+                save_rich_report,  # Persists image-rich HTML/PDF reports
                 save_markdown_report,  # Persists the final markdown report
                 # Plotting libraries (matplotlib, seaborn) available via Python environment
             ],
@@ -621,6 +623,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
             session_state={
                 "report_outputs": {
                     "report_path": None,
+                    "report_paths": {},
                     "plots": [],
                     "report_type": None,
                 },

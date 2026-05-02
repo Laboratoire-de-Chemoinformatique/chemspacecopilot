@@ -13,6 +13,7 @@ Functions are organized into categories:
 - Utility Functions: Helper functions for data manipulation
 """
 
+import ast
 import base64
 import gzip
 import hashlib
@@ -67,7 +68,7 @@ from ..chemistry.smiles_columns import (
     format_smiles_column_expectation,
     smiles_column_exact_names,
 )
-from ..chemistry.standardize import standardize_smiles, standardize_smiles_column
+from ..chemistry.standardize import standardize_smiles_column
 from ..constants import (
     CSV_EXTENSION,
     DEFAULT_CHART_HEIGHT,
@@ -383,6 +384,51 @@ def _dataframe_fingerprint(df: pd.DataFrame) -> str:
         content = df.to_json(orient="split", date_format="iso", default_handler=str)
         hasher.update(content.encode("utf-8"))
     return hasher.hexdigest()
+
+
+def _descriptor_matrix_from_column(values: pd.Series, column_name: str) -> np.ndarray:
+    """Parse an existing descriptor column into a numeric matrix."""
+
+    vectors: list[np.ndarray] = []
+    expected_size: int | None = None
+
+    for row_index, value in values.items():
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                raise ValueError(f"empty descriptor at row {row_index}")
+            try:
+                value = ast.literal_eval(stripped)
+            except (SyntaxError, ValueError) as exc:
+                raise ValueError(
+                    f"descriptor at row {row_index} in '{column_name}' is not parseable"
+                ) from exc
+
+        try:
+            vector = np.asarray(value, dtype=np.float64).reshape(-1)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"descriptor at row {row_index} in '{column_name}' is not numeric"
+            ) from exc
+
+        if vector.size == 0:
+            raise ValueError(f"empty descriptor vector at row {row_index}")
+        if not np.isfinite(vector).all():
+            raise ValueError(f"non-finite descriptor values at row {row_index}")
+        if expected_size is None:
+            expected_size = int(vector.size)
+        elif vector.size != expected_size:
+            raise ValueError(
+                f"inconsistent descriptor size in '{column_name}': "
+                f"expected {expected_size}, got {vector.size} at row {row_index}"
+            )
+
+        vectors.append(vector)
+
+    if not vectors:
+        raise ValueError(f"descriptor column '{column_name}' is empty")
+
+    return np.vstack(vectors)
 
 
 def _raw_smiles_column_name(columns: Iterable[str], smiles_column: str) -> str:
@@ -1038,6 +1084,19 @@ def _compute_descriptors(
     )
     column_name = descriptor_column or encoder.column_name()
 
+    if column_name in df.columns:
+        try:
+            descriptor_matrix = _descriptor_matrix_from_column(df[column_name], column_name)
+        except ValueError as exc:
+            logger.info(
+                "Existing descriptor column '%s' cannot be reused (%s); recomputing descriptors",
+                column_name,
+                exc,
+            )
+        else:
+            logger.info("Using existing descriptor column '%s'", column_name)
+            return df, descriptor_matrix, column_name
+
     # Compute descriptors
     smiles_list = df[smiles_column].tolist()
     descriptor_matrix = encoder.encode(smiles_list)
@@ -1113,16 +1172,16 @@ def data_load_and_prep(
 
     df = df.reset_index(drop=True)  # Reset index to be 0-based consecutive
 
-    # Normalize SMILES column name to standard 'smi'
-    df = normalize_smiles_column(df)
-    df = standardize_smiles_column(df, SMILES_COLUMN)
-    df = df.dropna(subset=[SMILES_COLUMN]).reset_index(drop=True)
-
-    # Compute descriptors using the resolved descriptor type (session-aware).
-    effective_descriptor = get_session_descriptor_type(agent, descriptor_type)
-    df, X, _ = _compute_descriptors(
-        df, smiles_column=SMILES_COLUMN, descriptor_type=effective_descriptor
+    smiles_column = find_smiles_column(df)
+    prepared = _prepare_gtm_training_data(
+        df,
+        smiles_column,
+        dataset_identifier=data_file,
+        descriptor_type=descriptor_type,
+        agent=agent,
     )
+    df = normalize_smiles_column(prepared.df)
+    X = prepared.X
 
     df = df.rename(columns={"assay_chembl_id": "source"})
     resps, _ = gtm.project(torch.from_numpy(X).to(torch.double))
@@ -1236,9 +1295,8 @@ def project_data_on_gtm(
     df = df.reset_index(drop=True)
     original_count = len(df)
 
-    # Normalize SMILES column name to standard 'smi'
     try:
-        df = normalize_smiles_column(df)
+        smiles_column = find_smiles_column(df)
     except ValueError as e:
         raise ValueError(
             f"Dataset must contain a SMILES column. {e}. Expected one of: {_SMILES_COLUMN_VARIANTS}"
@@ -1247,50 +1305,40 @@ def project_data_on_gtm(
     logger.info(f"Loaded dataset with {original_count} molecules")
 
     # -------------------------------------------------------------------------
-    # Step 3: Validate and filter SMILES
+    # Step 3: Validate, standardize, and descriptor-encode molecules
     # -------------------------------------------------------------------------
-    # Track invalid SMILES for reporting
-    invalid_smiles_indices = []
-    valid_smiles_mask = []
-
-    for idx, smiles in enumerate(df[SMILES_COLUMN]):
-        if pd.isna(smiles) or not isinstance(smiles, str) or not smiles.strip():
-            invalid_smiles_indices.append(idx)
-            valid_smiles_mask.append(False)
-        else:
-            smiles_std = standardize_smiles(smiles)
-            if smiles_std is None:
-                invalid_smiles_indices.append(idx)
-                valid_smiles_mask.append(False)
-            else:
-                df.at[idx, SMILES_COLUMN] = smiles_std
-                valid_smiles_mask.append(True)
-
-    # Filter to valid molecules only
-    df_valid = df[valid_smiles_mask].reset_index(drop=True)
-    valid_count = len(df_valid)
-
-    if valid_count == 0:
+    try:
+        prepared = _prepare_gtm_training_data(
+            df,
+            smiles_column,
+            dataset_identifier=data_file,
+            descriptor_type=descriptor_type,
+            agent=agent,
+        )
+    except ValueError as e:
+        if "No valid SMILES" not in str(e):
+            raise
         raise ValueError(
             f"No valid SMILES found in dataset. "
             f"All {original_count} molecules had invalid or empty SMILES."
-        )
+        ) from e
 
-    if invalid_smiles_indices:
+    df_valid = normalize_smiles_column(prepared.df)
+    X = prepared.X
+    descriptor_col = prepared.descriptor_column
+    valid_count = prepared.final_size
+    invalid_count = prepared.initial_size - prepared.final_size
+
+    if invalid_count:
         logger.warning(
-            f"Filtered out {len(invalid_smiles_indices)} invalid/empty SMILES "
-            f"(indices: {invalid_smiles_indices[:10]}{'...' if len(invalid_smiles_indices) > 10 else ''})"
+            "Filtered out %d invalid/empty SMILES from %d input molecules",
+            invalid_count,
+            prepared.initial_size,
         )
 
     # -------------------------------------------------------------------------
-    # Step 4: Compute descriptors and validate compatibility via trial projection
+    # Step 4: Validate descriptor compatibility via trial projection
     # -------------------------------------------------------------------------
-    logger.debug("Computing molecular descriptors...")
-    effective_descriptor = get_session_descriptor_type(agent, descriptor_type)
-    df_valid, X, descriptor_col = _compute_descriptors(
-        df_valid, smiles_column=SMILES_COLUMN, descriptor_type=effective_descriptor
-    )
-
     # Validate descriptor compatibility by doing a trial projection
     logger.debug("Validating descriptor compatibility with GTM model...")
     try:
@@ -1326,10 +1374,11 @@ def project_data_on_gtm(
     if "source" not in df_valid.columns:
         df_valid["source"] = Path(dataset_file).stem  # Use filename as source
 
-    # Remove the descriptor column from output (will be recomputed by save_gtm_plot)
-    # Keep only essential columns: smi, source, and any other original columns
-    if descriptor_col in df_valid.columns:
-        df_valid = df_valid.drop(columns=[descriptor_col])
+    # Keep the descriptor column in the preprocessed output. Downstream GTM
+    # plotting/loading code can reuse it instead of recomputing descriptors for
+    # the same standardized molecules.
+    if descriptor_col not in df_valid.columns:
+        df_valid[descriptor_col] = [vec.tolist() for vec in X]
 
     # -------------------------------------------------------------------------
     # Step 6: Save preprocessed dataset
@@ -1355,10 +1404,8 @@ def project_data_on_gtm(
         f"Use save_gtm_plot('{S3.path(output_filename)}', '{gtm_model_file}') to generate the GTM plot.",
     ]
 
-    if invalid_smiles_indices:
-        summary_parts.append(
-            f"Note: {len(invalid_smiles_indices)} molecules with invalid SMILES were excluded."
-        )
+    if invalid_count:
+        summary_parts.append(f"Note: {invalid_count} molecules with invalid SMILES were excluded.")
 
     logger.info(f"Preprocessed dataset saved: {output_filename}")
     return " ".join(summary_parts)
@@ -3321,16 +3368,16 @@ def load_and_prepare_gtm_data_with_model(
 
         df = df.reset_index(drop=True)
 
-        # Normalize SMILES column name to standard 'smi'
-        df = normalize_smiles_column(df)
-        df = standardize_smiles_column(df, SMILES_COLUMN)
-        df = df.dropna(subset=[SMILES_COLUMN]).reset_index(drop=True)
-
-        # Compute descriptors using the resolved descriptor type (session-aware).
-        effective_descriptor = get_session_descriptor_type(agent, descriptor_type)
-        df, X, _ = _compute_descriptors(
-            df, smiles_column=SMILES_COLUMN, descriptor_type=effective_descriptor
+        smiles_column = find_smiles_column(df)
+        prepared = _prepare_gtm_training_data(
+            df,
+            smiles_column,
+            dataset_identifier=data_file,
+            descriptor_type=descriptor_type,
+            agent=agent,
         )
+        df = normalize_smiles_column(prepared.df)
+        X = prepared.X
         df = df.rename(columns={"assay_chembl_id": "source"})
 
         # Project onto the GTM model

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -195,3 +196,86 @@ def test_optimize_gtm_accepts_precomputed_descriptors(monkeypatch):
     assert result_df["morgan_fingerprint"].tolist() == [[1.0, 0.0], [0.0, 1.0]]
     assert gtm.num_nodes > 0
     assert best_score == pytest.approx(1.0)
+
+
+def test_compute_descriptors_reuses_existing_descriptor_lists(monkeypatch):
+    class FailingEncoder:
+        def __init__(self, default_descriptor="morgan"):
+            self.default_descriptor = default_descriptor
+
+        def column_name(self):
+            return "morgan_fingerprint"
+
+        def encode(self, _smiles):
+            raise AssertionError("descriptors should not be recomputed")
+
+    monkeypatch.setattr(gtm_operations, "MolecularDescriptorEncoder", FailingEncoder)
+
+    df = pd.DataFrame(
+        {
+            "smi": ["C", "CC"],
+            "morgan_fingerprint": [[1.0, 0.0], [0.0, 1.0]],
+        }
+    )
+
+    result_df, matrix, column = gtm_operations._compute_descriptors(df, smiles_column="smi")
+
+    assert result_df is df
+    assert column == "morgan_fingerprint"
+    np.testing.assert_array_equal(matrix, np.array([[1.0, 0.0], [0.0, 1.0]]))
+
+
+def test_compute_descriptors_reuses_existing_descriptor_strings(monkeypatch):
+    class FailingEncoder:
+        def __init__(self, default_descriptor="morgan"):
+            self.default_descriptor = default_descriptor
+
+        def column_name(self):
+            return "morgan_fingerprint"
+
+        def encode(self, _smiles):
+            raise AssertionError("descriptors should not be recomputed")
+
+    monkeypatch.setattr(gtm_operations, "MolecularDescriptorEncoder", FailingEncoder)
+
+    df = pd.DataFrame(
+        {
+            "smi": ["C", "CC"],
+            "morgan_fingerprint": ["[1.0, 0.0]", "[0.0, 1.0]"],
+        }
+    )
+
+    _result_df, matrix, column = gtm_operations._compute_descriptors(df, smiles_column="smi")
+
+    assert column == "morgan_fingerprint"
+    np.testing.assert_array_equal(matrix, np.array([[1.0, 0.0], [0.0, 1.0]]))
+
+
+def test_data_load_and_prep_reuses_prepared_dataset_cache(monkeypatch, tmp_path):
+    csv_path = tmp_path / "dataset.csv"
+    gtm_path = tmp_path / "model.pkl.gz"
+    pd.DataFrame({"smiles": ["C", "CC"]}).to_csv(csv_path, index=False)
+    with gzip.open(gtm_path, "wb") as handle:
+        handle.write(b"dummy")
+
+    class FakeGTM:
+        num_nodes = 4
+
+        def project(self, tensor):
+            return (
+                gtm_operations.torch.ones(
+                    (tensor.shape[0], self.num_nodes),
+                    dtype=gtm_operations.torch.float64,
+                ),
+                None,
+            )
+
+    calls = _patch_fast_gtm_optimization(monkeypatch, tmp_path)
+    monkeypatch.setattr(gtm_operations.dill, "load", lambda _handle: FakeGTM())
+    agent = SimpleNamespace(session_state={})
+
+    gtm_operations.data_load_and_prep(str(csv_path), str(gtm_path), agent=agent)
+    gtm_operations.data_load_and_prep(str(csv_path), str(gtm_path), agent=agent)
+
+    assert calls["standardize"] == 1
+    assert calls["descriptors"] == 1

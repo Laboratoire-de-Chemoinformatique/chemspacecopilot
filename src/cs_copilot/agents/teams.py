@@ -37,8 +37,8 @@ def get_cs_copilot_agent_team(
         markdown: Format output in markdown
         debug_mode: Enable debug logs
         show_members_responses: Print member responses during coordination
-        enable_memory: Enable persistent memory (default: True). Set to False for
-                      isolated testing to prevent state leakage between runs.
+        enable_memory: Enable persistent session history (default: True). Cross-session
+                      user/agentic memories stay disabled to prevent state leakage.
         db_file: Custom database file path. If not provided, uses CS_COPILOT_MEMORY_DB.
                 Use unique paths for session isolation in testing.
         enable_mlflow_tracking: Enable MLflow tracking for agents (default: True).
@@ -53,8 +53,9 @@ def get_cs_copilot_agent_team(
     logger = logging.getLogger(__name__)
     logger.info("Creating Cs_copilot Agent Team")
 
-    # ✅ Single DB handles session storage + user memories in v2.1.x
-    # For testing, either disable memory or use unique DB files per session
+    # ✅ Single DB handles session storage/history in v2.1.x.
+    # Cross-session memories are intentionally disabled below; only per-thread
+    # history/session state should persist.
     db = None
     if enable_memory:
         db = SqliteDb(
@@ -125,12 +126,15 @@ def get_cs_copilot_agent_team(
         name="Cs_copilot Team",
         members=agents,
         model=model,
-        # ✅ Attach DB directly to the team (persists sessions/history/memories)
+        # ✅ Attach DB directly to the team (persists sessions/history)
         # If enable_memory=False, db=None prevents any persistence
         db=db,
-        # Team-level capabilities (disabled when enable_memory=False)
-        enable_agentic_memory=enable_memory,  # let the team manage memories
-        enable_user_memories=False,  # Disable cross-session user memories for session isolation
+        # Keep session history, but never inject cross-session memories. Agno
+        # defaults add_memories_to_context=True when agentic memory is enabled,
+        # which caused new chats to recall prior chemical-space analyses.
+        enable_agentic_memory=False,
+        enable_user_memories=False,
+        add_memories_to_context=False,
         add_history_to_context=enable_memory,  # include recent history in prompts
         num_history_runs=5 if enable_memory else 0,  # 🔧 LIMIT context to last 5 runs
         share_member_interactions=True,  # share member messages across team
