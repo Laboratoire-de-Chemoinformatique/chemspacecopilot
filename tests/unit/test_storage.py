@@ -2,6 +2,7 @@
 # coding: utf-8
 """Unit tests for storage backend resolution and local session paths."""
 
+import contextvars
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -122,6 +123,26 @@ def test_relative_local_paths_are_session_scoped(
 
     with S3.open("nested/output.csv", "r") as handle:
         assert handle.read() == "value\n1\n"
+
+
+def test_relative_paths_use_context_local_session_prefix(clean_storage_env, monkeypatch, tmp_path):
+    """Concurrent execution contexts should not share the mutable storage prefix."""
+    monkeypatch.chdir(tmp_path)
+
+    def path_for(prefix: str) -> str:
+        S3.set_session_prefix(prefix)
+        return S3.path("artifact.txt")
+
+    context_a = contextvars.Context()
+    context_b = contextvars.Context()
+
+    path_a = context_a.run(path_for, "sessions/session-a")
+    path_b = context_b.run(path_for, "sessions/session-b")
+
+    assert path_a == os.fspath(Path("data") / "sessions" / "session-a" / "artifact.txt")
+    assert path_b == os.fspath(Path("data") / "sessions" / "session-b" / "artifact.txt")
+    assert context_a.run(S3.path, "artifact.txt") == path_a
+    assert context_b.run(S3.path, "artifact.txt") == path_b
 
 
 def test_explicit_s3_paths_stay_explicit(clean_storage_env):

@@ -8,6 +8,7 @@ with automatic session-based path management.
 """
 
 import builtins
+import contextvars
 import datetime
 import logging
 import os
@@ -32,8 +33,24 @@ else:
     logger.info("SESSION_ID is set from environment")
     SESSION_ID = _ENV_SESSION_ID
 
+_DEFAULT_PREFIX = f"sessions/{SESSION_ID}"
+_SESSION_PREFIX: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "cs_copilot_s3_prefix",
+    default=None,
+)
 
-class S3:
+
+class _S3Meta(type):
+    @property
+    def prefix(cls) -> str:
+        return cls.current_prefix()
+
+    @prefix.setter
+    def prefix(cls, value: str) -> None:
+        cls.set_session_prefix(value)
+
+
+class S3(metaclass=_S3Meta):
     """
     Unified storage client for S3/MinIO and local file operations.
 
@@ -68,8 +85,29 @@ class S3:
     ...     data = f.read()
     """
 
-    prefix = f"sessions/{SESSION_ID}"
+    _fallback_prefix = _DEFAULT_PREFIX
     logger.info(f"Initialized S3 client with SESSION_ID: {SESSION_ID}")
+
+    @classmethod
+    def set_session_prefix(cls, prefix: str) -> None:
+        """Set the storage prefix for the current execution context.
+
+        Chainlit serves multiple chat sessions in one Python process.  A plain
+        class-level prefix is shared across concurrent chats, so relative
+        storage paths can leak into another user's session.  The context-local
+        prefix isolates async tasks while keeping ``S3.prefix`` as a fallback
+        for CLI/tests/backwards compatibility.
+        """
+        normalized = str(prefix).strip("/")
+        if not normalized:
+            raise ValueError("prefix cannot be empty")
+        cls._fallback_prefix = normalized
+        _SESSION_PREFIX.set(normalized)
+
+    @classmethod
+    def current_prefix(cls) -> str:
+        """Return the active context-local prefix, falling back to ``S3.prefix``."""
+        return _SESSION_PREFIX.get() or cls._fallback_prefix
 
     @classmethod
     def path(cls, rel: str) -> str:
@@ -100,7 +138,7 @@ class S3:
         if not is_s3_enabled():
             return os.fspath(cls._local_session_path(rel))
 
-        key = PurePosixPath(cls.prefix.strip("/")) / str(rel).lstrip("/")
+        key = PurePosixPath(cls.current_prefix().strip("/")) / str(rel).lstrip("/")
         return f"s3://{config.bucket_name}/{key.as_posix()}"
 
     @classmethod
@@ -163,7 +201,7 @@ class S3:
 
     @classmethod
     def _local_session_path(cls, rel: str) -> Path:
-        return LOCAL_STORAGE_ROOT / Path(cls.prefix.strip("/")) / Path(rel)
+        return LOCAL_STORAGE_ROOT / Path(cls.current_prefix().strip("/")) / Path(rel)
 
     @staticmethod
     def _is_write_mode(mode: str) -> bool:

@@ -12,6 +12,7 @@ import logging
 import mimetypes
 import os
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import chainlit as cl
@@ -75,6 +76,14 @@ def _apply_map_settings(session_agent, map_choice: str) -> None:
     )
 
 
+def _sync_storage_session(thread_id: str | None, context: str) -> None:
+    """Bind relative storage paths to the current Chainlit thread context."""
+    if not thread_id:
+        return
+    S3.set_session_prefix(f"sessions/{thread_id}")
+    logger.info("Set S3 session prefix in %s to: %s", context, S3.current_prefix())
+
+
 # ---------- Authentication Callback ---------------------------------------- #
 @cl.password_auth_callback
 async def auth_callback(username: str, password: str) -> cl.User | None:
@@ -101,10 +110,7 @@ async def on_chat_start():
     """Create a fresh agent for this chat thread and stash in session."""
     # Synchronize S3 session with Chainlit thread ID
     thread_id = cl.context.session.thread_id
-    if thread_id:
-        # Update S3 prefix to match Chainlit session
-        S3.prefix = f"sessions/{thread_id}"
-        logger.info(f"Set S3 session prefix to: {S3.prefix}")
+    _sync_storage_session(thread_id, "on_chat_start")
 
     # Initialize session state for this chat thread
     session_agent = get_cs_copilot_agent_team(
@@ -130,24 +136,22 @@ async def on_chat_start():
                 items={
                     "New map in this session": "new_map",
                     "Default Map": "default_map",
-                    },
+                },
                 initial_value="new_map",
-            )
+            ),
         ]
     ).send()
     cl.user_session.set("show_tool_calls", settings["show_tool_calls"])
     cl.user_session.set("map", settings["map"])
     _apply_map_settings(session_agent, settings["map"])
 
+
 @cl.on_chat_resume
 async def on_chat_resume(thread: ThreadDict):
     """Resume existing chat session or create new agent if needed."""
     # Synchronize S3 session with Chainlit thread ID
     thread_id = cl.context.session.thread_id
-    if thread_id:
-        # Update S3 prefix to match Chainlit session
-        S3.prefix = f"sessions/{thread_id}"
-        logger.info(f"Resumed S3 session prefix: {S3.prefix}")
+    _sync_storage_session(thread_id, "on_chat_resume")
 
     # Only create a new agent if none exists and session wasn't properly initialized
     if not cl.user_session.get("session_initialized") or cl.user_session.get("agent") is None:
@@ -197,7 +201,7 @@ async def on_chat_resume(thread: ThreadDict):
                     "Default Map": "default_map",
                 },
                 initial_value=restored_map,
-            )
+            ),
         ]
     ).send()
     cl.user_session.set("show_tool_calls", settings["show_tool_calls"])
@@ -211,6 +215,7 @@ async def on_settings_update(settings):
     cl.user_session.set("show_tool_calls", settings["show_tool_calls"])
     cl.user_session.set("map", settings["map"])
     _apply_map_settings(cl.user_session.get("agent"), settings["map"])
+
 
 # Note: on_chat_end can cause issues with some Chainlit versions
 # Session cleanup is handled automatically by Chainlit
@@ -241,7 +246,25 @@ async def on_chat_end():
 PATH_RX = re.compile(
     r"^\s*(.*?)\s*[:\-]\s*(/[^ \t]+?\.(?:png|jpe?g|gif|svg))\s*$", re.I
 )  # Caption: /path/file.png
-SMI_RX = re.compile(r"`?<smiles>([^<]+)</smiles>`?")  # explicit SMILES tags
+# Prefer explicit SMILES tags from the agent prompts, but also accept common
+# backticked SMILES output so structures still render when the model omits tags.
+SMI_RX = re.compile(
+    r"`?<smiles>\s*([^<`]+?)\s*</smiles>`?" r"|`([A-Za-z0-9@+\-\[\]\(\)=#$%\\/.:*]+)`",
+    re.IGNORECASE,
+)
+
+
+def _smiles_from_match(match: re.Match) -> str:
+    return (match.group(1) or match.group(2) or "").strip()
+
+
+@lru_cache(maxsize=1024)
+def _smiles_to_data_url(smiles: str) -> str:
+    png = smiles_to_png_bytes(smiles)
+    b64 = base64.b64encode(png).decode()
+    return f"data:image/png;base64,{b64}"
+
+
 INLINE_ELEMENT_RX = re.compile(
     r"!\[([^\]]*)\]\(([^)]+)\)|<file>(.*?)</file>",
     re.I,
@@ -270,7 +293,7 @@ def _process_smiles_in_text(text: str, callback):
     """
     pos = 0
     for m in SMI_RX.finditer(text):
-        smi = m.group(1)
+        smi = _smiles_from_match(m)
 
         # Add text before SMILES
         if m.start() > pos:
@@ -366,7 +389,7 @@ async def _stream_text_to_message(text: str, msg: cl.Message):
     # Process text with SMILES
     pos = 0
     for m in SMI_RX.finditer(text):
-        smi = m.group(1)
+        smi = _smiles_from_match(m)
         logger.debug(f"Detected SMILES in stream: '{smi}'")
 
         # Stream text up to SMILES
@@ -380,22 +403,14 @@ async def _stream_text_to_message(text: str, msg: cl.Message):
         # Try to create molecule image and send as cl.Image
         try:
             logger.info(f"Attempting to convert SMILES to PNG: '{smi}'")
-            png = smiles_to_png_bytes(smi)
-            if png is not None:
-                png_size = len(png)
-                logger.info(f"Successfully generated PNG from SMILES '{smi}' ({png_size} bytes)")
-                b64 = base64.b64encode(png).decode()
-                data_url = f"data:image/png;base64,{b64}"
-                logger.debug(f"Created data URL from PNG (size: {len(b64)} chars)")
-                img_el = cl.Image(url=data_url, name=smi, display="inline")
-                logger.debug(f"Created cl.Image element for SMILES: '{smi}'")
-                await _finalize_message(msg)
-                await cl.Message(content=f"`{smi}`", elements=[img_el]).send()
-                logger.info(f"Sent SMILES image message for: '{smi}'")
-                # Return new streaming message for continuation
-                return await _create_streaming_message()
-            else:
-                logger.info(f"smiles_to_png_bytes returned None for SMILES: '{smi}'")
+            data_url = _smiles_to_data_url(smi)
+            img_el = cl.Image(url=data_url, name=smi, display="inline")
+            logger.debug(f"Created cl.Image element for SMILES: '{smi}'")
+            await _finalize_message(msg)
+            await cl.Message(content=f"`{smi}`", elements=[img_el]).send()
+            logger.info(f"Sent SMILES image message for: '{smi}'")
+            # Return new streaming message for continuation
+            return await _create_streaming_message()
         except ValueError as ve:
             logger.info(f"ValueError converting SMILES '{smi}' to image: {ve}")
             # Invalid SMILES, just continue without image
@@ -447,7 +462,9 @@ async def _image_bubble_streaming(caption: str, src: str) -> cl.Message:
             img_el = cl.Image(url=data_url, name=name, display="inline")
             logger.debug(f"Created cl.Image element from S3 (streaming): {name}")
         except Exception as e:
-            logger.warning(f"Error loading from S3 (streaming), falling back to URL: {type(e).__name__}: {e}")
+            logger.warning(
+                f"Error loading from S3 (streaming), falling back to URL: {type(e).__name__}: {e}"
+            )
             # Fallback: let client try to fetch as URL (e.g. if it's a presigned S3 HTTP URL)
             img_el = cl.Image(url=src, name=name, display="inline")
             logger.debug(f"Created cl.Image element with fallback URL (streaming): {name}")
@@ -463,7 +480,7 @@ def _is_web_url(path: str) -> bool:
 
 
 def _guess_file_name(path: str) -> str:
-    cleaned = path.strip().strip("`").strip("\"").strip("'")
+    cleaned = path.strip().strip("`").strip('"').strip("'")
     without_query = cleaned.split("?", 1)[0]
     name = Path(without_query).name
     if not name:
@@ -619,7 +636,7 @@ async def _send_text_with_smiles(text: str):
     # Process text with SMILES
     pos = 0
     for m in SMI_RX.finditer(text):
-        smi = m.group(1)
+        smi = _smiles_from_match(m)
         logger.debug(f"Detected SMILES: '{smi}'")
 
         # Send text up to SMILES
@@ -633,19 +650,11 @@ async def _send_text_with_smiles(text: str):
         # Try to create molecule image and send as cl.Image
         try:
             logger.info(f"Attempting to convert SMILES to PNG: '{smi}'")
-            png = smiles_to_png_bytes(smi)
-            if png is not None:
-                png_size = len(png)
-                logger.info(f"Successfully generated PNG from SMILES '{smi}' ({png_size} bytes)")
-                b64 = base64.b64encode(png).decode()
-                data_url = f"data:image/png;base64,{b64}"
-                logger.debug(f"Created data URL from PNG (size: {len(b64)} chars)")
-                img_el = cl.Image(url=data_url, name=smi, display="inline")
-                logger.debug(f"Created cl.Image element for SMILES: '{smi}'")
-                await cl.Message(content=f"`{smi}`", elements=[img_el], author="assistant").send()
-                logger.info(f"Sent SMILES image message for: '{smi}'")
-            else:
-                logger.warning(f"smiles_to_png_bytes returned None for SMILES: '{smi}'")
+            data_url = _smiles_to_data_url(smi)
+            img_el = cl.Image(url=data_url, name=smi, display="inline")
+            logger.debug(f"Created cl.Image element for SMILES: '{smi}'")
+            await cl.Message(content=f"`{smi}`", elements=[img_el], author="assistant").send()
+            logger.info(f"Sent SMILES image message for: '{smi}'")
         except ValueError as ve:
             logger.warning(f"ValueError converting SMILES '{smi}' to image: {ve}")
             # Invalid SMILES, just continue without image
@@ -682,13 +691,13 @@ async def _handle_file_uploads(files: list, session_id: str) -> list[str]:
             # Read file content
             file_content = None
 
-            if hasattr(file, 'content') and file.content:
+            if hasattr(file, "content") and file.content:
                 file_content = file.content
                 logger.debug(f"Got content from file.content ({len(file_content)} bytes)")
-            elif hasattr(file, 'path') and file.path:
+            elif hasattr(file, "path") and file.path:
                 # Read from file path
                 logger.debug(f"Reading from file.path: {file.path}")
-                with open(file.path, 'rb') as f:
+                with open(file.path, "rb") as f:
                     file_content = f.read()
                 logger.debug(f"Read {len(file_content)} bytes from file")
 
@@ -700,11 +709,11 @@ async def _handle_file_uploads(files: list, session_id: str) -> list[str]:
             # S3.prefix is already set to sessions/{session_id} by on_chat_start/resume
             relative_path = f"{file.name}"
             logger.debug(f"Relative S3 path: {relative_path}")
-            logger.debug(f"Current S3.prefix: {S3.prefix}")
+            logger.debug(f"Current S3 prefix: {S3.current_prefix()}")
 
             # Write file to S3 using S3.open with relative path
             logger.debug("Opening S3 file for writing...")
-            with S3.open(relative_path, 'wb') as s3_file:
+            with S3.open(relative_path, "wb") as s3_file:
                 s3_file.write(file_content)
 
             # Get the full S3 URL for display
@@ -713,7 +722,10 @@ async def _handle_file_uploads(files: list, session_id: str) -> list[str]:
             logger.info(f"Uploaded file {file.name} to {full_s3_url}")
 
         except Exception as e:
-            logger.error(f"Error uploading file {getattr(file, 'name', 'unknown')}: {type(e).__name__}: {e}", exc_info=True)
+            logger.error(
+                f"Error uploading file {getattr(file, 'name', 'unknown')}: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
             # Continue with other files even if one fails
             continue
 
@@ -790,9 +802,7 @@ async def main(user_msg: cl.Message):
         if session_agent is None:
             # Ensure S3 session is synchronized
             thread_id = cl.context.session.thread_id
-            if thread_id:
-                S3.prefix = f"sessions/{thread_id}"
-                logger.info(f"Set S3 session prefix in main(): {S3.prefix}")
+            _sync_storage_session(thread_id, "main:new-agent")
 
             session_agent = get_cs_copilot_agent_team(
                 model,
@@ -802,6 +812,8 @@ async def main(user_msg: cl.Message):
 
         # Re-apply map settings so the agent's session_state is up to date
         # even when a fresh agent was just created above.
+        thread_id = cl.context.session.thread_id
+        _sync_storage_session(thread_id, "main")
         _apply_map_settings(session_agent, cl.user_session.get("map") or "new_map")
 
         # Handle file uploads if present
@@ -809,10 +821,10 @@ async def main(user_msg: cl.Message):
         files = None
 
         # Try different ways files might be attached
-        if hasattr(user_msg, 'files') and user_msg.files:
+        if hasattr(user_msg, "files") and user_msg.files:
             files = user_msg.files
             logger.debug(f"Found files in user_msg.files: {[f.name for f in files]}")
-        elif hasattr(user_msg, 'elements') and user_msg.elements:
+        elif hasattr(user_msg, "elements") and user_msg.elements:
             # Filter for File elements
             files = [el for el in user_msg.elements if isinstance(el, cl.File)]
             if files:
@@ -842,14 +854,18 @@ async def main(user_msg: cl.Message):
 
                     # Add new files (basename: s3_path) without overwriting existing ones
                     for s3_path in uploaded_paths:
-                        filename = s3_path.split('/')[-1]
+                        filename = s3_path.split("/")[-1]
                         session_agent.session_state["uploaded_files"][filename] = s3_path
                         logger.info(f"Added to session state: {filename} → {s3_path}")
 
-                    logger.info(f"Total files in session state: {len(session_agent.session_state['uploaded_files'])}")
+                    logger.info(
+                        f"Total files in session state: {len(session_agent.session_state['uploaded_files'])}"
+                    )
 
                     # Display confirmation message
-                    file_list = "\n".join([f"- `{path.split('/')[-1]}` → {path}" for path in uploaded_paths])
+                    file_list = "\n".join(
+                        [f"- `{path.split('/')[-1]}` → {path}" for path in uploaded_paths]
+                    )
                     await cl.Message(
                         content=f"📁 **Files uploaded to S3:**\n{file_list}",
                         author="assistant",
@@ -862,7 +878,7 @@ async def main(user_msg: cl.Message):
         else:
             logger.debug("No files found in message")
 
-        # Process the message with session-scoped memory.
+        # Process the message with session-scoped thread history.
         # Two layers of retry protect against transient Ollama errors
         # (e.g. malformed tool-call JSON):
         #  - Inner: arun_with_retry wraps the async stream with retry
@@ -870,7 +886,6 @@ async def main(user_msg: cl.Message):
         #  - Outer: this loop catches errors that surface after relay()
         #    has already emitted partial UI content.  On retry a fresh
         #    stream + relay is started and the user is notified.
-        thread_id = cl.context.session.thread_id
         max_retries = 3
         base_delay = 2.0
         for attempt in range(max_retries + 1):
@@ -879,17 +894,16 @@ async def main(user_msg: cl.Message):
                     session_agent,
                     user_msg.content,
                     stream=True,
-                    session_id=thread_id,  # Isolate memory per chat thread
+                    session_id=thread_id,  # Isolate persisted history per chat thread
                     max_retries=1,  # Light inner retry; outer loop is primary
                 )
                 await relay(stream)
                 break  # Success – exit retry loop
             except Exception as e:
                 if _is_retriable(e) and attempt < max_retries:
-                    delay = base_delay * (2 ** attempt)
+                    delay = base_delay * (2**attempt)
                     logger.warning(
-                        "Retriable error in main() on attempt %d/%d: %s "
-                        "– retrying in %.1fs …",
+                        "Retriable error in main() on attempt %d/%d: %s " "– retrying in %.1fs …",
                         attempt + 1,
                         max_retries + 1,
                         e,
