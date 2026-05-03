@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-Autoencoder robustness tests.
+Molecular Designer autoencoder-engine robustness tests.
 
-Tests the autoencoder sampling functionality with prompt variations to assess
-robustness and consistency of generated molecules.
+Tests Molecular Designer autoencoder-engine functionality with prompt variations
+to assess robustness and consistency of generated molecules.
 """
 
 import logging
@@ -25,13 +25,13 @@ logger = logging.getLogger(__name__)
 
 
 class TestAutoencoderRobustness:
-    """Test autoencoder sampling robustness to prompt variations."""
+    """Test Molecular Designer autoencoder-engine robustness to prompt variations."""
 
     def test_basic_sampling_robustness(
         self, agent_team_factory, prompt_generator, comparator, metrics_calculator
     ):
         """
-        Test basic autoencoder sampling with 10 prompt variations.
+        Test Molecular Designer autoencoder-engine sampling with 10 prompt variations.
         Ensures consistent molecule generation across different phrasings.
 
         Each variation runs in a completely separate session with isolated S3
@@ -43,7 +43,7 @@ class TestAutoencoderRobustness:
         from cs_copilot.storage import is_s3_enabled
         from cs_copilot.storage.client import S3 as S3Client
 
-        logger.info("Starting basic autoencoder sampling robustness test")
+        logger.info("Starting Molecular Designer autoencoder-engine sampling robustness test")
 
         # Generate test run ID
         test_run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -94,7 +94,7 @@ class TestAutoencoderRobustness:
 
             except Exception as e:
                 logger.error(f"Variation {i} failed: {e}")
-                pytest.fail(f"Autoencoder sampling failed on variation {i}: {e}")
+                pytest.fail(f"Molecular Designer sampling failed on variation {i}: {e}")
 
             finally:
                 # Restore original S3 prefix
@@ -129,7 +129,7 @@ class TestAutoencoderRobustness:
         # Assertions
         assert (
             robustness_score > 0.75
-        ), f"Autoencoder sampling robustness score {robustness_score:.2f} below threshold"
+        ), f"Molecular Designer sampling robustness score {robustness_score:.2f} below threshold"
 
         # Check consistency
         n_molecules = [out["n_molecules"] for out in outputs]
@@ -148,7 +148,7 @@ class TestAutoencoderRobustness:
         self, agent_team_factory, prompt_generator, comparator, metrics_calculator
     ):
         """
-        Test GTM-guided autoencoder sampling with prompt variations.
+        Test GTM-guided Molecular Designer sampling with prompt variations.
         Ensures consistent molecule generation when guided by GTM dense nodes.
 
         Each variation runs in a completely separate session with isolated S3

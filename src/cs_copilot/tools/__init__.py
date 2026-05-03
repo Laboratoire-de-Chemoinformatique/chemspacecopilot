@@ -26,6 +26,7 @@ from .chemistry import (
     AutoencoderToolkit,
     BaseChemistryToolkit,
     ChemicalSimilarityToolkit,
+    MolecularDesignerToolkit,
     PeptideWAEToolkit,
     SynPlannerToolkit,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "BaseChemistryToolkit",
     "ChemicalSimilarityToolkit",
     "AutoencoderToolkit",
+    "MolecularDesignerToolkit",
     "PeptideWAEToolkit",
     "SynPlannerToolkit",
     "ChemblToolkit",
