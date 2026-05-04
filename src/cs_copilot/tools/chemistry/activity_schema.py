@@ -543,10 +543,14 @@ def build_compound_memory_preview(
     activity_kind = None
     if mapping.activity_column and mapping.activity_kind:
         try:
-            activity_values, activity_kind, _mapping = activity_series_for_landscape(preview, mapping)
+            activity_values, activity_kind, _mapping = activity_series_for_landscape(
+                preview, mapping
+            )
             sort_values = _activity_sort_values(activity_values, activity_kind)
             preview = preview.assign(_session_activity_sort=sort_values)
-            preview = preview.sort_values("_session_activity_sort", ascending=False, na_position="last")
+            preview = preview.sort_values(
+                "_session_activity_sort", ascending=False, na_position="last"
+            )
         except ValueError:
             activity_values = None
 
@@ -592,15 +596,19 @@ def _activity_payload_for_row(
     }
     if mapping.endpoint:
         activity["endpoint"] = mapping.endpoint
-    if mapping.endpoint_column and mapping.endpoint_column in row.index and pd.notna(
-        row.get(mapping.endpoint_column)
+    if (
+        mapping.endpoint_column
+        and mapping.endpoint_column in row.index
+        and pd.notna(row.get(mapping.endpoint_column))
     ):
         activity["endpoint"] = row.get(mapping.endpoint_column)
     raw_value = row.get(mapping.activity_column)
     if pd.notna(raw_value):
         activity["value"] = raw_value
-    if mapping.units_column and mapping.units_column in row.index and pd.notna(
-        row.get(mapping.units_column)
+    if (
+        mapping.units_column
+        and mapping.units_column in row.index
+        and pd.notna(row.get(mapping.units_column))
     ):
         activity["units"] = row.get(mapping.units_column)
     elif mapping.detected_units:

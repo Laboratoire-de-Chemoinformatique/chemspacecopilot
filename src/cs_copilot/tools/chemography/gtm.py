@@ -214,7 +214,9 @@ class GTMToolkit(BaseDRToolkit):
             ("dense", False, True),
             ("sparse", True, False),
         ):
-            metric = "filtered_density" if "filtered_density" in density_table.columns else "density"
+            metric = (
+                "filtered_density" if "filtered_density" in density_table.columns else "density"
+            )
             table = density_table.sort_values(metric, ascending=ascending).head(5)
             node_ids = [int(node) for node in table.get("nodes", table.index).tolist()]
             zone_id = register_session_object(
@@ -1024,7 +1026,9 @@ class GTMToolkit(BaseDRToolkit):
             )
 
         node_col = "node_index" if "node_index" in sampled.columns else "node"
-        nodes = sampled[node_col].dropna().astype(int).unique().tolist() if node_col in sampled else []
+        nodes = (
+            sampled[node_col].dropna().astype(int).unique().tolist() if node_col in sampled else []
+        )
         self._remember_sampled_zone(
             zone_type="coordinate",
             node_ids=nodes,

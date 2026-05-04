@@ -654,9 +654,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
                     source_tool="fetch_compounds",
                     set_current=True,
                 )
-                for idx, compound in enumerate(
-                    build_compound_memory_preview(merged_df), start=1
-                ):
+                for idx, compound in enumerate(build_compound_memory_preview(merged_df), start=1):
                     register_session_object(
                         state,
                         "compound",

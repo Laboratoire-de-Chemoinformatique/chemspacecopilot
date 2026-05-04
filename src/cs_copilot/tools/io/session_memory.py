@@ -65,7 +65,9 @@ def _json_safe(value: Any, *, depth: int = 0, max_items: int = 20) -> Any:
         return out
     if isinstance(value, (list, tuple, set)):
         values = list(value)
-        out = [_json_safe(item, depth=depth + 1, max_items=max_items) for item in values[:max_items]]
+        out = [
+            _json_safe(item, depth=depth + 1, max_items=max_items) for item in values[:max_items]
+        ]
         if len(values) > max_items:
             out.append({"_truncated": len(values) - max_items})
         return out
@@ -308,7 +310,9 @@ def register_compounds_from_candidates(
 
         if candidate.get("valid") is False:
             continue
-        smiles = candidate.get("smiles") or candidate.get("canonical_smiles") or candidate.get("smi")
+        smiles = (
+            candidate.get("smiles") or candidate.get("canonical_smiles") or candidate.get("smi")
+        )
         if not smiles:
             continue
 
