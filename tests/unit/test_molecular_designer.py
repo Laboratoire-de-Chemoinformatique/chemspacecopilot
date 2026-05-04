@@ -11,6 +11,7 @@ from cs_copilot.tools.chemistry.molecular_designer_toolkit import (
     MolecularDesignerToolkit,
     MolecularDesignResult,
 )
+from cs_copilot.tools.io.session_memory import resolve_candidate_set
 
 
 class _FakeAutoencoderToolkit:
@@ -167,3 +168,92 @@ def test_validate_and_rank_design_candidates_scores_seed_similarity():
     assert ranked[0]["smiles"] == "CCO"
     assert ranked[0]["properties"]["seed_tanimoto"] == 1.0
     assert ranked[-1]["valid"] is False
+
+
+def test_register_design_candidates_tool_is_exposed():
+    """The facade should expose explicit persistence for validated/ranked outputs."""
+    toolkit = MolecularDesignerToolkit(autoencoder_toolkit=_FakeAutoencoderToolkit())
+
+    assert "register_design_candidates" in toolkit.functions
+
+
+def test_register_design_candidates_persists_ranked_autoencoder_candidate_set():
+    """Validated/ranked low-level autoencoder candidates become a generated candidate set."""
+    toolkit = MolecularDesignerToolkit(autoencoder_toolkit=_FakeAutoencoderToolkit())
+    agent = SimpleNamespace(session_state={})
+    shared_state = {}
+
+    validated = toolkit.validate_design_candidates(["CCO", "CCN", "bad"], engine="autoencoder")
+    ranked = toolkit.rank_design_candidates(validated, seed_smiles="CCO")
+    summary = toolkit.register_design_candidates(
+        ranked,
+        engine="autoencoder",
+        generation_mode="analog",
+        seed_smiles="CCO",
+        goal="Register low-level autoencoder analogs.",
+        session_key="autoencoder_candidates",
+        agent=agent,
+        session_state=shared_state,
+    )
+
+    memory = shared_state["session_objects"]
+    candidate_set = memory["candidate_sets"]["cset_001"]
+
+    assert summary["status"] == "registered"
+    assert summary["registered_candidate_set_id"] == "cset_001"
+    assert summary["registered_compound_ids"] == ["cmp_001", "cmp_002"]
+    assert candidate_set["generation_engine"] == "autoencoder"
+    assert candidate_set["generation_mode"] == "analog"
+    assert candidate_set["compound_ids"] == ["cmp_001", "cmp_002"]
+    assert memory["current"]["candidate_set"] == "cset_001"
+    assert memory["current"]["generated_compounds"] == "cset_001"
+    assert [
+        shared_state["session_objects"]["compounds"][cid]["smiles"]
+        for cid in candidate_set["compound_ids"]
+    ] == [
+        "CCO",
+        "CCN",
+    ]
+    assert (
+        agent.session_state["session_objects"]["candidate_sets"]["cset_001"]["generation_engine"]
+        == "autoencoder"
+    )
+
+
+def test_autoencoder_registration_resolves_over_older_llm_candidate_set():
+    """Explicit autoencoder registration prevents fallback to older LLM candidates."""
+    toolkit = MolecularDesignerToolkit(autoencoder_toolkit=_FakeAutoencoderToolkit())
+    shared_state = {}
+
+    toolkit.register_design_candidates(
+        [{"smiles": "CCC", "valid": True}],
+        engine="llm",
+        generation_mode="design",
+        goal="Older LLM candidates.",
+        session_key="llm_candidates",
+        session_state=shared_state,
+    )
+    toolkit.register_design_candidates(
+        [
+            {"smiles": "CCO", "valid": True, "ranking_score": 0.9},
+            {"smiles": "CCN", "valid": True, "ranking_score": 0.8},
+        ],
+        engine="autoencoder",
+        generation_mode="analog",
+        goal="New autoencoder candidates.",
+        session_key="autoencoder_candidates",
+        session_state=shared_state,
+    )
+
+    resolved_autoencoder = resolve_candidate_set(shared_state, "autoencoder candidates")
+    resolved_llm = resolve_candidate_set(shared_state, "LLM candidates")
+
+    assert resolved_autoencoder["status"] == "resolved"
+    assert resolved_autoencoder["candidate_set"]["id"] == "cset_002"
+    assert resolved_autoencoder["candidate_set"]["generation_engine"] == "autoencoder"
+    assert [compound["smiles"] for compound in resolved_autoencoder["compounds"]] == [
+        "CCO",
+        "CCN",
+    ]
+    assert resolved_llm["candidate_set"]["id"] == "cset_001"
+    assert [compound["smiles"] for compound in resolved_llm["compounds"]] == ["CCC"]

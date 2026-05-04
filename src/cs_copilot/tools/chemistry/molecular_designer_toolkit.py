@@ -391,6 +391,7 @@ class MolecularDesignerToolkit(Toolkit):
         self.register(self.interpolate_molecules)
         self.register(self.validate_design_candidates)
         self.register(self.rank_design_candidates)
+        self.register(self.register_design_candidates)
 
     def list_design_engines(self) -> Dict[str, Any]:
         """
@@ -714,6 +715,151 @@ class MolecularDesignerToolkit(Toolkit):
             reverse=True,
         )
 
+    def register_design_candidates(
+        self,
+        candidates: Union[str, List[Union[str, Dict[str, Any]]]],
+        engine: str = "autoencoder",
+        generation_mode: str = "manual",
+        seed_smiles: Optional[str] = None,
+        goal: str = "Register generated molecular design candidates.",
+        session_key: str = "registered_design_candidates",
+        include_invalid: bool = False,
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Persist final molecular design candidates as a generated candidate set.
+
+        Use this after low-level generation, validation, ranking, or manual recovery
+        of candidate SMILES when the candidates did not come from design_molecules or
+        generate_analogs. This makes the set resolvable by downstream agents as
+        "autoencoder candidates", "LLM candidates", "top candidates", or cset_*.
+
+        Args:
+            candidates: SMILES or candidate dictionaries from validation/ranking tools.
+            engine: Generation engine provenance, such as "autoencoder" or "llm".
+            generation_mode: Generation mode label, such as "analog" or "neighborhood".
+            seed_smiles: Optional seed molecule used for generation or ranking.
+            goal: Design objective or rationale for this candidate set.
+            session_key: Session-state key where the candidate list should be stored.
+            include_invalid: Whether to keep invalid candidates in session_key output.
+            agent: Agent instance auto-injected by Agno.
+            session_state: Shared session state auto-injected by Agno.
+
+        Returns:
+            Registration summary including compound IDs and candidate_set ID.
+        """
+        if isinstance(candidates, str):
+            raw_candidates: List[Union[str, Dict[str, Any]]] = [candidates]
+        else:
+            raw_candidates = list(candidates or [])
+
+        engine_key = str(engine or "manual").strip().lower() or "manual"
+        candidate_dicts = [
+            self._candidate_dict_from_input(candidate, engine=engine_key)
+            for candidate in raw_candidates
+        ]
+        if not include_invalid:
+            candidate_dicts = [candidate for candidate in candidate_dicts if candidate.get("valid")]
+
+        state_targets = update_state_targets(agent, session_state)
+        if not state_targets:
+            return {
+                "status": "not_registered",
+                "message": "No session state is available for candidate registration.",
+                "engine": engine_key,
+                "generation_mode": generation_mode,
+                "count_attempted": len(raw_candidates),
+                "count_returned": len(candidate_dicts),
+                "preview": candidate_dicts[:20],
+            }
+
+        registered_compound_ids: List[str] = []
+        registered_candidate_set_id: Optional[str] = None
+        for state in state_targets:
+            state[session_key] = candidate_dicts
+            candidate_ids = register_compounds_from_candidates(
+                state,
+                candidate_dicts,
+                source_agent=getattr(agent, "name", None),
+                source_tool="register_design_candidates",
+                label_prefix=f"{engine_key} registered candidate",
+                related={
+                    "session_key": session_key,
+                    "goal": goal,
+                    "generation_mode": generation_mode,
+                    "seed_smiles": seed_smiles,
+                },
+                provenance={
+                    "origin_type": "generated",
+                    "origin_agent": "molecular_designer",
+                    "generation_engine": engine_key,
+                },
+                set_current_first=bool(candidate_dicts),
+            )
+            candidate_set_id = None
+            if candidate_ids:
+                candidate_set_id = register_generated_candidate_set(
+                    state,
+                    candidate_ids,
+                    source_agent=getattr(agent, "name", None),
+                    source_tool="register_design_candidates",
+                    origin_agent="molecular_designer",
+                    generation_engine=engine_key,
+                    generation_mode=generation_mode,
+                    session_key=session_key,
+                    label=f"Molecular Designer candidates ({engine_key})",
+                    seed_smiles=seed_smiles,
+                    goal=goal,
+                    count_attempted=len(raw_candidates),
+                    metadata={
+                        "registered_from": "validated_or_ranked_candidates",
+                        "include_invalid": include_invalid,
+                    },
+                )
+            register_session_object(
+                state,
+                "analysis",
+                {
+                    "analysis_type": "molecular_design_registration",
+                    "engine": engine_key,
+                    "generation_mode": generation_mode,
+                    "goal": goal,
+                    "session_key": session_key,
+                    "count_attempted": len(raw_candidates),
+                    "count_returned": len(candidate_dicts),
+                    "count_registered": len(candidate_ids),
+                    "compound_ids": candidate_ids,
+                    "candidate_set_id": candidate_set_id,
+                },
+                label=f"Molecular design registration ({engine_key})",
+                source_agent=getattr(agent, "name", None),
+                source_tool="register_design_candidates",
+                set_current=True,
+                current_role="analysis",
+            )
+
+            if state is session_state or (session_state is None and not registered_compound_ids):
+                registered_compound_ids = candidate_ids
+                registered_candidate_set_id = candidate_set_id
+
+        return {
+            "status": "registered" if registered_candidate_set_id else "no_valid_candidates",
+            "engine": engine_key,
+            "generation_mode": generation_mode,
+            "count_attempted": len(raw_candidates),
+            "count_returned": len(candidate_dicts),
+            "count_registered": len(registered_compound_ids),
+            "preview": candidate_dicts[:20],
+            "session_key": session_key,
+            "registered_compound_ids": registered_compound_ids,
+            "registered_candidate_set_id": registered_candidate_set_id,
+            "note": (
+                f"Registered {len(registered_compound_ids)} molecular design candidates "
+                f"under session_state['{session_key}']."
+            ),
+        }
+
     def _get_engine(self, engine: str, agent: Optional[Agent]) -> MolecularDesignEngine:
         engine_key = engine.lower().strip()
         if engine_key == "autoencoder":
@@ -752,3 +898,37 @@ class MolecularDesignerToolkit(Toolkit):
             ),
             reverse=True,
         )
+
+    def _candidate_dict_from_input(
+        self, candidate: Union[str, Dict[str, Any]], *, engine: str
+    ) -> Dict[str, Any]:
+        if isinstance(candidate, dict):
+            item = dict(candidate)
+            raw_smiles = item.get("smiles") or item.get("canonical_smiles") or item.get("smi")
+            score = item.get("score")
+            if score is None:
+                score = item.get("ranking_score")
+            validated = _validate_candidate(
+                raw_smiles,
+                engine=engine,
+                rationale=item.get("rationale"),
+                score=score,
+            ).to_dict()
+
+            properties = dict(validated.get("properties") or {})
+            properties.update(dict(item.get("properties") or {}))
+            if item.get("ranking_score") is not None:
+                properties.setdefault("ranking_score", item["ranking_score"])
+
+            merged = dict(validated)
+            merged["engine"] = engine
+            merged["properties"] = properties
+            for key in ("activity", "ranking_score", "rationale", "score"):
+                if item.get(key) is not None:
+                    merged[key] = item[key]
+            if item.get("valid") is False:
+                merged["valid"] = False
+                merged["error"] = item.get("error") or merged.get("error")
+            return merged
+
+        return _validate_candidate(candidate, engine=engine).to_dict()
