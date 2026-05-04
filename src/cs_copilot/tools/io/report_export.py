@@ -9,10 +9,11 @@ import io
 import logging
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from cs_copilot.storage import S3
 
+from .session_memory import register_session_object
 from .utils import get_mime_type
 
 logger = logging.getLogger(__name__)
@@ -585,6 +586,7 @@ def save_markdown_report(
     content: str,
     filename: Optional[str] = None,
     report_type: Optional[str] = None,
+    session_state: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Save a markdown report to the session-scoped storage (S3 or local).
@@ -618,6 +620,19 @@ def save_markdown_report(
 
     try:
         full_path = _write_text_report(content, rel_path)
+        if session_state is not None:
+            register_session_object(
+                session_state,
+                "report",
+                {
+                    "report_type": report_type or _DEFAULT_REPORT_TYPE,
+                    "paths": {"Markdown": full_path},
+                    "format": "markdown",
+                },
+                label=name,
+                source_tool="save_markdown_report",
+                set_current=True,
+            )
         logger.info(f"Markdown report saved to {full_path}")
         return f"Markdown report saved to S3: `{full_path}`"
     except Exception as e:
@@ -634,6 +649,7 @@ def save_rich_report(
     report_type: Optional[str] = None,
     formats: Optional[list[str]] = None,
     embed_images: bool = True,
+    session_state: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Save an image-rich report to session-scoped storage.
@@ -724,6 +740,21 @@ def save_rich_report(
             saved_paths.append(("Markdown", _write_text_report(markdown_content, rel_path)))
 
         logger.info("Rich report saved with outputs: %s", saved_paths)
+        if session_state is not None:
+            register_session_object(
+                session_state,
+                "report",
+                {
+                    "report_type": report_type or _DEFAULT_REPORT_TYPE,
+                    "paths": dict(saved_paths),
+                    "formats": [label for label, _path in saved_paths],
+                    "figure_count": len(normalized_figures)
+                    + sum(len(section["figures"]) for section in normalized_sections),
+                },
+                label=title.strip(),
+                source_tool="save_rich_report",
+                set_current=True,
+            )
         formatted_paths = "\n".join(f"- {label}: `{path}`" for label, path in saved_paths)
         return f"Rich report saved to S3:\n{formatted_paths}"
     except Exception as e:

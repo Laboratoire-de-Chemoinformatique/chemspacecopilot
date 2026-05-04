@@ -286,7 +286,31 @@ class TestPointerPandasTools:
         assert result["columns_mapped"]["smiles"] == "standardized_smiles"
         assert result["columns_mapped"]["cluster_id"] == "node_index"
         assert result["columns_mapped"]["activity"] == "standard_value"
+        assert result["activity_mapping"]["activity_column"] == "standard_value"
         assert normalized["smiles"].tolist() == ["CCO", "CCN"]
+
+    def test_normalize_for_analysis_registers_user_dataset_activity_memory(self, tools):
+        """User datasets get sparse activity memory without ChEMBL-specific fields."""
+        tools.dataframes["user_activity_df"] = pd.DataFrame(
+            {
+                "canonical_smiles": ["CCO", "CCN"],
+                "IC50_nM": [10.0, 100.0],
+            }
+        )
+        session_state = {}
+
+        result = tools.normalize_for_analysis("user_activity_df", session_state=session_state)
+
+        memory = session_state["session_objects"]
+        dataset = next(iter(memory["datasets"].values()))
+        compounds = list(memory["compounds"].values())
+
+        assert result["activity_mapping"]["activity_column"] == "IC50_nM"
+        assert result["activity_mapping"]["activity_semantics"] == "lower_is_better"
+        assert dataset["activity_mapping"]["activity_column"] == "IC50_nM"
+        assert compounds[0]["activity"]["endpoint"] == "IC50"
+        assert compounds[0]["activity"]["score"] == 8.0
+        assert "assay_chembl_id" not in compounds[0]
 
     def test_normalize_for_analysis_prefers_exact_smiles_column(self, tools):
         """Test normalize_for_analysis does not remap when exact smiles exists."""

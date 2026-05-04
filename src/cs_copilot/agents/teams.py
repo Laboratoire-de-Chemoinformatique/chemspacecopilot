@@ -11,6 +11,7 @@ from agno.db.sqlite import SqliteDb  # ✅ v2.1.x style DB import
 from agno.models.base import Model  # Agno v2 base class
 from agno.team import Team
 
+from cs_copilot.tools import SessionMemoryToolkit
 from cs_copilot.utils.resources import analyze_resources
 
 from .config import CS_COPILOT_MEMORY_DB  # optional now; kept for compatibility
@@ -145,6 +146,7 @@ def get_cs_copilot_agent_team(
         session_state={"resource_profile": resource_profile},
         add_session_state_to_context=True,
         enable_agentic_state=True,
+        tools=[SessionMemoryToolkit()],
         # Prompting
         description=(
             "You are an intelligent coordinator orchestrating a team of specialized cheminformatics agents. "

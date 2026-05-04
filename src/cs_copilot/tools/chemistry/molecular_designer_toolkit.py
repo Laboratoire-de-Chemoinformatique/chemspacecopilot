@@ -21,6 +21,12 @@ from pydantic import BaseModel, Field
 from rdkit import Chem, DataStructs
 from rdkit.Chem import QED, Descriptors, rdFingerprintGenerator
 
+from cs_copilot.tools.io.session_memory import (
+    register_compounds_from_candidates,
+    register_session_object,
+    update_state_targets,
+)
+
 from .autoencoder_toolkit import AutoencoderToolkit
 from .base_chemistry import ChemistryError
 from .standardize import standardize_smiles
@@ -423,6 +429,7 @@ class MolecularDesignerToolkit(Toolkit):
         return_format: SampleReturnFormat = "summary",
         session_key: str = "designed_molecules",
         agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """
         Design small-molecule candidates using a selected generative engine.
@@ -441,6 +448,7 @@ class MolecularDesignerToolkit(Toolkit):
             return_format: "summary" persists full results in session state; "list" returns all inline.
             session_key: Session-state key for full results when return_format="summary".
             agent: Agent instance auto-injected by Agno.
+            session_state: Shared session state auto-injected by Agno.
 
         Returns:
             Compact summary or a list of candidate dictionaries.
@@ -464,17 +472,53 @@ class MolecularDesignerToolkit(Toolkit):
         candidates = self._rank_candidate_objects(candidates, seed_smiles=seed_smiles)
         candidate_dicts = [candidate.to_dict() for candidate in candidates]
 
-        if return_format == "list" or agent is None:
-            if return_format == "summary" and agent is None:
+        state_targets = update_state_targets(agent, session_state)
+        registered_compound_ids: List[str] = []
+        for state in state_targets:
+            state[session_key] = candidate_dicts
+            candidate_ids = register_compounds_from_candidates(
+                state,
+                candidate_dicts,
+                source_agent=getattr(agent, "name", None),
+                source_tool="design_molecules",
+                label_prefix=f"{result.engine} design candidate",
+                related={
+                    "session_key": session_key,
+                    "goal": goal,
+                    "generation_mode": generation_mode,
+                    "seed_smiles": seed_smiles,
+                },
+                set_current_first=bool(candidate_dicts),
+            )
+            if state is session_state:
+                registered_compound_ids = candidate_ids
+            register_session_object(
+                state,
+                "analysis",
+                {
+                    "analysis_type": "molecular_design",
+                    "engine": result.engine,
+                    "generation_mode": generation_mode,
+                    "goal": goal,
+                    "session_key": session_key,
+                    "count_attempted": len(result.candidates),
+                    "count_returned": len(candidate_dicts),
+                    "compound_ids": candidate_ids,
+                },
+                label=f"Molecular design run ({result.engine})",
+                source_agent=getattr(agent, "name", None),
+                source_tool="design_molecules",
+                set_current=True,
+                current_role="analysis",
+            )
+
+        if return_format == "list" or not state_targets:
+            if return_format == "summary" and not state_targets:
                 logger.info(
-                    "design_molecules called with return_format='summary' but no agent "
-                    "was provided; falling back to list."
+                    "design_molecules called with return_format='summary' but no session "
+                    "state was available; falling back to list."
                 )
             return candidate_dicts
-
-        if agent.session_state is None:
-            agent.session_state = {}
-        agent.session_state[session_key] = candidate_dicts
 
         return {
             "engine": result.engine,
@@ -484,10 +528,11 @@ class MolecularDesignerToolkit(Toolkit):
             "include_invalid": include_invalid,
             "preview": candidate_dicts[:20],
             "session_key": session_key,
+            "registered_compound_ids": registered_compound_ids,
             "metadata": result.metadata,
             "note": (
                 f"Full {len(candidate_dicts)}-item molecular design result persisted to "
-                f"agent.session_state['{session_key}']; use that key for downstream "
+                f"session_state['{session_key}']; use that key for downstream "
                 "ranking, filtering, GTM projection, or reporting."
             ),
         }
@@ -504,6 +549,7 @@ class MolecularDesignerToolkit(Toolkit):
         return_format: SampleReturnFormat = "summary",
         session_key: str = "designed_analogs",
         agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """
         Generate small-molecule analogs around a seed SMILES.
@@ -519,6 +565,7 @@ class MolecularDesignerToolkit(Toolkit):
             return_format: "summary" or "list".
             session_key: Session-state key for summary mode.
             agent: Agent instance auto-injected by Agno.
+            session_state: Shared session state auto-injected by Agno.
 
         Returns:
             Compact summary or list of analog candidate dictionaries.
@@ -535,6 +582,7 @@ class MolecularDesignerToolkit(Toolkit):
             return_format=return_format,
             session_key=session_key,
             agent=agent,
+            session_state=session_state,
         )
 
     def interpolate_molecules(
@@ -546,6 +594,7 @@ class MolecularDesignerToolkit(Toolkit):
         return_format: SampleReturnFormat = "summary",
         session_key: str = "designed_interpolation",
         agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """
         Interpolate between two molecules using the autoencoder engine.
@@ -558,6 +607,7 @@ class MolecularDesignerToolkit(Toolkit):
             return_format: "summary" or "list".
             session_key: Session-state key for summary mode.
             agent: Agent instance auto-injected by Agno.
+            session_state: Shared session state auto-injected by Agno.
 
         Returns:
             Compact summary or list of interpolation candidate dictionaries.
@@ -574,6 +624,7 @@ class MolecularDesignerToolkit(Toolkit):
             return_format=return_format,
             session_key=session_key,
             agent=agent,
+            session_state=session_state,
         )
 
     def validate_design_candidates(

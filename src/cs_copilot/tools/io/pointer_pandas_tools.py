@@ -5,13 +5,18 @@ Enhanced PandasTools with pointer-based dataframe management and S3 support.
 """
 
 import logging
-from typing import Dict, Optional, Union
+from typing import Any, Dict, Optional, Union
 from uuid import uuid4
 
 import pandas as pd
 from agno.tools.pandas import PandasTools
 
 from cs_copilot.storage import S3
+from cs_copilot.tools.chemistry.activity_schema import (
+    add_normalized_activity_column,
+    build_compound_memory_preview,
+    infer_activity_mapping,
+)
 from cs_copilot.tools.chemistry.smiles_columns import (
     find_smiles_column_name,
     format_smiles_column_expectation,
@@ -19,6 +24,7 @@ from cs_copilot.tools.chemistry.smiles_columns import (
 )
 from cs_copilot.tools.chemistry.standardize import standardize_smiles_column
 from cs_copilot.tools.constants import MAX_COL_WIDTH, SAMPLE_COLS, SAMPLE_ROWS
+from cs_copilot.tools.io.session_memory import register_session_object, update_state_targets
 
 logger = logging.getLogger(__name__)
 
@@ -785,6 +791,9 @@ class PointerPandasTools(PandasTools):
         cluster_col: Optional[str] = None,
         smiles_col: Optional[str] = None,
         activity_col: Optional[str] = None,
+        *,
+        agent: Optional[Any] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Union[str, int]]:
         """Normalize a DataFrame to standard analysis format.
 
@@ -799,15 +808,15 @@ class PointerPandasTools(PandasTools):
                         ['node_index', 'cluster_id', 'cluster', 'group', 'class', 'label']
             smiles_col: Name of SMILES column. If None, auto-detects exact common
                        names first, then column names containing 'smiles'.
-            activity_col: Name of activity column. If None, auto-detects from:
-                         ['activity', 'pIC50', 'pKi', 'standard_value', 'value']
+            activity_col: Name of activity column. If None, auto-detects common
+                         raw potency, p-scale potency, and active/inactive label columns.
 
         Returns:
             Dictionary with:
             - dataframe_name: Name of the normalized DataFrame in registry
             - n_rows: Number of rows
             - n_clusters: Number of unique clusters (if cluster column found)
-            - has_activity: Boolean indicating if activity column was found
+            - has_activity: Boolean indicating if an activity column was found
             - columns_mapped: Dict showing original → normalized column mappings
 
         Examples:
@@ -832,16 +841,6 @@ class PointerPandasTools(PandasTools):
             "label",
             "node",
         ]
-        ACTIVITY_PATTERNS = [
-            "activity",
-            "pIC50",
-            "pKi",
-            "pEC50",
-            "standard_value",
-            "value",
-            "potency",
-        ]
-
         # Load the DataFrame
         df = self._get_or_load_dataframe(df_path)
         df = df.copy()  # Don't modify original
@@ -872,6 +871,12 @@ class PointerPandasTools(PandasTools):
         if dropped:
             logger.info(f"Dropped {dropped} rows with unstandardizable SMILES")
 
+        activity_mapping = infer_activity_mapping(
+            df,
+            smiles_column="smiles",
+            activity_column=activity_col,
+        )
+
         # Normalize cluster column (optional)
         cluster_found = None
         n_clusters = None
@@ -891,22 +896,27 @@ class PointerPandasTools(PandasTools):
             n_clusters = int(df["cluster_id"].nunique())
 
         # Normalize activity column (optional)
-        activity_found = None
-        has_activity = False
-        if activity_col and activity_col in df.columns:
-            activity_found = activity_col
-        else:
-            for pattern in ACTIVITY_PATTERNS:
-                if pattern in df.columns:
-                    activity_found = pattern
-                    break
-
-        if activity_found:
+        activity_found = activity_mapping.activity_column
+        has_activity = activity_found is not None and activity_mapping.activity_kind is not None
+        if has_activity:
+            try:
+                df = add_normalized_activity_column(df, activity_mapping, output_column="activity")
+            except ValueError as exc:
+                logger.warning(
+                    "Could not normalize activity column '%s': %s. Preserving raw values.",
+                    activity_found,
+                    exc,
+                )
+                df["activity"] = pd.to_numeric(df[activity_found], errors="coerce")
             if activity_found != "activity":
-                df = df.rename(columns={activity_found: "activity"})
                 columns_mapped["activity"] = activity_found
-                logger.info(f"Mapped '{activity_found}' → 'activity'")
+                logger.info(f"Mapped '{activity_found}' → normalized 'activity'")
             has_activity = True
+            activity_mapping = infer_activity_mapping(
+                df,
+                smiles_column="smiles",
+                activity_column=activity_found,
+            )
 
         # Store in registry with standardized name
         normalized_name = f"analysis_input_{uuid4().hex[:6]}"
@@ -918,11 +928,42 @@ class PointerPandasTools(PandasTools):
             "n_rows": int(len(df)),
             "has_activity": has_activity,
             "columns_mapped": columns_mapped,
+            "activity_mapping": activity_mapping.to_dict(),
             "preview": _preview(df),
         }
 
         if n_clusters is not None:
             result["n_clusters"] = n_clusters
+
+        for state in update_state_targets(agent, session_state):
+            dataset_id = register_session_object(
+                state,
+                "dataset",
+                {
+                    "dataset_path": df_path,
+                    "dataframe_name": normalized_name,
+                    "row_count": int(len(df)),
+                    "columns_mapped": columns_mapped,
+                    "activity_mapping": activity_mapping.to_dict(),
+                    "source_format": activity_mapping.source_format,
+                },
+                label=f"Analysis dataset: {df_path}",
+                source_agent=getattr(agent, "name", None),
+                source_tool="normalize_for_analysis",
+                set_current=True,
+            )
+            for idx, compound in enumerate(
+                build_compound_memory_preview(df, activity_mapping), start=1
+            ):
+                register_session_object(
+                    state,
+                    "compound",
+                    {**compound, "related": {"dataset_id": dataset_id}},
+                    label=f"Dataset compound {idx}",
+                    source_agent=getattr(agent, "name", None),
+                    source_tool="normalize_for_analysis",
+                    set_current=False,
+                )
 
         return result
 

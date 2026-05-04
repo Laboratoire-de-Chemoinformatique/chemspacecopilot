@@ -58,6 +58,7 @@ def test_design_molecules_summary_persists_full_result_in_session_state():
     """Summary mode should keep full candidate lists out of the LLM-visible response."""
     toolkit = MolecularDesignerToolkit(autoencoder_toolkit=_FakeAutoencoderToolkit())
     agent = SimpleNamespace(session_state={})
+    shared_state = {}
 
     summary = toolkit.design_molecules(
         goal="Generate small molecules",
@@ -65,15 +66,26 @@ def test_design_molecules_summary_persists_full_result_in_session_state():
         n_candidates=4,
         session_key="test_designs",
         agent=agent,
+        session_state=shared_state,
     )
 
     assert summary["session_key"] == "test_designs"
     assert summary["count_returned"] == 2
     assert len(summary["preview"]) == 2
-    assert {candidate["smiles"] for candidate in agent.session_state["test_designs"]} == {
+    assert {candidate["smiles"] for candidate in shared_state["test_designs"]} == {
         "CCO",
         "c1ccccc1",
     }
+    assert shared_state["session_objects"]["current"]["compound"] == "cmp_001"
+    assert shared_state["session_objects"]["compounds"]["cmp_001"]["smiles"] in {
+        "CCO",
+        "c1ccccc1",
+    }
+    assert {item["smiles"] for item in shared_state["session_objects"]["compounds"].values()} == {
+        "CCO",
+        "c1ccccc1",
+    }
+    assert set(agent.session_state["session_objects"]["compounds"]) == {"cmp_001", "cmp_002"}
 
 
 def test_interpolation_uses_autoencoder_interpolation_not_analog_dispatch():

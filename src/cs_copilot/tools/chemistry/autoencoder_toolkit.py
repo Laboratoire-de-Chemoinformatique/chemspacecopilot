@@ -24,6 +24,11 @@ from cs_copilot.tools.constants import (
     DEFAULT_AUTOENCODER_MODEL_PATH,
     HUGGINGFACE_AUTOENCODER_REPO,
 )
+from cs_copilot.tools.io.session_memory import (
+    register_compounds_from_candidates,
+    register_session_object,
+    update_state_targets,
+)
 
 from .base_chemistry import BaseChemistryToolkit, ChemistryError
 from .standardize import standardize_smiles
@@ -463,6 +468,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         return_format: SampleReturnFormat = "summary",
         session_key: str = "sampled_molecules",
         agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[List[str], Dict[str, Any]]:
         """
         Sample new molecules from the latent space using Gaussian prior.
@@ -486,10 +492,11 @@ class AutoencoderToolkit(BaseChemistryToolkit):
                 agent.session_state when return_format="summary".
             agent: Agent instance (auto-injected by agno). Required for
                 "summary" format; if None, gracefully falls back to "list".
+            session_state: Shared session state auto-injected by Agno.
 
         Returns:
             Dict summary (default) or List[str] (when return_format="list" or
-            no agent available).
+            no session state available).
         """
         raw = self.sample_from_latent(
             z=None,
@@ -502,17 +509,45 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
         sampled = _filter_valid_unique_smiles(raw) if filter_valid_unique else list(raw)
 
-        if return_format == "list" or agent is None:
-            if return_format == "summary" and agent is None:
+        state_targets = update_state_targets(agent, session_state)
+        registered_compound_ids: List[str] = []
+        for state in state_targets:
+            state[session_key] = sampled
+            candidate_ids = register_compounds_from_candidates(
+                state,
+                sampled,
+                source_agent=getattr(agent, "name", None),
+                source_tool="sample_molecules",
+                label_prefix="Autoencoder sample",
+                related={"session_key": session_key},
+                set_current_first=bool(sampled),
+            )
+            if state is session_state:
+                registered_compound_ids = candidate_ids
+            register_session_object(
+                state,
+                "analysis",
+                {
+                    "analysis_type": "autoencoder_sampling",
+                    "session_key": session_key,
+                    "count_attempted": n_samples,
+                    "count_returned": len(sampled),
+                    "compound_ids": candidate_ids,
+                },
+                label="Autoencoder sampling run",
+                source_agent=getattr(agent, "name", None),
+                source_tool="sample_molecules",
+                set_current=True,
+                current_role="analysis",
+            )
+
+        if return_format == "list" or not state_targets:
+            if return_format == "summary" and not state_targets:
                 logger.info(
-                    "sample_molecules called with return_format='summary' but no agent "
-                    "was provided; falling back to raw list."
+                    "sample_molecules called with return_format='summary' but no session "
+                    "state was available; falling back to raw list."
                 )
             return sampled
-
-        if agent.session_state is None:
-            agent.session_state = {}
-        agent.session_state[session_key] = sampled
 
         return {
             "count_attempted": n_samples,
@@ -520,9 +555,10 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             "filter_valid_unique": filter_valid_unique,
             "preview": sampled[:20],
             "session_key": session_key,
+            "registered_compound_ids": registered_compound_ids,
             "note": (
                 f"Full {len(sampled)}-item SMILES list persisted to "
-                f"agent.session_state['{session_key}']. Retrieve it from session state "
+                f"session_state['{session_key}']. Retrieve it from session state "
                 f"for downstream analysis (property calculation, clustering, GTM projection, etc.) "
                 f"instead of asking for the whole list inline."
             ),

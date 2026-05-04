@@ -13,7 +13,15 @@ import pandas as pd
 from agno.agent import Agent
 
 from cs_copilot.storage import S3
+from cs_copilot.tools.chemistry.activity_schema import (
+    build_compound_memory_preview,
+    infer_activity_mapping,
+)
 from cs_copilot.tools.chemistry.standardize import standardize_smiles_column
+from cs_copilot.tools.io.session_memory import (
+    register_session_object,
+    update_state_targets,
+)
 from cs_copilot.tools.io.utils import validate_positive_int
 
 from .base import BaseDatabaseToolkit, DatabaseError, NotFound, RateLimited, ValidationError
@@ -447,6 +455,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         assay_types: Optional[Sequence[str]] = None,
         mechanism: Optional[str] = None,
         agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Fetch compound bioactivity data from ChEMBL database using multiple keywords.
@@ -468,6 +477,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
             mechanism: Optional mechanism of action filter. When provided, only assays
                 whose description contains this term (case-insensitive) are kept.
                 Examples: "agonist", "antagonist", "modulator", "inverse agonist", None.
+            session_state: Shared session state auto-injected by Agno.
 
         Returns:
             Status message with information about fetched data
@@ -617,17 +627,47 @@ class ChemblToolkit(BaseDatabaseToolkit):
             if len(keywords) > 3:
                 query_slug += "_and_more"
             filename = self._save_chembl_data(merged_df, query_slug)
+            total_assays = len(all_assay_ids)
+            activity_mapping = infer_activity_mapping(merged_df).to_dict()
 
-            # Store dataset path in session state for cross-agent access
-            if agent is not None:
-                if agent.session_state is None:
-                    agent.session_state = {}
-                if "data_file_paths" not in agent.session_state:
-                    agent.session_state["data_file_paths"] = {}
-                agent.session_state["data_file_paths"]["dataset_path"] = filename
+            # Store dataset path and compact memory objects for cross-agent access.
+            for state in update_state_targets(agent, session_state):
+                if "data_file_paths" not in state:
+                    state["data_file_paths"] = {}
+                state["data_file_paths"]["dataset_path"] = filename
+                dataset_id = register_session_object(
+                    state,
+                    "dataset",
+                    {
+                        "dataset_path": filename,
+                        "query_keywords": keywords,
+                        "row_count": int(len(merged_df)),
+                        "unique_compounds": int(merged_df["smi"].nunique()),
+                        "assay_count": total_assays,
+                        "organism_filter": organism,
+                        "assay_type_codes": assay_type_codes,
+                        "mechanism_filter": mechanism,
+                        "activity_mapping": activity_mapping,
+                    },
+                    label=f"ChEMBL dataset: {', '.join(keywords[:3])}",
+                    source_agent=getattr(agent, "name", None),
+                    source_tool="fetch_compounds",
+                    set_current=True,
+                )
+                for idx, compound in enumerate(
+                    build_compound_memory_preview(merged_df), start=1
+                ):
+                    register_session_object(
+                        state,
+                        "compound",
+                        {**compound, "related": {"dataset_id": dataset_id}},
+                        label=f"ChEMBL compound {idx}",
+                        source_agent=getattr(agent, "name", None),
+                        source_tool="fetch_compounds",
+                        set_current=False,
+                    )
                 logger.info(f"Stored dataset_path in session_state: {filename}")
 
-            total_assays = len(all_assay_ids)
             return self._format_success_message(
                 merged_df,
                 keywords,
@@ -642,6 +682,11 @@ class ChemblToolkit(BaseDatabaseToolkit):
         except Exception as e:
             logger.error(f"Error fetching ChEMBL compounds: {e}")
             raise
+
+    @staticmethod
+    def _memory_compound_preview(df: pd.DataFrame, limit: int = 50) -> list[Dict[str, Any]]:
+        """Return compact activity-bearing compound records for session memory."""
+        return build_compound_memory_preview(df, limit=limit)
 
     def _add_smiles_to_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add SMILES structures to activity DataFrame."""
