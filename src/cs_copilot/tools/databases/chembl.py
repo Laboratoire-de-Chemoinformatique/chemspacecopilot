@@ -13,10 +13,8 @@ import pandas as pd
 from agno.agent import Agent
 
 from cs_copilot.storage import S3
-from cs_copilot.tools.chemistry.activity_schema import (
-    build_compound_memory_preview,
-    infer_activity_mapping,
-)
+from cs_copilot.tools.chemistry.activity_schema import build_compound_memory_preview
+from cs_copilot.tools.chemistry.clean_dataset import prepare_clean_dataset
 from cs_copilot.tools.chemistry.standardize import standardize_smiles_column
 from cs_copilot.tools.io.session_memory import (
     register_session_object,
@@ -611,50 +609,75 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 f"Removed {duplicates_removed} duplicate records. Final dataset: {len(merged_df)} records"
             )
 
-            # Step 5: Standardize SMILES
-            pre_std_count = len(merged_df)
-            merged_df = standardize_smiles_column(merged_df, "smi")
-            merged_df = merged_df.dropna(subset=["smi"])
-            std_dropped = pre_std_count - len(merged_df)
-            if std_dropped:
-                logger.info(f"Dropped {std_dropped} records with unstandardizable SMILES")
-
-            # Step 6: Save dataset
-            # Create filename from all keywords
+            # Step 5: Prepare raw, clean, descriptor, and report artifacts.
             query_slug = "_".join(
                 [kw.replace(" ", "_") for kw in keywords[:3]]
             )  # Limit to first 3 keywords for filename
             if len(keywords) > 3:
                 query_slug += "_and_more"
-            filename = self._save_chembl_data(merged_df, query_slug)
+            prepared = prepare_clean_dataset(
+                merged_df,
+                source_name=f"chembl_{query_slug}",
+                smiles_column="smi",
+                raw_filename=f"chembl_{query_slug}_raw.csv",
+                clean_filename=f"chembl_{query_slug}_clean.csv",
+                descriptor_filename=f"chembl_{query_slug}_descriptors.parquet",
+                report_filename=f"chembl_{query_slug}_standardization_report.md",
+            )
             total_assays = len(all_assay_ids)
-            activity_mapping = infer_activity_mapping(merged_df).to_dict()
+            clean_df = prepared.clean_df
+            activity_mapping = prepared.activity_mapping.to_dict()
+            final_activity_mapping = prepared.final_activity_mapping.to_dict()
 
             # Store dataset path and compact memory objects for cross-agent access.
             for state in update_state_targets(agent, session_state):
                 if "data_file_paths" not in state:
                     state["data_file_paths"] = {}
-                state["data_file_paths"]["dataset_path"] = filename
+                state["data_file_paths"]["raw_dataset_path"] = prepared.raw_dataset_path
+                state["data_file_paths"]["clean_dataset_path"] = prepared.clean_dataset_path
+                state["data_file_paths"][
+                    "descriptor_parquet_path"
+                ] = prepared.descriptor_parquet_path
+                state["data_file_paths"][
+                    "standardization_report_path"
+                ] = prepared.standardization_report_path
+                state["data_file_paths"]["dataset_path"] = prepared.clean_dataset_path
                 dataset_id = register_session_object(
                     state,
                     "dataset",
                     {
-                        "dataset_path": filename,
+                        "dataset_path": prepared.clean_dataset_path,
+                        "raw_dataset_path": prepared.raw_dataset_path,
+                        "clean_dataset_path": prepared.clean_dataset_path,
+                        "descriptor_parquet_path": prepared.descriptor_parquet_path,
+                        "standardization_report_path": prepared.standardization_report_path,
                         "query_keywords": keywords,
-                        "row_count": int(len(merged_df)),
-                        "unique_compounds": int(merged_df["smi"].nunique()),
+                        "row_count": int(len(clean_df)),
+                        "raw_row_count": int(len(merged_df)),
+                        "unique_compounds": int(clean_df["smiles"].nunique()),
                         "assay_count": total_assays,
                         "organism_filter": organism,
                         "assay_type_codes": assay_type_codes,
                         "mechanism_filter": mechanism,
                         "activity_mapping": activity_mapping,
+                        "final_activity_mapping": final_activity_mapping,
+                        "activity_merge_policy": prepared.standardization_summary[
+                            "activity_merge_policy"
+                        ],
+                        "stereochemistry_removed": prepared.standardization_summary[
+                            "stereochemistry_removed"
+                        ],
+                        "standardization_summary": prepared.standardization_summary,
                     },
                     label=f"ChEMBL dataset: {', '.join(keywords[:3])}",
                     source_agent=getattr(agent, "name", None),
                     source_tool="fetch_compounds",
                     set_current=True,
                 )
-                for idx, compound in enumerate(build_compound_memory_preview(merged_df), start=1):
+                for idx, compound in enumerate(
+                    build_compound_memory_preview(clean_df, prepared.final_activity_mapping),
+                    start=1,
+                ):
                     register_session_object(
                         state,
                         "compound",
@@ -664,17 +687,24 @@ class ChemblToolkit(BaseDatabaseToolkit):
                         source_tool="fetch_compounds",
                         set_current=False,
                     )
-                logger.info(f"Stored dataset_path in session_state: {filename}")
+                logger.info(
+                    "Stored clean dataset_path in session_state: %s",
+                    prepared.clean_dataset_path,
+                )
 
             return self._format_success_message(
-                merged_df,
+                clean_df,
                 keywords,
-                filename,
+                prepared.clean_dataset_path,
                 total_assays,
                 duplicates_removed,
                 organism_filter=organism,
                 assay_type_codes=assay_type_codes,
                 mechanism_filter=mechanism,
+                raw_dataset_path=prepared.raw_dataset_path,
+                descriptor_parquet_path=prepared.descriptor_parquet_path,
+                standardization_report_path=prepared.standardization_report_path,
+                standardization_summary=prepared.standardization_summary,
             )
 
         except Exception as e:
@@ -767,6 +797,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
         organism_filter: Optional[str] = None,
         assay_type_codes: Optional[Sequence[str]] = None,
         mechanism_filter: Optional[str] = None,
+        raw_dataset_path: Optional[str] = None,
+        descriptor_parquet_path: Optional[str] = None,
+        standardization_report_path: Optional[str] = None,
+        standardization_summary: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Format success message for ChEMBL data fetch."""
         sample_row = df.head(1).to_string(index=False) if not df.empty else "No data"
@@ -777,9 +811,16 @@ class ChemblToolkit(BaseDatabaseToolkit):
         keywords_str = ", ".join([f"'{kw}'" for kw in keywords])
         save_label = "Saved to S3" if filename.startswith("s3://") else "Saved locally"
         message = (
-            f"✅ Fetched {len(df)} records from {len(keywords)} keyword(s): {keywords_str}\n"
-            f"📄 {save_label}: `{filename}`\n"
+            f"✅ Fetched and cleaned {len(df)} compound records from "
+            f"{len(keywords)} keyword(s): {keywords_str}\n"
+            f"📄 Clean dataset ({save_label}): `{filename}`\n"
         )
+        if raw_dataset_path:
+            message += f"📄 Raw dataset: `{raw_dataset_path}`\n"
+        if descriptor_parquet_path:
+            message += f"🧮 Descriptor Parquet: `{descriptor_parquet_path}`\n"
+        if standardization_report_path:
+            message += f"🧾 Standardization report: `{standardization_report_path}`\n"
 
         if total_assays > 0:
             message += f"🔬 Found {total_assays} unique assays across all keywords\n"
@@ -796,12 +837,23 @@ class ChemblToolkit(BaseDatabaseToolkit):
             message += f"🧬 Target organism filter: {organism_filter}\n"
 
         if duplicates_removed > 0:
-            message += f"🔄 Removed {duplicates_removed} duplicate records\n"
+            message += f"🔄 Removed {duplicates_removed} duplicate raw activity records\n"
+
+        if standardization_summary:
+            message += (
+                "🧹 Standardization: "
+                f"{standardization_summary.get('raw_rows')} raw rows → "
+                f"{standardization_summary.get('rows_after_standardization')} valid rows → "
+                f"{standardization_summary.get('clean_rows')} clean compounds; "
+                f"{standardization_summary.get('invalid_smiles_rows')} invalid rows; "
+                f"{standardization_summary.get('duplicate_rows_after_standardization')} "
+                "post-standardization duplicate rows\n"
+            )
 
         message += (
             f"📊 Columns: {columns_preview}\n"
             f"🔍 Sample row:\n{sample_row}\n\n"
-            f"💡 You can now use '{filename}' directly with pandas operations"
+            f"💡 Downstream agents will use the clean dataset path: `{filename}`"
         )
 
         return message

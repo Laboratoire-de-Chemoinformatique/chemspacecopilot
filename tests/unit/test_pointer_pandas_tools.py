@@ -277,6 +277,7 @@ class TestPointerPandasTools:
                 "standardized_smiles": ["CCO", "CCN"],
                 "node_index": [1, 2],
                 "standard_value": [10.0, 20.0],
+                "standard_units": ["nM", "nM"],
             }
         )
 
@@ -287,7 +288,13 @@ class TestPointerPandasTools:
         assert result["columns_mapped"]["cluster_id"] == "node_index"
         assert result["columns_mapped"]["activity"] == "standard_value"
         assert result["activity_mapping"]["activity_column"] == "standard_value"
+        assert result["final_activity_mapping"]["activity_column"] == "activity_final"
         assert normalized["smiles"].tolist() == ["CCO", "CCN"]
+        assert "morgan_fingerprint" not in normalized.columns
+        assert (
+            result["clean_dataset_path"] == result["standardization_summary"]["clean_dataset_path"]
+        )
+        assert result["descriptor_parquet_path"].endswith(".parquet")
 
     def test_normalize_for_analysis_registers_user_dataset_activity_memory(self, tools):
         """User datasets get sparse activity memory without ChEMBL-specific fields."""
@@ -307,7 +314,16 @@ class TestPointerPandasTools:
 
         assert result["activity_mapping"]["activity_column"] == "IC50_nM"
         assert result["activity_mapping"]["activity_semantics"] == "lower_is_better"
+        assert result["final_activity_mapping"]["activity_column"] == "activity_final"
+        assert session_state["data_file_paths"]["dataset_path"] == result["clean_dataset_path"]
+        assert session_state["data_file_paths"]["raw_dataset_path"] == result["raw_dataset_path"]
+        assert (
+            session_state["data_file_paths"]["descriptor_parquet_path"]
+            == result["descriptor_parquet_path"]
+        )
         assert dataset["activity_mapping"]["activity_column"] == "IC50_nM"
+        assert dataset["clean_dataset_path"] == result["clean_dataset_path"]
+        assert dataset["descriptor_parquet_path"] == result["descriptor_parquet_path"]
         assert compounds[0]["activity"]["endpoint"] == "IC50"
         assert compounds[0]["activity"]["score"] == 8.0
         assert "assay_chembl_id" not in compounds[0]

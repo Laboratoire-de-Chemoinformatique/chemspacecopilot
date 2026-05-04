@@ -58,12 +58,19 @@ def _chunk_size(item_count: int, worker_count: int) -> int:
     return max(1, math.ceil(item_count / worker_count))
 
 
-def _standardize_chunk(smiles_values: list[str]) -> list[Optional[str]]:
-    return [standardize_smiles(smiles) for smiles in smiles_values]
+def _standardize_chunk(args: tuple[list[str], bool]) -> list[Optional[str]]:
+    smiles_values, remove_stereochemistry = args
+    return [
+        standardize_smiles(smiles, remove_stereochemistry=remove_stereochemistry)
+        for smiles in smiles_values
+    ]
 
 
 @lru_cache(maxsize=_STANDARDIZE_CACHE_SIZE)
-def _standardize_smiles_cached(smiles: str) -> Optional[str]:
+def _standardize_smiles_cached(
+    smiles: str,
+    remove_stereochemistry: bool = True,
+) -> Optional[str]:
     try:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
@@ -75,21 +82,33 @@ def _standardize_smiles_cached(smiles: str) -> Optional[str]:
         uncharged = uncharger.uncharge(parent)
         tautomer = tautomer_enumerator.Canonicalize(uncharged)
 
-        return Chem.MolToSmiles(tautomer, canonical=True)
+        if remove_stereochemistry:
+            Chem.RemoveStereochemistry(tautomer)
+
+        return Chem.MolToSmiles(
+            tautomer,
+            canonical=True,
+            isomericSmiles=not remove_stereochemistry,
+        )
     except Exception:
         return None
 
 
-def standardize_smiles(smiles: str) -> Optional[str]:
+def standardize_smiles(
+    smiles: str,
+    *,
+    remove_stereochemistry: bool = True,
+) -> Optional[str]:
     if not isinstance(smiles, str):
         return None
-    return _standardize_smiles_cached(smiles)
+    return _standardize_smiles_cached(smiles, remove_stereochemistry)
 
 
 def standardize_smiles_column(
     df: pd.DataFrame,
     col_name: str,
     *,
+    remove_stereochemistry: bool = True,
     max_workers: Optional[int] = None,
     min_parallel_rows: int = 64,
 ) -> pd.DataFrame:
@@ -118,12 +137,14 @@ def standardize_smiles_column(
     serial_fallback = False
 
     logger.info(
-        "Standardizing SMILES column '%s': total_rows=%d string_rows=%d mode=%s workers=%d",
+        "Standardizing SMILES column '%s': total_rows=%d string_rows=%d mode=%s "
+        "workers=%d remove_stereochemistry=%s",
         col_name,
         total_rows,
         string_row_count,
         mode,
         worker_count,
+        remove_stereochemistry,
     )
     started_at = time.perf_counter()
 
@@ -138,7 +159,10 @@ def standardize_smiles_column(
             with ProcessPoolExecutor(max_workers=worker_count) as executor:
                 standardized_values = [
                     standardized
-                    for chunk_result in executor.map(_standardize_chunk, chunks)
+                    for chunk_result in executor.map(
+                        _standardize_chunk,
+                        [(chunk, remove_stereochemistry) for chunk in chunks],
+                    )
                     for standardized in chunk_result
                 ]
         except Exception:
@@ -148,10 +172,16 @@ def standardize_smiles_column(
                 col_name,
                 exc_info=True,
             )
-            standardized_values = [standardize_smiles(smiles) for smiles in string_values]
+            standardized_values = [
+                standardize_smiles(smiles, remove_stereochemistry=remove_stereochemistry)
+                for smiles in string_values
+            ]
             serial_fallback = True
     else:
-        standardized_values = [standardize_smiles(smiles) for smiles in string_values]
+        standardized_values = [
+            standardize_smiles(smiles, remove_stereochemistry=remove_stereochemistry)
+            for smiles in string_values
+        ]
 
     result_values: list[Optional[str]] = [None] * total_rows
     for pos, standardized in zip(string_positions, standardized_values, strict=True):

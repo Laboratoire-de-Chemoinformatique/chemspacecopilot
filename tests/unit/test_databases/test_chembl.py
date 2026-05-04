@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pandas as pd
 import pytest
 
+from cs_copilot.tools.databases import chembl as chembl_module
 from cs_copilot.tools.databases.base import DatabaseError, NotFound, RateLimited, ValidationError
 from cs_copilot.tools.databases.chembl import ChemblToolkit
 from cs_copilot.tools.databases.types import DBConfig, PaginationMode, QueryParams, ResultPage
@@ -308,6 +309,8 @@ class TestChemblToolkit:
                 "assay_chembl_id": "CHEMBL1",
                 "molecule_chembl_id": "CHEMBL1",
                 "standard_value": 10.0,
+                "standard_units": "nM",
+                "standard_type": "IC50",
                 "canonical_smiles": "CCO",
             },
             {
@@ -315,6 +318,8 @@ class TestChemblToolkit:
                 "assay_chembl_id": "CHEMBL2",
                 "molecule_chembl_id": "CHEMBL2",
                 "standard_value": 20.0,
+                "standard_units": "nM",
+                "standard_type": "IC50",
                 "canonical_smiles": "CCC",
             },
         ]
@@ -332,7 +337,10 @@ class TestChemblToolkit:
 
         assert "✅ Fetched" in result
         assert "kinase" in result
-        assert "chembl_kinase.csv" in result
+        assert "chembl_kinase_clean.csv" in result
+        assert "chembl_kinase_raw.csv" in result
+        assert "chembl_kinase_descriptors.parquet" in result
+        assert "chembl_kinase_standardization_report.md" in result
         assert "Assay types filtered: Binding, Functional" in result
 
         # Verify API calls
@@ -425,6 +433,8 @@ class TestChemblToolkit:
                 "assay_chembl_id": "CHEMBL1",
                 "molecule_chembl_id": "CHEMBL1",
                 "standard_value": 10.0,
+                "standard_units": "nM",
+                "standard_type": "IC50",
                 "canonical_smiles": "CCO",
             }
         ]
@@ -451,8 +461,18 @@ class TestChemblToolkit:
         finally:
             S3.prefix = original_prefix
 
-        expected_path = Path("data") / "sessions" / "test-session" / "chembl_kinase.csv"
+        expected_path = Path("data") / "sessions" / "test-session" / "chembl_kinase_clean.csv"
+        expected_raw_path = Path("data") / "sessions" / "test-session" / "chembl_kinase_raw.csv"
+        expected_descriptor_path = (
+            Path("data") / "sessions" / "test-session" / "chembl_kinase_descriptors.parquet"
+        )
+        expected_report_path = (
+            Path("data") / "sessions" / "test-session" / "chembl_kinase_standardization_report.md"
+        )
         assert (tmp_path / expected_path).exists()
+        assert (tmp_path / expected_raw_path).exists()
+        assert (tmp_path / expected_descriptor_path).exists()
+        assert (tmp_path / expected_report_path).exists()
         assert "Saved locally" in result
         assert str(expected_path) in result
 
@@ -523,7 +543,9 @@ class TestChemblToolkit:
 
     @patch.object(ChemblToolkit, "_ensure_client")
     @patch("cs_copilot.tools.databases.chembl.S3")
-    def test_fetch_compounds_multi_keyword_tracks_keywords(self, mock_s3, mock_ensure_client):
+    def test_fetch_compounds_multi_keyword_tracks_keywords(
+        self, mock_s3, mock_ensure_client, monkeypatch
+    ):
         """Test that query_keywords column tracks which keywords retrieved each row."""
         mock_client = Mock()
 
@@ -539,6 +561,8 @@ class TestChemblToolkit:
                 "assay_chembl_id": "CHEMBL_A1",
                 "molecule_chembl_id": "MOL1",
                 "standard_value": 10.0,
+                "standard_units": "nM",
+                "standard_type": "IC50",
                 "canonical_smiles": "CCO",
             },
             {
@@ -546,6 +570,8 @@ class TestChemblToolkit:
                 "assay_chembl_id": "CHEMBL_A1",
                 "molecule_chembl_id": "MOL2",
                 "standard_value": 20.0,
+                "standard_units": "nM",
+                "standard_type": "IC50",
                 "canonical_smiles": "CCC",
             },
         ]
@@ -555,6 +581,8 @@ class TestChemblToolkit:
                 "assay_chembl_id": "CHEMBL_A2",
                 "molecule_chembl_id": "MOL1",
                 "standard_value": 10.0,
+                "standard_units": "nM",
+                "standard_type": "IC50",
                 "canonical_smiles": "CCO",
             },
             {
@@ -562,6 +590,8 @@ class TestChemblToolkit:
                 "assay_chembl_id": "CHEMBL_A2",
                 "molecule_chembl_id": "MOL3",
                 "standard_value": 30.0,
+                "standard_units": "nM",
+                "standard_type": "IC50",
                 "canonical_smiles": "CCCO",
             },
         ]
@@ -584,16 +614,16 @@ class TestChemblToolkit:
         mock_s3.open.return_value.__exit__.return_value = False
         mock_s3.path.side_effect = lambda rel: rel
 
-        toolkit = ChemblToolkit()
-        # Patch _save_chembl_data to capture the DataFrame
         saved_dfs = []
-        original_save = toolkit._save_chembl_data
+        original_prepare = chembl_module.prepare_clean_dataset
 
-        def capture_save(df, query):
+        def capture_prepare(df, *args, **kwargs):
             saved_dfs.append(df.copy())
-            return original_save(df, query)
+            return original_prepare(df, *args, **kwargs)
 
-        toolkit._save_chembl_data = capture_save
+        monkeypatch.setattr(chembl_module, "prepare_clean_dataset", capture_prepare)
+
+        toolkit = ChemblToolkit()
         toolkit.fetch_compounds("cdk2, kinase")
 
         assert len(saved_dfs) == 1

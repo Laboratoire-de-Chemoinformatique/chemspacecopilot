@@ -12,17 +12,13 @@ import pandas as pd
 from agno.tools.pandas import PandasTools
 
 from cs_copilot.storage import S3
-from cs_copilot.tools.chemistry.activity_schema import (
-    add_normalized_activity_column,
-    build_compound_memory_preview,
-    infer_activity_mapping,
-)
+from cs_copilot.tools.chemistry.activity_schema import build_compound_memory_preview
+from cs_copilot.tools.chemistry.clean_dataset import prepare_clean_dataset
 from cs_copilot.tools.chemistry.smiles_columns import (
     find_smiles_column_name,
     format_smiles_column_expectation,
     smiles_column_exact_names,
 )
-from cs_copilot.tools.chemistry.standardize import standardize_smiles_column
 from cs_copilot.tools.constants import MAX_COL_WIDTH, SAMPLE_COLS, SAMPLE_ROWS
 from cs_copilot.tools.io.session_memory import register_session_object, update_state_targets
 
@@ -196,6 +192,17 @@ def _resolve(obj, registry: dict):
     if isinstance(obj, dict) and "dataframe_name" in obj:
         return registry[obj["dataframe_name"]]
     return obj
+
+
+def _raw_dataset_path_for_input(df_path: str, registry: dict[str, pd.DataFrame]) -> Optional[str]:
+    """Return an existing raw path when df_path is a loadable file, not a dataframe key."""
+    if df_path in registry:
+        return None
+    if df_path.endswith((".csv", ".csv.gz", ".tsv", ".tab", ".txt")):
+        return S3.path(df_path)
+    if df_path.startswith(("s3://", "/", "file://")):
+        return S3.path(df_path)
+    return None
 
 
 class PointerPandasTools(PandasTools):
@@ -864,19 +871,6 @@ class PointerPandasTools(PandasTools):
             columns_mapped["smiles"] = smiles_found
             logger.info(f"Mapped '{smiles_found}' → 'smiles'")
 
-        pre_std = len(df)
-        df = standardize_smiles_column(df, "smiles")
-        df = df.dropna(subset=["smiles"]).reset_index(drop=True)
-        dropped = pre_std - len(df)
-        if dropped:
-            logger.info(f"Dropped {dropped} rows with unstandardizable SMILES")
-
-        activity_mapping = infer_activity_mapping(
-            df,
-            smiles_column="smiles",
-            activity_column=activity_col,
-        )
-
         # Normalize cluster column (optional)
         cluster_found = None
         n_clusters = None
@@ -893,30 +887,26 @@ class PointerPandasTools(PandasTools):
                 df = df.rename(columns={cluster_found: "cluster_id"})
                 columns_mapped["cluster_id"] = cluster_found
                 logger.info(f"Mapped '{cluster_found}' → 'cluster_id'")
-            n_clusters = int(df["cluster_id"].nunique())
 
-        # Normalize activity column (optional)
+        prepared = prepare_clean_dataset(
+            df,
+            source_name=df_path,
+            smiles_column="smiles",
+            activity_column=activity_col,
+            raw_dataset_path=_raw_dataset_path_for_input(df_path, self.dataframes),
+        )
+        df = prepared.clean_df
+        activity_mapping = prepared.activity_mapping
+        final_activity_mapping = prepared.final_activity_mapping
+        has_activity = final_activity_mapping.activity_column is not None
+
         activity_found = activity_mapping.activity_column
-        has_activity = activity_found is not None and activity_mapping.activity_kind is not None
-        if has_activity:
-            try:
-                df = add_normalized_activity_column(df, activity_mapping, output_column="activity")
-            except ValueError as exc:
-                logger.warning(
-                    "Could not normalize activity column '%s': %s. Preserving raw values.",
-                    activity_found,
-                    exc,
-                )
-                df["activity"] = pd.to_numeric(df[activity_found], errors="coerce")
-            if activity_found != "activity":
-                columns_mapped["activity"] = activity_found
-                logger.info(f"Mapped '{activity_found}' → normalized 'activity'")
-            has_activity = True
-            activity_mapping = infer_activity_mapping(
-                df,
-                smiles_column="smiles",
-                activity_column=activity_found,
-            )
+        if has_activity and activity_found and activity_found != "activity":
+            columns_mapped["activity"] = activity_found
+            logger.info(f"Mapped '{activity_found}' → final 'activity_final'")
+
+        if "cluster_id" in df.columns:
+            n_clusters = int(df["cluster_id"].nunique())
 
         # Store in registry with standardized name
         normalized_name = f"analysis_input_{uuid4().hex[:6]}"
@@ -929,6 +919,12 @@ class PointerPandasTools(PandasTools):
             "has_activity": has_activity,
             "columns_mapped": columns_mapped,
             "activity_mapping": activity_mapping.to_dict(),
+            "final_activity_mapping": final_activity_mapping.to_dict(),
+            "raw_dataset_path": prepared.raw_dataset_path,
+            "clean_dataset_path": prepared.clean_dataset_path,
+            "descriptor_parquet_path": prepared.descriptor_parquet_path,
+            "standardization_report_path": prepared.standardization_report_path,
+            "standardization_summary": prepared.standardization_summary,
             "preview": _preview(df),
         }
 
@@ -936,15 +932,35 @@ class PointerPandasTools(PandasTools):
             result["n_clusters"] = n_clusters
 
         for state in update_state_targets(agent, session_state):
+            data_file_paths = state.setdefault("data_file_paths", {})
+            data_file_paths["raw_dataset_path"] = prepared.raw_dataset_path
+            data_file_paths["clean_dataset_path"] = prepared.clean_dataset_path
+            data_file_paths["descriptor_parquet_path"] = prepared.descriptor_parquet_path
+            data_file_paths["standardization_report_path"] = prepared.standardization_report_path
+            data_file_paths["dataset_path"] = prepared.clean_dataset_path
+
             dataset_id = register_session_object(
                 state,
                 "dataset",
                 {
-                    "dataset_path": df_path,
+                    "dataset_path": prepared.clean_dataset_path,
+                    "raw_dataset_path": prepared.raw_dataset_path,
+                    "clean_dataset_path": prepared.clean_dataset_path,
+                    "descriptor_parquet_path": prepared.descriptor_parquet_path,
+                    "standardization_report_path": prepared.standardization_report_path,
                     "dataframe_name": normalized_name,
                     "row_count": int(len(df)),
+                    "raw_row_count": int(prepared.standardization_summary["raw_rows"]),
                     "columns_mapped": columns_mapped,
                     "activity_mapping": activity_mapping.to_dict(),
+                    "final_activity_mapping": final_activity_mapping.to_dict(),
+                    "activity_merge_policy": prepared.standardization_summary[
+                        "activity_merge_policy"
+                    ],
+                    "stereochemistry_removed": prepared.standardization_summary[
+                        "stereochemistry_removed"
+                    ],
+                    "standardization_summary": prepared.standardization_summary,
                     "source_format": activity_mapping.source_format,
                 },
                 label=f"Analysis dataset: {df_path}",
@@ -953,7 +969,7 @@ class PointerPandasTools(PandasTools):
                 set_current=True,
             )
             for idx, compound in enumerate(
-                build_compound_memory_preview(df, activity_mapping), start=1
+                build_compound_memory_preview(df, final_activity_mapping), start=1
             ):
                 register_session_object(
                     state,
