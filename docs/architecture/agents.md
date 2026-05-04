@@ -19,7 +19,7 @@ The system uses a **Factory Pattern + Registry** for agent creation.
 | **GTM Agent** | Unified GTM workflows: build, load, density, activity, projection, and GTM sampling support |
 | **Chemoinformatician** | Downstream chemoinformatics analysis including scaffold, similarity, clustering, and SAR workflows |
 | **Report Generator** | Formats analysis outputs into reports and visual artifacts |
-| **Autoencoder** | Small-molecule generation via LSTM autoencoders, including standalone and GTM-guided modes |
+| **Molecular Designer** | Small-molecule design via autoencoder and LLM engines, including standalone and GTM-guided modes |
 | **Peptide WAE** | Peptide generation, latent-space GTM workflows, and DBAASP-backed peptide activity landscapes |
 | **SynPlanner** | Retrosynthetic planning and route visualization for target molecules |
 

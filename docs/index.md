@@ -2,13 +2,13 @@
 
 **LLM-powered agent system for GTM-based chemical space analysis**
 
-ChemSpace Copilot is a multi-agent system powered by the [Agno](https://docs.agno.com/) framework. The default runtime team coordinates seven specialized AI agents for ChEMBL bioactivity download, unified GTM workflows, downstream chemoinformatics, report generation, small-molecule generation, peptide generation, and retrosynthetic planning. A separate robustness evaluation agent is available for analyzing prompt-robustness test outputs. The GTM engine is provided by [chemographykit](https://www.piwheels.org/project/chemographykit/).
+ChemSpace Copilot is a multi-agent system powered by the [Agno](https://docs.agno.com/) framework. The default runtime team coordinates seven specialized AI agents for ChEMBL bioactivity download, unified GTM workflows, downstream chemoinformatics, report generation, small-molecule design, peptide generation, and retrosynthetic planning. A separate robustness evaluation agent is available for analyzing prompt-robustness test outputs. The GTM engine is provided by [chemographykit](https://www.piwheels.org/project/chemographykit/).
 
 ## Features
 
-- **7 Runtime Agents + 1 Evaluation Agent** — ChEMBL data download, unified GTM operations, chemoinformatics analysis, report generation, small-molecule generation, peptide WAE workflows, retrosynthetic planning, and robustness evaluation
+- **7 Runtime Agents + 1 Evaluation Agent** — ChEMBL data download, unified GTM operations, chemoinformatics analysis, report generation, small-molecule design, peptide WAE workflows, retrosynthetic planning, and robustness evaluation
 - **Generative Topographic Mapping** — Dimensionality reduction and visualization of chemical space via chemographykit
-- **Molecular and Peptide Generation** — LSTM autoencoder-based small-molecule generation plus peptide WAE generation, interpolation, and GTM-guided targeting
+- **Molecular and Peptide Generation** — Molecular Designer small-molecule generation with autoencoder and LLM engines plus peptide WAE generation, interpolation, and GTM-guided targeting
 - **S3/MinIO Integration** — Session-scoped cloud storage with local filesystem fallback
 - **Chainlit Interface** — WebSocket-based real-time chat with password authentication, file upload, and inline molecule rendering
 - **Agentic Memory** — SQLite-backed agentic state and recent session history shared across agent workflows

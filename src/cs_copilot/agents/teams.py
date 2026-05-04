@@ -11,6 +11,7 @@ from agno.db.sqlite import SqliteDb  # ✅ v2.1.x style DB import
 from agno.models.base import Model  # Agno v2 base class
 from agno.team import Team
 
+from cs_copilot.tools import SessionMemoryToolkit
 from cs_copilot.utils.resources import analyze_resources
 
 from .config import CS_COPILOT_MEMORY_DB  # optional now; kept for compatibility
@@ -82,7 +83,7 @@ def get_cs_copilot_agent_team(
     # Consolidation history:
     #   MERGED: GTM Optimization + Loading + Density + Activity → GTM Agent
     #   GENERALIZED: GTM Chemotype Analysis → Chemoinformatician (method-agnostic)
-    #   MERGED: Autoencoder + Autoencoder GTM Sampling → Autoencoder (mode-based)
+    #   TRANSFORMED: Autoencoder public agent → Molecular Designer (engine-based)
     #   ADDED: Report Generator (presentation layer)
     #   REMOVED: Robustness Evaluator (not included in main team, invoked separately)
     # ============================================================================
@@ -99,7 +100,7 @@ def get_cs_copilot_agent_team(
             "Chemoinformatician",
         ),  # Comprehensive chemoinformatics (chemotype, clustering, SAR, similarity, QSAR)
         ("report_generator", "Report Generator"),  # Universal presentation layer
-        ("autoencoder", "Autoencoder"),  # SMILES molecule generation (LSTM autoencoder)
+        ("molecular_designer", "Molecular Designer"),  # Small-molecule design engines
         ("peptide_wae", "Peptide WAE"),  # Peptide sequence generation (Wasserstein autoencoder)
         ("synplanner", "SynPlanner"),
         # Note: Robustness Evaluator excluded from main team (invoked separately for testing)
@@ -145,6 +146,7 @@ def get_cs_copilot_agent_team(
         session_state={"resource_profile": resource_profile},
         add_session_state_to_context=True,
         enable_agentic_state=True,
+        tools=[SessionMemoryToolkit()],
         # Prompting
         description=(
             "You are an intelligent coordinator orchestrating a team of specialized cheminformatics agents. "
@@ -154,14 +156,14 @@ def get_cs_copilot_agent_team(
             "• GTM Agent: All GTM operations (build/load/density/activity/project) with smart caching\n"
             "• Chemoinformatician: Downstream analysis (scaffold, SAR, similarity, clustering) - works with GTM output\n"
             "• Report Generator: Universal presentation layer for all analysis types\n"
-            "• Autoencoder: Small molecule generation via LSTM autoencoders (SMILES, standalone + GTM-guided)\n"
+            "• Molecular Designer: Small-molecule design via autoencoder and LLM engines (SMILES, standalone + GTM-guided)\n"
             "• Peptide WAE: Peptide sequence generation + GTM on latent space + DBAASP antimicrobial activity landscapes\n"
             "• SynPlanner: Retrosynthetic planning for target molecules\n\n"
             "**Molecule vs Peptide Routing**:\n"
             "  - 'peptide', 'amino acid', 'AMP', 'antimicrobial peptide' → Peptide WAE agent\n"
-            "  - 'SMILES', 'molecule', 'compound', 'small molecule' → Autoencoder agent\n"
+            "  - 'SMILES', 'molecule', 'compound', 'small molecule', 'LLM design' → Molecular Designer agent\n"
             "  - DBAASP/antimicrobial landscapes → Peptide WAE agent (has GTM tools)\n"
-            "  - Unqualified 'generate' → Autoencoder (small molecules)\n\n"
+            "  - Unqualified 'generate' → Molecular Designer (small molecules)\n\n"
             "When coordinating: (1) Assess if a predefined workflow covers the request, (2) Select and chain "
             "specialized agents for multi-step tasks (GTM → Chemoinformatician → Report Generator is common), "
             "(3) For analysis requests, automatically add Report Generator unless user explicitly requests raw data only, "

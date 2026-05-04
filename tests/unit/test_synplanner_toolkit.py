@@ -8,6 +8,10 @@ import types
 import pytest
 
 from cs_copilot.tools.chemistry.synplanner_toolkit import SynPlannerToolkit
+from cs_copilot.tools.io.session_memory import (
+    register_compounds_from_candidates,
+    register_generated_candidate_set,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -413,6 +417,49 @@ def test_plan_synthesis_stores_report_state_without_agent(monkeypatch):
     assert plan["synthesis_report_data"] == report_plan
     assert report_plan["smiles"] == "CCO"
     assert len(report_plan["routes"]) == 1
+
+
+def test_plan_synthesis_links_routes_to_existing_generated_compound(monkeypatch):
+    toolkit = SynPlannerToolkit()
+    _patch_planning_dependencies(monkeypatch, toolkit)
+    session_state = {}
+    candidate_ids = register_compounds_from_candidates(
+        session_state,
+        [{"smiles": "CCO", "valid": True}],
+        source_agent="molecular_designer_agent",
+        source_tool="design_molecules",
+        label_prefix="Generated candidate",
+        provenance={
+            "origin_type": "generated",
+            "origin_agent": "molecular_designer",
+            "generation_engine": "llm",
+        },
+    )
+    register_generated_candidate_set(
+        session_state,
+        candidate_ids,
+        source_agent="molecular_designer_agent",
+        source_tool="design_molecules",
+        origin_agent="molecular_designer",
+        generation_engine="llm",
+        generation_mode="design",
+        session_key="designed_molecules",
+        label="LLM generated candidates",
+    )
+
+    monkeypatch.setattr(
+        toolkit, "_create_and_search_tree", lambda smiles, profile=None: _FakeTree([42])
+    )
+
+    toolkit.plan_synthesis("CCO", session_state=session_state)
+
+    compounds = session_state["session_objects"]["compounds"]
+    routes = session_state["session_objects"]["routes"]
+
+    assert list(compounds) == ["cmp_001"]
+    assert compounds["cmp_001"]["origin_agent"] == "molecular_designer"
+    assert compounds["cmp_001"]["related_route_ids"] == ["route_001"]
+    assert routes["route_001"]["target_compound_id"] == "cmp_001"
 
 
 def test_plan_synthesis_stores_no_route_report_state(monkeypatch):

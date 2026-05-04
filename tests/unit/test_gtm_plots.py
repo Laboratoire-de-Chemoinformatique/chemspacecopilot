@@ -458,6 +458,34 @@ def test_detect_activity_landscape_type():
         )
 
 
+def test_get_activity_column_accepts_user_ic50_units():
+    """User potency columns with units are converted to higher-is-better scores."""
+    df = pd.DataFrame({"smiles": ["CCO", "CCN"], "IC50_nM": [10.0, 100.0]})
+
+    activity, activity_type = gtm_operations.get_activity_column(df)
+
+    assert activity_type == "regression"
+    assert activity.tolist() == pytest.approx([8.0, 7.0])
+
+
+def test_get_activity_column_accepts_user_activity_labels():
+    """User label columns can drive classification landscapes."""
+    df = pd.DataFrame({"smiles": ["CCO", "CCN"], "activity": ["active", "inactive"]})
+
+    activity, activity_type = gtm_operations.get_activity_column(df)
+
+    assert activity_type == "classification"
+    assert activity.tolist() == ["active", "inactive"]
+
+
+def test_get_activity_column_requires_units_for_raw_potency():
+    """Ambiguous lower-is-better potency columns fail with a useful message."""
+    df = pd.DataFrame({"smiles": ["CCO", "CCN"], "IC50": [10.0, 100.0]})
+
+    with pytest.raises(ValueError, match="units could not be inferred"):
+        gtm_operations.get_activity_column(df)
+
+
 def test_create_activity_landscapes_defaults_to_altair(monkeypatch):
     """Without a renderer arg, create_activity_landscapes_tool uses the Altair path."""
 

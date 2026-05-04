@@ -10,11 +10,16 @@ gtm_operations.py for the actual implementations.
 from __future__ import annotations
 
 import logging
-from typing import Iterable, List, Literal, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
 from agno.agent import Agent
+
+from cs_copilot.tools.io.session_memory import (
+    register_session_object,
+    update_state_targets,
+)
 
 from . import gtm_operations
 from .dimensionality_reduction import BaseDRToolkit, DRToolkitError
@@ -94,6 +99,201 @@ class GTMToolkit(BaseDRToolkit):
         # Initialize data storage for chemotype analysis
         self._gtm_data = None
 
+    def _current_or_new_map_id(
+        self,
+        state: Dict[str, Any],
+        *,
+        dataset_path: Optional[str],
+        model_path: Optional[str],
+        descriptor_type: Optional[str],
+        source_agent: Optional[str],
+        source_tool: str,
+        activity_mapping: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        memory = state.get("session_objects", {})
+        current_map = memory.get("current", {}).get("map") if isinstance(memory, dict) else None
+        maps = memory.get("maps", {}) if isinstance(memory, dict) else {}
+        if current_map and current_map in maps:
+            return current_map
+
+        return register_session_object(
+            state,
+            "map",
+            {
+                "map_type": "gtm",
+                "dataset_path": dataset_path,
+                "model_path": model_path,
+                "descriptor_type": descriptor_type,
+                "activity_mapping": activity_mapping or {},
+            },
+            label="Current GTM map",
+            source_agent=source_agent,
+            source_tool=source_tool,
+            set_current=True,
+        )
+
+    def _remember_gtm_map(
+        self,
+        *,
+        dataset_path: Optional[str],
+        model_path: Optional[str],
+        descriptor_type: Optional[str],
+        agent: Optional[Agent],
+        session_state: Optional[Dict[str, Any]],
+        source_tool: str,
+        label: str = "GTM map",
+        activity_mapping: Optional[Dict[str, Any]] = None,
+    ) -> List[str]:
+        map_ids = []
+        activity_mapping = activity_mapping or self._activity_mapping_for_dataset(dataset_path)
+        for state in update_state_targets(agent, session_state):
+            dataset_id = None
+            if dataset_path:
+                dataset_id = register_session_object(
+                    state,
+                    "dataset",
+                    {
+                        "dataset_path": dataset_path,
+                        "activity_mapping": activity_mapping,
+                        "source_format": activity_mapping.get("source_format"),
+                    },
+                    label=f"GTM dataset: {dataset_path}",
+                    source_agent=getattr(agent, "name", None),
+                    source_tool=source_tool,
+                    set_current=True,
+                )
+            map_id = register_session_object(
+                state,
+                "map",
+                {
+                    "map_type": "gtm",
+                    "dataset_path": dataset_path,
+                    "model_path": model_path,
+                    "descriptor_type": descriptor_type,
+                    "activity_mapping": activity_mapping,
+                    "related": {"dataset_id": dataset_id} if dataset_id else {},
+                },
+                label=label,
+                source_agent=getattr(agent, "name", None),
+                source_tool=source_tool,
+                set_current=True,
+            )
+            map_ids.append(map_id)
+            self._remember_density_zones(
+                state,
+                map_id,
+                source_agent=getattr(agent, "name", None),
+                source_tool=source_tool,
+            )
+        return map_ids
+
+    def _activity_mapping_for_dataset(self, dataset_path: Optional[str]) -> Dict[str, Any]:
+        if not dataset_path:
+            return {}
+        try:
+            return gtm_operations.infer_dataset_activity_mapping(dataset_path)
+        except Exception as exc:
+            logger.debug("Could not infer activity mapping for %s: %s", dataset_path, exc)
+            return {}
+
+    def _remember_density_zones(
+        self,
+        state: Dict[str, Any],
+        map_id: str,
+        *,
+        source_agent: Optional[str],
+        source_tool: str,
+    ) -> None:
+        if self._gtm_data is None or getattr(self._gtm_data, "source", None) is None:
+            return
+        density_table = self._gtm_data.source
+        if density_table is None or density_table.empty:
+            return
+
+        for zone_type, ascending, set_current in (
+            ("dense", False, True),
+            ("sparse", True, False),
+        ):
+            metric = "filtered_density" if "filtered_density" in density_table.columns else "density"
+            table = density_table.sort_values(metric, ascending=ascending).head(5)
+            node_ids = [int(node) for node in table.get("nodes", table.index).tolist()]
+            zone_id = register_session_object(
+                state,
+                "zone",
+                {
+                    "zone_type": zone_type,
+                    "map_id": map_id,
+                    "node_ids": node_ids,
+                    "selection_metric": metric,
+                },
+                label=f"{zone_type.capitalize()} GTM zone",
+                source_agent=source_agent,
+                source_tool=source_tool,
+                set_current=set_current,
+            )
+            for row in table.to_dict(orient="records"):
+                node_index = row.get("nodes", row.get("node_index"))
+                register_session_object(
+                    state,
+                    "node",
+                    {
+                        "map_id": map_id,
+                        "zone_id": zone_id,
+                        "node_index": node_index,
+                        "x": row.get("x"),
+                        "y": row.get("y"),
+                        "density": row.get("density"),
+                        "filtered_density": row.get("filtered_density"),
+                    },
+                    source_agent=source_agent,
+                    source_tool=source_tool,
+                    set_current=False,
+                )
+
+    def _remember_sampled_zone(
+        self,
+        *,
+        zone_type: str,
+        node_ids: List[int],
+        sampled: pd.DataFrame,
+        agent: Optional[Agent],
+        session_state: Optional[Dict[str, Any]],
+        source_tool: str,
+    ) -> None:
+        for state in update_state_targets(agent, session_state):
+            map_id = self._current_or_new_map_id(
+                state,
+                dataset_path=None,
+                model_path=None,
+                descriptor_type=None,
+                source_agent=getattr(agent, "name", None),
+                source_tool=source_tool,
+            )
+            zone_id = register_session_object(
+                state,
+                "zone",
+                {
+                    "zone_type": zone_type,
+                    "map_id": map_id,
+                    "node_ids": node_ids,
+                    "sample_count": int(len(sampled)),
+                    "sample_smiles": sampled.get("smi", pd.Series(dtype=str)).head(10).tolist(),
+                },
+                label=f"{zone_type.capitalize()} GTM sampling zone",
+                source_agent=getattr(agent, "name", None),
+                source_tool=source_tool,
+                set_current=True,
+            )
+            for node_id in node_ids:
+                register_session_object(
+                    state,
+                    "node",
+                    {"map_id": map_id, "zone_id": zone_id, "node_index": node_id},
+                    source_agent=getattr(agent, "name", None),
+                    source_tool=source_tool,
+                    set_current=False,
+                )
+
     def gtm_optimization(
         self,
         df_csv_path: str,
@@ -103,6 +303,7 @@ class GTMToolkit(BaseDRToolkit):
         agent: Agent,
         strategy: str = "low",
         descriptor_type: Optional[str] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Load a dataset of SMILES strings, optimize a Generative Topographic Mapping (GTM)
@@ -127,7 +328,7 @@ class GTMToolkit(BaseDRToolkit):
             FileNotFoundError: If df_csv_path does not point to an existing CSV file
             ValueError: If smiles_column is missing
         """
-        return gtm_operations.optimize_gtm_model(
+        result = gtm_operations.optimize_gtm_model(
             df_csv_path,
             dataset_name,
             gtm_name,
@@ -136,6 +337,16 @@ class GTMToolkit(BaseDRToolkit):
             strategy=strategy,
             descriptor_type=descriptor_type,
         )
+        self._remember_gtm_map(
+            dataset_path=df_csv_path,
+            model_path=f"{gtm_name}.pkl.gz",
+            descriptor_type=descriptor_type,
+            agent=agent,
+            session_state=session_state,
+            source_tool="gtm_optimization",
+            label=f"Optimized GTM map ({strategy})",
+        )
+        return result
 
     def calculate_map_ruggedness(self, dataset_name: str, gtm_name: str, agent: Agent) -> str:
         """
@@ -200,6 +411,7 @@ class GTMToolkit(BaseDRToolkit):
         agent: Agent | None = None,
         use_default: bool = False,
         generate_framesets: bool = False,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Load only the GTM model and cache it for later projections.
 
@@ -227,6 +439,15 @@ class GTMToolkit(BaseDRToolkit):
             session_path = agent.session_state.get(
                 gtm_operations.SESSION_GTM_MODEL_PATH_KEY, "session"
             )
+            self._remember_gtm_map(
+                dataset_path=None,
+                model_path=session_path,
+                descriptor_type=None,
+                agent=agent,
+                session_state=session_state,
+                source_tool="load_gtm_model_only",
+                label="Loaded GTM map",
+            )
             return f"gtm model from session state ({session_path}) has been loaded"
 
         # Resolve model path (will check session state path, then explicit, then default)
@@ -243,6 +464,15 @@ class GTMToolkit(BaseDRToolkit):
             self._gtm_data = gtm_operations.GTMData()
 
         self._gtm_data.gtm = gtm_model
+        self._remember_gtm_map(
+            dataset_path=None,
+            model_path=resolved_model,
+            descriptor_type=None,
+            agent=agent,
+            session_state=session_state,
+            source_tool="load_gtm_model_only",
+            label="Loaded GTM map",
+        )
         return f"gtm model {resolved_model} has been loaded"
 
     def load_gtm_get_density_matrix(
@@ -253,6 +483,7 @@ class GTMToolkit(BaseDRToolkit):
         agent: Agent | None = None,
         use_default: bool = False,
         descriptor_type: Optional[str] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Load GTM model and dataset, return density matrix information.
@@ -276,9 +507,19 @@ class GTMToolkit(BaseDRToolkit):
         resolved_model = gtm_operations.resolve_gtm_model_path(
             gtm_file, agent=agent, use_default=use_default
         )
-        return gtm_operations.load_gtm_density_matrix(
+        result = gtm_operations.load_gtm_density_matrix(
             dataset_file, resolved_model, descriptor_type=descriptor_type, agent=agent
         )
+        self._remember_gtm_map(
+            dataset_path=dataset_file,
+            model_path=resolved_model,
+            descriptor_type=descriptor_type,
+            agent=agent,
+            session_state=session_state,
+            source_tool="load_gtm_get_density_matrix",
+            label="GTM density map",
+        )
+        return result
 
     def load_and_prep_data(
         self,
@@ -288,6 +529,7 @@ class GTMToolkit(BaseDRToolkit):
         agent: Agent | None = None,
         use_default: bool = False,
         descriptor_type: Optional[str] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Load GTM model and molecular data, compute coordinates, and prepare source_mols.
@@ -338,6 +580,15 @@ class GTMToolkit(BaseDRToolkit):
             gtm_for_projection,
             descriptor_type=descriptor_type,
             agent=agent,
+        )
+        self._remember_gtm_map(
+            dataset_path=dataset,
+            model_path=resolved_model,
+            descriptor_type=descriptor_type,
+            agent=agent,
+            session_state=session_state,
+            source_tool="load_and_prep_data",
+            label="Prepared GTM map",
         )
         return (
             f"dataset {dataset} projected onto gtm model {resolved_model} and successfully loaded"
@@ -601,6 +852,8 @@ class GTMToolkit(BaseDRToolkit):
         sample_size: int | None = None,
         random_state: int | None = None,
         return_format: SampleReturnFormat = "text",
+        agent: Agent | None = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[str, pd.DataFrame, List[str]]:
         """Sample molecules assigned to the provided GTM node identifiers."""
 
@@ -619,6 +872,14 @@ class GTMToolkit(BaseDRToolkit):
                 "No molecules found for the requested nodes.",
             )
 
+        self._remember_sampled_zone(
+            zone_type="selected_nodes",
+            node_ids=node_ids,
+            sampled=sampled,
+            agent=agent,
+            session_state=session_state,
+            source_tool="sample_nodes",
+        )
         return self._format_sample_output(sampled, return_format)
 
     def sample_dense_nodes(
@@ -629,6 +890,8 @@ class GTMToolkit(BaseDRToolkit):
         random_state: int | None = None,
         use_filtered: bool = True,
         return_format: SampleReturnFormat = "text",
+        agent: Agent | None = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[str, pd.DataFrame, List[str]]:
         """Sample molecules from the densest GTM nodes."""
 
@@ -661,6 +924,14 @@ class GTMToolkit(BaseDRToolkit):
                 "No molecules found for the selected dense nodes.",
             )
 
+        self._remember_sampled_zone(
+            zone_type="dense",
+            node_ids=nodes,
+            sampled=sampled,
+            agent=agent,
+            session_state=session_state,
+            source_tool="sample_dense_nodes",
+        )
         return self._format_sample_output(sampled, return_format)
 
     def sample_active_nodes(
@@ -672,6 +943,8 @@ class GTMToolkit(BaseDRToolkit):
         sample_size: int | None = None,
         random_state: int | None = None,
         return_format: SampleReturnFormat = "text",
+        agent: Agent | None = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[str, pd.DataFrame, List[str]]:
         """Sample molecules from nodes ranked by an activity metric."""
 
@@ -705,6 +978,14 @@ class GTMToolkit(BaseDRToolkit):
                 "No molecules found for the selected activity nodes.",
             )
 
+        self._remember_sampled_zone(
+            zone_type="active",
+            node_ids=nodes,
+            sampled=sampled,
+            agent=agent,
+            session_state=session_state,
+            source_tool="sample_active_nodes",
+        )
         return self._format_sample_output(sampled, return_format)
 
     def sample_by_coordinates(
@@ -714,6 +995,8 @@ class GTMToolkit(BaseDRToolkit):
         random_state: int | None = None,
         allow_missing: bool = False,
         return_format: SampleReturnFormat = "text",
+        agent: Agent | None = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[str, pd.DataFrame, List[str]]:
         """
         Sample molecules located at the provided coordinate pairs.
@@ -740,6 +1023,16 @@ class GTMToolkit(BaseDRToolkit):
                 "No molecules found for the requested coordinates.",
             )
 
+        node_col = "node_index" if "node_index" in sampled.columns else "node"
+        nodes = sampled[node_col].dropna().astype(int).unique().tolist() if node_col in sampled else []
+        self._remember_sampled_zone(
+            zone_type="coordinate",
+            node_ids=nodes,
+            sampled=sampled,
+            agent=agent,
+            session_state=session_state,
+            source_tool="sample_by_coordinates",
+        )
         return self._format_sample_output(sampled, return_format)
 
     def create_activity_landscapes(
@@ -754,6 +1047,7 @@ class GTMToolkit(BaseDRToolkit):
         agent: Agent | None = None,
         use_default: bool = False,
         descriptor_type: Optional[str] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Create activity landscapes from GTM model and dataset.
@@ -781,7 +1075,7 @@ class GTMToolkit(BaseDRToolkit):
         resolved_model = gtm_operations.resolve_gtm_model_path(
             gtm_model, agent=agent, use_default=use_default
         )
-        return gtm_operations.create_activity_landscapes_tool(
+        result = gtm_operations.create_activity_landscapes_tool(
             dataset,
             resolved_model,
             node_threshold,
@@ -791,6 +1085,50 @@ class GTMToolkit(BaseDRToolkit):
             descriptor_type=descriptor_type,
             agent=agent,
         )
+        activity_mapping = self._activity_mapping_for_dataset(dataset)
+        for state in update_state_targets(agent, session_state):
+            dataset_id = register_session_object(
+                state,
+                "dataset",
+                {
+                    "dataset_path": dataset,
+                    "activity_mapping": activity_mapping,
+                    "source_format": activity_mapping.get("source_format"),
+                },
+                label=f"Activity dataset: {dataset}",
+                source_agent=getattr(agent, "name", None),
+                source_tool="create_activity_landscapes",
+                set_current=True,
+            )
+            map_id = self._current_or_new_map_id(
+                state,
+                dataset_path=dataset,
+                model_path=resolved_model,
+                descriptor_type=descriptor_type,
+                activity_mapping=activity_mapping,
+                source_agent=getattr(agent, "name", None),
+                source_tool="create_activity_landscapes",
+            )
+            register_session_object(
+                state,
+                "zone",
+                {
+                    "zone_type": "activity_landscape",
+                    "map_id": map_id,
+                    "dataset_path": dataset,
+                    "model_path": resolved_model,
+                    "renderer": renderer,
+                    "node_threshold": node_threshold,
+                    "activity_mapping": activity_mapping,
+                    "related": {"dataset_id": dataset_id},
+                    "result": result,
+                },
+                label="GTM activity landscape zone",
+                source_agent=getattr(agent, "name", None),
+                source_tool="create_activity_landscapes",
+                set_current=True,
+            )
+        return result
 
     def save_gtm_landscape_plot(
         self,
@@ -832,6 +1170,7 @@ class GTMToolkit(BaseDRToolkit):
         agent: Agent | None = None,
         use_default: bool = False,
         descriptor_type: Optional[str] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Preprocess a new dataset for projection onto an existing GTM map.
@@ -859,12 +1198,22 @@ class GTMToolkit(BaseDRToolkit):
         resolved_model = gtm_operations.resolve_gtm_model_path(
             gtm_model_file, agent=agent, use_default=use_default
         )
-        return gtm_operations.project_data_on_gtm(
+        result = gtm_operations.project_data_on_gtm(
             dataset_file,
             resolved_model,
             descriptor_type=descriptor_type,
             agent=agent,
         )
+        self._remember_gtm_map(
+            dataset_path=dataset_file,
+            model_path=resolved_model,
+            descriptor_type=descriptor_type,
+            agent=agent,
+            session_state=session_state,
+            source_tool="project_data_on_gtm",
+            label="Projected GTM map",
+        )
+        return result
 
     # =========================================================================
     # Latent-Space GTM Tools (for Peptide WAE integration)

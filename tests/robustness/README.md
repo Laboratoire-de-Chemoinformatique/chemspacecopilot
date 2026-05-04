@@ -7,7 +7,7 @@ This directory contains automated tests to assess the robustness of the ChemSpac
 The framework tests whether semantically equivalent but syntactically different prompts yield consistent outputs across:
 - Individual agents (ChEMBL download, GTM optimization, density analysis, etc.)
 - The full end-to-end pipeline
-- Autoencoder operations (sampling, interpolation, latent exploration)
+- Molecular Designer autoencoder-engine operations (sampling, interpolation, latent exploration)
 
 **Key Feature**: Each prompt variation runs in a **completely isolated session** with:
 - Fresh agent teams (no shared state)
@@ -304,8 +304,8 @@ variations = generator.get_variations("full_pipeline", n=10)
 | `density_analysis` | `density_analysis` | Density landscape analysis |
 | `activity_analysis` | `activity_analysis` | Activity landscape analysis |
 | `chemotype_analysis` | `chemotype_analysis` | Chemotype/scaffold analysis |
-| `autoencoder_sampling` | `autoencoder_sampling` | Basic autoencoder molecule generation |
-| `gtm_guided_sampling` | `gtm_guided_sampling` | GTM-guided autoencoder sampling |
+| `autoencoder_sampling` | `autoencoder_sampling` | Basic Molecular Designer autoencoder-engine generation |
+| `gtm_guided_sampling` | `gtm_guided_sampling` | GTM-guided Molecular Designer generation |
 | `interpolation` | `interpolation` | Molecule interpolation in latent space |
 | `latent_exploration` | `latent_exploration` | Latent space neighborhood exploration |
 

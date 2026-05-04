@@ -58,6 +58,11 @@ from sklearn.neighbors import NearestNeighbors
 from cs_copilot.storage import S3
 from cs_copilot.utils.logging import setup_logging
 
+from ..chemistry.activity_schema import (
+    activity_series_for_landscape,
+    infer_activity_mapping,
+    normalize_activity_labels,
+)
 from ..chemistry.base_chemistry import _smiles_to_mol_or_none
 from ..chemistry.descriptors import (
     DEFAULT_DESCRIPTOR_TYPE,
@@ -1836,17 +1841,12 @@ def get_activity_column(
     df: pd.DataFrame,
 ) -> tuple[pd.Series, Literal["regression", "classification"]]:
     """
-    Extract a single 'activity' series from a ChEMBL activity DataFrame.
-
-    Priority order
-    --------------
-    1. 'pchembl_value'  – negative-log potency values (float)
-    2. 'activity_comment' – qualitative labels such as 'Active'/'Inactive' (str)
+    Extract a single normalized activity series from a molecular activity DataFrame.
 
     Parameters
     ----------
     df : pd.DataFrame
-        ChEMBL activity table.
+        Activity table from ChEMBL or a user-provided dataset.
 
     Returns
     -------
@@ -1856,51 +1856,17 @@ def get_activity_column(
     Raises
     ------
     ValueError
-        When neither column is present in *df* or both columns have only null values.
+        When no usable activity column is present.
     """
-    if df.empty:
-        raise ValueError("Input DataFrame is empty")
+    return activity_series_for_landscape(df)[:2]
 
-    available_cols = list(df.columns)
 
-    # Check for pchembl_value first (regression)
-    if "pchembl_value" in df.columns and df["pchembl_value"].notna().any():
-        activity_column = df["pchembl_value"]
-        activity_type: Literal["regression", "classification"] = "regression"
-        logger.debug("Selected 'pchembl_value' column for regression activity")
-        return activity_column, activity_type
-
-    # Check for activity_comment (classification)
-    if "activity_comment" in df.columns and df["activity_comment"].notna().any():
-        activity_column = df["activity_comment"]
-        activity_type = "classification"
-        logger.debug("Selected 'activity_comment' column for classification activity")
-        return activity_column, activity_type
-
-    # Neither column found or both are all null
-    has_pchembl = "pchembl_value" in df.columns
-    has_comment = "activity_comment" in df.columns
-
-    if has_pchembl and has_comment:
-        raise ValueError(
-            f"Input DataFrame contains both 'pchembl_value' and 'activity_comment' columns, "
-            f"but both have only null values. Available columns: {available_cols}"
-        )
-    elif has_pchembl:
-        raise ValueError(
-            f"Input DataFrame contains 'pchembl_value' column but it has only null values. "
-            f"Available columns: {available_cols}"
-        )
-    elif has_comment:
-        raise ValueError(
-            f"Input DataFrame contains 'activity_comment' column but it has only null values. "
-            f"Available columns: {available_cols}"
-        )
-    else:
-        raise ValueError(
-            f"Input DataFrame must contain either 'pchembl_value' or 'activity_comment' columns. "
-            f"Available columns: {available_cols}"
-        )
+def infer_dataset_activity_mapping(dataset: str) -> dict[str, Any]:
+    """Infer compact activity mapping metadata from a CSV dataset path."""
+    data_file = _ensure_suffix(dataset, ".csv")
+    with S3.open(data_file, "r") as f:
+        df = _read_csv_flexible(f)
+    return infer_activity_mapping(df).to_dict()
 
 
 def preprocess_gtm_activity_data(
@@ -1953,11 +1919,24 @@ def preprocess_gtm_activity_data(
     )
     logger.debug(f"Loaded dataset with {len(df)} molecules and {resps.shape[1]} GTM nodes")
 
+    activity_mapping = infer_activity_mapping(df)
+
     # Try to get regression activity column first
     regression_column = None
-    if "pchembl_value" in df.columns and df["pchembl_value"].notna().any():
-        regression_column = df["pchembl_value"]
-        logger.info("Found 'pchembl_value' column for regression landscape")
+    activity_detection_error = None
+    if activity_mapping.activity_kind == "regression":
+        try:
+            regression_column, _activity_type, activity_mapping = activity_series_for_landscape(
+                df,
+                activity_mapping,
+            )
+            logger.info(
+                "Using '%s' for regression activity landscape",
+                activity_mapping.activity_column,
+            )
+        except ValueError as exc:
+            activity_detection_error = exc
+            logger.warning("Could not use inferred regression activity: %s", exc)
 
     # Try to get classification activity column
     classification_column = None
@@ -2010,22 +1989,35 @@ def preprocess_gtm_activity_data(
         and df["activity_comment"].notna().any()
     ):
         # Parse all activity_comment values
-        classification_column = df["activity_comment"].apply(_parse_activity_comment)
+        classification_column = normalize_activity_labels(df["activity_comment"])
         if classification_column.notna().any():
             logger.info(
                 f"Using 'activity_comment' column for classification landscape (fallback): "
                 f"{classification_column.notna().sum()} compounds classified"
             )
 
+    if classification_column is None and activity_mapping.activity_kind == "classification":
+        classification_column, _activity_type, activity_mapping = activity_series_for_landscape(
+            df,
+            activity_mapping,
+        )
+        logger.info(
+            "Using '%s' for classification activity landscape",
+            activity_mapping.activity_column,
+        )
+
     # Determine which landscapes to create
     create_regression = regression_column is not None
     create_classification = classification_column is not None
 
     if not create_regression and not create_classification:
+        details = f"{activity_detection_error} " if activity_detection_error else ""
         raise ValueError(
-            "No valid activity data found. Need either 'pchembl_value' for regression, "
-            "or sufficient raw activity data (standard_type, standard_value, standard_units) "
-            "for classification (with fallback to 'activity_comment' if available). "
+            "No valid activity data found. Need a p-scale potency column such as "
+            "pIC50/pKi/pChEMBL, a raw potency column with detectable units, "
+            "active/inactive labels, or sufficient ChEMBL raw activity data for "
+            "classification. "
+            f"{details}"
             f"Available columns: {list(df.columns)}"
         )
 
@@ -2035,9 +2027,8 @@ def preprocess_gtm_activity_data(
     if create_regression:
         logger.debug("Computing regression activity landscape")
         valid_mask = regression_column.notna()
-        df_reg = df[valid_mask].copy()
         resps_reg = resps[valid_mask]
-        activity_col_reg = df_reg["pchembl_value"]
+        activity_col_reg = regression_column[valid_mask]
 
         density, density_activity = get_reg_density_matrix(resps_reg, activity_col_reg)
         source_activity_reg = reg_density_to_table(

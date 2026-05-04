@@ -131,7 +131,7 @@ uv run pytest tests/ -v
 # Database tests only
 uv run pytest tests/unit/test_databases/ -v
 
-# Autoencoder tests only (unit + robustness)
+# Molecular Designer/autoencoder-engine tests only (unit + robustness)
 uv run pytest tests/unit/test_autoencoder.py tests/robustness/test_autoencoder_robustness.py -v
 
 # GTM sampling tests

@@ -91,21 +91,21 @@ prompts:
       - "Find dense regions, decompose scaffolds, report assays, assess class separation."
 
   autoencoder_sampling:
-    base: "Sample from autoencoder model"
+    base: "Use Molecular Designer with the autoencoder engine to sample molecules"
     variations:
-      - "Generate molecules with the autoencoder."
+      - "Generate molecules with Molecular Designer."
 
   gtm_guided_sampling:
-    base: "Sample from autoencoder model using GTM dense nodes as guidance"
+    base: "Use Molecular Designer with GTM dense nodes as guidance"
     variations:
-      - "Generate autoencoder molecules guided by dense GTM regions."
+      - "Generate molecules with Molecular Designer guided by dense GTM regions."
 
   interpolation:
-    base: "Interpolate between two molecules using the autoencoder"
+    base: "Interpolate between two molecules using Molecular Designer"
     variations:
       - "Interpolate between two SMILES in latent space."
 
   latent_exploration:
-    base: "Explore the latent space around a given molecule using the autoencoder"
+    base: "Explore the latent space around a given molecule using Molecular Designer"
     variations:
       - "Generate similar molecules by exploring a compound's latent neighborhood."

@@ -18,6 +18,7 @@ from cs_copilot.tools import (
     ChemblToolkit,
     ChemicalSimilarityToolkit,
     GTMToolkit,
+    MolecularDesignerToolkit,
     PeptideWAEToolkit,
     PointerPandasTools,
     SynPlannerToolkit,
@@ -30,10 +31,10 @@ from cs_copilot.tools import (
 from cs_copilot.tools.analysis import RobustnessAnalysisToolkit
 
 from .prompts import (
-    AUTOENCODER_INSTRUCTIONS,
     CHEMBL_INSTRUCTIONS,
     CHEMOINFORMATICIAN_INSTRUCTIONS,  # Comprehensive chemoinformatics analysis
     GTM_AGENT_INSTRUCTIONS,  # Unified GTM agent (all GTM operations)
+    MOLECULAR_DESIGNER_INSTRUCTIONS,
     PEPTIDE_WAE_INSTRUCTIONS,  # Peptide WAE for amino acid sequence generation
     REPORT_GENERATOR_INSTRUCTIONS,  # Universal presentation layer
     ROBUSTNESS_EVALUATION_INSTRUCTIONS,
@@ -443,31 +444,36 @@ class ChemoinformaticianFactory(BaseAgentFactory):
         )
 
 
-class AutoencoderFactory(BaseAgentFactory):
-    """Factory for creating autoencoder-based molecular generation agents.
+class MolecularDesignerFactory(BaseAgentFactory):
+    """Factory for creating small-molecule design agents.
 
     Supports two modes:
-    - **Standalone**: Encode/decode SMILES, sample from latent space, interpolate, explore neighborhoods
-    - **GTM-guided**: Combine GTM maps with autoencoders for targeted molecular generation from
-      specific map regions (by density, activity, or coordinates)
+    - **Engine-driven design**: Use autoencoder or LLM engines behind a common facade
+    - **Standalone autoencoder**: Encode/decode SMILES, sample latent space, interpolate, explore neighborhoods
+    - **GTM-guided**: Combine GTM maps with generative engines for targeted molecular design
+      from specific map regions (by density, activity, or coordinates)
 
     Enhanced with GTM cache awareness to avoid redundant GTM loading when working with GTM Agent
     in the same session.
     """
 
-    agent_type = "autoencoder"
-    aliases = ["autoencoder_gtm_sampling"]
+    agent_type = "molecular_designer"
 
     def get_agent_config(self) -> AgentConfig:
+        autoencoder_toolkit = AutoencoderToolkit()
         return AgentConfig(
-            name="autoencoder_agent",
+            name="molecular_designer_agent",
             description="""
-            You are a scientific assistant specialized in molecular generation and analysis using LSTM
-            autoencoders. You operate in two modes:
+            You are a scientific assistant specialized in small-molecule design and analysis.
+            You operate through a molecular design engine facade so new generative engines can
+            be attached without changing agent routing.
 
-            **Standalone mode**: Encode molecules to latent representations, generate novel structures
-            by sampling from latent space, interpolate between molecules, and explore chemical space
-            neighborhoods to understand structure-property relationships.
+            **Autoencoder engine**: Encode molecules to latent representations, generate novel
+            structures by sampling from latent space, interpolate between molecules, and explore
+            chemical-space neighborhoods to understand structure-property relationships.
+
+            **LLM engine**: Propose candidate SMILES from a design objective or constraints, then
+            validate, standardize, deduplicate, and rank candidates before presenting them.
 
             **GTM-guided mode**: Combine Generative Topographic Mapping (GTM) with autoencoders for
             targeted molecular generation. Sample molecules from specific regions of GTM maps
@@ -478,12 +484,13 @@ class AutoencoderFactory(BaseAgentFactory):
             eliminating redundant loading for multi-step workflows (e.g., GTM density → sampling).
             """,
             tools=[
-                AutoencoderToolkit(),
+                MolecularDesignerToolkit(autoencoder_toolkit=autoencoder_toolkit),
+                autoencoder_toolkit,
                 GTMToolkit(),
                 ChemicalSimilarityToolkit(),
                 PointerPandasTools(),
             ],
-            instructions=AUTOENCODER_INSTRUCTIONS,
+            instructions=MOLECULAR_DESIGNER_INSTRUCTIONS,
             session_state={
                 "data_file_paths": {
                     "dataset_path": None,
@@ -567,7 +574,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
     - Chemotype analysis reports
     - GTM density reports
     - GTM activity/SAR reports
-    - Autoencoder generation reports
+    - Molecular designer generation reports
     - Combined/custom reports
 
     **Separation of Concerns**: Analysis agents produce structured data, Report Generator handles presentation.

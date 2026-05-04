@@ -26,6 +26,7 @@ from .chemistry import (
     AutoencoderToolkit,
     BaseChemistryToolkit,
     ChemicalSimilarityToolkit,
+    MolecularDesignerToolkit,
     PeptideWAEToolkit,
     SynPlannerToolkit,
 )
@@ -41,6 +42,7 @@ from .databases.chembl import ChemblToolkit
 # Import all the main classes and functions for the public API
 from .io.pointer_pandas_tools import PointerPandasTools
 from .io.report_export import save_markdown_report, save_rich_report
+from .io.session_memory import SessionMemoryToolkit
 from .io.session_toolkit import SessionToolkit
 
 # Backwards compatibility alias
@@ -51,10 +53,12 @@ __all__ = [
     # Classes
     "PointerPandasTools",
     "SessionToolkit",
+    "SessionMemoryToolkit",
     "GTMToolkit",
     "BaseChemistryToolkit",
     "ChemicalSimilarityToolkit",
     "AutoencoderToolkit",
+    "MolecularDesignerToolkit",
     "PeptideWAEToolkit",
     "SynPlannerToolkit",
     "ChemblToolkit",
