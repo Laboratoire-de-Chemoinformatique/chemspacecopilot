@@ -45,13 +45,14 @@ uv run pytest tests/unit/test_autoencoder.py -v
 
 Tests GTM (Generative Topographic Mapping) sampling helpers:
 - Dense node sampling
-- Active node sampling
+- Activity landscape node sampling
+- Molecule-level activity ranking
 - Coordinate-based sampling
 - Data format conversions (DataFrame, SMILES)
 
 **Key test functions:**
 - `test_sample_dense_nodes_prioritizes_filtered_density`
-- `test_sample_active_nodes_infers_probability_column`
+- `test_sample_activity_landscape_nodes_infers_probability_column`
 - `test_sample_by_coordinates_uses_lookup_table`
 
 **Example:**

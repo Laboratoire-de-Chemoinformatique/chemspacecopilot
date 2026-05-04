@@ -642,20 +642,20 @@ def test_create_activity_landscapes_rejects_invalid_renderer():
 
 
 def test_gtm_toolkit_create_activity_landscapes_forwards_renderer(monkeypatch):
-    """GTMToolkit.create_activity_landscapes forwards renderer to the tool."""
+    """GTMToolkit.create_activity_landscapes forwards renderer and stores the landscape."""
 
     captured = {}
 
     def _fake_resolve(gtm_model, *, agent=None, use_default=False):
         return "resolved/model.pkl.gz"
 
-    def _fake_tool(
+    def _fake_artifact(
         dataset,
         gtm_model,
+        *,
         node_threshold,
         chart_width,
         chart_height,
-        *,
         renderer,
         descriptor_type=None,
         agent=None,
@@ -663,13 +663,21 @@ def test_gtm_toolkit_create_activity_landscapes_forwards_renderer(monkeypatch):
         captured["dataset"] = dataset
         captured["gtm_model"] = gtm_model
         captured["renderer"] = renderer
-        return "ok"
+        return gtm_operations.ActivityLandscapeArtifact(
+            table=_regression_activity_table(),
+            landscape_type="regression",
+            renderer=renderer,
+            csv_path="s3://session/model_regression.csv",
+            html_path="s3://session/landscape.html",
+            png_path="s3://session/landscape.png",
+            png_written=True,
+        )
 
     monkeypatch.setattr(gtm_operations, "resolve_gtm_model_path", _fake_resolve)
-    monkeypatch.setattr(gtm_operations, "create_activity_landscapes_tool", _fake_tool)
+    monkeypatch.setattr(gtm_operations, "create_activity_landscape_artifact", _fake_artifact)
 
     toolkit = GTMToolkit()
-    toolkit.create_activity_landscapes(
+    result = toolkit.create_activity_landscapes(
         "dataset.csv",
         gtm_model="ignored.pkl.gz",
         renderer="plotly",
@@ -677,6 +685,8 @@ def test_gtm_toolkit_create_activity_landscapes_forwards_renderer(monkeypatch):
 
     assert captured["renderer"] == "plotly"
     assert captured["gtm_model"] == "resolved/model.pkl.gz"
+    assert "Data CSV" in result
+    assert "regression" in toolkit._gtm_data.activity_landscapes
 
 
 def test_resolve_gtm_model_path_raises_when_no_source_available(monkeypatch, tmp_path):

@@ -4,6 +4,8 @@
 Enhanced PandasTools with pointer-based dataframe management and S3 support.
 """
 
+import ast
+import json
 import logging
 from typing import Any, Dict, Optional, Union
 from uuid import uuid4
@@ -20,7 +22,11 @@ from cs_copilot.tools.chemistry.smiles_columns import (
     smiles_column_exact_names,
 )
 from cs_copilot.tools.constants import MAX_COL_WIDTH, SAMPLE_COLS, SAMPLE_ROWS
-from cs_copilot.tools.io.session_memory import register_session_object, update_state_targets
+from cs_copilot.tools.io.session_memory import (
+    register_session_object,
+    resolve_loadable_session_data,
+    update_state_targets,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +122,34 @@ def _normalize_param_aliases(params: dict, canonical: str, aliases: tuple[str, .
         if alias in params:
             params[canonical] = params.pop(alias)
             return
+
+
+def _coerce_parameter_mapping(value: Any, param_name: str) -> dict[str, Any]:
+    """Accept dict parameters even when a tool runtime serialized them as strings."""
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value.copy()
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return {}
+        for parser in (json.loads, ast.literal_eval):
+            try:
+                parsed = parser(stripped)
+            except (json.JSONDecodeError, ValueError, SyntaxError):
+                continue
+            if isinstance(parsed, dict):
+                return parsed.copy()
+            raise ValueError(
+                f"{param_name} must decode to a JSON/object dictionary, "
+                f"got {type(parsed).__name__}"
+            )
+        raise ValueError(
+            f"{param_name} must be a dictionary or JSON object string. "
+            f"Received string: {stripped[:200]}"
+        )
+    raise ValueError(f"{param_name} must be a dictionary, got {type(value).__name__}")
 
 
 def _coerce_columns(value, param_name: str) -> list[str]:
@@ -216,11 +250,62 @@ class PointerPandasTools(PandasTools):
     - Automatic CSV path normalization
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.register(self.load_dataframe_from_session)
+
+    def load_dataframe_from_session(
+        self,
+        dataframe_name: str,
+        session_key: str,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, str]:
+        """
+        Load a session DataFrame or CSV path into the pandas dataframe registry.
+
+        Args:
+            dataframe_name: Name to store the loaded DataFrame under.
+            session_key: Top-level or dotted session key, such as
+                ``analysis_input`` or ``landscape_files.landscape_data_csv``.
+            session_state: Shared session state injected by Agno.
+        """
+        if not dataframe_name:
+            raise ValueError("dataframe_name cannot be empty")
+        if not session_key:
+            raise ValueError("session_key cannot be empty")
+        if session_state is None:
+            raise ValueError("session_state is not available")
+
+        resolved = resolve_loadable_session_data(session_state, session_key)
+        resolved_key = resolved["session_key"]
+        resolved_value = resolved["value"]
+
+        if resolved["kind"] == "dataframe":
+            df = resolved_value.copy()
+        elif resolved["kind"] == "csv_path":
+            path_lower = str(resolved_value).lower().split("?", 1)[0]
+            sep = "\t" if path_lower.endswith((".tsv", ".tab")) else ","
+            with S3.open(resolved_value, "r") as fh:
+                df = pd.read_csv(fh, sep=sep)
+        else:
+            raise TypeError(
+                f"Resolved session key '{resolved_key}' has unsupported kind "
+                f"'{resolved['kind']}'"
+            )
+
+        self.dataframes[dataframe_name] = df
+        return {
+            "dataframe_name": dataframe_name,
+            "session_key": resolved_key,
+            "shape": str(tuple(int(part) for part in df.shape)),
+            "preview": _preview(df),
+        }
+
     def create_pandas_dataframe(
         self,
         dataframe_name: str,
         create_using_function: str,
-        function_parameters: Optional[Dict] = None,
+        function_parameters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Union[str, pd.DataFrame]]:
         """Create a pandas DataFrame using various methods.
 
@@ -264,7 +349,7 @@ class PointerPandasTools(PandasTools):
         if not create_using_function:
             raise ValueError("create_using_function cannot be empty")
 
-        function_parameters = function_parameters or {}
+        function_parameters = _coerce_parameter_mapping(function_parameters, "function_parameters")
 
         # Normalize CSV params early for common cases
         if create_using_function in {"read_csv", "to_csv"}:
@@ -422,7 +507,7 @@ class PointerPandasTools(PandasTools):
         self,
         dataframe_name: str,
         operation: str,
-        operation_parameters: Optional[Dict] = None,
+        operation_parameters: Optional[Dict[str, Any]] = None,
     ) -> Union[pd.DataFrame, pd.Series, Dict, str, float, int]:
         """Run operations on existing DataFrames.
 
@@ -446,7 +531,7 @@ class PointerPandasTools(PandasTools):
 
         operation = _normalize_operation_name(operation)
         operation = _OPERATION_ALIASES.get(operation.lower(), operation)
-        params = (operation_parameters or {}).copy()
+        params = _coerce_parameter_mapping(operation_parameters, "operation_parameters")
 
         # Fix legacy to_csv aliases
         if operation == "to_csv":

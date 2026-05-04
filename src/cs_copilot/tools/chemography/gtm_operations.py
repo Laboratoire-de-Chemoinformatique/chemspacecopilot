@@ -32,7 +32,6 @@ import optuna
 import pandas as pd
 import torch
 from agno.agent import Agent
-from agno.tools.pandas import PandasTools
 from chemographykit.gtm import GTM
 from chemographykit.plots.altair_landscapes import (
     altair_discrete_class_landscape,
@@ -130,6 +129,14 @@ _LANDSCAPE_REQUIRED_COLUMNS: dict[str, set[str]] = {
 _PLOTLY_SUPPORTED_LANDSCAPES = {"density", "classification", "regression"}
 RAW_SMILES_COLUMN = "raw_smiles"
 RAW_SMILES_INPUT_COLUMN = "raw_smiles_input"
+_COMPACT_METADATA_REQUIRED_COLUMNS = (SMILES_COLUMN, "smi", "source")
+_COMPACT_METADATA_EXCLUDED_TOKENS = (
+    "descriptor",
+    "fingerprint",
+    "embedding",
+    "latent",
+    "image",
+)
 
 
 @dataclass
@@ -141,6 +148,19 @@ class _PreparedGTMData:
     initial_size: int
     final_size: int
     cache_hit: bool = False
+
+
+@dataclass
+class ActivityLandscapeArtifact:
+    """Structured result for a GTM node-level activity landscape."""
+
+    table: pd.DataFrame
+    landscape_type: Literal["classification", "regression"]
+    renderer: LandscapeRenderer
+    csv_path: str
+    html_path: str
+    png_path: Optional[str]
+    png_written: bool
 
 
 def find_smiles_column(df: pd.DataFrame) -> str:
@@ -196,6 +216,62 @@ def normalize_smiles_column(df: pd.DataFrame, inplace: bool = False) -> pd.DataF
         df.rename(columns={smiles_col: SMILES_COLUMN}, inplace=True)
 
     return df
+
+
+def _ensure_source_column(df: pd.DataFrame, default_source: Optional[str] = None) -> pd.DataFrame:
+    """Preserve assay metadata while adding the visualization-friendly source column."""
+    if "source" in df.columns:
+        return df
+    df = df.copy()
+    if "assay_chembl_id" in df.columns:
+        df["source"] = df["assay_chembl_id"]
+    else:
+        df["source"] = default_source or "unknown"
+    return df
+
+
+def _is_compact_sample_metadata(series: pd.Series) -> bool:
+    """Avoid returning vector/image-heavy values in sampled node tables."""
+    non_null = series.dropna()
+    if non_null.empty:
+        return True
+    sample = non_null.head(10)
+    if sample.map(lambda value: isinstance(value, (list, tuple, dict, set, np.ndarray))).any():
+        return False
+    return True
+
+
+def _sample_metadata_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Return scalar per-row metadata without interpreting column semantics."""
+    selected: list[Any] = []
+
+    for required in _COMPACT_METADATA_REQUIRED_COLUMNS:
+        if (
+            required in df.columns
+            and required not in selected
+            and _is_compact_sample_metadata(df[required])
+        ):
+            selected.append(required)
+
+    for column in df.columns:
+        column_str = str(column)
+        column_lower = column_str.lower()
+        if column in selected:
+            continue
+        if any(token in column_lower for token in _COMPACT_METADATA_EXCLUDED_TOKENS):
+            continue
+        if _is_compact_sample_metadata(df[column]):
+            selected.append(column)
+
+    if not selected:
+        return pd.DataFrame(index=df.index)
+    return df[selected].reset_index(drop=True)
+
+
+def _build_source_mols(coords_mols: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
+    """Combine GTM coordinates with compact row-level metadata."""
+    metadata = _sample_metadata_table(df)
+    return pd.concat([coords_mols.reset_index(drop=True), metadata], axis=1)
 
 
 def calculate_nn_preservation(
@@ -1188,7 +1264,7 @@ def data_load_and_prep(
     df = normalize_smiles_column(prepared.df)
     X = prepared.X
 
-    df = df.rename(columns={"assay_chembl_id": "source"})
+    df = _ensure_source_column(df, default_source=Path(data_file).stem)
     resps, _ = gtm.project(torch.from_numpy(X).to(torch.double))
     # Keep resps in the correct shape for ChemographyKit: (n_molecules, n_nodes)
     resps = resps.cpu().numpy()
@@ -1373,11 +1449,7 @@ def project_data_on_gtm(
     # Step 5: Prepare the output dataset
     # -------------------------------------------------------------------------
     # Handle missing 'source' column gracefully
-    if "source" not in df_valid.columns and "assay_chembl_id" in df_valid.columns:
-        df_valid = df_valid.rename(columns={"assay_chembl_id": "source"})
-
-    if "source" not in df_valid.columns:
-        df_valid["source"] = Path(dataset_file).stem  # Use filename as source
+    df_valid = _ensure_source_column(df_valid, default_source=Path(dataset_file).stem)
 
     # Keep the descriptor column in the preprocessed output. Downstream GTM
     # plotting/loading code can reuse it instead of recomputing descriptors for
@@ -1435,6 +1507,59 @@ def _detect_activity_landscape_type(
         "'filtered_reg_density' (regression) or at least two '*_prob' columns "
         f"(classification). Got columns: {list(source_activity.columns)}"
     )
+
+
+def validate_activity_landscape_table(
+    landscape_table: pd.DataFrame,
+    landscape_type: Optional[Literal["classification", "regression"]] = None,
+) -> tuple[pd.DataFrame, Literal["classification", "regression"]]:
+    """Validate and normalize a ChemographyKit node-level activity landscape table."""
+
+    if landscape_table is None or landscape_table.empty:
+        raise ValueError("Activity landscape table cannot be None or empty.")
+
+    table = landscape_table.copy()
+    if "nodes" not in table.columns and table.index.name == "nodes":
+        table = table.reset_index()
+
+    if "nodes" not in table.columns:
+        raise ValueError(
+            "Activity landscape table must contain a 'nodes' column. "
+            "This loader accepts GTM node-level landscape CSVs, not molecule-level "
+            "activity tables."
+        )
+
+    detected_type = _detect_activity_landscape_type(table)
+    if landscape_type is not None and landscape_type != detected_type:
+        raise ValueError(
+            f"Landscape type '{landscape_type}' does not match table columns "
+            f"(detected '{detected_type}')."
+        )
+
+    return table, detected_type
+
+
+def load_activity_landscape_csv(
+    landscape_csv: str,
+    landscape_type: Optional[Literal["classification", "regression"]] = None,
+) -> tuple[pd.DataFrame, Literal["classification", "regression"]]:
+    """Load a persisted GTM node-level activity landscape CSV."""
+
+    if not landscape_csv:
+        raise ValueError("landscape_csv path cannot be empty")
+
+    with S3.open(landscape_csv, "r") as f:
+        table = _read_csv_flexible(f)
+
+    return validate_activity_landscape_table(table, landscape_type=landscape_type)
+
+
+def activity_landscape_csv_path(
+    gtm_model: str,
+    landscape_type: Literal["classification", "regression"],
+) -> str:
+    """Return the CSV path used for persisted GTM activity landscape data."""
+    return _ensure_suffix(gtm_model, ".pkl.gz").replace(".pkl.gz", f"_{landscape_type}.csv")
 
 
 def create_activity_landscapes(
@@ -2036,7 +2161,7 @@ def preprocess_gtm_activity_data(
         )
 
         # Save regression landscape
-        path_reg = _ensure_suffix(gtm_model, ".pkl.gz").replace(".pkl.gz", "_regression.csv")
+        path_reg = activity_landscape_csv_path(gtm_model, "regression")
         logger.info(f"Saving regression activity landscape to {path_reg}")
         with S3.open(path_reg, "w") as f:
             source_activity_reg.to_csv(f)
@@ -2138,9 +2263,7 @@ def preprocess_gtm_activity_data(
             )
 
             # Save classification landscape
-            path_class = _ensure_suffix(gtm_model, ".pkl.gz").replace(
-                ".pkl.gz", "_classification.csv"
-            )
+            path_class = activity_landscape_csv_path(gtm_model, "classification")
             logger.info(f"Saving classification activity landscape to {path_class}")
             with S3.open(path_class, "w") as f:
                 source_activity_class.to_csv(f)
@@ -2879,70 +3002,6 @@ def save_gtm_and_dataset(dataset_name: str, gtm_name: str, agent: Agent) -> str:
         raise
 
 
-def load_dataframe_from_session(dataframe_name: str, session_key: str, agent: Agent) -> str:
-    """
-    Load a dataframe from the agent's session state into the pandas tools dataframes dictionary.
-
-    Args:
-        dataframe_name: Name to use for the dataframe in the pandas tools system
-        session_key: Key under which the DataFrame is stored in agent.session_state
-        agent: Agent instance whose session_state contains the dataframe
-
-    Returns:
-        Confirmation message with dataframe info
-
-    Raises:
-        KeyError: If session_key is not present in agent.session_state
-        ValueError: If inputs are invalid
-    """
-    if not dataframe_name:
-        raise ValueError("dataframe_name cannot be empty")
-    if not session_key:
-        raise ValueError("session_key cannot be empty")
-    if not agent:
-        raise ValueError("agent cannot be None")
-    if agent.session_state is None:
-        raise ValueError("agent.session_state is None - session state not initialized")
-
-    logger.info(f"Loading dataframe '{session_key}' from session state as '{dataframe_name}'")
-
-    try:
-        if session_key not in agent.session_state:
-            available_keys = list(agent.session_state.keys())
-            raise KeyError(
-                f"Dataframe '{session_key}' not found in session state. Available: {available_keys}"
-            )
-
-        df = agent.session_state[session_key]
-
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError(f"Object '{session_key}' is not a DataFrame, got {type(df)}")
-
-        # Store in the pandas tools dataframes dictionary
-        pandas_tool: Optional[PandasTools] = None
-        tools_attr = getattr(agent, "tools", [])
-
-        if isinstance(tools_attr, list):
-            for tool in tools_attr:
-                if isinstance(tool, PandasTools) or hasattr(tool, "dataframes"):
-                    pandas_tool = tool  # type: ignore[assignment]
-                    break
-        elif isinstance(tools_attr, PandasTools):
-            pandas_tool = tools_attr
-
-        if pandas_tool and hasattr(pandas_tool, "dataframes"):
-            pandas_tool.dataframes[dataframe_name] = df  # type: ignore[index]
-            logger.info(f"Successfully loaded dataframe '{dataframe_name}' with shape {df.shape}")
-            return f"✅ Dataframe '{dataframe_name}' loaded from session state. Shape: {df.shape}, Columns: {list(df.columns)}"
-
-        logger.warning("Could not access pandas tools dataframes dictionary")
-        return f"❌ Could not access pandas tools dataframes dictionary. Dataframe '{session_key}' exists in session state with shape {df.shape}"
-
-    except Exception as e:
-        logger.error(f"Error loading dataframe from session: {e}")
-        raise
-
-
 def load_gtm_density_matrix(
     dataset_file: str,
     gtm_file: str,
@@ -3008,7 +3067,7 @@ Density DataFrame:
         raise
 
 
-def create_activity_landscapes_tool(
+def create_activity_landscape_artifact(
     dataset: str,
     gtm_model: str,
     node_threshold: float = DEFAULT_NODE_THRESHOLD,
@@ -3018,9 +3077,9 @@ def create_activity_landscapes_tool(
     *,
     descriptor_type: Optional[str] = None,
     agent: Optional[Agent] = None,
-) -> str:
+) -> ActivityLandscapeArtifact:
     """
-    Create activity landscapes from GTM model and dataset.
+    Create a structured GTM node-level activity landscape artifact.
 
     Args:
         dataset: Path to the dataset file
@@ -3031,7 +3090,7 @@ def create_activity_landscapes_tool(
         renderer: Rendering backend ("altair" or "plotly"). Defaults to "altair".
 
     Returns:
-        Success message with file paths
+        Structured artifact containing the landscape table and persisted paths
 
     Raises:
         ValueError: If inputs are invalid
@@ -3066,6 +3125,7 @@ def create_activity_landscapes_tool(
             agent=agent,
         )
         detected_type = _detect_activity_landscape_type(source_activity)
+        landscape_csv = activity_landscape_csv_path(gtm_model, detected_type)
 
         # Generate output paths (embed renderer + detected type so altair/plotly
         # variants produced in the same run do not collide).
@@ -3095,20 +3155,67 @@ def create_activity_landscapes_tool(
         logger.info(
             f"Successfully created {normalized_renderer} {detected_type} activity landscape"
         )
-        if png_written:
-            return (
-                f"{normalized_renderer.capitalize()} {detected_type} activity landscape "
-                f"saved to S3: `{S3.path(s3_html)}` and `{S3.path(s3_png)}`"
-            )
-        return (
-            f"{normalized_renderer.capitalize()} {detected_type} activity landscape "
-            f"saved to S3: `{S3.path(s3_html)}`. PNG export was skipped because "
-            f"the Plotly image backend is unavailable."
+        return ActivityLandscapeArtifact(
+            table=source_activity,
+            landscape_type=detected_type,
+            renderer=normalized_renderer,
+            csv_path=S3.path(landscape_csv),
+            html_path=S3.path(s3_html),
+            png_path=S3.path(s3_png) if png_written else None,
+            png_written=png_written,
         )
 
     except Exception as e:
         logger.error(f"Error creating {normalized_renderer} activity landscapes: {e}")
         raise
+
+
+def format_activity_landscape_artifact(artifact: ActivityLandscapeArtifact) -> str:
+    """Format a structured GTM activity landscape artifact for tool output."""
+
+    if artifact.png_written and artifact.png_path:
+        return (
+            f"{artifact.renderer.capitalize()} {artifact.landscape_type} activity landscape "
+            f"saved to S3: `{artifact.html_path}` and `{artifact.png_path}`. "
+            f"Data CSV: `{artifact.csv_path}`"
+        )
+    return (
+        f"{artifact.renderer.capitalize()} {artifact.landscape_type} activity landscape "
+        f"saved to S3: `{artifact.html_path}`. PNG export was skipped because "
+        f"the Plotly image backend is unavailable. Data CSV: `{artifact.csv_path}`"
+    )
+
+
+def create_activity_landscapes_tool(
+    dataset: str,
+    gtm_model: str,
+    node_threshold: float = DEFAULT_NODE_THRESHOLD,
+    chart_width: int = DEFAULT_CHART_WIDTH,
+    chart_height: int = DEFAULT_CHART_HEIGHT,
+    renderer: LandscapeRenderer = "altair",
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
+) -> str:
+    """
+    Create activity landscapes from GTM model and dataset.
+
+    Returns a human-readable message for tool callers. Use
+    ``create_activity_landscape_artifact`` when the caller needs the generated
+    node-level landscape table in memory.
+    """
+
+    artifact = create_activity_landscape_artifact(
+        dataset,
+        gtm_model,
+        node_threshold=node_threshold,
+        chart_width=chart_width,
+        chart_height=chart_height,
+        renderer=renderer,
+        descriptor_type=descriptor_type,
+        agent=agent,
+    )
+    return format_activity_landscape_artifact(artifact)
 
 
 def save_gtm_plot(
@@ -3308,7 +3415,8 @@ class GTMData:
         self.coords_mols = None
         self.vis_info = None
         self.source_mols = None
-        self.activity_table = None
+        self.activity_landscapes = {}
+        self.landscape_artifacts = {}
         self.node_lookup_by_coords = None
         self.node_lookup_by_node = None
 
@@ -3369,7 +3477,7 @@ def load_and_prepare_gtm_data_with_model(
         )
         df = normalize_smiles_column(prepared.df)
         X = prepared.X
-        df = df.rename(columns={"assay_chembl_id": "source"})
+        df = _ensure_source_column(df, default_source=Path(data_file).stem)
 
         # Project onto the GTM model
         resps, _ = gtm_model.project(torch.from_numpy(X).to(torch.double))
@@ -3382,11 +3490,7 @@ def load_and_prepare_gtm_data_with_model(
         data.coords_mols = calculate_latent_coords(resps, correction=True, return_node=True)
         data.vis_info = encode_molecules(data.df, smiles_col_name=SMILES_COLUMN).reset_index()
 
-        # Combine coordinate and visualization data
-        # NOTE: Excluding 'image' column to prevent context overflow when sampling is returned to LLM
-        data.source_mols = pd.concat(
-            [data.coords_mols, data.vis_info[[SMILES_COLUMN, "source"]]], axis=1
-        )
+        data.source_mols = _build_source_mols(data.coords_mols, data.df)
 
         # Always compute density and neighborhood preservation
         # Validate that the dataset is compatible with the GTM model
@@ -3603,12 +3707,7 @@ def load_and_prepare_gtm_data(
         data.coords_mols = calculate_latent_coords(data.resps, correction=True, return_node=True)
         data.vis_info = encode_molecules(data.df, smiles_col_name=SMILES_COLUMN).reset_index()
 
-        # Combine coordinate and visualization data
-        # Select only columns that exist in vis_info
-        # NOTE: Excluding 'image' to prevent context overflow when sampling is returned to LLM
-        vis_cols = [SMILES_COLUMN, "source"]
-        available_vis_cols = [col for col in vis_cols if col in data.vis_info.columns]
-        data.source_mols = pd.concat([data.coords_mols, data.vis_info[available_vis_cols]], axis=1)
+        data.source_mols = _build_source_mols(data.coords_mols, data.df)
 
         # Create lookup tables from source (which has integer coordinates, no 0.5 offset)
         data.node_lookup_by_coords, data.node_lookup_by_node = _create_node_lookup_tables(
@@ -3868,6 +3967,148 @@ def select_nodes_by_density(
     return node_list
 
 
+_MOLECULE_ACTIVITY_COLUMN_HINTS = {
+    "activity_final",
+    "pchembl_value",
+    "pchembl",
+    "pic50",
+    "pic50_value",
+    "pki",
+    "pkd",
+    "standard_value",
+    "activity",
+}
+
+
+def select_nodes_by_landscape_metric(
+    landscape_table: pd.DataFrame,
+    metric_column: str | None = None,
+    top_n: int = 5,
+    min_value: float | None = None,
+    ascending: bool = False,
+) -> List[int]:
+    """
+    Select GTM nodes from a node-level activity landscape metric.
+
+    Args:
+        landscape_table: GTM landscape table with a 'nodes' column
+        metric_column: Node-level metric. If None, auto-detects filtered_reg_density
+            for regression landscapes or active/probability columns for classification.
+        top_n: Number of top nodes to select
+        min_value: Optional minimum metric value to filter nodes
+        ascending: If False, select highest values; if True, select lowest values
+
+    Returns:
+        List of node IDs sorted by the node-level metric
+
+    Raises:
+        ValueError: If landscape table is invalid or required columns are missing
+    """
+
+    landscape_table, landscape_type = validate_activity_landscape_table(landscape_table)
+
+    if metric_column is None:
+        if landscape_type == "regression" and "filtered_reg_density" in landscape_table.columns:
+            metric_column = "filtered_reg_density"
+        else:
+            prob_cols = [
+                col for col in landscape_table.columns if col.endswith("_prob") and col != "nodes"
+            ]
+            if "active_prob" in prob_cols:
+                metric_column = "active_prob"
+            elif prob_cols:
+                metric_column = prob_cols[0]
+            else:
+                numeric_cols = landscape_table.select_dtypes(include=[np.number]).columns.tolist()
+                numeric_cols = [col for col in numeric_cols if col not in {"nodes", "x", "y"}]
+                if not numeric_cols:
+                    raise ValueError(
+                        "Could not auto-detect a node-level landscape metric. "
+                        "Please specify metric_column."
+                    )
+                metric_column = numeric_cols[0]
+        logger.debug(f"Auto-detected activity landscape metric: {metric_column}")
+
+    if metric_column not in landscape_table.columns:
+        available_cols = [col for col in landscape_table.columns if col != "nodes"]
+        molecule_hint = ""
+        if metric_column.lower() in _MOLECULE_ACTIVITY_COLUMN_HINTS:
+            molecule_hint = (
+                " That looks like a molecule-level activity column; use "
+                "sample_top_activity_molecules() for compound ranking, or use a "
+                "node-level landscape metric such as 'filtered_reg_density' or "
+                "'active_prob' here."
+            )
+        raise ValueError(
+            f"Activity landscape metric '{metric_column}' not found. "
+            f"Available node-level columns: {available_cols}.{molecule_hint}"
+        )
+
+    filtered = landscape_table.copy()
+    if min_value is not None:
+        filtered = filtered[filtered[metric_column] >= min_value]
+
+    if filtered.empty:
+        logger.warning(
+            "No nodes found matching activity landscape criteria "
+            f"(min_value={min_value}, metric_column={metric_column})"
+        )
+        return []
+
+    sorted_nodes = filtered.sort_values(by=metric_column, ascending=ascending)
+    top_nodes = sorted_nodes.head(top_n)
+
+    node_list = top_nodes["nodes"].tolist()
+    logger.debug(
+        "Selected %d nodes by activity landscape metric %s: %s",
+        len(node_list),
+        metric_column,
+        node_list[:10],
+    )
+    return node_list
+
+
+def select_top_activity_molecules(
+    source_mols: pd.DataFrame,
+    activity_column: str,
+    top_n: int = 10,
+    min_value: float | None = None,
+    ascending: bool = False,
+) -> pd.DataFrame:
+    """Rank molecule rows by an explicit row-level activity column."""
+
+    if source_mols is None or source_mols.empty:
+        raise ValueError("source_mols cannot be None or empty")
+
+    if not activity_column:
+        raise ValueError("activity_column is required for molecule-level activity ranking")
+
+    if activity_column not in source_mols.columns:
+        available_cols = list(source_mols.columns)
+        raise ValueError(
+            f"Molecule-level activity column '{activity_column}' not found. "
+            f"Available columns: {available_cols}"
+        )
+
+    ranked = source_mols.copy()
+    metric = pd.to_numeric(ranked[activity_column], errors="coerce")
+    ranked = ranked[metric.notna()].copy()
+    ranked["_activity_sort_value"] = metric[metric.notna()]
+
+    if min_value is not None:
+        ranked = ranked[ranked["_activity_sort_value"] >= min_value]
+
+    if ranked.empty:
+        logger.warning(
+            "No molecule rows found matching activity criteria "
+            f"(activity_column={activity_column}, min_value={min_value})"
+        )
+        return pd.DataFrame(columns=source_mols.columns)
+
+    ranked = ranked.sort_values(by="_activity_sort_value", ascending=ascending).head(top_n)
+    return ranked.drop(columns=["_activity_sort_value"]).reset_index(drop=True)
+
+
 def select_nodes_by_activity(
     activity_table: pd.DataFrame,
     activity_column: str | None = None,
@@ -3876,73 +4117,20 @@ def select_nodes_by_activity(
     ascending: bool = False,
 ) -> List[int]:
     """
-    Select nodes from an activity table based on activity values.
+    Backward-compatible helper for legacy callers.
 
-    Args:
-        activity_table: DataFrame with 'nodes' column and activity columns
-        activity_column: Name of the activity column to use. If None, automatically detects
-                        probability columns (ending with '_prob') or numeric columns.
-        top_n: Number of top nodes to select
-        min_value: Optional minimum activity value to filter nodes
-        ascending: If False, select highest values; if True, select lowest values
-
-    Returns:
-        List of node IDs sorted by activity (best first)
-
-    Raises:
-        ValueError: If activity table is invalid or required columns are missing
+    Agent-facing GTM code should call ``select_nodes_by_landscape_metric`` so
+    node-level landscape metrics are not confused with molecule-level activity
+    columns.
     """
-    if activity_table is None or activity_table.empty:
-        raise ValueError("activity_table cannot be None or empty")
 
-    if "nodes" not in activity_table.columns:
-        raise ValueError("activity_table must contain 'nodes' column")
-
-    # Auto-detect activity column if not specified
-    if activity_column is None:
-        # Look for probability columns first (ending with '_prob')
-        prob_cols = [
-            col for col in activity_table.columns if col.endswith("_prob") and col != "nodes"
-        ]
-        if prob_cols:
-            activity_column = prob_cols[0]
-            logger.debug(f"Auto-detected activity column: {activity_column}")
-        else:
-            # Look for numeric columns (excluding 'nodes')
-            numeric_cols = activity_table.select_dtypes(include=[np.number]).columns.tolist()
-            numeric_cols = [col for col in numeric_cols if col != "nodes"]
-            if numeric_cols:
-                activity_column = numeric_cols[0]
-                logger.debug(f"Auto-detected activity column: {activity_column}")
-            else:
-                raise ValueError(
-                    "Could not auto-detect activity column. Please specify activity_column."
-                )
-
-    if activity_column not in activity_table.columns:
-        available_cols = [col for col in activity_table.columns if col != "nodes"]
-        raise ValueError(
-            f"Activity column '{activity_column}' not found. Available columns: {available_cols}"
-        )
-
-    # Filter by minimum value if specified
-    filtered = activity_table.copy()
-    if min_value is not None:
-        filtered = filtered[filtered[activity_column] >= min_value]
-
-    if filtered.empty:
-        logger.warning(
-            f"No nodes found matching activity criteria (min_value={min_value}, column={activity_column})"
-        )
-        return []
-
-    # Sort by activity column and select top N
-    sorted_nodes = filtered.sort_values(by=activity_column, ascending=ascending)
-    top_nodes = sorted_nodes.head(top_n)
-
-    node_list = top_nodes["nodes"].tolist()
-    logger.debug(f"Selected {len(node_list)} nodes by activity: {node_list[:10]}")
-    return node_list
+    return select_nodes_by_landscape_metric(
+        activity_table,
+        metric_column=activity_column,
+        top_n=top_n,
+        min_value=min_value,
+        ascending=ascending,
+    )
 
 
 def sample_molecules_from_nodes(

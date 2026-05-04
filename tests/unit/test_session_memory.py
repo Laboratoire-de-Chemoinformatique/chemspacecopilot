@@ -2,12 +2,16 @@
 # coding: utf-8
 """Tests for shared structured session working memory."""
 
+import pandas as pd
+
 from cs_copilot.tools.io.session_memory import (
     SessionMemoryToolkit,
+    list_loadable_session_data,
     register_compounds_from_candidates,
     register_generated_candidate_set,
     register_session_object,
     resolve_candidate_set,
+    resolve_loadable_session_data,
     resolve_session_reference,
     select_session_object,
 )
@@ -93,6 +97,35 @@ def test_session_memory_toolkit_resolves_and_selects():
     assert resolved["status"] == "resolved"
     assert selected["status"] == "selected"
     assert listed[0]["id"] == "cmp_001"
+
+
+def test_list_loadable_session_data_lists_dataframes_and_csv_paths():
+    state = {
+        "analysis_input": pd.DataFrame({"smi": ["CCO"], "activity_final": [7.0]}),
+        "landscape_files": {"landscape_data_csv": "/tmp/landscape.csv"},
+        "_gtm_prepared_dataset_cache": {"private": "/tmp/private.csv"},
+    }
+
+    loadable = list_loadable_session_data(state)
+    keys = {entry["session_key"] for entry in loadable}
+
+    assert "analysis_input" in keys
+    assert "landscape_files.landscape_data_csv" in keys
+    assert "_gtm_prepared_dataset_cache.private" not in keys
+
+
+def test_resolve_loadable_session_data_prefers_primary_path_in_container():
+    state = {
+        "analysis_outputs": {
+            "supplementary_data": ["/tmp/supplementary.csv"],
+            "primary_data_csv": "/tmp/primary.csv",
+        }
+    }
+
+    resolved = resolve_loadable_session_data(state, "analysis_outputs")
+
+    assert resolved["session_key"] == "analysis_outputs.primary_data_csv"
+    assert resolved["path"] == "/tmp/primary.csv"
 
 
 def test_generated_candidate_set_resolves_top_candidates_over_dataset_compounds():

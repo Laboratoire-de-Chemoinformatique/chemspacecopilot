@@ -9,12 +9,25 @@ from datetime import datetime, timezone
 from math import isfinite
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+import pandas as pd
 from agno.tools.toolkit import Toolkit
 
 SESSION_OBJECTS_KEY = "session_objects"
 SESSION_MEMORY_SUMMARY_KEY = "session_memory_summary"
 MAX_REGISTERED_COMPOUNDS_PER_RESULT = 50
 MAX_SUMMARY_ITEMS_PER_TYPE = 6
+LOADABLE_CSV_SUFFIXES = (".csv", ".csv.gz", ".tsv", ".tab", ".txt")
+LOADABLE_SESSION_PATH_PRIORITY = {
+    "clean_dataset_path": 0,
+    "landscape_data_csv": 1,
+    "activity_csv": 2,
+    "density_csv": 3,
+    "primary_data_csv": 4,
+    "dataset_path": 5,
+    "raw_dataset_path": 6,
+    "csv_path": 7,
+    "path": 8,
+}
 
 _OBJECT_TYPES: Dict[str, Tuple[str, str]] = {
     "compound": ("compounds", "cmp"),
@@ -213,6 +226,173 @@ def select_session_object(
 def get_session_object(session_state: Dict[str, Any], object_id: str) -> Optional[Dict[str, Any]]:
     """Return a session object by ID."""
     return _find_object(ensure_session_objects(session_state), object_id)
+
+
+def _is_loadable_csv_path(value: Any) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    path = value.strip().split("?", 1)[0].lower()
+    return path.endswith(LOADABLE_CSV_SUFFIXES)
+
+
+def _loadable_entry(session_key: str, value: Any) -> Optional[Dict[str, Any]]:
+    if isinstance(value, pd.DataFrame):
+        return {
+            "session_key": session_key,
+            "kind": "dataframe",
+            "shape": tuple(int(part) for part in value.shape),
+            "columns": [str(column) for column in value.columns[:20]],
+        }
+    if _is_loadable_csv_path(value):
+        return {
+            "session_key": session_key,
+            "kind": "csv_path",
+            "path": value,
+        }
+    return None
+
+
+def _iter_loadable_session_data(
+    value: Any,
+    prefix: str,
+    output: List[Dict[str, Any]],
+    *,
+    depth: int = 0,
+    max_depth: int = 5,
+    max_items: int = 100,
+    seen: Optional[set[int]] = None,
+) -> None:
+    if len(output) >= max_items:
+        return
+    seen = seen or set()
+    value_id = id(value)
+    if value_id in seen:
+        return
+    seen.add(value_id)
+
+    entry = _loadable_entry(prefix, value)
+    if entry is not None:
+        output.append(entry)
+        return
+    if depth >= max_depth:
+        return
+
+    if isinstance(value, dict):
+        for key, item in value.items():
+            key_str = str(key)
+            if key_str.startswith("_"):
+                continue
+            child_prefix = f"{prefix}.{key_str}" if prefix else key_str
+            _iter_loadable_session_data(
+                item,
+                child_prefix,
+                output,
+                depth=depth + 1,
+                max_depth=max_depth,
+                max_items=max_items,
+                seen=seen,
+            )
+            if len(output) >= max_items:
+                return
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            child_prefix = f"{prefix}.{index}" if prefix else str(index)
+            _iter_loadable_session_data(
+                item,
+                child_prefix,
+                output,
+                depth=depth + 1,
+                max_depth=max_depth,
+                max_items=max_items,
+                seen=seen,
+            )
+            if len(output) >= max_items:
+                return
+
+
+def list_loadable_session_data(
+    session_state: Dict[str, Any],
+    *,
+    max_items: int = 100,
+) -> List[Dict[str, Any]]:
+    """List session DataFrames and CSV-like paths that dataframe tools can load."""
+    if not isinstance(session_state, dict):
+        return []
+    output: List[Dict[str, Any]] = []
+    for key, value in session_state.items():
+        key_str = str(key)
+        if key_str.startswith("_"):
+            continue
+        _iter_loadable_session_data(value, key_str, output, max_items=max_items)
+        if len(output) >= max_items:
+            break
+    return output
+
+
+def _resolve_dotted_session_key(
+    session_state: Dict[str, Any], session_key: str
+) -> Tuple[bool, Any]:
+    if session_key in session_state:
+        return True, session_state[session_key]
+
+    current: Any = session_state
+    for part in str(session_key).split("."):
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+            continue
+        if isinstance(current, (list, tuple)) and part.isdigit():
+            index = int(part)
+            if 0 <= index < len(current):
+                current = current[index]
+                continue
+        return False, None
+    return True, current
+
+
+def _loadable_sort_key(entry: Dict[str, Any]) -> tuple[int, str]:
+    if entry.get("kind") == "dataframe":
+        return (-1, str(entry.get("session_key", "")))
+    final_key = str(entry.get("session_key", "")).rsplit(".", 1)[-1]
+    return (
+        LOADABLE_SESSION_PATH_PRIORITY.get(final_key, 100),
+        str(entry.get("session_key", "")),
+    )
+
+
+def resolve_loadable_session_data(
+    session_state: Dict[str, Any],
+    session_key: str,
+) -> Dict[str, Any]:
+    """Resolve a top-level, dotted, or container session key to a loadable object."""
+    if not isinstance(session_state, dict):
+        raise ValueError("session_state must be a dictionary")
+
+    found, value = _resolve_dotted_session_key(session_state, session_key)
+    if not found:
+        available = [entry["session_key"] for entry in list_loadable_session_data(session_state)]
+        raise KeyError(
+            f"Session key '{session_key}' not found. Loadable session data keys: {available}"
+        )
+
+    entry = _loadable_entry(session_key, value)
+    if entry is not None:
+        entry["value"] = value
+        return entry
+
+    nested_entries: List[Dict[str, Any]] = []
+    _iter_loadable_session_data(value, session_key, nested_entries)
+    if not nested_entries:
+        raise TypeError(
+            f"Session key '{session_key}' is not a DataFrame or CSV path and contains no "
+            "loadable nested DataFrames/CSV paths."
+        )
+
+    selected = sorted(nested_entries, key=_loadable_sort_key)[0]
+    found_nested, nested_value = _resolve_dotted_session_key(session_state, selected["session_key"])
+    if not found_nested:
+        raise KeyError(f"Resolved nested session key vanished: {selected['session_key']}")
+    selected["value"] = nested_value
+    return selected
 
 
 def list_session_objects(
@@ -713,6 +893,7 @@ class SessionMemoryToolkit(Toolkit):
     def __init__(self):
         super().__init__("session_memory")
         self.register(self.list_session_objects)
+        self.register(self.list_loadable_session_data)
         self.register(self.get_session_object)
         self.register(self.select_session_object)
         self.register(self.resolve_session_reference)
@@ -735,6 +916,20 @@ class SessionMemoryToolkit(Toolkit):
         if session_state is None:
             return []
         return list_session_objects(session_state, object_type)
+
+    def list_loadable_session_data(
+        self,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        List DataFrames and CSV paths available through supported session keys.
+
+        Args:
+            session_state: Shared session state injected by Agno.
+        """
+        if session_state is None:
+            return []
+        return list_loadable_session_data(session_state)
 
     def get_session_object(
         self,
