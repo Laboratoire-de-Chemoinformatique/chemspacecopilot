@@ -325,7 +325,11 @@ class ChEMBLDownloaderFactory(BaseAgentFactory):
             instructions=CHEMBL_INSTRUCTIONS,
             session_state={
                 "data_file_paths": {
-                    "dataset_path": None,
+                    "dataset_path": None,  # Backward-compatible alias for clean_dataset_path.
+                    "raw_dataset_path": None,
+                    "clean_dataset_path": None,
+                    "descriptor_parquet_path": None,
+                    "standardization_report_path": None,
                 }
             },
         )
@@ -493,7 +497,11 @@ class MolecularDesignerFactory(BaseAgentFactory):
             instructions=MOLECULAR_DESIGNER_INSTRUCTIONS,
             session_state={
                 "data_file_paths": {
-                    "dataset_path": None,
+                    "dataset_path": None,  # Backward-compatible alias for clean_dataset_path.
+                    "raw_dataset_path": None,
+                    "clean_dataset_path": None,
+                    "descriptor_parquet_path": None,
+                    "standardization_report_path": None,
                 },
             },
         )

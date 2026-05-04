@@ -668,6 +668,10 @@ def _compact_record_for_summary(record: Dict[str, Any]) -> Dict[str, Any]:
         "candidate_set_id": record.get("candidate_set_id"),
         "node_index": record.get("node_index"),
         "map_id": record.get("map_id"),
+        "dataset_path": record.get("dataset_path"),
+        "clean_dataset_path": record.get("clean_dataset_path"),
+        "raw_dataset_path": record.get("raw_dataset_path"),
+        "descriptor_parquet_path": record.get("descriptor_parquet_path"),
     }
 
 
@@ -685,6 +689,15 @@ def _compact_record_line(record: Dict[str, Any], object_type: str) -> str:
         bits.append(f"compounds={len(record.get('compound_ids') or [])}")
     if object_type == "map" and record.get("dataset_path"):
         bits.append(f"dataset={record['dataset_path']}")
+    if object_type == "dataset":
+        if record.get("clean_dataset_path"):
+            bits.append(f"clean={record['clean_dataset_path']}")
+        elif record.get("dataset_path"):
+            bits.append(f"dataset={record['dataset_path']}")
+        if record.get("raw_dataset_path"):
+            bits.append(f"raw={record['raw_dataset_path']}")
+        if record.get("descriptor_parquet_path"):
+            bits.append(f"descriptors={record['descriptor_parquet_path']}")
     if object_type == "zone" and record.get("node_ids"):
         bits.append(f"nodes={record['node_ids']}")
     if object_type == "node" and record.get("node_index") is not None:

@@ -35,6 +35,11 @@ _PVALUE_COLUMNS = {
     "pmic": ("pMIC", "MIC"),
 }
 
+_FINAL_ACTIVITY_COLUMNS = {
+    "activityfinal": "activity_final",
+    "activityscoremedian": "activity_score_median",
+}
+
 _POTENCY_COLUMNS = {
     "ic50": "IC50",
     "ec50": "EC50",
@@ -249,6 +254,23 @@ def infer_activity_mapping(
         if explicit.activity_kind is not None:
             return explicit
 
+    final_activity = _find_final_activity_column(df)
+    if final_activity is not None:
+        return ActivityMapping(
+            smiles_column=smiles_found,
+            activity_column=final_activity,
+            activity_kind="regression",
+            activity_semantics="higher_is_better",
+            endpoint_column=("activity_endpoint" if "activity_endpoint" in df.columns else None),
+            units_column="activity_units" if "activity_units" in df.columns else None,
+            target_column=target_column,
+            assay_column=assay_column,
+            molecule_id_column=molecule_id_column,
+            relation_column=relation_column,
+            source_format=source_format,
+            score_name=final_activity,
+        )
+
     pvalue = _find_pvalue_column(df)
     if pvalue is not None:
         canonical = _canonical_name(pvalue)
@@ -393,6 +415,15 @@ def _mapping_for_explicit_activity(
 def _find_pvalue_column(df: pd.DataFrame) -> Optional[str]:
     lookup = _column_lookup(df.columns)
     for canonical in _PVALUE_COLUMNS:
+        column = lookup.get(canonical)
+        if column is not None and _looks_like_numeric(df[column]):
+            return column
+    return None
+
+
+def _find_final_activity_column(df: pd.DataFrame) -> Optional[str]:
+    lookup = _column_lookup(df.columns)
+    for canonical in _FINAL_ACTIVITY_COLUMNS:
         column = lookup.get(canonical)
         if column is not None and _looks_like_numeric(df[column]):
             return column

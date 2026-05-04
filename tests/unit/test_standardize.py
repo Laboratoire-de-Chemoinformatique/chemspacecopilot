@@ -50,6 +50,21 @@ class TestStandardizeSmilesColumn:
     def test_standardize_smiles_keeps_largest_fragment_behavior(self):
         assert standardize_smiles("CC(=O)O.[Na+]") == "CC(=O)O"
 
+    def test_standardize_smiles_removes_stereochemistry_by_default(self):
+        first = standardize_smiles("F[C@H](Cl)Br")
+        second = standardize_smiles("F[C@@H](Cl)Br")
+
+        assert first == second
+        assert "@" not in first
+
+    def test_standardize_smiles_can_preserve_stereochemistry(self):
+        first = standardize_smiles("F[C@H](Cl)Br", remove_stereochemistry=False)
+        second = standardize_smiles("F[C@@H](Cl)Br", remove_stereochemistry=False)
+
+        assert first != second
+        assert "@" in first
+        assert "@" in second
+
     def test_default_worker_count_uses_all_detected_cpus(self, monkeypatch):
         monkeypatch.setattr(_MODULE.os, "cpu_count", lambda: 48)
 
