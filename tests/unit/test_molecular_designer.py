@@ -77,14 +77,27 @@ def test_design_molecules_summary_persists_full_result_in_session_state():
         "c1ccccc1",
     }
     assert shared_state["session_objects"]["current"]["compound"] == "cmp_001"
+    assert shared_state["session_objects"]["current"]["candidate_set"] == "cset_001"
+    assert shared_state["session_objects"]["current"]["generated_compounds"] == "cset_001"
     assert shared_state["session_objects"]["compounds"]["cmp_001"]["smiles"] in {
         "CCO",
         "c1ccccc1",
     }
+    assert shared_state["session_objects"]["compounds"]["cmp_001"]["origin_agent"] == (
+        "molecular_designer"
+    )
+    assert shared_state["session_objects"]["compounds"]["cmp_001"]["generation_engine"] == (
+        "autoencoder"
+    )
     assert {item["smiles"] for item in shared_state["session_objects"]["compounds"].values()} == {
         "CCO",
         "c1ccccc1",
     }
+    candidate_set = shared_state["session_objects"]["candidate_sets"]["cset_001"]
+    assert candidate_set["origin_agent"] == "molecular_designer"
+    assert candidate_set["generation_engine"] == "autoencoder"
+    assert candidate_set["compound_ids"] == ["cmp_001", "cmp_002"]
+    assert summary["registered_candidate_set_id"] == "cset_001"
     assert set(agent.session_state["session_objects"]["compounds"]) == {"cmp_001", "cmp_002"}
 
 

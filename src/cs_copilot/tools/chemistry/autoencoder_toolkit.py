@@ -26,6 +26,7 @@ from cs_copilot.tools.constants import (
 )
 from cs_copilot.tools.io.session_memory import (
     register_compounds_from_candidates,
+    register_generated_candidate_set,
     register_session_object,
     update_state_targets,
 )
@@ -511,6 +512,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
         state_targets = update_state_targets(agent, session_state)
         registered_compound_ids: List[str] = []
+        registered_candidate_set_id: Optional[str] = None
         for state in state_targets:
             state[session_key] = sampled
             candidate_ids = register_compounds_from_candidates(
@@ -520,10 +522,35 @@ class AutoencoderToolkit(BaseChemistryToolkit):
                 source_tool="sample_molecules",
                 label_prefix="Autoencoder sample",
                 related={"session_key": session_key},
+                provenance={
+                    "origin_type": "generated",
+                    "origin_agent": "autoencoder_toolkit",
+                    "generation_engine": "autoencoder",
+                },
                 set_current_first=bool(sampled),
             )
             if state is session_state:
                 registered_compound_ids = candidate_ids
+            candidate_set_id = register_generated_candidate_set(
+                state,
+                candidate_ids,
+                source_agent=getattr(agent, "name", None),
+                source_tool="sample_molecules",
+                origin_agent="autoencoder_toolkit",
+                generation_engine="autoencoder",
+                generation_mode="sample",
+                session_key=session_key,
+                label="Autoencoder sampled candidates",
+                count_attempted=n_samples,
+                metadata={
+                    "latent_std": latent_std,
+                    "temperature": temperature,
+                    "decode_mode": decode_mode,
+                    "filter_valid_unique": filter_valid_unique,
+                },
+            )
+            if state is session_state:
+                registered_candidate_set_id = candidate_set_id
             register_session_object(
                 state,
                 "analysis",
@@ -533,6 +560,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
                     "count_attempted": n_samples,
                     "count_returned": len(sampled),
                     "compound_ids": candidate_ids,
+                    "candidate_set_id": candidate_set_id,
                 },
                 label="Autoencoder sampling run",
                 source_agent=getattr(agent, "name", None),
@@ -556,6 +584,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             "preview": sampled[:20],
             "session_key": session_key,
             "registered_compound_ids": registered_compound_ids,
+            "registered_candidate_set_id": registered_candidate_set_id,
             "note": (
                 f"Full {len(sampled)}-item SMILES list persisted to "
                 f"session_state['{session_key}']. Retrieve it from session state "

@@ -34,6 +34,7 @@ from agno.agent import Agent
 from cs_copilot.storage import S3
 from cs_copilot.tools.io.formatting import smiles_to_png_bytes
 from cs_copilot.tools.io.session_memory import (
+    list_session_objects,
     register_session_object,
     update_session_object,
     update_state_targets,
@@ -729,19 +730,39 @@ class SynPlannerToolkit(BaseChemistryToolkit):
 
         for state in update_state_targets(agent, session_state):
             route_ids = []
-            target_compound_id = register_session_object(
+            target_compound_id = self._existing_session_compound_id(
                 state,
-                "compound",
-                {
-                    "smiles": report_plan.get("smiles"),
-                    "source": report_plan.get("source"),
-                    "related": {"synplanner_query": report_plan.get("query")},
-                },
-                label="SynPlanner target compound",
-                source_agent=getattr(agent, "name", None),
-                source_tool="plan_synthesis",
-                set_current=True,
+                report_plan.get("smiles"),
             )
+            if target_compound_id:
+                existing = self._session_compound_record(state, target_compound_id) or {}
+                related = dict(existing.get("related") or {})
+                related["synplanner_query"] = report_plan.get("query")
+                target_record = update_session_object(
+                    state,
+                    target_compound_id,
+                    {
+                        "source": report_plan.get("source"),
+                        "related": related,
+                    },
+                    set_current=True,
+                    current_role="compound",
+                )
+                target_compound_id = target_record["id"]
+            else:
+                target_compound_id = register_session_object(
+                    state,
+                    "compound",
+                    {
+                        "smiles": report_plan.get("smiles"),
+                        "source": report_plan.get("source"),
+                        "related": {"synplanner_query": report_plan.get("query")},
+                    },
+                    label="SynPlanner target compound",
+                    source_agent=getattr(agent, "name", None),
+                    source_tool="plan_synthesis",
+                    set_current=True,
+                )
             for idx, route in enumerate(report_plan.get("routes", []), start=1):
                 route_id = register_session_object(
                     state,
@@ -769,8 +790,37 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                     )
                 except KeyError:
                     pass
-
         return report_plan
+
+    @staticmethod
+    def _existing_session_compound_id(
+        session_state: Dict[str, Any],
+        smiles: Optional[str],
+    ) -> Optional[str]:
+        if not smiles:
+            return None
+        compounds = list_session_objects(session_state, "compound")
+        generated_matches = [
+            compound
+            for compound in compounds
+            if compound.get("smiles") == smiles and compound.get("origin_type") == "generated"
+        ]
+        if generated_matches:
+            return generated_matches[-1].get("id")
+        for compound in reversed(compounds):
+            if compound.get("smiles") == smiles:
+                return compound.get("id")
+        return None
+
+    @staticmethod
+    def _session_compound_record(
+        session_state: Dict[str, Any],
+        compound_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        for compound in list_session_objects(session_state, "compound"):
+            if compound.get("id") == compound_id:
+                return compound
+        return None
 
     def _build_report_ready_plan(
         self,

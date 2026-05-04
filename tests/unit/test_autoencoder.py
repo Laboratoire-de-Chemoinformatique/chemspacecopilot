@@ -5,6 +5,7 @@ Tests for the autoencoder toolkit, including Hugging Face download functionality
 """
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -196,3 +197,22 @@ class TestAutoencoderDownload:
                 pass  # Ignore errors related to model loading
 
             # Verify download was attempted (may fail if files exist)
+
+
+def test_sample_molecules_registers_autoencoder_candidate_set(monkeypatch):
+    """Direct Autoencoder sampling records generated provenance and candidate set."""
+    monkeypatch.setattr(AutoencoderToolkit, "_ensure_model_exists", lambda self: None)
+    monkeypatch.setattr(AutoencoderToolkit, "_load_model", lambda self: None)
+    toolkit = AutoencoderToolkit(model_path="unused", device="cpu")
+    monkeypatch.setattr(toolkit, "sample_from_latent", lambda **_kwargs: ["CCO", "CCN"])
+    agent = SimpleNamespace(session_state={})
+    session_state = {}
+
+    summary = toolkit.sample_molecules(agent=agent, session_state=session_state)
+
+    memory = session_state["session_objects"]
+    assert summary["registered_candidate_set_id"] == "cset_001"
+    assert memory["candidate_sets"]["cset_001"]["origin_agent"] == "autoencoder_toolkit"
+    assert memory["candidate_sets"]["cset_001"]["generation_engine"] == "autoencoder"
+    assert memory["compounds"]["cmp_001"]["origin_agent"] == "autoencoder_toolkit"
+    assert memory["compounds"]["cmp_001"]["candidate_set_id"] == "cset_001"

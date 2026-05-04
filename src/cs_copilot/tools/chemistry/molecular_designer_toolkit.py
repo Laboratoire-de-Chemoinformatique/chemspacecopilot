@@ -23,6 +23,7 @@ from rdkit.Chem import QED, Descriptors, rdFingerprintGenerator
 
 from cs_copilot.tools.io.session_memory import (
     register_compounds_from_candidates,
+    register_generated_candidate_set,
     register_session_object,
     update_state_targets,
 )
@@ -430,6 +431,7 @@ class MolecularDesignerToolkit(Toolkit):
         session_key: str = "designed_molecules",
         agent: Optional[Agent] = None,
         session_state: Optional[Dict[str, Any]] = None,
+        _source_tool: str = "design_molecules",
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """
         Design small-molecule candidates using a selected generative engine.
@@ -474,13 +476,14 @@ class MolecularDesignerToolkit(Toolkit):
 
         state_targets = update_state_targets(agent, session_state)
         registered_compound_ids: List[str] = []
+        registered_candidate_set_id: Optional[str] = None
         for state in state_targets:
             state[session_key] = candidate_dicts
             candidate_ids = register_compounds_from_candidates(
                 state,
                 candidate_dicts,
                 source_agent=getattr(agent, "name", None),
-                source_tool="design_molecules",
+                source_tool=_source_tool,
                 label_prefix=f"{result.engine} design candidate",
                 related={
                     "session_key": session_key,
@@ -488,10 +491,32 @@ class MolecularDesignerToolkit(Toolkit):
                     "generation_mode": generation_mode,
                     "seed_smiles": seed_smiles,
                 },
+                provenance={
+                    "origin_type": "generated",
+                    "origin_agent": "molecular_designer",
+                    "generation_engine": result.engine,
+                },
                 set_current_first=bool(candidate_dicts),
             )
             if state is session_state:
                 registered_compound_ids = candidate_ids
+            candidate_set_id = register_generated_candidate_set(
+                state,
+                candidate_ids,
+                source_agent=getattr(agent, "name", None),
+                source_tool=_source_tool,
+                origin_agent="molecular_designer",
+                generation_engine=result.engine,
+                generation_mode=generation_mode,
+                session_key=session_key,
+                label=f"Molecular Designer candidates ({result.engine})",
+                seed_smiles=seed_smiles,
+                goal=goal,
+                count_attempted=len(result.candidates),
+                metadata=result.metadata,
+            )
+            if state is session_state:
+                registered_candidate_set_id = candidate_set_id
             register_session_object(
                 state,
                 "analysis",
@@ -504,10 +529,11 @@ class MolecularDesignerToolkit(Toolkit):
                     "count_attempted": len(result.candidates),
                     "count_returned": len(candidate_dicts),
                     "compound_ids": candidate_ids,
+                    "candidate_set_id": candidate_set_id,
                 },
                 label=f"Molecular design run ({result.engine})",
                 source_agent=getattr(agent, "name", None),
-                source_tool="design_molecules",
+                source_tool=_source_tool,
                 set_current=True,
                 current_role="analysis",
             )
@@ -529,6 +555,7 @@ class MolecularDesignerToolkit(Toolkit):
             "preview": candidate_dicts[:20],
             "session_key": session_key,
             "registered_compound_ids": registered_compound_ids,
+            "registered_candidate_set_id": registered_candidate_set_id,
             "metadata": result.metadata,
             "note": (
                 f"Full {len(candidate_dicts)}-item molecular design result persisted to "
@@ -583,6 +610,7 @@ class MolecularDesignerToolkit(Toolkit):
             session_key=session_key,
             agent=agent,
             session_state=session_state,
+            _source_tool="generate_analogs",
         )
 
     def interpolate_molecules(
@@ -625,6 +653,7 @@ class MolecularDesignerToolkit(Toolkit):
             session_key=session_key,
             agent=agent,
             session_state=session_state,
+            _source_tool="interpolate_molecules",
         )
 
     def validate_design_candidates(

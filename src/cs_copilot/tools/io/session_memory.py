@@ -18,6 +18,7 @@ MAX_SUMMARY_ITEMS_PER_TYPE = 6
 
 _OBJECT_TYPES: Dict[str, Tuple[str, str]] = {
     "compound": ("compounds", "cmp"),
+    "candidate_set": ("candidate_sets", "cset"),
     "map": ("maps", "map"),
     "zone": ("zones", "zone"),
     "node": ("nodes", "node"),
@@ -35,7 +36,7 @@ def _now_iso() -> str:
 
 
 def _normalize_object_type(object_type: str) -> str:
-    normalized = str(object_type).strip().lower()
+    normalized = str(object_type).strip().lower().replace(" ", "_")
     if normalized in _OBJECT_TYPES:
         return normalized
     if normalized in _PLURAL_TO_SINGULAR:
@@ -291,6 +292,7 @@ def register_compounds_from_candidates(
     source_tool: str,
     label_prefix: str,
     related: Optional[Dict[str, Any]] = None,
+    provenance: Optional[Dict[str, Any]] = None,
     set_current_first: bool = True,
     limit: int = MAX_REGISTERED_COMPOUNDS_PER_RESULT,
 ) -> List[str]:
@@ -320,6 +322,7 @@ def register_compounds_from_candidates(
             "activity": candidate.get("activity"),
             "related": related or {},
         }
+        payload.update(provenance or {})
         object_id = register_session_object(
             session_state,
             "compound",
@@ -331,6 +334,106 @@ def register_compounds_from_candidates(
         )
         ids.append(object_id)
     return ids
+
+
+def register_generated_candidate_set(
+    session_state: Dict[str, Any],
+    compound_ids: Sequence[str],
+    *,
+    source_agent: Optional[str],
+    source_tool: str,
+    origin_agent: str,
+    generation_engine: str,
+    session_key: str,
+    label: str,
+    generation_mode: Optional[str] = None,
+    seed_smiles: Optional[str] = None,
+    seed_compound_id: Optional[str] = None,
+    goal: Optional[str] = None,
+    count_attempted: Optional[int] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Register an ordered generated candidate set and link compounds back to it."""
+    ordered_ids = [compound_id for compound_id in compound_ids if compound_id]
+    candidate_set_id = register_session_object(
+        session_state,
+        "candidate_set",
+        {
+            "candidate_set_type": "generated",
+            "origin_type": "generated",
+            "origin_agent": origin_agent,
+            "generation_engine": generation_engine,
+            "generation_mode": generation_mode,
+            "source_tool": source_tool,
+            "session_key": session_key,
+            "compound_ids": ordered_ids,
+            "seed_smiles": seed_smiles,
+            "seed_compound_id": seed_compound_id,
+            "goal": goal,
+            "ranked": True,
+            "count_attempted": count_attempted,
+            "count_returned": len(ordered_ids),
+            "metadata": metadata or {},
+        },
+        label=label,
+        source_agent=source_agent,
+        source_tool=source_tool,
+        set_current=True,
+        current_role="candidate_set",
+    )
+    memory = ensure_session_objects(session_state)
+    memory.setdefault("current", {})["generated_compounds"] = candidate_set_id
+
+    for rank, compound_id in enumerate(ordered_ids, start=1):
+        record = _find_object(memory, compound_id)
+        if record is None:
+            continue
+        related = dict(record.get("related") or {})
+        related["candidate_set_id"] = candidate_set_id
+        updates = {
+            "origin_type": "generated",
+            "origin_agent": origin_agent,
+            "generation_engine": generation_engine,
+            "candidate_set_id": candidate_set_id,
+            "candidate_set_rank": rank,
+            "related": related,
+        }
+        if seed_smiles is not None:
+            updates["seed_smiles"] = seed_smiles
+        if seed_compound_id is not None:
+            updates["seed_compound_id"] = seed_compound_id
+        update_session_object(session_state, compound_id, updates)
+
+    refresh_session_memory_summary(session_state)
+    return candidate_set_id
+
+
+def resolve_candidate_set(
+    session_state: Dict[str, Any],
+    reference: str = "top candidates",
+    *,
+    top_n: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Resolve phrases like 'top candidates' to the latest generated candidate set."""
+    memory = ensure_session_objects(session_state)
+    reference_text = str(reference or "").strip()
+    reference_lower = reference_text.lower()
+    parsed_top_n = top_n or _parse_top_n(reference_lower)
+
+    candidate_set = _resolve_candidate_set_record(memory, reference_lower)
+    if candidate_set is None:
+        return {
+            "status": "not_found",
+            "message": "No generated candidate set is available in session memory.",
+        }
+
+    compounds = _candidate_set_compounds(memory, candidate_set, top_n=parsed_top_n)
+    return {
+        "status": "resolved",
+        "candidate_set": candidate_set,
+        "compounds": compounds,
+        "count": len(compounds),
+    }
 
 
 def update_state_targets(
@@ -397,7 +500,18 @@ def _resolve_current(
         object_id = current.get(normalized)
         return _find_object(memory, object_id) if object_id else None
 
-    for role in ("compound", "map", "zone", "node", "dataset", "analysis", "route", "report"):
+    for role in (
+        "compound",
+        "candidate_set",
+        "generated_compounds",
+        "map",
+        "zone",
+        "node",
+        "dataset",
+        "analysis",
+        "route",
+        "report",
+    ):
         object_id = current.get(role)
         if object_id:
             record = _find_object(memory, object_id)
@@ -424,7 +538,10 @@ def _resolve_numbered_reference(
     reference_lower: str,
     candidates: Sequence[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    match = re.search(r"\b(?:compound|map|zone|node|dataset|analysis|route|report)\s+(\d+)\b", reference_lower)
+    match = re.search(
+        r"\b(?:compound|candidate set|candidate|map|zone|node|dataset|analysis|route|report)\s+(\d+)\b",
+        reference_lower,
+    )
     if not match:
         return None
     index = int(match.group(1))
@@ -433,12 +550,118 @@ def _resolve_numbered_reference(
     return candidates[index - 1]
 
 
+def _parse_top_n(reference_lower: str) -> Optional[int]:
+    match = re.search(r"\btop\s+(\d+)\b", reference_lower)
+    if not match:
+        return None
+    value = int(match.group(1))
+    return value if value > 0 else None
+
+
+def _resolve_candidate_set_record(
+    memory: Dict[str, Any],
+    reference_lower: str,
+) -> Optional[Dict[str, Any]]:
+    requested_engine = None
+    if "llm" in reference_lower:
+        requested_engine = "llm"
+    elif "autoencoder" in reference_lower:
+        requested_engine = "autoencoder"
+
+    current = memory.get("current", {})
+    for role in ("candidate_set", "generated_compounds"):
+        object_id = current.get(role)
+        record = _find_object(memory, object_id)
+        if (
+            record is not None
+            and record.get("object_type") == "candidate_set"
+            and (
+                requested_engine is None
+                or str(record.get("generation_engine", "")).lower() == requested_engine
+            )
+        ):
+            return record
+
+    direct = _find_object(memory, reference_lower)
+    if direct is not None and direct.get("object_type") == "candidate_set":
+        return direct
+
+    generated_words = {
+        "top candidates",
+        "candidates",
+        "generated compounds",
+        "generated molecules",
+        "analogs",
+        "analogues",
+        "latest designs",
+        "design candidates",
+        "molecular designer candidates",
+        "llm candidates",
+        "autoencoder candidates",
+    }
+    if any(word in reference_lower for word in generated_words):
+        candidate_sets = [
+            record
+            for record in memory.get("candidate_sets", {}).values()
+            if requested_engine is None
+            or str(record.get("generation_engine", "")).lower() == requested_engine
+        ]
+        return candidate_sets[-1] if candidate_sets else None
+
+    matches = []
+    for record in memory.get("candidate_sets", {}).values():
+        haystacks = [
+            str(record.get("id", "")),
+            str(record.get("label", "")),
+            str(record.get("generation_engine", "")),
+            str(record.get("generation_mode", "")),
+            str(record.get("source_tool", "")),
+        ]
+        if any(reference_lower == item.lower() for item in haystacks if item):
+            matches.append(record)
+            continue
+        if any(reference_lower in item.lower() for item in haystacks if item):
+            matches.append(record)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _candidate_set_compounds(
+    memory: Dict[str, Any],
+    candidate_set: Dict[str, Any],
+    *,
+    top_n: Optional[int],
+) -> List[Dict[str, Any]]:
+    compound_ids = list(candidate_set.get("compound_ids") or [])
+    if top_n is not None:
+        compound_ids = compound_ids[:top_n]
+
+    compounds = []
+    for rank, compound_id in enumerate(compound_ids, start=1):
+        record = _find_object(memory, compound_id)
+        if record is None:
+            continue
+        compact = _compact_record_for_summary(record)
+        compact.update(
+            {
+                "rank": record.get("candidate_set_rank") or rank,
+                "score": record.get("score"),
+                "source_tool": record.get("source_tool"),
+                "origin_agent": record.get("origin_agent"),
+                "generation_engine": record.get("generation_engine"),
+                "candidate_set_id": candidate_set.get("id"),
+            }
+        )
+        compounds.append(compact)
+    return compounds
+
+
 def _compact_record_for_summary(record: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": record.get("id"),
         "object_type": record.get("object_type"),
         "label": record.get("label"),
         "smiles": record.get("smiles"),
+        "candidate_set_id": record.get("candidate_set_id"),
         "node_index": record.get("node_index"),
         "map_id": record.get("map_id"),
     }
@@ -448,6 +671,14 @@ def _compact_record_line(record: Dict[str, Any], object_type: str) -> str:
     bits = [str(record.get("id")), str(record.get("label", ""))]
     if object_type == "compound" and record.get("smiles"):
         bits.append(str(record["smiles"]))
+        if record.get("origin_type") == "generated":
+            bits.append(
+                f"generated_by={record.get('origin_agent')}/{record.get('generation_engine')}"
+            )
+    if object_type == "candidate_set":
+        bits.append(f"engine={record.get('generation_engine')}")
+        bits.append(f"mode={record.get('generation_mode')}")
+        bits.append(f"compounds={len(record.get('compound_ids') or [])}")
     if object_type == "map" and record.get("dataset_path"):
         bits.append(f"dataset={record['dataset_path']}")
     if object_type == "zone" and record.get("node_ids"):
@@ -468,6 +699,7 @@ class SessionMemoryToolkit(Toolkit):
         self.register(self.get_session_object)
         self.register(self.select_session_object)
         self.register(self.resolve_session_reference)
+        self.register(self.resolve_candidate_set)
         self.register(self.summarize_session_memory)
 
     def list_session_objects(
@@ -479,8 +711,8 @@ class SessionMemoryToolkit(Toolkit):
         List important objects remembered in this session.
 
         Args:
-            object_type: Optional type filter such as compound, map, zone, node,
-                dataset, analysis, route, or report.
+            object_type: Optional type filter such as compound, candidate_set, map,
+                zone, node, dataset, analysis, route, or report.
             session_state: Shared session state injected by Agno.
         """
         if session_state is None:
@@ -546,12 +778,30 @@ class SessionMemoryToolkit(Toolkit):
             return {"status": "not_found", "message": "No session state is available."}
         return resolve_session_reference(session_state, reference, object_type)
 
+    def resolve_candidate_set(
+        self,
+        reference: str = "top candidates",
+        top_n: Optional[int] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Resolve generated candidate references such as 'top candidates'.
+
+        Args:
+            reference: User reference text, e.g. 'top 3 candidates' or 'LLM candidates'.
+            top_n: Optional limit on returned ranked compounds.
+            session_state: Shared session state injected by Agno.
+        """
+        if session_state is None:
+            return {"status": "not_found", "message": "No session state is available."}
+        return resolve_candidate_set(session_state, reference, top_n=top_n)
+
     def summarize_session_memory(
         self,
         session_state: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
-        Summarize important compounds, maps, zones, nodes, analyses, and routes.
+        Summarize important compounds, candidate sets, maps, zones, nodes, analyses, and routes.
 
         Args:
             session_state: Shared session state injected by Agno.
