@@ -22,6 +22,7 @@ from rdkit import Chem, DataStructs
 from rdkit.Chem import QED, Descriptors, rdFingerprintGenerator
 
 from cs_copilot.tools.io.session_memory import (
+    compact_candidate_preview,
     register_compounds_from_candidates,
     register_generated_candidate_set,
     register_session_object,
@@ -448,8 +449,9 @@ class MolecularDesignerToolkit(Toolkit):
             decode_mode: Decode mode for compatible engines.
             noise_scale: Latent perturbation scale for analog generation.
             include_invalid: Whether to keep invalid candidates in returned/stored results.
-            return_format: "summary" persists full results in session state; "list" returns all inline.
-            session_key: Session-state key for full results when return_format="summary".
+            return_format: "summary" saves full results as a candidate-set artifact and
+                stores a compact session-state pointer; "list" returns all inline.
+            session_key: Session-state key for the artifact pointer in summary mode.
             agent: Agent instance auto-injected by Agno.
             session_state: Shared session state auto-injected by Agno.
 
@@ -478,8 +480,11 @@ class MolecularDesignerToolkit(Toolkit):
         state_targets = update_state_targets(agent, session_state)
         registered_compound_ids: List[str] = []
         registered_candidate_set_id: Optional[str] = None
+        registered_artifact_path: Optional[str] = None
         for state in state_targets:
-            state[session_key] = candidate_dicts
+            use_state_for_summary = state is session_state or (
+                session_state is None and not registered_compound_ids
+            )
             candidate_ids = register_compounds_from_candidates(
                 state,
                 candidate_dicts,
@@ -499,7 +504,7 @@ class MolecularDesignerToolkit(Toolkit):
                 },
                 set_current_first=bool(candidate_dicts),
             )
-            if state is session_state:
+            if use_state_for_summary:
                 registered_compound_ids = candidate_ids
             candidate_set_id = register_generated_candidate_set(
                 state,
@@ -515,9 +520,13 @@ class MolecularDesignerToolkit(Toolkit):
                 goal=goal,
                 count_attempted=len(result.candidates),
                 metadata=result.metadata,
+                candidates=candidate_dicts,
             )
-            if state is session_state:
+            pointer = state.get(session_key)
+            artifact_path = pointer.get("artifact_path") if isinstance(pointer, dict) else None
+            if use_state_for_summary:
                 registered_candidate_set_id = candidate_set_id
+                registered_artifact_path = artifact_path
             register_session_object(
                 state,
                 "analysis",
@@ -531,6 +540,7 @@ class MolecularDesignerToolkit(Toolkit):
                     "count_returned": len(candidate_dicts),
                     "compound_ids": candidate_ids,
                     "candidate_set_id": candidate_set_id,
+                    "artifact_path": artifact_path,
                 },
                 label=f"Molecular design run ({result.engine})",
                 source_agent=getattr(agent, "name", None),
@@ -553,14 +563,16 @@ class MolecularDesignerToolkit(Toolkit):
             "count_attempted": len(result.candidates),
             "count_returned": len(candidate_dicts),
             "include_invalid": include_invalid,
-            "preview": candidate_dicts[:20],
+            "preview": compact_candidate_preview(candidate_dicts),
             "session_key": session_key,
             "registered_compound_ids": registered_compound_ids,
             "registered_candidate_set_id": registered_candidate_set_id,
+            "artifact_path": registered_artifact_path,
+            "artifact_format": "json" if registered_artifact_path else None,
             "metadata": result.metadata,
             "note": (
-                f"Full {len(candidate_dicts)}-item molecular design result persisted to "
-                f"session_state['{session_key}']; use that key for downstream "
+                f"Full {len(candidate_dicts)}-item molecular design result saved as an "
+                "artifact. Use registered_candidate_set_id or artifact_path for downstream "
                 "ranking, filtering, GTM projection, or reporting."
             ),
         }
@@ -741,7 +753,7 @@ class MolecularDesignerToolkit(Toolkit):
             generation_mode: Generation mode label, such as "analog" or "neighborhood".
             seed_smiles: Optional seed molecule used for generation or ranking.
             goal: Design objective or rationale for this candidate set.
-            session_key: Session-state key where the candidate list should be stored.
+            session_key: Session-state key where the candidate artifact pointer should be stored.
             include_invalid: Whether to keep invalid candidates in session_key output.
             agent: Agent instance auto-injected by Agno.
             session_state: Shared session state auto-injected by Agno.
@@ -771,13 +783,13 @@ class MolecularDesignerToolkit(Toolkit):
                 "generation_mode": generation_mode,
                 "count_attempted": len(raw_candidates),
                 "count_returned": len(candidate_dicts),
-                "preview": candidate_dicts[:20],
+                "preview": compact_candidate_preview(candidate_dicts),
             }
 
         registered_compound_ids: List[str] = []
         registered_candidate_set_id: Optional[str] = None
+        registered_artifact_path: Optional[str] = None
         for state in state_targets:
-            state[session_key] = candidate_dicts
             candidate_ids = register_compounds_from_candidates(
                 state,
                 candidate_dicts,
@@ -816,7 +828,10 @@ class MolecularDesignerToolkit(Toolkit):
                         "registered_from": "validated_or_ranked_candidates",
                         "include_invalid": include_invalid,
                     },
+                    candidates=candidate_dicts,
                 )
+            pointer = state.get(session_key)
+            artifact_path = pointer.get("artifact_path") if isinstance(pointer, dict) else None
             register_session_object(
                 state,
                 "analysis",
@@ -831,6 +846,7 @@ class MolecularDesignerToolkit(Toolkit):
                     "count_registered": len(candidate_ids),
                     "compound_ids": candidate_ids,
                     "candidate_set_id": candidate_set_id,
+                    "artifact_path": artifact_path,
                 },
                 label=f"Molecular design registration ({engine_key})",
                 source_agent=getattr(agent, "name", None),
@@ -842,6 +858,7 @@ class MolecularDesignerToolkit(Toolkit):
             if state is session_state or (session_state is None and not registered_compound_ids):
                 registered_compound_ids = candidate_ids
                 registered_candidate_set_id = candidate_set_id
+                registered_artifact_path = artifact_path
 
         return {
             "status": "registered" if registered_candidate_set_id else "no_valid_candidates",
@@ -850,13 +867,15 @@ class MolecularDesignerToolkit(Toolkit):
             "count_attempted": len(raw_candidates),
             "count_returned": len(candidate_dicts),
             "count_registered": len(registered_compound_ids),
-            "preview": candidate_dicts[:20],
+            "preview": compact_candidate_preview(candidate_dicts),
             "session_key": session_key,
             "registered_compound_ids": registered_compound_ids,
             "registered_candidate_set_id": registered_candidate_set_id,
+            "artifact_path": registered_artifact_path,
+            "artifact_format": "json" if registered_artifact_path else None,
             "note": (
                 f"Registered {len(registered_compound_ids)} molecular design candidates "
-                f"under session_state['{session_key}']."
+                "as an artifact-backed candidate set."
             ),
         }
 

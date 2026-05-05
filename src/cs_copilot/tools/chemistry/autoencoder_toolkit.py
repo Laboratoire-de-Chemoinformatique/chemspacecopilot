@@ -25,6 +25,7 @@ from cs_copilot.tools.constants import (
     HUGGINGFACE_AUTOENCODER_REPO,
 )
 from cs_copilot.tools.io.session_memory import (
+    compact_candidate_preview,
     register_compounds_from_candidates,
     register_generated_candidate_set,
     register_session_object,
@@ -484,13 +485,13 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             max_length: Maximum length of generated SMILES
             filter_valid_unique: If True (default), drop non-parseable SMILES
                 and deduplicate by canonical form before returning.
-            return_format: "summary" (default) persists the full list into
-                agent.session_state[session_key] and returns a compact dict with
-                count, preview (first 20), and the session key. "list" returns
+            return_format: "summary" (default) saves the full list as a
+                candidate-set artifact and returns a compact dict with count,
+                preview, session key, and artifact path. "list" returns
                 the raw List[str] directly (legacy behavior — may inflate LLM
                 context with large n_samples).
-            session_key: Key under which the full list is stored in
-                agent.session_state when return_format="summary".
+            session_key: Key under which the artifact pointer is stored in
+                session state when return_format="summary".
             agent: Agent instance (auto-injected by agno). Required for
                 "summary" format; if None, gracefully falls back to "list".
             session_state: Shared session state auto-injected by Agno.
@@ -513,8 +514,11 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         state_targets = update_state_targets(agent, session_state)
         registered_compound_ids: List[str] = []
         registered_candidate_set_id: Optional[str] = None
+        registered_artifact_path: Optional[str] = None
         for state in state_targets:
-            state[session_key] = sampled
+            use_state_for_summary = state is session_state or (
+                session_state is None and not registered_compound_ids
+            )
             candidate_ids = register_compounds_from_candidates(
                 state,
                 sampled,
@@ -529,7 +533,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
                 },
                 set_current_first=bool(sampled),
             )
-            if state is session_state:
+            if use_state_for_summary:
                 registered_compound_ids = candidate_ids
             candidate_set_id = register_generated_candidate_set(
                 state,
@@ -548,9 +552,13 @@ class AutoencoderToolkit(BaseChemistryToolkit):
                     "decode_mode": decode_mode,
                     "filter_valid_unique": filter_valid_unique,
                 },
+                candidates=sampled,
             )
-            if state is session_state:
+            pointer = state.get(session_key)
+            artifact_path = pointer.get("artifact_path") if isinstance(pointer, dict) else None
+            if use_state_for_summary:
                 registered_candidate_set_id = candidate_set_id
+                registered_artifact_path = artifact_path
             register_session_object(
                 state,
                 "analysis",
@@ -561,6 +569,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
                     "count_returned": len(sampled),
                     "compound_ids": candidate_ids,
                     "candidate_set_id": candidate_set_id,
+                    "artifact_path": artifact_path,
                 },
                 label="Autoencoder sampling run",
                 source_agent=getattr(agent, "name", None),
@@ -581,15 +590,16 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             "count_attempted": n_samples,
             "count_returned": len(sampled),
             "filter_valid_unique": filter_valid_unique,
-            "preview": sampled[:20],
+            "preview": compact_candidate_preview(sampled),
             "session_key": session_key,
             "registered_compound_ids": registered_compound_ids,
             "registered_candidate_set_id": registered_candidate_set_id,
+            "artifact_path": registered_artifact_path,
+            "artifact_format": "json" if registered_artifact_path else None,
             "note": (
-                f"Full {len(sampled)}-item SMILES list persisted to "
-                f"session_state['{session_key}']. Retrieve it from session state "
-                f"for downstream analysis (property calculation, clustering, GTM projection, etc.) "
-                f"instead of asking for the whole list inline."
+                f"Full {len(sampled)}-item SMILES list saved as an artifact. Use "
+                "registered_candidate_set_id or artifact_path for downstream analysis "
+                "(property calculation, clustering, GTM projection, etc.)."
             ),
         }
 
