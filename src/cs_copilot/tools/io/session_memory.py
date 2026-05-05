@@ -4,18 +4,25 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 from math import isfinite
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 from agno.tools.toolkit import Toolkit
 
+from cs_copilot.storage import S3
+
 SESSION_OBJECTS_KEY = "session_objects"
 SESSION_MEMORY_SUMMARY_KEY = "session_memory_summary"
 MAX_REGISTERED_COMPOUNDS_PER_RESULT = 50
 MAX_SUMMARY_ITEMS_PER_TYPE = 6
+MAX_CANDIDATE_PREVIEW_ITEMS = 5
+CANDIDATE_ARTIFACT_DIR = "candidate_sets"
+CANDIDATE_ARTIFACT_FORMAT = "json"
 LOADABLE_CSV_SUFFIXES = (".csv", ".csv.gz", ".tsv", ".tab", ".txt")
 LOADABLE_SESSION_PATH_PRIORITY = {
     "clean_dataset_path": 0,
@@ -90,6 +97,128 @@ def _json_safe(value: Any, *, depth: int = 0, max_items: int = 20) -> Any:
         except Exception:
             pass
     return str(value)
+
+
+def _short_text(value: Any, *, max_chars: int = 160) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if len(text) <= max_chars:
+        return text
+    return f"{text[: max_chars - 3]}..."
+
+
+def _candidate_smiles(candidate: Any) -> Optional[str]:
+    if isinstance(candidate, str):
+        return candidate
+    if isinstance(candidate, dict):
+        smiles = (
+            candidate.get("smiles") or candidate.get("canonical_smiles") or candidate.get("smi")
+        )
+        return str(smiles) if smiles else None
+    return None
+
+
+def _candidate_score(candidate: Any) -> Optional[Any]:
+    if not isinstance(candidate, dict):
+        return None
+    for key in ("score", "ranking_score"):
+        if candidate.get(key) is not None:
+            return candidate[key]
+    properties = candidate.get("properties") or {}
+    if isinstance(properties, dict):
+        for key in ("seed_tanimoto", "qed"):
+            if properties.get(key) is not None:
+                return properties[key]
+    return None
+
+
+def compact_candidate_preview(
+    candidates: Sequence[Any],
+    *,
+    limit: int = MAX_CANDIDATE_PREVIEW_ITEMS,
+) -> List[Dict[str, Any]]:
+    """Return a small LLM-visible candidate preview."""
+    preview: List[Dict[str, Any]] = []
+    for candidate in list(candidates or [])[:limit]:
+        item: Dict[str, Any] = {}
+        smiles = _candidate_smiles(candidate)
+        if smiles:
+            item["smiles"] = smiles
+        if isinstance(candidate, dict):
+            if candidate.get("valid") is not None:
+                item["valid"] = bool(candidate["valid"])
+            if candidate.get("error"):
+                item["error"] = str(candidate["error"])
+        score = _candidate_score(candidate)
+        if score is not None:
+            item["score"] = score
+        if item:
+            preview.append(_json_safe(item))
+    return preview
+
+
+def _compact_related(related: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not related:
+        return {}
+    allowed = (
+        "session_key",
+        "candidate_set_id",
+        "seed_smiles",
+        "seed_compound_id",
+        "generation_mode",
+    )
+    return {key: related[key] for key in allowed if related.get(key) is not None}
+
+
+def _candidate_artifact_rel_path(candidate_set_id: str) -> str:
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(candidate_set_id))
+    return f"{CANDIDATE_ARTIFACT_DIR}/{safe_id}.{CANDIDATE_ARTIFACT_FORMAT}"
+
+
+def save_candidate_set_artifact(
+    candidate_set_id: str,
+    candidates: Sequence[Any],
+    *,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Persist full candidate payload to session-scoped storage and return its path."""
+    candidate_list = list(candidates or [])
+    max_items = max(len(candidate_list), 1)
+    payload = {
+        "version": 1,
+        "candidate_set_id": candidate_set_id,
+        "created_at": _now_iso(),
+        "count": len(candidate_list),
+        "metadata": _json_safe(metadata or {}, max_items=1000),
+        "candidates": _json_safe(candidate_list, max_items=max(max_items, 1000)),
+    }
+    rel_path = _candidate_artifact_rel_path(candidate_set_id)
+    with S3.open(rel_path, "w") as handle:
+        json.dump(payload, handle, sort_keys=True)
+    return S3.path(rel_path)
+
+
+def load_candidate_artifact(artifact_path: str) -> Dict[str, Any]:
+    """Load a generated candidate artifact from local/S3 storage."""
+    if (
+        isinstance(artifact_path, str)
+        and not artifact_path.startswith("s3://")
+        and (artifact_path.startswith("data/") or Path(artifact_path).is_absolute())
+    ):
+        with Path(artifact_path).open("r") as handle:
+            payload = json.load(handle)
+    else:
+        with S3.open(artifact_path, "r") as handle:
+            payload = json.load(handle)
+    if isinstance(payload, list):
+        return {"version": 1, "count": len(payload), "candidates": payload}
+    if not isinstance(payload, dict):
+        raise TypeError(f"Candidate artifact must contain a JSON object: {artifact_path}")
+    payload.setdefault("count", len(payload.get("candidates") or []))
+    return payload
 
 
 def ensure_session_objects(session_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -496,15 +625,14 @@ def register_compounds_from_candidates(
         if not smiles:
             continue
 
+        score = candidate.get("score")
+        if score is None:
+            score = candidate.get("ranking_score")
         payload = {
             "smiles": smiles,
-            "original_smiles": candidate.get("original_smiles"),
             "rank": idx,
-            "score": candidate.get("score"),
-            "properties": candidate.get("properties", {}),
-            "rationale": candidate.get("rationale"),
-            "activity": candidate.get("activity"),
-            "related": related or {},
+            "score": score,
+            "related": _compact_related(related),
         }
         payload.update(provenance or {})
         object_id = register_session_object(
@@ -536,9 +664,13 @@ def register_generated_candidate_set(
     goal: Optional[str] = None,
     count_attempted: Optional[int] = None,
     metadata: Optional[Dict[str, Any]] = None,
+    candidates: Optional[Sequence[Any]] = None,
 ) -> str:
     """Register an ordered generated candidate set and link compounds back to it."""
     ordered_ids = [compound_id for compound_id in compound_ids if compound_id]
+    artifact_path = None
+    artifact_count = None
+    preview: List[Dict[str, Any]] = []
     candidate_set_id = register_session_object(
         session_state,
         "candidate_set",
@@ -553,11 +685,11 @@ def register_generated_candidate_set(
             "compound_ids": ordered_ids,
             "seed_smiles": seed_smiles,
             "seed_compound_id": seed_compound_id,
-            "goal": goal,
+            "goal": _short_text(goal),
             "ranked": True,
             "count_attempted": count_attempted,
             "count_returned": len(ordered_ids),
-            "metadata": metadata or {},
+            "metadata_keys": sorted(str(key) for key in (metadata or {}).keys()),
         },
         label=label,
         source_agent=source_agent,
@@ -567,6 +699,48 @@ def register_generated_candidate_set(
     )
     memory = ensure_session_objects(session_state)
     memory.setdefault("current", {})["generated_compounds"] = candidate_set_id
+
+    if candidates is not None:
+        candidate_list = list(candidates or [])
+        artifact_metadata = {
+            "origin_agent": origin_agent,
+            "generation_engine": generation_engine,
+            "generation_mode": generation_mode,
+            "source_tool": source_tool,
+            "session_key": session_key,
+            "label": label,
+            "seed_smiles": seed_smiles,
+            "seed_compound_id": seed_compound_id,
+            "goal": goal,
+            "count_attempted": count_attempted,
+            "metadata": metadata or {},
+        }
+        artifact_path = save_candidate_set_artifact(
+            candidate_set_id,
+            candidate_list,
+            metadata=artifact_metadata,
+        )
+        artifact_count = len(candidate_list)
+        preview = compact_candidate_preview(candidate_list)
+        session_state[session_key] = {
+            "candidate_set_id": candidate_set_id,
+            "artifact_path": artifact_path,
+            "artifact_rel_path": _candidate_artifact_rel_path(candidate_set_id),
+            "artifact_format": CANDIDATE_ARTIFACT_FORMAT,
+            "count": artifact_count,
+            "preview": preview,
+        }
+        update_session_object(
+            session_state,
+            candidate_set_id,
+            {
+                "artifact_path": artifact_path,
+                "artifact_rel_path": _candidate_artifact_rel_path(candidate_set_id),
+                "artifact_format": CANDIDATE_ARTIFACT_FORMAT,
+                "artifact_count": artifact_count,
+                "preview": preview,
+            },
+        )
 
     for rank, compound_id in enumerate(ordered_ids, start=1):
         record = _find_object(memory, compound_id)
@@ -618,6 +792,62 @@ def resolve_candidate_set(
         "compounds": compounds,
         "count": len(compounds),
     }
+
+
+def load_candidate_set_artifact(
+    session_state: Dict[str, Any],
+    reference: str = "top candidates",
+    *,
+    include_candidates: bool = True,
+) -> Dict[str, Any]:
+    """Load a generated candidate-set artifact by ID, session key, path, or reference."""
+    if not isinstance(session_state, dict):
+        return {"status": "not_found", "message": "No session state is available."}
+
+    reference_text = str(reference or "").strip()
+    candidate_set = None
+    artifact_path = reference_text if reference_text.endswith(".json") else None
+
+    if not artifact_path and reference_text in session_state:
+        pointer = session_state.get(reference_text)
+        if isinstance(pointer, dict):
+            artifact_path = pointer.get("artifact_rel_path") or pointer.get("artifact_path")
+            candidate_set_id = pointer.get("candidate_set_id")
+            if candidate_set_id:
+                candidate_set = get_session_object(session_state, str(candidate_set_id))
+
+    if not artifact_path:
+        resolved = resolve_candidate_set(session_state, reference_text)
+        if resolved.get("status") != "resolved":
+            return resolved
+        candidate_set = resolved.get("candidate_set")
+        if isinstance(candidate_set, dict):
+            artifact_path = candidate_set.get("artifact_rel_path") or candidate_set.get(
+                "artifact_path"
+            )
+
+    if not artifact_path:
+        return {
+            "status": "not_found",
+            "message": f"No candidate artifact path found for '{reference_text}'.",
+        }
+
+    payload = load_candidate_artifact(artifact_path)
+    candidates = payload.get("candidates") or []
+    result = {
+        "status": "loaded",
+        "artifact_path": payload.get("artifact_path")
+        or (
+            candidate_set.get("artifact_path") if isinstance(candidate_set, dict) else artifact_path
+        ),
+        "count": int(payload.get("count") or len(candidates)),
+        "preview": compact_candidate_preview(candidates),
+    }
+    if isinstance(candidate_set, dict):
+        result["candidate_set"] = _compact_record_for_summary(candidate_set)
+    if include_candidates:
+        result["candidates"] = candidates
+    return result
 
 
 def update_state_targets(
@@ -867,6 +1097,10 @@ def _compact_record_line(record: Dict[str, Any], object_type: str) -> str:
         bits.append(f"engine={record.get('generation_engine')}")
         bits.append(f"mode={record.get('generation_mode')}")
         bits.append(f"compounds={len(record.get('compound_ids') or [])}")
+        if record.get("session_key"):
+            bits.append(f"session_key={record['session_key']}")
+        if record.get("artifact_path"):
+            bits.append("artifact=json")
     if object_type == "map" and record.get("dataset_path"):
         bits.append(f"dataset={record['dataset_path']}")
     if object_type == "dataset":
@@ -898,6 +1132,7 @@ class SessionMemoryToolkit(Toolkit):
         self.register(self.select_session_object)
         self.register(self.resolve_session_reference)
         self.register(self.resolve_candidate_set)
+        self.register(self.load_candidate_set_artifact)
         self.register(self.summarize_session_memory)
 
     def list_session_objects(
@@ -1007,6 +1242,28 @@ class SessionMemoryToolkit(Toolkit):
         if session_state is None:
             return {"status": "not_found", "message": "No session state is available."}
         return resolve_candidate_set(session_state, reference, top_n=top_n)
+
+    def load_candidate_set_artifact(
+        self,
+        reference: str = "top candidates",
+        include_candidates: bool = False,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Load a generated candidate-set artifact by ID, session key, path, or reference.
+
+        Args:
+            reference: Candidate-set ID, session key, artifact path, or phrase.
+            include_candidates: Include the full artifact payload. Keep False for summaries.
+            session_state: Shared session state injected by Agno.
+        """
+        if session_state is None:
+            return {"status": "not_found", "message": "No session state is available."}
+        return load_candidate_set_artifact(
+            session_state,
+            reference,
+            include_candidates=include_candidates,
+        )
 
     def summarize_session_memory(
         self,

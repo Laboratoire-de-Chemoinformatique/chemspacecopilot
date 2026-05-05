@@ -7,6 +7,7 @@ import pandas as pd
 from cs_copilot.tools.io.session_memory import (
     SessionMemoryToolkit,
     list_loadable_session_data,
+    load_candidate_set_artifact,
     register_compounds_from_candidates,
     register_generated_candidate_set,
     register_session_object,
@@ -32,6 +33,7 @@ def test_register_compounds_updates_current_and_summary():
     assert state["session_objects"]["current"]["compound"] == "cmp_001"
     assert "cmp_001" in state["session_memory_summary"]
     assert state["session_objects"]["compounds"]["cmp_002"]["smiles"] == "CCN"
+    assert "properties" not in state["session_objects"]["compounds"]["cmp_002"]
 
 
 def test_resolve_current_and_numbered_references():
@@ -128,8 +130,16 @@ def test_resolve_loadable_session_data_prefers_primary_path_in_container():
     assert resolved["path"] == "/tmp/primary.csv"
 
 
-def test_generated_candidate_set_resolves_top_candidates_over_dataset_compounds():
+def test_generated_candidate_set_resolves_top_candidates_over_dataset_compounds(
+    monkeypatch, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
     state = {}
+    candidates = [
+        {"smiles": "CCO", "score": 0.9, "valid": True, "rationale": "Verbose rationale"},
+        {"smiles": "CCN", "score": 0.8, "valid": True},
+        {"smiles": "CCC", "score": 0.7, "valid": True},
+    ]
     register_session_object(
         state,
         "compound",
@@ -140,11 +150,7 @@ def test_generated_candidate_set_resolves_top_candidates_over_dataset_compounds(
     )
     candidate_ids = register_compounds_from_candidates(
         state,
-        [
-            {"smiles": "CCO", "score": 0.9, "valid": True},
-            {"smiles": "CCN", "score": 0.8, "valid": True},
-            {"smiles": "CCC", "score": 0.7, "valid": True},
-        ],
+        candidates,
         source_agent="molecular_designer_agent",
         source_tool="design_molecules",
         label_prefix="Generated candidate",
@@ -166,17 +172,29 @@ def test_generated_candidate_set_resolves_top_candidates_over_dataset_compounds(
         label="LLM generated candidates",
         goal="Design examples",
         count_attempted=3,
+        candidates=candidates,
     )
 
     resolved = resolve_candidate_set(state, "top 2 candidates")
+    artifact = load_candidate_set_artifact(state, candidate_set_id)
 
     assert candidate_set_id == "cset_001"
     assert state["session_objects"]["current"]["candidate_set"] == "cset_001"
     assert state["session_objects"]["current"]["generated_compounds"] == "cset_001"
+    assert state["designed_molecules"]["candidate_set_id"] == "cset_001"
+    assert state["designed_molecules"]["artifact_path"].endswith("candidate_sets/cset_001.json")
+    assert state["designed_molecules"]["preview"] == [
+        {"smiles": "CCO", "valid": True, "score": 0.9},
+        {"smiles": "CCN", "valid": True, "score": 0.8},
+        {"smiles": "CCC", "valid": True, "score": 0.7},
+    ]
     assert [compound["smiles"] for compound in resolved["compounds"]] == ["CCO", "CCN"]
     assert resolved["compounds"][0]["origin_agent"] == "molecular_designer"
     assert resolved["compounds"][0]["generation_engine"] == "llm"
     assert state["session_objects"]["compounds"]["cmp_002"]["candidate_set_id"] == "cset_001"
+    assert state["session_objects"]["candidate_sets"]["cset_001"]["artifact_format"] == "json"
+    assert artifact["status"] == "loaded"
+    assert [candidate["smiles"] for candidate in artifact["candidates"]] == ["CCO", "CCN", "CCC"]
 
 
 def test_session_memory_toolkit_resolves_candidate_set():

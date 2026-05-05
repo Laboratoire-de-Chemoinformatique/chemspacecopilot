@@ -12,6 +12,7 @@ import pytest
 
 from cs_copilot.tools.chemistry.autoencoder_toolkit import AutoencoderError, AutoencoderToolkit
 from cs_copilot.tools.constants import HUGGINGFACE_AUTOENCODER_REPO
+from cs_copilot.tools.io.session_memory import load_candidate_set_artifact
 
 
 class TestAutoencoderDownload:
@@ -199,8 +200,9 @@ class TestAutoencoderDownload:
             # Verify download was attempted (may fail if files exist)
 
 
-def test_sample_molecules_registers_autoencoder_candidate_set(monkeypatch):
-    """Direct Autoencoder sampling records generated provenance and candidate set."""
+def test_sample_molecules_registers_autoencoder_candidate_set(monkeypatch, tmp_path):
+    """Direct Autoencoder sampling records generated provenance and artifact-backed set."""
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(AutoencoderToolkit, "_ensure_model_exists", lambda self: None)
     monkeypatch.setattr(AutoencoderToolkit, "_load_model", lambda self: None)
     toolkit = AutoencoderToolkit(model_path="unused", device="cpu")
@@ -212,7 +214,16 @@ def test_sample_molecules_registers_autoencoder_candidate_set(monkeypatch):
 
     memory = session_state["session_objects"]
     assert summary["registered_candidate_set_id"] == "cset_001"
+    assert summary["artifact_path"].endswith("candidate_sets/cset_001.json")
+    assert session_state["sampled_molecules"]["candidate_set_id"] == "cset_001"
+    assert session_state["sampled_molecules"]["preview"] == [
+        {"smiles": "CCO"},
+        {"smiles": "CCN"},
+    ]
     assert memory["candidate_sets"]["cset_001"]["origin_agent"] == "autoencoder_toolkit"
     assert memory["candidate_sets"]["cset_001"]["generation_engine"] == "autoencoder"
+    assert memory["candidate_sets"]["cset_001"]["artifact_path"] == summary["artifact_path"]
     assert memory["compounds"]["cmp_001"]["origin_agent"] == "autoencoder_toolkit"
     assert memory["compounds"]["cmp_001"]["candidate_set_id"] == "cset_001"
+    artifact = load_candidate_set_artifact(session_state, "sampled_molecules")
+    assert artifact["candidates"] == ["CCO", "CCN"]

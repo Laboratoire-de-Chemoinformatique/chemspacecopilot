@@ -11,7 +11,7 @@ from cs_copilot.tools.chemistry.molecular_designer_toolkit import (
     MolecularDesignerToolkit,
     MolecularDesignResult,
 )
-from cs_copilot.tools.io.session_memory import resolve_candidate_set
+from cs_copilot.tools.io.session_memory import load_candidate_set_artifact, resolve_candidate_set
 
 
 class _FakeAutoencoderToolkit:
@@ -55,8 +55,9 @@ def test_autoencoder_engine_design_filters_and_deduplicates_candidates():
     assert all(candidate["engine"] == "autoencoder" for candidate in result)
 
 
-def test_design_molecules_summary_persists_full_result_in_session_state():
-    """Summary mode should keep full candidate lists out of the LLM-visible response."""
+def test_design_molecules_summary_saves_full_result_as_artifact(monkeypatch, tmp_path):
+    """Summary mode should keep full candidate lists out of the LLM-visible session state."""
+    monkeypatch.chdir(tmp_path)
     toolkit = MolecularDesignerToolkit(autoencoder_toolkit=_FakeAutoencoderToolkit())
     agent = SimpleNamespace(session_state={})
     shared_state = {}
@@ -73,10 +74,10 @@ def test_design_molecules_summary_persists_full_result_in_session_state():
     assert summary["session_key"] == "test_designs"
     assert summary["count_returned"] == 2
     assert len(summary["preview"]) == 2
-    assert {candidate["smiles"] for candidate in shared_state["test_designs"]} == {
-        "CCO",
-        "c1ccccc1",
-    }
+    assert summary["artifact_path"].endswith("candidate_sets/cset_001.json")
+    assert shared_state["test_designs"]["candidate_set_id"] == "cset_001"
+    assert shared_state["test_designs"]["artifact_path"] == summary["artifact_path"]
+    assert shared_state["test_designs"]["count"] == 2
     assert shared_state["session_objects"]["current"]["compound"] == "cmp_001"
     assert shared_state["session_objects"]["current"]["candidate_set"] == "cset_001"
     assert shared_state["session_objects"]["current"]["generated_compounds"] == "cset_001"
@@ -98,8 +99,11 @@ def test_design_molecules_summary_persists_full_result_in_session_state():
     assert candidate_set["origin_agent"] == "molecular_designer"
     assert candidate_set["generation_engine"] == "autoencoder"
     assert candidate_set["compound_ids"] == ["cmp_001", "cmp_002"]
+    assert candidate_set["artifact_path"] == summary["artifact_path"]
     assert summary["registered_candidate_set_id"] == "cset_001"
     assert set(agent.session_state["session_objects"]["compounds"]) == {"cmp_001", "cmp_002"}
+    artifact = load_candidate_set_artifact(shared_state, "test_designs")
+    assert {candidate["smiles"] for candidate in artifact["candidates"]} == {"CCO", "c1ccccc1"}
 
 
 def test_interpolation_uses_autoencoder_interpolation_not_analog_dispatch():
@@ -177,8 +181,11 @@ def test_register_design_candidates_tool_is_exposed():
     assert "register_design_candidates" in toolkit.functions
 
 
-def test_register_design_candidates_persists_ranked_autoencoder_candidate_set():
-    """Validated/ranked low-level autoencoder candidates become a generated candidate set."""
+def test_register_design_candidates_persists_ranked_autoencoder_candidate_set(
+    monkeypatch, tmp_path
+):
+    """Validated/ranked low-level autoencoder candidates become an artifact-backed set."""
+    monkeypatch.chdir(tmp_path)
     toolkit = MolecularDesignerToolkit(autoencoder_toolkit=_FakeAutoencoderToolkit())
     agent = SimpleNamespace(session_state={})
     shared_state = {}
@@ -201,10 +208,12 @@ def test_register_design_candidates_persists_ranked_autoencoder_candidate_set():
 
     assert summary["status"] == "registered"
     assert summary["registered_candidate_set_id"] == "cset_001"
+    assert summary["artifact_path"].endswith("candidate_sets/cset_001.json")
     assert summary["registered_compound_ids"] == ["cmp_001", "cmp_002"]
     assert candidate_set["generation_engine"] == "autoencoder"
     assert candidate_set["generation_mode"] == "analog"
     assert candidate_set["compound_ids"] == ["cmp_001", "cmp_002"]
+    assert shared_state["autoencoder_candidates"]["candidate_set_id"] == "cset_001"
     assert memory["current"]["candidate_set"] == "cset_001"
     assert memory["current"]["generated_compounds"] == "cset_001"
     assert [
@@ -220,8 +229,9 @@ def test_register_design_candidates_persists_ranked_autoencoder_candidate_set():
     )
 
 
-def test_autoencoder_registration_resolves_over_older_llm_candidate_set():
+def test_autoencoder_registration_resolves_over_older_llm_candidate_set(monkeypatch, tmp_path):
     """Explicit autoencoder registration prevents fallback to older LLM candidates."""
+    monkeypatch.chdir(tmp_path)
     toolkit = MolecularDesignerToolkit(autoencoder_toolkit=_FakeAutoencoderToolkit())
     shared_state = {}
 
