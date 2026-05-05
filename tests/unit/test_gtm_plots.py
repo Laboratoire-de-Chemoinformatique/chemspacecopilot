@@ -111,6 +111,52 @@ def test_save_gtm_plot_supports_large_point_datasets(monkeypatch, tmp_path):
     assert alt.data_transformers.active == "default"
 
 
+def test_save_gtm_plot_styles_projected_compounds_as_red_larger_points(monkeypatch):
+    """Projected compound points on density GTM plots should use the analog overlay style."""
+
+    smiles_col = gtm_operations.SMILES_COLUMN
+    density_table = pd.DataFrame(
+        {
+            "x": [1, 1, 2, 2],
+            "y": [1, 2, 1, 2],
+            "nodes": [0, 1, 2, 3],
+            "density": [1.0, 1.0, 1.0, 1.0],
+            "filtered_density": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    df = pd.DataFrame({smiles_col: ["CCO", "CCN"]})
+    coords = pd.DataFrame({"x": [1.2, 1.8], "y": [1.2, 1.8], "node_index": [0, 3]})
+    vis_info = pd.DataFrame(
+        {smiles_col: ["CCO", "CCN"], "source": ["analogs", "analogs"], "image": ["a", "b"]}
+    )
+    responsibilities = np.full((2, 4), 0.25)
+    calls = {}
+
+    monkeypatch.setattr(gtm_operations, "load_gtm", lambda *_args, **_kwargs: (density_table, None))
+    monkeypatch.setattr(
+        gtm_operations,
+        "data_load_and_prep",
+        lambda *_args, **_kwargs: (None, df.copy(), None, responsibilities),
+    )
+    monkeypatch.setattr(gtm_operations, "calculate_latent_coords", lambda *_args, **_kwargs: coords)
+    monkeypatch.setattr(gtm_operations, "encode_molecules", lambda *_args, **_kwargs: vis_info)
+
+    def _fake_points_chart(**kwargs):
+        calls.update(kwargs)
+        return alt.Chart(pd.DataFrame({"x": [1], "y": [1]})).mark_circle()
+
+    monkeypatch.setattr(gtm_operations, "altair_points_chart", _fake_points_chart)
+    monkeypatch.setattr(gtm_operations, "_write_chart_outputs", lambda *_args, **_kwargs: None)
+
+    result = gtm_operations.save_gtm_plot("analogs.csv", "model.pkl.gz")
+
+    assert "GTM plot saved to S3" in result
+    assert calls["points_color"] == gtm_operations.PROJECTED_POINTS_COLOR
+    assert calls["points_size"] == gtm_operations.PROJECTED_POINTS_SIZE
+    assert calls["points_size"] > gtm_operations.DEFAULT_POINTS_SIZE
+    assert calls["points_opacity"] == gtm_operations.PROJECTED_POINTS_OPACITY
+
+
 @pytest.mark.parametrize(
     ("landscape_type", "renderer_name", "table", "expected_suffix"),
     [
@@ -301,6 +347,173 @@ def test_save_gtm_landscape_plot_dispatches_to_plotly_renderers(
         assert calls["kwargs"]["second_class_prob_column_name"] == "2_prob"
         assert calls["kwargs"]["first_class_density_column_name"] == "1_density"
         assert calls["kwargs"]["second_class_density_column_name"] == "2_density"
+
+
+@pytest.mark.parametrize(
+    ("landscape_type", "renderer_name", "table"),
+    [
+        (
+            "classification",
+            "altair_discrete_class_landscape",
+            pd.DataFrame(
+                {
+                    "x": [1, 1, 2, 2],
+                    "y": [1, 2, 1, 2],
+                    "nodes": [0, 1, 2, 3],
+                    "density": [1.0, 2.0, 3.0, 4.0],
+                    "first_class_prob": [0.1, 0.2, 0.3, 0.4],
+                    "second_class_prob": [0.9, 0.8, 0.7, 0.6],
+                    "first_class_density": [1.0, 1.0, 1.0, 1.0],
+                    "second_class_density": [2.0, 2.0, 2.0, 2.0],
+                }
+            ),
+        ),
+        (
+            "regression",
+            "altair_discrete_regression_landscape",
+            pd.DataFrame(
+                {
+                    "x": [1, 1, 2, 2],
+                    "y": [1, 2, 1, 2],
+                    "nodes": [0, 1, 2, 3],
+                    "density": [1.0, 2.0, 3.0, 4.0],
+                    "filtered_reg_density": [5.0, 6.0, 7.0, 8.0],
+                }
+            ),
+        ),
+    ],
+)
+def test_save_gtm_landscape_plot_altair_overlays_projected_points(
+    monkeypatch, tmp_path, landscape_type, renderer_name, table
+):
+    """Altair activity landscapes should layer projected analog points when provided."""
+
+    landscape_path = tmp_path / f"{landscape_type}.csv"
+    overlay_path = tmp_path / "projected_analogs.csv"
+    table.to_csv(landscape_path, index=False)
+    pd.DataFrame(
+        {
+            "x": [1.25, 1.75],
+            "y": [1.25, 1.75],
+            gtm_operations.SMILES_COLUMN: ["CCO", "CCN"],
+            "source": ["analogs", "analogs"],
+        }
+    ).to_csv(overlay_path, index=False)
+    calls = {}
+
+    def _fake_renderer(source_table, title="", **kwargs):
+        calls["renderer"] = renderer_name
+        calls["source_table"] = source_table.copy()
+        calls["renderer_kwargs"] = kwargs
+        return alt.Chart(pd.DataFrame({"x": [1], "y": [1]})).mark_rect()
+
+    def _fake_overlay(points_table, num_nodes):
+        calls["overlay_table"] = points_table.copy()
+        calls["overlay_num_nodes"] = num_nodes
+        return alt.Chart(pd.DataFrame({"x": [1.25], "y": [1.25]})).mark_circle(
+            color=gtm_operations.PROJECTED_POINTS_COLOR
+        )
+
+    monkeypatch.setattr(gtm_operations, renderer_name, _fake_renderer)
+    monkeypatch.setattr(gtm_operations, "_build_projected_points_layer", _fake_overlay)
+    monkeypatch.setattr(gtm_operations, "_write_chart_outputs", lambda *_args, **_kwargs: None)
+
+    result = gtm_operations.save_gtm_landscape_plot(
+        str(landscape_path),
+        landscape_type,
+        renderer="altair",
+        overlay_dataset_file=str(overlay_path),
+    )
+
+    assert calls["renderer"] == renderer_name
+    assert calls["overlay_table"][gtm_operations.SMILES_COLUMN].tolist() == ["CCO", "CCN"]
+    assert calls["overlay_table"]["source"].tolist() == ["analogs", "analogs"]
+    assert calls["overlay_num_nodes"] == 4
+    assert "projected compound overlay" in result
+
+
+@pytest.mark.parametrize(
+    ("landscape_type", "renderer_name", "table"),
+    [
+        (
+            "classification",
+            "plotly_discrete_class_landscape",
+            pd.DataFrame(
+                {
+                    "x": [1, 1, 2, 2],
+                    "y": [1, 2, 1, 2],
+                    "nodes": [0, 1, 2, 3],
+                    "density": [1.0, 2.0, 3.0, 4.0],
+                    "1_prob": [0.1, 0.2, 0.3, 0.4],
+                    "2_prob": [0.9, 0.8, 0.7, 0.6],
+                    "1_density": [1.0, 1.0, 1.0, 1.0],
+                    "2_density": [2.0, 2.0, 2.0, 2.0],
+                }
+            ),
+        ),
+        (
+            "regression",
+            "plotly_smooth_regression_landscape",
+            pd.DataFrame(
+                {
+                    "x": [1, 1, 2, 2],
+                    "y": [1, 2, 1, 2],
+                    "nodes": [0, 1, 2, 3],
+                    "density": [1.0, 2.0, 3.0, 4.0],
+                    "filtered_reg_density": [5.0, 6.0, 7.0, 8.0],
+                }
+            ),
+        ),
+    ],
+)
+def test_save_gtm_landscape_plot_plotly_overlays_projected_points(
+    monkeypatch, tmp_path, landscape_type, renderer_name, table
+):
+    """Plotly activity landscapes should add a red projected-analog scatter trace."""
+
+    landscape_path = tmp_path / f"plotly_{landscape_type}.csv"
+    overlay_path = tmp_path / "plotly_projected_analogs.csv"
+    table.to_csv(landscape_path, index=False)
+    pd.DataFrame(
+        {
+            "x": [1.25, 1.75],
+            "y": [1.25, 1.75],
+            gtm_operations.SMILES_COLUMN: ["CCO", "CCN"],
+            "source": ["analogs", "analogs"],
+        }
+    ).to_csv(overlay_path, index=False)
+    calls = {}
+
+    class _DummyFigure:
+        def add_scatter(self, **kwargs):
+            calls["scatter"] = kwargs
+
+        def update_layout(self, **kwargs):
+            calls["layout"] = kwargs
+
+    def _fake_renderer(source_table, title="", **kwargs):
+        calls["renderer"] = renderer_name
+        calls["source_table"] = source_table.copy()
+        calls["renderer_kwargs"] = kwargs
+        return _DummyFigure()
+
+    monkeypatch.setattr(gtm_operations, renderer_name, _fake_renderer)
+    monkeypatch.setattr(gtm_operations, "_write_plotly_outputs", lambda *_args, **_kwargs: True)
+
+    result = gtm_operations.save_gtm_landscape_plot(
+        str(landscape_path),
+        landscape_type,
+        renderer="plotly",
+        overlay_dataset_file=str(overlay_path),
+    )
+
+    assert calls["renderer"] == renderer_name
+    assert calls["scatter"]["x"] == [1.25, 1.75]
+    assert calls["scatter"]["y"] == [1.25, 1.75]
+    assert calls["scatter"]["marker"]["color"] == gtm_operations.PROJECTED_POINTS_COLOR
+    assert calls["scatter"]["marker"]["size"] == gtm_operations.PROJECTED_PLOTLY_POINTS_SIZE
+    assert calls["layout"] == {"width": 600, "height": 600}
+    assert "projected compound overlay" in result
 
 
 def test_save_gtm_landscape_plot_plotly_query_is_rejected(tmp_path):

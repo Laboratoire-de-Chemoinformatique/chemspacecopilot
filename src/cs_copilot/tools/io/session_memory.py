@@ -23,6 +23,7 @@ MAX_SUMMARY_ITEMS_PER_TYPE = 6
 MAX_CANDIDATE_PREVIEW_ITEMS = 5
 CANDIDATE_ARTIFACT_DIR = "candidate_sets"
 CANDIDATE_ARTIFACT_FORMAT = "json"
+CANDIDATE_DATASET_FORMAT = "csv"
 LOADABLE_CSV_SUFFIXES = (".csv", ".csv.gz", ".tsv", ".tab", ".txt")
 LOADABLE_SESSION_PATH_PRIORITY = {
     "clean_dataset_path": 0,
@@ -176,6 +177,122 @@ def _compact_related(related: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 def _candidate_artifact_rel_path(candidate_set_id: str) -> str:
     safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(candidate_set_id))
     return f"{CANDIDATE_ARTIFACT_DIR}/{safe_id}.{CANDIDATE_ARTIFACT_FORMAT}"
+
+
+def _candidate_dataset_rel_path(candidate_set_id: str, top_n: Optional[int] = None) -> str:
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(candidate_set_id))
+    suffix = f"_top_{top_n}" if top_n is not None else ""
+    return f"{CANDIDATE_ARTIFACT_DIR}/{safe_id}{suffix}.{CANDIDATE_DATASET_FORMAT}"
+
+
+def _candidate_row_from_payload(
+    candidate_set_id: str,
+    rank: int,
+    candidate: Any,
+    *,
+    source: str,
+) -> Optional[Dict[str, Any]]:
+    smiles = _candidate_smiles(candidate)
+    if not smiles:
+        return None
+
+    row: Dict[str, Any] = {
+        "smi": smiles,
+        "rank": rank,
+        "candidate_set_id": candidate_set_id,
+        "source": source,
+    }
+    if isinstance(candidate, dict):
+        for key in ("valid", "score", "ranking_score"):
+            if candidate.get(key) is not None:
+                row[key] = candidate[key]
+        properties = candidate.get("properties") or {}
+        if isinstance(properties, dict):
+            for key in ("seed_tanimoto", "qed"):
+                if properties.get(key) is not None:
+                    row[key] = properties[key]
+    else:
+        score = _candidate_score(candidate)
+        if score is not None:
+            row["score"] = score
+    return _json_safe(row, max_items=1000)
+
+
+def _candidate_dataset_rows_from_payloads(
+    candidate_set_id: str,
+    candidates: Sequence[Any],
+    *,
+    source: str,
+    top_n: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    rows = []
+    for rank, candidate in enumerate(list(candidates or []), start=1):
+        if top_n is not None and rank > top_n:
+            break
+        row = _candidate_row_from_payload(candidate_set_id, rank, candidate, source=source)
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
+def _candidate_dataset_rows_from_compounds(
+    memory: Dict[str, Any],
+    candidate_set: Dict[str, Any],
+    *,
+    top_n: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    rows = []
+    candidate_set_id = str(candidate_set.get("id") or "")
+    source = str(
+        candidate_set.get("generation_engine")
+        or candidate_set.get("origin_agent")
+        or candidate_set.get("source_tool")
+        or "generated_candidates"
+    )
+    compound_ids = list(candidate_set.get("compound_ids") or [])
+    for rank, compound_id in enumerate(compound_ids, start=1):
+        if top_n is not None and rank > top_n:
+            break
+        record = _find_object(memory, compound_id)
+        if not isinstance(record, dict):
+            continue
+        smiles = record.get("smiles")
+        if not smiles:
+            continue
+        row: Dict[str, Any] = {
+            "smi": str(smiles),
+            "rank": rank,
+            "candidate_set_id": candidate_set_id,
+            "source": source,
+        }
+        if record.get("candidate_set_rank") is not None:
+            row["candidate_set_rank"] = record["candidate_set_rank"]
+        if record.get("generation_engine") is not None:
+            row["generation_engine"] = record["generation_engine"]
+        properties = record.get("properties") or {}
+        if isinstance(properties, dict):
+            for key in ("seed_tanimoto", "qed"):
+                if properties.get(key) is not None:
+                    row[key] = properties[key]
+        rows.append(_json_safe(row, max_items=1000))
+    return rows
+
+
+def save_candidate_set_dataset(
+    candidate_set_id: str,
+    rows: Sequence[Dict[str, Any]],
+    *,
+    top_n: Optional[int] = None,
+) -> str:
+    """Persist a compact candidate-set CSV dataset for downstream tools."""
+    row_list = list(rows or [])
+    rel_path = _candidate_dataset_rel_path(candidate_set_id, top_n=top_n)
+    table = pd.DataFrame(row_list)
+    if table.empty:
+        table = pd.DataFrame(columns=["smi", "rank", "candidate_set_id", "source"])
+    with S3.open(rel_path, "w") as handle:
+        table.to_csv(handle, index=False)
+    return S3.path(rel_path)
 
 
 def save_candidate_set_artifact(
@@ -670,6 +787,8 @@ def register_generated_candidate_set(
     ordered_ids = [compound_id for compound_id in compound_ids if compound_id]
     artifact_path = None
     artifact_count = None
+    csv_path = None
+    csv_count = None
     preview: List[Dict[str, Any]] = []
     candidate_set_id = register_session_object(
         session_state,
@@ -739,6 +858,51 @@ def register_generated_candidate_set(
                 "artifact_format": CANDIDATE_ARTIFACT_FORMAT,
                 "artifact_count": artifact_count,
                 "preview": preview,
+            },
+        )
+
+    candidate_set_record = _find_object(memory, candidate_set_id) or {}
+    csv_source = str(generation_engine or origin_agent or source_tool or "generated_candidates")
+    if candidates is not None:
+        csv_rows = _candidate_dataset_rows_from_payloads(
+            candidate_set_id,
+            list(candidates or []),
+            source=csv_source,
+        )
+    else:
+        csv_rows = _candidate_dataset_rows_from_compounds(memory, candidate_set_record)
+
+    if candidates is not None and (csv_rows or ordered_ids):
+        csv_path = save_candidate_set_dataset(candidate_set_id, csv_rows)
+        csv_count = len(csv_rows)
+        csv_rel_path = _candidate_dataset_rel_path(candidate_set_id)
+        pointer = session_state.get(session_key)
+        if not isinstance(pointer, dict):
+            pointer = {
+                "candidate_set_id": candidate_set_id,
+                "count": csv_count,
+                "preview": [
+                    {"smiles": row["smi"]} for row in csv_rows[:MAX_CANDIDATE_PREVIEW_ITEMS]
+                ],
+            }
+            session_state[session_key] = pointer
+        pointer.update(
+            {
+                "candidate_set_id": candidate_set_id,
+                "csv_path": csv_path,
+                "csv_rel_path": csv_rel_path,
+                "csv_format": CANDIDATE_DATASET_FORMAT,
+                "csv_count": csv_count,
+            }
+        )
+        update_session_object(
+            session_state,
+            candidate_set_id,
+            {
+                "csv_path": csv_path,
+                "csv_rel_path": csv_rel_path,
+                "csv_format": CANDIDATE_DATASET_FORMAT,
+                "csv_count": csv_count,
             },
         )
 
@@ -848,6 +1012,195 @@ def load_candidate_set_artifact(
     if include_candidates:
         result["candidates"] = candidates
     return result
+
+
+def materialize_candidate_set_dataset(
+    session_state: Dict[str, Any],
+    reference: str = "generated compounds",
+    *,
+    top_n: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Resolve a generated candidate set and return a compact CSV path for tools."""
+    if not isinstance(session_state, dict):
+        return {"status": "not_found", "message": "No session state is available."}
+    if top_n is not None and top_n <= 0:
+        return {"status": "error", "message": "top_n must be positive when provided."}
+
+    reference_text = str(reference or "").strip() or "generated compounds"
+    if reference_text.endswith(LOADABLE_CSV_SUFFIXES):
+        return {
+            "status": "materialized",
+            "candidate_set_id": None,
+            "csv_path": reference_text,
+            "count": None,
+        }
+
+    candidate_set: Optional[Dict[str, Any]] = None
+    pointer = session_state.get(reference_text)
+    if isinstance(pointer, dict) and pointer.get("candidate_set_id"):
+        candidate_set = get_session_object(session_state, str(pointer["candidate_set_id"]))
+
+    if candidate_set is None and reference_text.endswith(f".{CANDIDATE_ARTIFACT_FORMAT}"):
+        payload = load_candidate_artifact(reference_text)
+        candidate_set_id = str(payload.get("candidate_set_id") or Path(reference_text).stem)
+        candidates = payload.get("candidates") or []
+        rows = _candidate_dataset_rows_from_payloads(
+            candidate_set_id,
+            candidates,
+            source=str((payload.get("metadata") or {}).get("generation_engine") or "generated"),
+            top_n=top_n,
+        )
+        csv_path = save_candidate_set_dataset(candidate_set_id, rows, top_n=top_n)
+        return {
+            "status": "materialized",
+            "candidate_set_id": candidate_set_id,
+            "csv_path": csv_path,
+            "count": len(rows),
+        }
+
+    if candidate_set is None:
+        resolved = resolve_candidate_set(session_state, reference_text, top_n=top_n)
+        if resolved.get("status") != "resolved":
+            return resolved
+        candidate_set = resolved.get("candidate_set")
+
+    if not isinstance(candidate_set, dict):
+        return {
+            "status": "not_found",
+            "message": f"No generated candidate set found for '{reference_text}'.",
+        }
+
+    candidate_set_id = str(candidate_set.get("id") or "")
+    if not candidate_set_id:
+        return {"status": "not_found", "message": "Resolved candidate set has no ID."}
+
+    if top_n is None and candidate_set.get("csv_path"):
+        return {
+            "status": "materialized",
+            "candidate_set_id": candidate_set_id,
+            "csv_path": candidate_set["csv_path"],
+            "count": int(
+                candidate_set.get("csv_count") or candidate_set.get("count_returned") or 0
+            ),
+        }
+
+    candidates = None
+    artifact_path = candidate_set.get("artifact_rel_path") or candidate_set.get("artifact_path")
+    if artifact_path:
+        try:
+            payload = load_candidate_artifact(str(artifact_path))
+            candidates = payload.get("candidates") or []
+        except Exception:
+            candidates = None
+
+    if candidates:
+        rows = _candidate_dataset_rows_from_payloads(
+            candidate_set_id,
+            candidates,
+            source=str(
+                candidate_set.get("generation_engine")
+                or candidate_set.get("origin_agent")
+                or "generated"
+            ),
+            top_n=top_n,
+        )
+    else:
+        rows = _candidate_dataset_rows_from_compounds(
+            ensure_session_objects(session_state),
+            candidate_set,
+            top_n=top_n,
+        )
+
+    if not rows:
+        return {
+            "status": "not_found",
+            "message": f"Candidate set '{candidate_set_id}' has no materializable SMILES rows.",
+            "candidate_set_id": candidate_set_id,
+        }
+
+    csv_path = save_candidate_set_dataset(candidate_set_id, rows, top_n=top_n)
+    result = {
+        "status": "materialized",
+        "candidate_set_id": candidate_set_id,
+        "csv_path": csv_path,
+        "count": len(rows),
+    }
+
+    if top_n is None:
+        csv_rel_path = _candidate_dataset_rel_path(candidate_set_id)
+        update_session_object(
+            session_state,
+            candidate_set_id,
+            {
+                "csv_path": csv_path,
+                "csv_rel_path": csv_rel_path,
+                "csv_format": CANDIDATE_DATASET_FORMAT,
+                "csv_count": len(rows),
+            },
+        )
+        pointer = session_state.get(str(candidate_set.get("session_key") or ""))
+        if isinstance(pointer, dict):
+            pointer.update(
+                {
+                    "csv_path": csv_path,
+                    "csv_rel_path": csv_rel_path,
+                    "csv_format": CANDIDATE_DATASET_FORMAT,
+                    "csv_count": len(rows),
+                }
+            )
+        refresh_session_memory_summary(session_state)
+
+    return result
+
+
+class SessionStore:
+    """Typed facade over Agno's mutable ``session_state`` dictionary."""
+
+    def __init__(self, session_state: Dict[str, Any]):
+        if not isinstance(session_state, dict):
+            raise TypeError("session_state must be a dictionary")
+        self.session_state = session_state
+
+    @property
+    def objects(self) -> Dict[str, Any]:
+        return ensure_session_objects(self.session_state)
+
+    def register_object(self, object_type: str, data: Dict[str, Any], **kwargs) -> str:
+        return register_session_object(self.session_state, object_type, data, **kwargs)
+
+    def get_object(self, object_id: str) -> Optional[Dict[str, Any]]:
+        return get_session_object(self.session_state, object_id)
+
+    def resolve_candidate_set(
+        self,
+        reference: str = "top candidates",
+        *,
+        top_n: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        return resolve_candidate_set(self.session_state, reference, top_n=top_n)
+
+    def load_candidate_set_artifact(
+        self,
+        reference: str = "top candidates",
+        *,
+        include_candidates: bool = True,
+    ) -> Dict[str, Any]:
+        return load_candidate_set_artifact(
+            self.session_state,
+            reference,
+            include_candidates=include_candidates,
+        )
+
+    def materialize_candidate_set_dataset(
+        self,
+        reference: str = "generated compounds",
+        *,
+        top_n: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        return materialize_candidate_set_dataset(self.session_state, reference, top_n=top_n)
+
+    def refresh_summary(self) -> str:
+        return refresh_session_memory_summary(self.session_state)
 
 
 def update_state_targets(
@@ -1133,6 +1486,7 @@ class SessionMemoryToolkit(Toolkit):
         self.register(self.resolve_session_reference)
         self.register(self.resolve_candidate_set)
         self.register(self.load_candidate_set_artifact)
+        self.register(self.materialize_candidate_set_dataset)
         self.register(self.summarize_session_memory)
 
     def list_session_objects(
@@ -1264,6 +1618,24 @@ class SessionMemoryToolkit(Toolkit):
             reference,
             include_candidates=include_candidates,
         )
+
+    def materialize_candidate_set_dataset(
+        self,
+        reference: str = "generated compounds",
+        top_n: Optional[int] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Resolve generated candidates and return a compact CSV path for downstream tools.
+
+        Args:
+            reference: Candidate-set ID, session key, CSV/JSON artifact path, or phrase.
+            top_n: Optional limit for a ranked subset CSV.
+            session_state: Shared session state injected by Agno.
+        """
+        if session_state is None:
+            return {"status": "not_found", "message": "No session state is available."}
+        return materialize_candidate_set_dataset(session_state, reference, top_n=top_n)
 
     def summarize_session_memory(
         self,
