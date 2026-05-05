@@ -69,12 +69,17 @@ def get_cs_copilot_agent_team(
     # Probe runtime environment (GPU, CPU, RAM, databases, cached models)
     resource_profile = analyze_resources()
     logger.info("Resource profile: %s", resource_profile)
+    shared_session_state = {
+        "resource_profile": resource_profile,
+        "agent_scratch": {},
+    }
 
     # Common agent parameters supplied by the factory
     agent_params = {
         "markdown": markdown,
         "debug_mode": debug_mode,
         "enable_mlflow_tracking": enable_mlflow_tracking,
+        "session_state": shared_session_state,
     }
 
     # ============================================================================
@@ -143,7 +148,7 @@ def get_cs_copilot_agent_team(
         store_tool_messages=enable_memory,  # persist tool results
         store_media=enable_memory,  # persist any media if used
         # Session state (always enabled for within-session data passing)
-        session_state={"resource_profile": resource_profile},
+        session_state=shared_session_state,
         add_session_state_to_context=True,
         enable_agentic_state=True,
         tools=[SessionMemoryToolkit()],

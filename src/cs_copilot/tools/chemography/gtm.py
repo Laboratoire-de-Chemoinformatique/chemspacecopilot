@@ -1284,6 +1284,11 @@ class GTMToolkit(BaseDRToolkit):
         mark_nodes: Optional[List[int]] = None,
         chart_width: int = 600,
         chart_height: int = 600,
+        overlay_dataset_file: Optional[str] = None,
+        gtm_model_file: Optional[str] = None,
+        *,
+        descriptor_type: Optional[str] = None,
+        agent: Agent | None = None,
     ) -> str:
         """
         Render a saved ChemographyKit landscape table as an HTML/PNG plot.
@@ -1295,6 +1300,13 @@ class GTMToolkit(BaseDRToolkit):
             mark_nodes: Optional list of node identifiers to label
             chart_width: Width of the output chart (pixels)
             chart_height: Height of the output chart (pixels)
+            overlay_dataset_file: Optional CSV of designed analogs/new compounds
+                to overlay as red projected datapoints. If it lacks x/y projection
+                coordinates, provide ``gtm_model_file``.
+            gtm_model_file: GTM model used to project ``overlay_dataset_file``
+                when the overlay file has no x/y coordinates.
+            descriptor_type: Optional descriptor backend for projecting overlays.
+            agent: Optional agent whose session state can resolve descriptor settings.
 
         Returns:
             Success message with file paths
@@ -1306,6 +1318,10 @@ class GTMToolkit(BaseDRToolkit):
             mark_nodes=mark_nodes,
             chart_width=chart_width,
             chart_height=chart_height,
+            overlay_dataset_file=overlay_dataset_file,
+            gtm_model_file=gtm_model_file,
+            descriptor_type=descriptor_type,
+            agent=agent,
         )
 
     def project_data_on_gtm(

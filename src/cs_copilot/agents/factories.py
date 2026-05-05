@@ -7,6 +7,7 @@ Contains the base factory class and all specialized factory implementations.
 
 import logging
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -21,6 +22,7 @@ from cs_copilot.tools import (
     MolecularDesignerToolkit,
     PeptideWAEToolkit,
     PointerPandasTools,
+    SessionMemoryToolkit,
     SynPlannerToolkit,
     # SessionToolkit,
     save_gtm_landscape_plot,
@@ -70,6 +72,16 @@ class AgentCreationError(Exception):
     pass
 
 
+def _merge_session_state_defaults(target: Dict[str, Any], defaults: Dict[str, Any]) -> None:
+    """Merge agent default state into shared state without replacing existing values."""
+    for key, value in (defaults or {}).items():
+        if key not in target:
+            target[key] = deepcopy(value)
+            continue
+        if isinstance(target[key], dict) and isinstance(value, dict):
+            _merge_session_state_defaults(target[key], value)
+
+
 class BaseAgentFactory(ABC):
     """Base class for creating agents with common configuration and error handling."""
 
@@ -104,6 +116,7 @@ class BaseAgentFactory(ABC):
         try:
             config = self.get_agent_config()
             config.validate()
+            provided_session_state = kwargs.pop("session_state", None)
 
             # Log agent creation
             self.logger.info(f"Creating agent: {config.name}")
@@ -123,7 +136,11 @@ class BaseAgentFactory(ABC):
             # Add optional parameters if they exist
             if config.instructions:
                 agent_kwargs["instructions"] = config.instructions
-            if config.session_state:
+            if provided_session_state is not None:
+                if config.session_state:
+                    _merge_session_state_defaults(provided_session_state, config.session_state)
+                agent_kwargs["session_state"] = provided_session_state
+            elif config.session_state:
                 agent_kwargs["session_state"] = config.session_state
 
             # Add any additional kwargs passed in
@@ -544,6 +561,7 @@ class GTMAgentFactory(BaseAgentFactory):
             tools=[
                 GTMToolkit(),
                 PointerPandasTools(),
+                SessionMemoryToolkit(),
                 save_gtm_landscape_plot,
                 save_gtm_plot,
             ],

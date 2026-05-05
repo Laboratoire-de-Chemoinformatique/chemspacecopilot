@@ -83,7 +83,6 @@ from ..constants import (
     DEFAULT_GTM_MODEL_PATH,
     DEFAULT_LEGEND_FONT_SIZE,
     DEFAULT_NODE_THRESHOLD,
-    DEFAULT_POINTS_OPACITY,
     DEFAULT_POINTS_SIZE,
     DEFAULT_TICK_COUNT,
     GTM_MODEL_SUFFIXES,
@@ -127,6 +126,10 @@ _LANDSCAPE_REQUIRED_COLUMNS: dict[str, set[str]] = {
 }
 
 _PLOTLY_SUPPORTED_LANDSCAPES = {"density", "classification", "regression"}
+PROJECTED_POINTS_COLOR = "red"
+PROJECTED_POINTS_SIZE = max(DEFAULT_POINTS_SIZE + 20, int(DEFAULT_POINTS_SIZE * 1.8))
+PROJECTED_POINTS_OPACITY = 0.95
+PROJECTED_PLOTLY_POINTS_SIZE = 10
 RAW_SMILES_COLUMN = "raw_smiles"
 RAW_SMILES_INPUT_COLUMN = "raw_smiles_input"
 _COMPACT_METADATA_REQUIRED_COLUMNS = (SMILES_COLUMN, "smi", "source")
@@ -994,6 +997,157 @@ def _build_node_labels_layer(
             ),
         )
     )
+
+
+def _projected_points_tooltips(points_table: pd.DataFrame) -> dict[str, str | None]:
+    """Return tooltip columns that exist in the projected-points table."""
+    tooltip_columns: dict[str, str | None] = {}
+    if SMILES_COLUMN in points_table.columns:
+        tooltip_columns[SMILES_COLUMN] = "Smile: "
+    if "source" in points_table.columns:
+        tooltip_columns["source"] = "Dataset: "
+    if "image" in points_table.columns:
+        tooltip_columns["image"] = None
+    return tooltip_columns
+
+
+def _projected_points_hover_text(points_table: pd.DataFrame) -> list[str]:
+    """Build Plotly hover text for projected molecule points."""
+    hover_columns = [
+        (SMILES_COLUMN, "SMILES"),
+        ("source", "Dataset"),
+        ("node_index", "Node"),
+        ("nodes", "Node"),
+    ]
+    hover_text = []
+    for _, row in points_table.iterrows():
+        parts = [
+            f"{label}: {row[column]}"
+            for column, label in hover_columns
+            if column in points_table.columns and pd.notna(row[column])
+        ]
+        hover_text.append("<br>".join(parts) if parts else "Projected compound")
+    return hover_text
+
+
+def _normalize_projected_points_table(points_table: pd.DataFrame) -> pd.DataFrame:
+    """Normalize coordinate and optional metadata columns for projection overlays."""
+    if not {"x", "y"}.issubset(points_table.columns):
+        missing = sorted({"x", "y"} - set(points_table.columns))
+        raise ValueError(f"Projection overlay table is missing coordinate columns: {missing}")
+
+    normalized = points_table.copy().reset_index(drop=True)
+    for col in ("x", "y"):
+        normalized[col] = pd.to_numeric(normalized[col], errors="raise")
+
+    try:
+        smiles_column = find_smiles_column(normalized)
+    except ValueError:
+        smiles_column = None
+    if smiles_column and smiles_column != SMILES_COLUMN:
+        normalized = normalized.rename(columns={smiles_column: SMILES_COLUMN})
+
+    normalized = _ensure_source_column(normalized, default_source="projected_compounds")
+    return normalized
+
+
+def _projected_points_from_projection(df: pd.DataFrame, resps: np.ndarray) -> pd.DataFrame:
+    """Build an x/y point table from GTM projection responses and molecule metadata."""
+    coords = calculate_latent_coords(resps, correction=True, return_node=True)
+    vis_info = encode_molecules(df, smiles_col_name=SMILES_COLUMN).reset_index()
+    metadata_columns = [
+        column for column in (SMILES_COLUMN, "source", "image") if column in vis_info.columns
+    ]
+    source_mols = pd.concat([coords.reset_index(drop=True), vis_info[metadata_columns]], axis=1)
+    return _normalize_projected_points_table(source_mols)
+
+
+def _load_projected_points_overlay(
+    overlay_dataset_file: str | None,
+    gtm_model_file: str | None = None,
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
+) -> pd.DataFrame | None:
+    """
+    Load or project an overlay dataset for red compound-point layers.
+
+    If the CSV already contains x/y coordinates, it is used as-is. Otherwise the
+    caller must provide a GTM model path so the dataset can be projected first.
+    """
+    if not overlay_dataset_file:
+        return None
+
+    data_file = _ensure_suffix(overlay_dataset_file, CSV_EXTENSION)
+    with S3.open(data_file, "r") as sf:
+        candidate_table = _read_csv_flexible(sf)
+
+    if {"x", "y"}.issubset(candidate_table.columns):
+        return _normalize_projected_points_table(candidate_table)
+
+    if not gtm_model_file:
+        raise ValueError(
+            "gtm_model_file is required when overlay_dataset_file does not contain "
+            "precomputed 'x' and 'y' projection coordinates."
+        )
+
+    _, df, _, resps = data_load_and_prep(
+        overlay_dataset_file,
+        gtm_model_file,
+        descriptor_type=descriptor_type,
+        agent=agent,
+    )
+    return _projected_points_from_projection(df, resps)
+
+
+def _infer_projection_num_nodes(
+    landscape_table: pd.DataFrame,
+    overlay_points: pd.DataFrame | None = None,
+) -> int:
+    """Infer a square GTM grid size for point-layer domains."""
+    coordinate_max = 1
+    for table in (landscape_table, overlay_points):
+        if table is None or table.empty:
+            continue
+        coordinate_max = max(
+            coordinate_max,
+            int(math.ceil(float(table["x"].max()))),
+            int(math.ceil(float(table["y"].max()))),
+        )
+    return coordinate_max * coordinate_max
+
+
+def _build_projected_points_layer(
+    points_table: pd.DataFrame,
+    num_nodes: int,
+) -> alt.Chart:
+    """Create the red, enlarged Altair point layer for projected compounds."""
+    return altair_points_chart(
+        points_table=points_table,
+        num_nodes=num_nodes,
+        points_size=PROJECTED_POINTS_SIZE,
+        points_opacity=PROJECTED_POINTS_OPACITY,
+        points_color=PROJECTED_POINTS_COLOR,
+        tooltip_columns=_projected_points_tooltips(points_table),
+    )
+
+
+def _add_projected_points_trace(fig, points_table: pd.DataFrame):
+    """Add the red, enlarged Plotly point layer for projected compounds."""
+    fig.add_scatter(
+        x=points_table["x"].tolist(),
+        y=points_table["y"].tolist(),
+        mode="markers",
+        name="Projected compounds",
+        marker={
+            "color": PROJECTED_POINTS_COLOR,
+            "size": PROJECTED_PLOTLY_POINTS_SIZE,
+            "line": {"color": "white", "width": 1},
+        },
+        text=_projected_points_hover_text(points_table),
+        hoverinfo="text",
+    )
+    return fig
 
 
 def _create_altair_landscape_chart(
@@ -3267,20 +3421,12 @@ def save_gtm_plot(
 
         # Compute charts and molecule info
         density_chart = altair_discrete_density_landscape(source, title=model_header)
-        # resps now has the correct shape (n_molecules, n_nodes) for ChemographyKit
-        coords = calculate_latent_coords(resps, correction=True, return_node=True)
-        vis_info = encode_molecules(df, smiles_col_name=SMILES_COLUMN).reset_index()[
-            [SMILES_COLUMN, "source", "image"]
-        ]
-        source_mols = pd.concat([coords, vis_info], axis=1)
+        source_mols = _projected_points_from_projection(df, resps)
 
         # Create points layer
-        points = altair_points_chart(
+        points = _build_projected_points_layer(
             points_table=source_mols,
             num_nodes=resps.shape[1],  # n_nodes is the second dimension
-            points_size=DEFAULT_POINTS_SIZE,
-            points_opacity=DEFAULT_POINTS_OPACITY,
-            tooltip_columns={SMILES_COLUMN: "Smile: ", "source": "Dataset: ", "image": None},
         )
 
         # Create optional labels layer for marked nodes
@@ -3324,6 +3470,11 @@ def save_gtm_landscape_plot(
     mark_nodes: Optional[List[int]] = None,
     chart_width: int = DEFAULT_CHART_WIDTH,
     chart_height: int = DEFAULT_CHART_HEIGHT,
+    overlay_dataset_file: Optional[str] = None,
+    gtm_model_file: Optional[str] = None,
+    *,
+    descriptor_type: Optional[str] = None,
+    agent: Optional[Agent] = None,
 ) -> str:
     """
     Generate and save a ChemographyKit landscape plot from a saved landscape table.
@@ -3335,6 +3486,13 @@ def save_gtm_landscape_plot(
         mark_nodes: Optional list of node indices to label on the plot
         chart_width: Width of the output chart (pixels)
         chart_height: Height of the output chart (pixels)
+        overlay_dataset_file: Optional CSV of designed analogs/new compounds to
+            overlay as red projected datapoints. The file may already contain
+            x/y projection coordinates; otherwise ``gtm_model_file`` is required.
+        gtm_model_file: GTM model used to project ``overlay_dataset_file`` when
+            it does not already contain x/y coordinates.
+        descriptor_type: Optional descriptor backend for projecting the overlay dataset.
+        agent: Optional agent whose session state can resolve descriptor settings.
 
     Returns:
         Success message with file paths
@@ -3347,6 +3505,14 @@ def save_gtm_landscape_plot(
     if mark_nodes is not None and not isinstance(mark_nodes, list):
         raise ValueError("mark_nodes must be a list or None")
 
+    if overlay_dataset_file is not None and not isinstance(overlay_dataset_file, str):
+        raise ValueError("overlay_dataset_file must be a string or None")
+    if overlay_dataset_file and normalized_type == "query":
+        raise ValueError(
+            "Projection overlays are supported for density, classification, and "
+            "regression landscapes."
+        )
+
     logger.info(
         f"Creating {normalized_renderer} {normalized_type} landscape plot from {landscape_file}"
     )
@@ -3354,6 +3520,12 @@ def save_gtm_landscape_plot(
     try:
         source_table = _load_landscape_table(landscape_file)
         _validate_landscape_table(source_table, normalized_type)
+        overlay_points = _load_projected_points_overlay(
+            overlay_dataset_file,
+            gtm_model_file,
+            descriptor_type=descriptor_type,
+            agent=agent,
+        )
 
         title = f"{Path(landscape_file).stem} ({normalized_renderer} {normalized_type})"
         base_path = f"{Path(landscape_file).with_suffix('')}_{normalized_renderer}_{normalized_type}_landscape"
@@ -3367,9 +3539,19 @@ def save_gtm_landscape_plot(
 
         if normalized_renderer == "altair":
             chart = _create_altair_landscape_chart(source_table, normalized_type, title=title)
+            layers = [chart]
+            if overlay_points is not None:
+                layers.append(
+                    _build_projected_points_layer(
+                        points_table=overlay_points,
+                        num_nodes=_infer_projection_num_nodes(source_table, overlay_points),
+                    )
+                )
             labels = _build_node_labels_layer(source_table, mark_nodes)
             if labels is not None:
-                chart = alt.layer(chart, labels)
+                layers.append(labels)
+            if len(layers) > 1:
+                chart = alt.layer(*layers)
 
             chart = configure_chart(chart, chart_width, chart_height)
             _write_chart_outputs(chart, html_path, png_path)
@@ -3378,17 +3560,22 @@ def save_gtm_landscape_plot(
             if mark_nodes:
                 logger.warning("mark_nodes is ignored for Plotly landscape plots")
             fig = _create_plotly_landscape_figure(source_table, normalized_type, title=title)
+            if overlay_points is not None:
+                fig = _add_projected_points_trace(fig, overlay_points)
             fig.update_layout(width=chart_width, height=chart_height)
             png_written = _write_plotly_outputs(fig, html_path, png_path)
 
         logger.info(f"Successfully created {normalized_renderer} {normalized_type} landscape plot")
+        overlay_note = " with projected compound overlay" if overlay_points is not None else ""
         if png_written:
             return (
-                f"{normalized_renderer.capitalize()} {normalized_type} landscape saved to S3: "
+                f"{normalized_renderer.capitalize()} {normalized_type} landscape{overlay_note} "
+                f"saved to S3: "
                 f"`{S3.path(html_path)}` and `{S3.path(png_path)}`"
             )
         return (
-            f"{normalized_renderer.capitalize()} {normalized_type} landscape saved to S3: "
+            f"{normalized_renderer.capitalize()} {normalized_type} landscape{overlay_note} "
+            f"saved to S3: "
             f"`{S3.path(html_path)}`. PNG export was skipped because the Plotly image backend "
             f"is unavailable."
         )

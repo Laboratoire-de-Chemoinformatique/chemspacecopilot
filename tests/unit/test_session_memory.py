@@ -2,12 +2,17 @@
 # coding: utf-8
 """Tests for shared structured session working memory."""
 
+from pathlib import Path
+
 import pandas as pd
 
+import cs_copilot.tools.io.session_memory as session_memory
 from cs_copilot.tools.io.session_memory import (
     SessionMemoryToolkit,
+    SessionStore,
     list_loadable_session_data,
     load_candidate_set_artifact,
+    materialize_candidate_set_dataset,
     register_compounds_from_candidates,
     register_generated_candidate_set,
     register_session_object,
@@ -16,6 +21,24 @@ from cs_copilot.tools.io.session_memory import (
     resolve_session_reference,
     select_session_object,
 )
+
+
+def _use_local_candidate_artifacts(monkeypatch, tmp_path: Path) -> None:
+    """Keep candidate artifact reads/writes local even if S3 was enabled by another test."""
+
+    def _open(path: str, mode: str = "r"):
+        target = Path(path)
+        if not target.is_absolute():
+            target = tmp_path / target
+        target.parent.mkdir(parents=True, exist_ok=True)
+        return open(target, mode)
+
+    monkeypatch.setattr(session_memory.S3, "open", _open)
+    monkeypatch.setattr(
+        session_memory.S3,
+        "path",
+        lambda rel: str(tmp_path / rel) if not str(rel).startswith("/") else str(rel),
+    )
 
 
 def test_register_compounds_updates_current_and_summary():
@@ -133,7 +156,7 @@ def test_resolve_loadable_session_data_prefers_primary_path_in_container():
 def test_generated_candidate_set_resolves_top_candidates_over_dataset_compounds(
     monkeypatch, tmp_path
 ):
-    monkeypatch.chdir(tmp_path)
+    _use_local_candidate_artifacts(monkeypatch, tmp_path)
     state = {}
     candidates = [
         {"smiles": "CCO", "score": 0.9, "valid": True, "rationale": "Verbose rationale"},
@@ -183,6 +206,7 @@ def test_generated_candidate_set_resolves_top_candidates_over_dataset_compounds(
     assert state["session_objects"]["current"]["generated_compounds"] == "cset_001"
     assert state["designed_molecules"]["candidate_set_id"] == "cset_001"
     assert state["designed_molecules"]["artifact_path"].endswith("candidate_sets/cset_001.json")
+    assert state["designed_molecules"]["csv_path"].endswith("candidate_sets/cset_001.csv")
     assert state["designed_molecules"]["preview"] == [
         {"smiles": "CCO", "valid": True, "score": 0.9},
         {"smiles": "CCN", "valid": True, "score": 0.8},
@@ -193,11 +217,58 @@ def test_generated_candidate_set_resolves_top_candidates_over_dataset_compounds(
     assert resolved["compounds"][0]["generation_engine"] == "llm"
     assert state["session_objects"]["compounds"]["cmp_002"]["candidate_set_id"] == "cset_001"
     assert state["session_objects"]["candidate_sets"]["cset_001"]["artifact_format"] == "json"
+    assert state["session_objects"]["candidate_sets"]["cset_001"]["csv_format"] == "csv"
+    csv_table = pd.read_csv(state["designed_molecules"]["csv_path"])
+    assert csv_table["smi"].tolist() == ["CCO", "CCN", "CCC"]
+    assert csv_table["rank"].tolist() == [1, 2, 3]
+    assert csv_table["candidate_set_id"].tolist() == ["cset_001"] * 3
     assert artifact["status"] == "loaded"
     assert [candidate["smiles"] for candidate in artifact["candidates"]] == ["CCO", "CCN", "CCC"]
 
+    materialized = materialize_candidate_set_dataset(state, "designed_molecules", top_n=2)
+    top_csv = pd.read_csv(materialized["csv_path"])
+    assert materialized["status"] == "materialized"
+    assert materialized["candidate_set_id"] == "cset_001"
+    assert top_csv["smi"].tolist() == ["CCO", "CCN"]
 
-def test_session_memory_toolkit_resolves_candidate_set():
+
+def test_session_store_materializes_candidate_set_dataset(monkeypatch, tmp_path):
+    _use_local_candidate_artifacts(monkeypatch, tmp_path)
+    state = {}
+    candidate_ids = register_compounds_from_candidates(
+        state,
+        ["CCO", "CCN"],
+        source_agent="test",
+        source_tool="sample_molecules",
+        label_prefix="Sample",
+        provenance={
+            "origin_type": "generated",
+            "origin_agent": "autoencoder_toolkit",
+            "generation_engine": "autoencoder",
+        },
+    )
+    register_generated_candidate_set(
+        state,
+        candidate_ids,
+        source_agent="test",
+        source_tool="sample_molecules",
+        origin_agent="autoencoder_toolkit",
+        generation_engine="autoencoder",
+        generation_mode="sample",
+        session_key="sampled",
+        label="Autoencoder samples",
+    )
+
+    materialized = SessionStore(state).materialize_candidate_set_dataset("autoencoder candidates")
+    csv_table = pd.read_csv(materialized["csv_path"])
+
+    assert materialized["status"] == "materialized"
+    assert materialized["candidate_set_id"] == "cset_001"
+    assert csv_table["smi"].tolist() == ["CCO", "CCN"]
+
+
+def test_session_memory_toolkit_resolves_candidate_set(monkeypatch, tmp_path):
+    _use_local_candidate_artifacts(monkeypatch, tmp_path)
     state = {}
     candidate_ids = register_compounds_from_candidates(
         state,
@@ -232,3 +303,10 @@ def test_session_memory_toolkit_resolves_candidate_set():
     assert resolved["status"] == "resolved"
     assert resolved["candidate_set"]["id"] == "cset_001"
     assert resolved["compounds"][0]["smiles"] == "CCO"
+
+    materialized = SessionMemoryToolkit().materialize_candidate_set_dataset(
+        "autoencoder candidates",
+        session_state=state,
+    )
+    assert materialized["status"] == "materialized"
+    assert materialized["csv_path"].endswith("candidate_sets/cset_001.csv")
