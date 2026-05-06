@@ -182,9 +182,7 @@ def test_output_layout_scopes_operation_artifacts_to_workflow():
 
     assert context["layout_version"] == 3
     assert state[OUTPUT_CONTEXT_KEY]["workflow_id"] == "layout-session"
-    assert path == (
-        f"workflows/{context['workflow_id']}/01_chemical_space/gtm/models/model.pkl.gz"
-    )
+    assert path == (f"workflows/{context['workflow_id']}/01_chemical_space/gtm/models/model.pkl.gz")
     assert reports_path == f"workflows/{context['workflow_id']}/reports/gtm_activity/report.html"
 
 
