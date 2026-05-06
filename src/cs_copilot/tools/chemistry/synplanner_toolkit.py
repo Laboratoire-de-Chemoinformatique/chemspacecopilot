@@ -22,16 +22,17 @@ see when running the notebook without first installing the package.
 
 from __future__ import annotations
 
+import hashlib
 import importlib
+import json
 import logging
 import re
-import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from agno.agent import Agent
 
-from cs_copilot.storage import S3
+from cs_copilot.storage import S3, OutputOperation, operation_rel_path
 from cs_copilot.tools.io.formatting import smiles_to_png_bytes
 from cs_copilot.tools.io.session_memory import (
     list_session_objects,
@@ -44,6 +45,24 @@ from .base_chemistry import BaseChemistryToolkit, InvalidSMILESError
 from .standardize import standardize_smiles
 
 logger = logging.getLogger(__name__)
+
+
+def _session_state_for_outputs(
+    agent: Optional[Agent],
+    session_state: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if isinstance(session_state, dict):
+        return session_state
+    agent_state = getattr(agent, "session_state", None)
+    return agent_state if isinstance(agent_state, dict) else None
+
+
+def _target_slug(query: Optional[str], smiles: Optional[str]) -> str:
+    seed = str(smiles or query or "target")
+    digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:8]
+    label = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(query or "target")).strip("._-")
+    label = label[:48].strip("._-") or "target"
+    return f"{label}_{digest}"
 
 
 class SynPlannerError(Exception):
@@ -520,7 +539,12 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         route_visualizations = []
         if tree is not None and raw_routes:
             route_visualizations = self._generate_route_visualizations(
-                tree, raw_routes, agent=agent, session_state=session_state
+                tree,
+                raw_routes,
+                query=info["query"],
+                smiles=smiles,
+                agent=agent,
+                session_state=session_state,
             )
 
         descriptors = self.get_basic_descriptors(smiles)
@@ -719,6 +743,10 @@ class SynPlannerToolkit(BaseChemistryToolkit):
     ) -> Dict[str, Any]:
         """Persist compact SynPlanner output for the Report Generator agent."""
         report_plan = self._build_report_ready_plan(plan, visualizations)
+        self._persist_route_artifacts(report_plan, agent=agent, session_state=session_state)
+        plan_path = self._persist_plan_artifact(report_plan, agent=agent, session_state=session_state)
+        if plan_path:
+            report_plan["plan_path"] = plan_path
 
         if session_state is not None:
             session_state["synplanner_plan"] = report_plan
@@ -792,6 +820,75 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                     pass
         return report_plan
 
+    def _retrosynthesis_rel_path(
+        self,
+        query: Optional[str],
+        smiles: Optional[str],
+        *parts: str,
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        state = _session_state_for_outputs(agent, session_state)
+        return operation_rel_path(
+            OutputOperation.RETROSYNTHESIS,
+            "targets",
+            _target_slug(query, smiles),
+            *parts,
+            session_state=state,
+            workflow_slug="retrosynthesis",
+        )
+
+    def _persist_plan_artifact(
+        self,
+        report_plan: Dict[str, Any],
+        *,
+        agent: Optional[Agent],
+        session_state: Optional[Dict[str, Any]],
+    ) -> Optional[str]:
+        rel_path = self._retrosynthesis_rel_path(
+            report_plan.get("query"),
+            report_plan.get("smiles"),
+            "plan.json",
+            agent=agent,
+            session_state=session_state,
+        )
+        try:
+            payload = {key: value for key, value in report_plan.items() if key != "plan_path"}
+            with S3.open(rel_path, "w") as handle:
+                json.dump(payload, handle, indent=2, sort_keys=True, default=str)
+            return S3.path(rel_path)
+        except Exception as exc:
+            logger.warning("Failed to persist SynPlanner plan artifact: %s", exc)
+            return None
+
+    def _persist_route_artifacts(
+        self,
+        report_plan: Dict[str, Any],
+        *,
+        agent: Optional[Agent],
+        session_state: Optional[Dict[str, Any]],
+    ) -> None:
+        routes = report_plan.get("routes", [])
+        if not isinstance(routes, list):
+            return
+        for idx, route in enumerate(routes, start=1):
+            if not isinstance(route, dict):
+                continue
+            rel_path = self._retrosynthesis_rel_path(
+                report_plan.get("query"),
+                report_plan.get("smiles"),
+                "routes",
+                f"route_{idx:03d}.json",
+                agent=agent,
+                session_state=session_state,
+            )
+            try:
+                with S3.open(rel_path, "w") as handle:
+                    json.dump(route, handle, indent=2, sort_keys=True, default=str)
+                route["route_json_path"] = S3.path(rel_path)
+            except Exception as exc:
+                logger.warning("Failed to persist SynPlanner route %d artifact: %s", idx, exc)
+
     @staticmethod
     def _existing_session_compound_id(
         session_state: Dict[str, Any],
@@ -847,12 +944,13 @@ class SynPlannerToolkit(BaseChemistryToolkit):
     def _compact_visualizations(visualizations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Keep only report-safe visualization metadata and file paths."""
         compact = []
-        for idx, viz in enumerate(visualizations):
+        for idx, viz in enumerate(visualizations, start=1):
             node_id = viz.get("node_id")
             score = viz.get("score")
+            route_index = viz.get("route_index") or idx
             compact.append(
                 {
-                    "route_index": idx,
+                    "route_index": route_index,
                     "node_id": node_id,
                     "score": score,
                     "png_path": viz.get("png_path"),
@@ -1186,6 +1284,9 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         self,
         tree: Any,
         raw_routes: List[Any],
+        *,
+        query: Optional[str],
+        smiles: Optional[str],
         agent: Optional[Agent] = None,
         session_state: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
@@ -1212,7 +1313,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             logger.warning("SynPlanner visualization module not available")
             return visualizations
 
-        for _idx, route_data in enumerate(raw_routes):
+        for route_idx, route_data in enumerate(raw_routes, start=1):
             node_id = route_data.get("node_id")
             if node_id is None:
                 continue
@@ -1228,8 +1329,8 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                     data_url = f"data:image/svg+xml;base64,{svg_base64}"
 
                     score = route_data.get("score")
-                    route_uuid = uuid.uuid4().hex[:8]
                     viz_data = {
+                        "route_index": route_idx,
                         "node_id": node_id,
                         "score": score,
                         "svg": svg_string,
@@ -1237,8 +1338,15 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                     }
 
                     # Save SVG to S3
-                    svg_filename = f"synplanner_route_{node_id}_{route_uuid}.svg"
-                    svg_path = f"synplanner_visualizations/{svg_filename}"
+                    svg_filename = f"route_{route_idx:03d}.svg"
+                    svg_path = self._retrosynthesis_rel_path(
+                        query,
+                        smiles,
+                        "routes",
+                        svg_filename,
+                        agent=agent,
+                        session_state=session_state,
+                    )
                     try:
                         svg_bytes = svg_string.encode("utf-8")
                         with S3.open(svg_path, "wb") as f:
@@ -1252,8 +1360,15 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                         logger.warning(f"Failed to save SVG for route node {node_id}: {exc}")
 
                     # Convert SVG to PNG and save to S3
-                    png_filename = f"synplanner_route_{node_id}_{route_uuid}.png"
-                    png_path = f"synplanner_visualizations/{png_filename}"
+                    png_filename = f"route_{route_idx:03d}.png"
+                    png_path = self._retrosynthesis_rel_path(
+                        query,
+                        smiles,
+                        "routes",
+                        png_filename,
+                        agent=agent,
+                        session_state=session_state,
+                    )
 
                     if self._convert_svg_to_png(svg_string, png_path):
                         # Get the full S3 path for storage in session state
@@ -1421,15 +1536,16 @@ class SynPlannerToolkit(BaseChemistryToolkit):
 
         # Format visualizations with route information (excluding large SVG/base64 data)
         formatted_viz = []
-        for idx, viz in enumerate(visualizations):
+        for idx, viz in enumerate(visualizations, start=1):
             node_id = viz.get("node_id")
             score = viz.get("score")
             png_path = viz.get("png_path")
             svg_path = viz.get("svg_path")
+            route_index = viz.get("route_index") or idx
 
             formatted_viz.append(
                 {
-                    "route_index": idx,
+                    "route_index": route_index,
                     "node_id": node_id,
                     "score": score,
                     "png_path": png_path,

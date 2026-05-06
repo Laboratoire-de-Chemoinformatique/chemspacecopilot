@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from cs_copilot.storage import S3
+from cs_copilot.storage import S3, OutputOperation, operation_rel_path
 
 from .session_memory import register_session_object
 from .utils import get_mime_type
@@ -43,7 +43,7 @@ def _report_filename(
     report_type: Optional[str],
 ) -> str:
     if filename:
-        # Strip directory components to keep files inside reports/.
+        # Strip directory components to keep files inside the workflow report folder.
         name = Path(filename).name
         # Force the requested extension, replacing any other suffix.
         return Path(name).with_suffix(extension).name
@@ -70,6 +70,20 @@ def _write_binary_report(content: bytes, rel_path: str) -> str:
     with S3.open(rel_path, "wb") as fh:
         fh.write(content)
     return S3.path(rel_path)
+
+
+def _report_rel_path(
+    filename: str,
+    report_type: Optional[str],
+    session_state: Optional[Dict[str, Any]],
+) -> str:
+    return operation_rel_path(
+        OutputOperation.REPORTS,
+        _report_slug(report_type),
+        filename,
+        session_state=session_state,
+        workflow_slug="reports",
+    )
 
 
 def _as_strings(value: Any) -> list[str]:
@@ -593,7 +607,8 @@ def save_markdown_report(
 
     Use this tool at the end of a Report Generator run to persist the final
     markdown document so the user can download it. The file is written under
-    ``reports/<filename>.md`` inside the active session prefix.
+    ``workflows/<workflow_id>/reports/<report_type>/<filename>.md`` inside the
+    active session prefix.
 
     Args:
         content: Full markdown text. Must be non-empty (whitespace-only rejected).
@@ -616,7 +631,7 @@ def save_markdown_report(
         raise ValueError("content cannot be empty")
 
     name = _report_filename(filename, _MD_EXTENSION, report_type)
-    rel_path = f"{_REPORTS_DIR}/{name}"
+    rel_path = _report_rel_path(name, report_type, session_state)
 
     try:
         full_path = _write_text_report(content, rel_path)
@@ -716,7 +731,11 @@ def save_rich_report(
                 figures=normalized_figures,
                 embed_images=embed_images,
             )
-            rel_path = f"{_REPORTS_DIR}/{basename}{_HTML_EXTENSION}"
+            rel_path = _report_rel_path(
+                f"{basename}{_HTML_EXTENSION}",
+                report_type,
+                session_state,
+            )
             saved_paths.append(("HTML", _write_text_report(html_content, rel_path)))
 
         if "pdf" in normalized_formats:
@@ -726,7 +745,11 @@ def save_rich_report(
                 sections=normalized_sections,
                 figures=normalized_figures,
             )
-            rel_path = f"{_REPORTS_DIR}/{basename}{_PDF_EXTENSION}"
+            rel_path = _report_rel_path(
+                f"{basename}{_PDF_EXTENSION}",
+                report_type,
+                session_state,
+            )
             saved_paths.append(("PDF", _write_binary_report(pdf_content, rel_path)))
 
         if "md" in normalized_formats:
@@ -736,7 +759,11 @@ def save_rich_report(
                 sections=normalized_sections,
                 figures=normalized_figures,
             )
-            rel_path = f"{_REPORTS_DIR}/{basename}{_MD_EXTENSION}"
+            rel_path = _report_rel_path(
+                f"{basename}{_MD_EXTENSION}",
+                report_type,
+                session_state,
+            )
             saved_paths.append(("Markdown", _write_text_report(markdown_content, rel_path)))
 
         logger.info("Rich report saved with outputs: %s", saved_paths)

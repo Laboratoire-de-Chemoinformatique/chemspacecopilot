@@ -14,7 +14,7 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 
-from cs_copilot.storage import S3
+from cs_copilot.storage import S3, OutputOperation, scoped_artifact_path
 from cs_copilot.tools.chemistry.activity_schema import (
     ActivityMapping,
     activity_series_for_landscape,
@@ -93,6 +93,7 @@ def prepare_clean_dataset(
     descriptor_type: Optional[str] = None,
     remove_stereochemistry: bool = True,
     save_raw: bool = True,
+    session_state: Optional[dict[str, Any]] = None,
 ) -> CleanDatasetResult:
     """Prepare raw, clean, descriptor, and report artifacts for a molecular dataset.
 
@@ -119,6 +120,7 @@ def prepare_clean_dataset(
         raw_dataset_path=raw_dataset_path,
         raw_filename=raw_filename,
         save_raw=save_raw,
+        session_state=session_state,
     )
 
     standardized_df, standardization_summary = _standardize_input(
@@ -143,14 +145,29 @@ def prepare_clean_dataset(
     final_activity_mapping = _final_activity_mapping(clean_df, activity_mapping, activity_kind)
 
     clean_filename = clean_filename or f"{source_stem}_clean.csv"
-    clean_dataset_path = _write_csv(clean_df, clean_filename)
+    clean_dataset_path = _write_csv(
+        clean_df,
+        _chemical_space_artifact_path(
+            clean_filename,
+            "datasets",
+            "clean",
+            session_state=session_state,
+        ),
+    )
 
     descriptor_df, descriptor_type_used, descriptor_column = _build_descriptor_dataframe(
         clean_df,
         descriptor_type=descriptor_type,
     )
     descriptor_filename = descriptor_filename or f"{source_stem}_descriptors.parquet"
-    descriptor_parquet_path = _write_parquet(descriptor_df, descriptor_filename)
+    descriptor_parquet_path = _write_parquet(
+        descriptor_df,
+        _chemical_space_artifact_path(
+            descriptor_filename,
+            "descriptors",
+            session_state=session_state,
+        ),
+    )
 
     standardization_summary.update(
         {
@@ -169,7 +186,14 @@ def prepare_clean_dataset(
     )
 
     report_filename = report_filename or f"{source_stem}_standardization_report.md"
-    report_path = _write_report(standardization_summary, report_filename)
+    report_path = _write_report(
+        standardization_summary,
+        _chemical_space_artifact_path(
+            report_filename,
+            "standardization",
+            session_state=session_state,
+        ),
+    )
     standardization_summary["standardization_report_path"] = report_path
 
     logger.info(
@@ -475,12 +499,36 @@ def _save_raw_dataset(
     raw_dataset_path: Optional[str],
     raw_filename: Optional[str],
     save_raw: bool,
+    session_state: Optional[dict[str, Any]],
 ) -> str:
     if raw_dataset_path:
         return raw_dataset_path
     if not save_raw:
         return ""
-    return _write_csv(df, raw_filename or f"{source_stem}_raw.csv")
+    filename = raw_filename or f"{source_stem}_raw.csv"
+    return _write_csv(
+        df,
+        _chemical_space_artifact_path(
+            filename,
+            "datasets",
+            "raw",
+            session_state=session_state,
+        ),
+    )
+
+
+def _chemical_space_artifact_path(
+    filename: str,
+    *folders: str,
+    session_state: Optional[dict[str, Any]] = None,
+) -> str:
+    return scoped_artifact_path(
+        filename,
+        OutputOperation.CHEMICAL_SPACE,
+        *folders,
+        session_state=session_state,
+        workflow_slug="chemical_space",
+    )
 
 
 def _write_csv(df: pd.DataFrame, filename: str) -> str:

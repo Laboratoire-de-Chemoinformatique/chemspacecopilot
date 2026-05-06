@@ -979,6 +979,7 @@ class PointerPandasTools(PandasTools):
             smiles_column="smiles",
             activity_column=activity_col,
             raw_dataset_path=_raw_dataset_path_for_input(df_path, self.dataframes),
+            session_state=session_state or getattr(agent, "session_state", None),
         )
         df = prepared.clean_df
         activity_mapping = prepared.activity_mapping

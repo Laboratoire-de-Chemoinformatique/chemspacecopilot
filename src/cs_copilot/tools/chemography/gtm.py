@@ -359,7 +359,12 @@ class GTMToolkit(BaseDRToolkit):
         )
         self._remember_gtm_map(
             dataset_path=df_csv_path,
-            model_path=f"{gtm_name}.pkl.gz",
+            model_path=gtm_operations.chemical_space_artifact_path(
+                f"{gtm_name}.pkl.gz",
+                "gtm",
+                "models",
+                agent=agent,
+            ),
             descriptor_type=descriptor_type,
             agent=agent,
             session_state=session_state,
@@ -1613,4 +1618,5 @@ class GTMToolkit(BaseDRToolkit):
             node_threshold=node_threshold,
             chart_width=chart_width,
             chart_height=chart_height,
+            agent=agent,
         )

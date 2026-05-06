@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
+from cs_copilot.storage import S3
 from cs_copilot.tools.chemistry.synplanner_toolkit import SynPlannerToolkit
 from cs_copilot.tools.io.session_memory import (
     register_compounds_from_candidates,
@@ -283,6 +285,16 @@ def _patch_planning_dependencies(monkeypatch, toolkit):
     monkeypatch.setattr(toolkit, "_load_synplanner_components", lambda: None)
     monkeypatch.setattr(toolkit, "_generate_route_visualizations", lambda *args, **kwargs: [])
     monkeypatch.setattr(toolkit, "get_basic_descriptors", lambda smiles: {})
+    monkeypatch.setattr(
+        toolkit,
+        "_persist_plan_artifact",
+        lambda report_plan, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        toolkit,
+        "_persist_route_artifacts",
+        lambda report_plan, **_kwargs: None,
+    )
 
 
 def test_build_search_profiles_use_synplanner_documented_baseline():
@@ -400,6 +412,34 @@ def test_plan_synthesis_stores_report_ready_session_state(monkeypatch):
     assert report_plan["visualizations"] == []
     assert "raw" not in report_plan
     assert "tree" not in report_plan
+
+
+def test_plan_synthesis_persists_plan_and_route_artifacts(monkeypatch, tmp_path):
+    toolkit = SynPlannerToolkit()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("USE_S3", "false")
+    old_prefix = S3.current_prefix()
+    S3.set_session_prefix("sessions/test-synplanner")
+    session_state = {}
+
+    monkeypatch.setattr(toolkit, "_load_synplanner_components", lambda: None)
+    monkeypatch.setattr(toolkit, "_generate_route_visualizations", lambda *args, **kwargs: [])
+    monkeypatch.setattr(toolkit, "get_basic_descriptors", lambda smiles: {})
+    monkeypatch.setattr(
+        toolkit, "_create_and_search_tree", lambda smiles, profile=None: _FakeTree([42])
+    )
+
+    try:
+        plan = toolkit.plan_synthesis("CCO", session_state=session_state)
+    finally:
+        S3.set_session_prefix(old_prefix)
+
+    report_plan = plan["synthesis_report_data"]
+    assert "/03_retrosynthesis/targets/" in report_plan["plan_path"]
+    assert report_plan["plan_path"].endswith("/plan.json")
+    assert report_plan["routes"][0]["route_json_path"].endswith("/routes/route_001.json")
+    assert Path(report_plan["plan_path"]).exists()
+    assert Path(report_plan["routes"][0]["route_json_path"]).exists()
 
 
 def test_plan_synthesis_stores_report_state_without_agent(monkeypatch):

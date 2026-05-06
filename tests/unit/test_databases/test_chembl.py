@@ -5,7 +5,6 @@ Tests for the ChEMBL database toolkit.
 """
 
 import re
-from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pandas as pd
@@ -461,20 +460,25 @@ class TestChemblToolkit:
         finally:
             S3.prefix = original_prefix
 
-        expected_path = Path("data") / "sessions" / "test-session" / "chembl_kinase_clean.csv"
-        expected_raw_path = Path("data") / "sessions" / "test-session" / "chembl_kinase_raw.csv"
-        expected_descriptor_path = (
-            Path("data") / "sessions" / "test-session" / "chembl_kinase_descriptors.parquet"
-        )
-        expected_report_path = (
-            Path("data") / "sessions" / "test-session" / "chembl_kinase_standardization_report.md"
-        )
-        assert (tmp_path / expected_path).exists()
-        assert (tmp_path / expected_raw_path).exists()
-        assert (tmp_path / expected_descriptor_path).exists()
-        assert (tmp_path / expected_report_path).exists()
+        session_root = tmp_path / "data" / "sessions" / "test-session"
+        expected_paths = {
+            "clean": "workflows/*/01_chemical_space/datasets/clean/chembl_kinase_clean.csv",
+            "raw": "workflows/*/01_chemical_space/datasets/raw/chembl_kinase_raw.csv",
+            "descriptor": (
+                "workflows/*/01_chemical_space/descriptors/"
+                "chembl_kinase_descriptors.parquet"
+            ),
+            "report": (
+                "workflows/*/01_chemical_space/standardization/"
+                "chembl_kinase_standardization_report.md"
+            ),
+        }
+        resolved_paths = {
+            key: next(iter(session_root.glob(pattern))) for key, pattern in expected_paths.items()
+        }
+        assert all(path.exists() for path in resolved_paths.values())
         assert "Saved locally" in result
-        assert str(expected_path) in result
+        assert str(resolved_paths["clean"].relative_to(tmp_path)) in result
 
     def test_fetch_compounds_invalid_query(self):
         """Test compound fetching with invalid query."""
