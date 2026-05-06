@@ -44,6 +44,9 @@ def test_prepare_clean_dataset_merges_stereo_duplicates_and_writes_artifacts(
         assert result.standardization_summary["invalid_smiles_rows"] == 1
         assert result.standardization_summary["duplicate_rows_after_standardization"] == 1
         assert result.standardization_summary["raw_smiles_collapse_groups"] == 1
+        assert "/01_chemical_space/datasets/clean/" in result.clean_dataset_path
+        assert "/01_chemical_space/descriptors/" in result.descriptor_parquet_path
+        assert "/01_chemical_space/standardization/" in result.standardization_report_path
 
         merged = clean.loc[clean["compound_ids"] == "cmp_a|cmp_b"].iloc[0]
         assert merged["activity_final"] == 7.5

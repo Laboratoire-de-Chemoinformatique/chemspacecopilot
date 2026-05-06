@@ -726,6 +726,7 @@ def test_create_activity_landscapes_defaults_to_altair(monkeypatch):
     result = gtm_operations.create_activity_landscapes_tool("dataset.csv", "model.pkl.gz")
 
     assert calls["renderer"] == "altair_discrete_regression_landscape"
+    assert "/01_chemical_space/gtm/plots/activity/" in calls["html_path"]
     assert calls["html_path"].endswith("dataset_gtm_activity_landscape_altair_regression.html")
     assert calls["png_path"].endswith("dataset_gtm_activity_landscape_altair_regression.png")
     assert "altair" in result.lower()
@@ -767,6 +768,7 @@ def test_create_activity_landscapes_plotly_regression(monkeypatch):
 
     assert calls["renderer"] == "plotly_smooth_regression_landscape"
     assert calls["layout"] == {"width": 600, "height": 600}
+    assert "/01_chemical_space/gtm/plots/activity/" in calls["html_path"]
     assert calls["html_path"].endswith("dataset_gtm_activity_landscape_plotly_regression.html")
     assert calls["png_path"].endswith("dataset_gtm_activity_landscape_plotly_regression.png")
     assert "plotly" in result.lower()

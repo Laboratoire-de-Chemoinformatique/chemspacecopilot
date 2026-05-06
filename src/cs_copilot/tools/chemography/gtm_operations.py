@@ -54,7 +54,7 @@ from rdkit.Chem.Scaffolds import MurckoScaffold
 from scipy.ndimage import convolve
 from sklearn.neighbors import NearestNeighbors
 
-from cs_copilot.storage import S3
+from cs_copilot.storage import S3, OutputOperation, scoped_artifact_path
 from cs_copilot.utils.logging import setup_logging
 
 from ..chemistry.activity_schema import (
@@ -129,6 +129,35 @@ _PLOTLY_SUPPORTED_LANDSCAPES = {"density", "classification", "regression"}
 PROJECTED_POINTS_COLOR = "red"
 PROJECTED_POINTS_SIZE = max(DEFAULT_POINTS_SIZE + 20, int(DEFAULT_POINTS_SIZE * 1.8))
 PROJECTED_POINTS_OPACITY = 0.95
+
+
+def _agent_session_state(agent: Optional[Agent]) -> Optional[dict[str, Any]]:
+    state = getattr(agent, "session_state", None)
+    return state if isinstance(state, dict) else None
+
+
+def chemical_space_artifact_path(
+    filename: str,
+    *folders: str,
+    agent: Optional[Agent] = None,
+) -> str:
+    return scoped_artifact_path(
+        filename,
+        OutputOperation.CHEMICAL_SPACE,
+        *folders,
+        session_state=_agent_session_state(agent),
+        workflow_slug="chemical_space",
+    )
+
+
+def _chemical_space_artifact_path(
+    filename: str,
+    *folders: str,
+    agent: Optional[Agent] = None,
+) -> str:
+    return chemical_space_artifact_path(filename, *folders, agent=agent)
+
+
 PROJECTED_PLOTLY_POINTS_SIZE = 10
 RAW_SMILES_COLUMN = "raw_smiles"
 RAW_SMILES_INPUT_COLUMN = "raw_smiles_input"
@@ -1619,7 +1648,11 @@ def project_data_on_gtm(
     if model_stem.endswith(".pkl"):
         model_stem = model_stem[:-4]  # Remove .pkl if present (from .pkl.gz)
 
-    output_filename = f"{dataset_stem}_preprocessed_for_{model_stem}{CSV_EXTENSION}"
+    output_filename = _chemical_space_artifact_path(
+        f"{dataset_stem}_preprocessed_for_{model_stem}{CSV_EXTENSION}",
+        "projections",
+        agent=agent,
+    )
 
     logger.debug(f"Saving preprocessed dataset to {output_filename}")
 
@@ -1711,9 +1744,21 @@ def load_activity_landscape_csv(
 def activity_landscape_csv_path(
     gtm_model: str,
     landscape_type: Literal["classification", "regression"],
+    *,
+    agent: Optional[Agent] = None,
 ) -> str:
     """Return the CSV path used for persisted GTM activity landscape data."""
-    return _ensure_suffix(gtm_model, ".pkl.gz").replace(".pkl.gz", f"_{landscape_type}.csv")
+    filename = Path(_ensure_suffix(gtm_model, ".pkl.gz")).name.replace(
+        ".pkl.gz",
+        f"_{landscape_type}.csv",
+    )
+    return _chemical_space_artifact_path(
+        filename,
+        "gtm",
+        "tables",
+        "activity",
+        agent=agent,
+    )
 
 
 def create_activity_landscapes(
@@ -2315,7 +2360,7 @@ def preprocess_gtm_activity_data(
         )
 
         # Save regression landscape
-        path_reg = activity_landscape_csv_path(gtm_model, "regression")
+        path_reg = activity_landscape_csv_path(gtm_model, "regression", agent=agent)
         logger.info(f"Saving regression activity landscape to {path_reg}")
         with S3.open(path_reg, "w") as f:
             source_activity_reg.to_csv(f)
@@ -2417,7 +2462,7 @@ def preprocess_gtm_activity_data(
             )
 
             # Save classification landscape
-            path_class = activity_landscape_csv_path(gtm_model, "classification")
+            path_class = activity_landscape_csv_path(gtm_model, "classification", agent=agent)
             logger.info(f"Saving classification activity landscape to {path_class}")
             with S3.open(path_class, "w") as f:
                 source_activity_class.to_csv(f)
@@ -3022,7 +3067,12 @@ def optimize_gtm_model(
 
         # Also set as the current session GTM model
         # Generate a path-like identifier for the optimized model
-        optimized_model_path = f"{gtm_name}.pkl.gz"
+        optimized_model_path = _chemical_space_artifact_path(
+            f"{gtm_name}.pkl.gz",
+            "gtm",
+            "models",
+            agent=agent,
+        )
         set_session_gtm_model(agent, gtm, optimized_model_path)
 
         logger.info(f"GTM optimization completed with entropy: {best_score:.1f}")
@@ -3134,8 +3184,18 @@ def save_gtm_and_dataset(dataset_name: str, gtm_name: str, agent: Agent) -> str:
         df = agent.session_state[dataset_name]
 
         # Generate file paths
-        saved_df_path = f"{dataset_name}{CSV_EXTENSION}"
-        saved_gtm_path = f"{gtm_name}{PKL_GZ_EXTENSION}"
+        saved_df_path = _chemical_space_artifact_path(
+            f"{dataset_name}{CSV_EXTENSION}",
+            "gtm",
+            "datasets",
+            agent=agent,
+        )
+        saved_gtm_path = _chemical_space_artifact_path(
+            f"{gtm_name}{PKL_GZ_EXTENSION}",
+            "gtm",
+            "models",
+            agent=agent,
+        )
 
         # Save dataset
         logger.debug(f"Saving dataset to {saved_df_path}")
@@ -3279,15 +3339,27 @@ def create_activity_landscape_artifact(
             agent=agent,
         )
         detected_type = _detect_activity_landscape_type(source_activity)
-        landscape_csv = activity_landscape_csv_path(gtm_model, detected_type)
+        landscape_csv = activity_landscape_csv_path(gtm_model, detected_type, agent=agent)
 
         # Generate output paths (embed renderer + detected type so altair/plotly
         # variants produced in the same run do not collide).
-        s3_base = (
+        artifact_base = (
             f"{Path(dataset).stem}_gtm_activity_landscape_" f"{normalized_renderer}_{detected_type}"
         )
-        s3_html = f"{s3_base}{HTML_EXTENSION}"
-        s3_png = f"{s3_base}{PNG_EXTENSION}"
+        s3_html = _chemical_space_artifact_path(
+            f"{artifact_base}{HTML_EXTENSION}",
+            "gtm",
+            "plots",
+            "activity",
+            agent=agent,
+        )
+        s3_png = _chemical_space_artifact_path(
+            f"{artifact_base}{PNG_EXTENSION}",
+            "gtm",
+            "plots",
+            "activity",
+            agent=agent,
+        )
 
         logger.debug(
             f"Saving {normalized_renderer} {detected_type} activity landscape to "
@@ -3448,8 +3520,20 @@ def save_gtm_plot(
         )
 
         # Generate output paths
-        s3_html = f"{model_header}_gtm_plot{HTML_EXTENSION}"
-        s3_png = f"{model_header}_gtm_plot{PNG_EXTENSION}"
+        s3_html = _chemical_space_artifact_path(
+            f"{model_header}_gtm_plot{HTML_EXTENSION}",
+            "gtm",
+            "plots",
+            "density",
+            agent=agent,
+        )
+        s3_png = _chemical_space_artifact_path(
+            f"{model_header}_gtm_plot{PNG_EXTENSION}",
+            "gtm",
+            "plots",
+            "density",
+            agent=agent,
+        )
 
         # Save files
         logger.debug(f"Saving GTM plot to {s3_html} and {s3_png}")
@@ -3528,9 +3612,23 @@ def save_gtm_landscape_plot(
         )
 
         title = f"{Path(landscape_file).stem} ({normalized_renderer} {normalized_type})"
-        base_path = f"{Path(landscape_file).with_suffix('')}_{normalized_renderer}_{normalized_type}_landscape"
-        html_path = f"{base_path}{HTML_EXTENSION}"
-        png_path = f"{base_path}{PNG_EXTENSION}"
+        base_name = (
+            f"{Path(landscape_file).stem}_{normalized_renderer}_{normalized_type}_landscape"
+        )
+        html_path = _chemical_space_artifact_path(
+            f"{base_name}{HTML_EXTENSION}",
+            "gtm",
+            "plots",
+            "activity",
+            agent=agent,
+        )
+        png_path = _chemical_space_artifact_path(
+            f"{base_name}{PNG_EXTENSION}",
+            "gtm",
+            "plots",
+            "activity",
+            agent=agent,
+        )
 
         logger.debug(
             f"Saving {normalized_renderer} {normalized_type} landscape plot to "
@@ -4847,6 +4945,7 @@ def create_peptide_activity_landscapes_tool(
     node_threshold: float = DEFAULT_NODE_THRESHOLD,
     chart_width: int = DEFAULT_CHART_WIDTH,
     chart_height: int = DEFAULT_CHART_HEIGHT,
+    agent: Optional[Agent] = None,
 ) -> str:
     """
     End-to-end tool: Load DBAASP data, project onto WAE GTM, create activity landscapes.
@@ -4860,6 +4959,7 @@ def create_peptide_activity_landscapes_tool(
         node_threshold: Threshold below which nodes are excluded.
         chart_width: Width of the output chart (pixels).
         chart_height: Height of the output chart (pixels).
+        agent: Optional agent carrying the active workflow/session state.
 
     Returns:
         Summary message with paths to saved landscape files.
@@ -4896,9 +4996,27 @@ def create_peptide_activity_landscapes_tool(
             # Save files
             safe_name = org_name.replace(" ", "_").replace(".", "").lower()
             base = f"peptide_activity_landscape_{safe_name}"
-            html_path = f"{base}{HTML_EXTENSION}"
-            png_path = f"{base}{PNG_EXTENSION}"
-            csv_path = f"{base}{CSV_EXTENSION}"
+            html_path = _chemical_space_artifact_path(
+                f"{base}{HTML_EXTENSION}",
+                "gtm",
+                "plots",
+                "peptide_activity",
+                agent=agent,
+            )
+            png_path = _chemical_space_artifact_path(
+                f"{base}{PNG_EXTENSION}",
+                "gtm",
+                "plots",
+                "peptide_activity",
+                agent=agent,
+            )
+            csv_path = _chemical_space_artifact_path(
+                f"{base}{CSV_EXTENSION}",
+                "gtm",
+                "tables",
+                "peptide_activity",
+                agent=agent,
+            )
 
             _write_chart_outputs(chart, html_path, png_path)
 

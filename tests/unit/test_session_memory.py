@@ -11,6 +11,7 @@ from cs_copilot.tools.io.session_memory import (
     SessionMemoryToolkit,
     SessionStore,
     list_loadable_session_data,
+    load_candidate_artifact,
     load_candidate_set_artifact,
     materialize_candidate_set_dataset,
     register_compounds_from_candidates,
@@ -205,8 +206,12 @@ def test_generated_candidate_set_resolves_top_candidates_over_dataset_compounds(
     assert state["session_objects"]["current"]["candidate_set"] == "cset_001"
     assert state["session_objects"]["current"]["generated_compounds"] == "cset_001"
     assert state["designed_molecules"]["candidate_set_id"] == "cset_001"
-    assert state["designed_molecules"]["artifact_path"].endswith("candidate_sets/cset_001.json")
-    assert state["designed_molecules"]["csv_path"].endswith("candidate_sets/cset_001.csv")
+    assert state["designed_molecules"]["artifact_path"].endswith(
+        "02_analog_generation/candidate_sets/cset_001/candidates.json"
+    )
+    assert state["designed_molecules"]["csv_path"].endswith(
+        "02_analog_generation/candidate_sets/cset_001/candidates.csv"
+    )
     assert state["designed_molecules"]["preview"] == [
         {"smiles": "CCO", "valid": True, "score": 0.9},
         {"smiles": "CCN", "valid": True, "score": 0.8},
@@ -267,6 +272,21 @@ def test_session_store_materializes_candidate_set_dataset(monkeypatch, tmp_path)
     assert csv_table["smi"].tolist() == ["CCO", "CCN"]
 
 
+def test_legacy_flat_candidate_artifact_path_still_loads(monkeypatch, tmp_path):
+    _use_local_candidate_artifacts(monkeypatch, tmp_path)
+    legacy_path = tmp_path / "candidate_sets" / "cset_001.json"
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_path.write_text(
+        '{"candidate_set_id": "cset_001", "candidates": [{"smiles": "CCO"}]}'
+    )
+
+    payload = load_candidate_artifact("candidate_sets/cset_001.json")
+
+    assert payload["candidate_set_id"] == "cset_001"
+    assert payload["count"] == 1
+    assert payload["candidates"][0]["smiles"] == "CCO"
+
+
 def test_session_memory_toolkit_resolves_candidate_set(monkeypatch, tmp_path):
     _use_local_candidate_artifacts(monkeypatch, tmp_path)
     state = {}
@@ -309,4 +329,6 @@ def test_session_memory_toolkit_resolves_candidate_set(monkeypatch, tmp_path):
         session_state=state,
     )
     assert materialized["status"] == "materialized"
-    assert materialized["csv_path"].endswith("candidate_sets/cset_001.csv")
+    assert materialized["csv_path"].endswith(
+        "02_analog_generation/candidate_sets/cset_001/candidates.csv"
+    )

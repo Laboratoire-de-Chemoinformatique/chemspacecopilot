@@ -9,7 +9,17 @@ from unittest.mock import patch
 
 import pytest
 
-from cs_copilot.storage import S3, StorageConfigError, get_s3_config, is_s3_enabled
+from cs_copilot.storage import (
+    OUTPUT_CONTEXT_KEY,
+    S3,
+    OutputOperation,
+    StorageConfigError,
+    ensure_output_context,
+    get_s3_config,
+    is_s3_enabled,
+    operation_rel_path,
+    scoped_artifact_path,
+)
 
 
 @pytest.fixture
@@ -143,6 +153,98 @@ def test_relative_paths_use_context_local_session_prefix(clean_storage_env, monk
     assert path_b == os.fspath(Path("data") / "sessions" / "session-b" / "artifact.txt")
     assert context_a.run(S3.path, "artifact.txt") == path_a
     assert context_b.run(S3.path, "artifact.txt") == path_b
+
+
+def test_output_layout_scopes_operation_artifacts_to_workflow():
+    """Workflow output helpers should organize relative artifacts by operation."""
+    old_prefix = S3.current_prefix()
+    S3.set_session_prefix("sessions/layout-session")
+
+    try:
+        state = {}
+
+        context = ensure_output_context(state, workflow_slug="EGFR SAR")
+        path = scoped_artifact_path(
+            "../model.pkl.gz",
+            OutputOperation.CHEMICAL_SPACE,
+            "gtm",
+            "models",
+            session_state=state,
+        )
+        reports_path = operation_rel_path(
+            OutputOperation.REPORTS,
+            "gtm_activity",
+            "report.html",
+            session_state=state,
+        )
+    finally:
+        S3.set_session_prefix(old_prefix)
+
+    assert context["layout_version"] == 3
+    assert state[OUTPUT_CONTEXT_KEY]["workflow_id"] == "layout-session"
+    assert path == (
+        f"workflows/{context['workflow_id']}/01_chemical_space/gtm/models/model.pkl.gz"
+    )
+    assert reports_path == f"workflows/{context['workflow_id']}/reports/gtm_activity/report.html"
+
+
+def test_output_layout_uses_one_workflow_root_per_storage_session():
+    """Different tools in the same storage session should share one workflow root."""
+    old_prefix = S3.current_prefix()
+    S3.set_session_prefix("sessions/layout-session")
+
+    try:
+        direct_path = operation_rel_path(
+            OutputOperation.ANALOG_GENERATION,
+            "candidate_sets",
+            "cset_001",
+            workflow_slug="analog_generation",
+        )
+
+        state = {
+            OUTPUT_CONTEXT_KEY: {
+                "layout_version": 2,
+                "workflow_id": "20260506_051532_chemical_space",
+            }
+        }
+        context = ensure_output_context(state, workflow_slug="EGFR SAR")
+        state_path = operation_rel_path(
+            OutputOperation.CHEMICAL_SPACE,
+            "gtm",
+            session_state=state,
+            workflow_slug="chemical_space",
+        )
+    finally:
+        S3.set_session_prefix(old_prefix)
+
+    assert direct_path == "workflows/layout-session/02_analog_generation/candidate_sets/cset_001"
+    assert state_path == "workflows/layout-session/01_chemical_space/gtm"
+    assert context["workflow_id"] == "layout-session"
+    assert state[OUTPUT_CONTEXT_KEY] == context
+
+
+def test_output_layout_leaves_explicit_paths_untouched():
+    """Absolute and S3 paths should not be moved into workflow folders."""
+    state = {}
+
+    assert (
+        scoped_artifact_path(
+            "s3://bucket/custom.csv",
+            OutputOperation.ANALOG_GENERATION,
+            "candidate_sets",
+            session_state=state,
+        )
+        == "s3://bucket/custom.csv"
+    )
+    assert (
+        scoped_artifact_path(
+            "/tmp/custom.csv",
+            OutputOperation.CHEMICAL_SPACE,
+            "datasets",
+            session_state=state,
+        )
+        == "/tmp/custom.csv"
+    )
 
 
 def test_explicit_s3_paths_stay_explicit(clean_storage_env):

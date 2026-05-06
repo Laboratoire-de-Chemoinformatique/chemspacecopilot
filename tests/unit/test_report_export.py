@@ -62,6 +62,16 @@ def stored_png():
     return S3.path(rel_path)
 
 
+def _report_dir(local_session_root, report_type: str):
+    matches = list(local_session_root.glob(f"workflows/*/reports/{report_type}"))
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _report_files(local_session_root, report_type: str, pattern: str):
+    return list(local_session_root.glob(f"workflows/*/reports/{report_type}/{pattern}"))
+
+
 def test_save_markdown_report_with_explicit_filename(local_session_root):
     """Explicit filename should be honoured under reports/ in the session."""
     content = (
@@ -74,11 +84,11 @@ def test_save_markdown_report_with_explicit_filename(local_session_root):
         report_type="chemotype",
     )
 
-    expected_path = local_session_root / "reports" / "egfr_scaffolds.md"
+    expected_path = _report_dir(local_session_root, "chemotype") / "egfr_scaffolds.md"
     assert expected_path.exists()
     assert expected_path.read_text() == content
     assert result.startswith("Markdown report saved to S3: `")
-    assert result.endswith("/reports/egfr_scaffolds.md`")
+    assert result.endswith("/reports/chemotype/egfr_scaffolds.md`")
 
 
 def test_save_markdown_report_autogenerates_filename(local_session_root):
@@ -86,9 +96,9 @@ def test_save_markdown_report_autogenerates_filename(local_session_root):
     content = "# BRAF activity landscape\n\nKey hotspot: V600E neighbourhood.\n"
     result = save_markdown_report(content=content, report_type="gtm_activity")
 
-    assert re.search(r"reports/gtm_activity_\d{8}_\d{6}\.md`$", result)
+    assert re.search(r"reports/gtm_activity/gtm_activity_\d{8}_\d{6}\.md`$", result)
 
-    written = list((local_session_root / "reports").glob("gtm_activity_*.md"))
+    written = _report_files(local_session_root, "gtm_activity", "gtm_activity_*.md")
     assert len(written) == 1
     assert written[0].read_text() == content
 
@@ -101,7 +111,7 @@ def test_save_markdown_report_enforces_md_extension(local_session_root):
         content="# PPARG", filename="ppar_gamma_report.md", report_type="chemotype"
     )
 
-    reports_dir = local_session_root / "reports"
+    reports_dir = _report_dir(local_session_root, "chemotype")
     files = sorted(p.name for p in reports_dir.iterdir())
     assert files == ["jak2_report.md", "pde4a_report.md", "ppar_gamma_report.md"]
 
@@ -113,8 +123,7 @@ def test_save_markdown_report_rejects_empty_content(local_session_root, bad_cont
         save_markdown_report(content=bad_content, filename="x.md", report_type="custom")
 
     # Confirm nothing was written.
-    reports_dir = local_session_root / "reports"
-    assert not reports_dir.exists() or not list(reports_dir.iterdir())
+    assert not _report_files(local_session_root, "custom", "*")
 
 
 def test_save_markdown_report_strips_directory_components(local_session_root):
@@ -126,12 +135,12 @@ def test_save_markdown_report_strips_directory_components(local_session_root):
         report_type="custom",
     )
 
-    safe_path = local_session_root / "reports" / "passwd.md"
+    safe_path = _report_dir(local_session_root, "custom") / "passwd.md"
     assert safe_path.exists()
     assert safe_path.read_text() == content
     # The unsafe target must NOT have been touched.
     assert not (local_session_root.parent.parent.parent / "etc" / "passwd.md").exists()
-    assert result.endswith("/reports/passwd.md`")
+    assert result.endswith("/reports/custom/passwd.md`")
 
 
 def test_save_markdown_report_roundtrip_content(local_session_root):
@@ -147,8 +156,8 @@ def test_save_markdown_report_roundtrip_content(local_session_root):
     )
     result = save_markdown_report(content=content, report_type="combined")
 
-    assert "/reports/combined_" in result
-    written = list((local_session_root / "reports").glob("combined_*.md"))
+    assert "/reports/combined/combined_" in result
+    written = _report_files(local_session_root, "combined", "combined_*.md")
     assert len(written) == 1
     assert written[0].read_text() == content
 
@@ -183,12 +192,12 @@ def test_save_rich_report_defaults_to_html_and_pdf(local_session_root, stored_pn
     assert "- HTML: `" in result
     assert "- PDF: `" in result
     assert "- Markdown: `" not in result
-    assert re.search(r"reports/gtm_density_\d{8}_\d{6}\.html`", result)
-    assert re.search(r"reports/gtm_density_\d{8}_\d{6}\.pdf`", result)
+    assert re.search(r"reports/gtm_density/gtm_density_\d{8}_\d{6}\.html`", result)
+    assert re.search(r"reports/gtm_density/gtm_density_\d{8}_\d{6}\.pdf`", result)
 
-    html_files = list((local_session_root / "reports").glob("gtm_density_*.html"))
-    pdf_files = list((local_session_root / "reports").glob("gtm_density_*.pdf"))
-    md_files = list((local_session_root / "reports").glob("gtm_density_*.md"))
+    html_files = _report_files(local_session_root, "gtm_density", "gtm_density_*.html")
+    pdf_files = _report_files(local_session_root, "gtm_density", "gtm_density_*.pdf")
+    md_files = _report_files(local_session_root, "gtm_density", "gtm_density_*.md")
     assert len(html_files) == 1
     assert len(pdf_files) == 1
     assert not md_files
@@ -224,12 +233,12 @@ def test_save_rich_report_can_emit_markdown_companion(local_session_root, stored
         formats=["html", "pdf", "md"],
     )
 
-    reports_dir = local_session_root / "reports"
+    reports_dir = _report_dir(local_session_root, "gtm_activity")
     assert (reports_dir / "activity_report.html").exists()
     assert (reports_dir / "activity_report.pdf").exists()
     assert (reports_dir / "activity_report.md").exists()
     assert not (local_session_root.parent.parent.parent / "activity_report.txt").exists()
-    assert result.endswith("/reports/activity_report.md`")
+    assert result.endswith("/reports/gtm_activity/activity_report.md`")
 
     markdown_content = (reports_dir / "activity_report.md").read_text()
     assert "### Figure 1. Activity landscape for BRAF analog generation" in markdown_content
@@ -266,8 +275,9 @@ def test_save_rich_report_numbers_section_and_top_level_figures(local_session_ro
         formats=["html", "md"],
     )
 
-    html_content = (local_session_root / "reports" / "combined_report.html").read_text()
-    markdown_content = (local_session_root / "reports" / "combined_report.md").read_text()
+    reports_dir = _report_dir(local_session_root, "combined")
+    html_content = (reports_dir / "combined_report.html").read_text()
+    markdown_content = (reports_dir / "combined_report.md").read_text()
     assert "Figure 1. GTM density landscape with projected compounds" in html_content
     assert "Figure 2. GTM activity landscape for the same compounds" in html_content
     assert "### Figure 1. GTM density landscape with projected compounds" in markdown_content
@@ -291,5 +301,4 @@ def test_save_rich_report_rejects_invalid_inputs(local_session_root, kwargs, mes
     with pytest.raises(ValueError, match=message):
         save_rich_report(**kwargs)
 
-    reports_dir = local_session_root / "reports"
-    assert not reports_dir.exists() or not list(reports_dir.iterdir())
+    assert not _report_files(local_session_root, "report", "*")

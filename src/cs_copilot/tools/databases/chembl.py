@@ -623,6 +623,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 clean_filename=f"chembl_{query_slug}_clean.csv",
                 descriptor_filename=f"chembl_{query_slug}_descriptors.parquet",
                 report_filename=f"chembl_{query_slug}_standardization_report.md",
+                session_state=session_state or getattr(agent, "session_state", None),
             )
             total_assays = len(all_assay_ids)
             clean_df = prepared.clean_df

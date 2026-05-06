@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import pandas as pd
 from agno.tools.toolkit import Toolkit
 
-from cs_copilot.storage import S3
+from cs_copilot.storage import S3, OutputOperation, operation_rel_path
 
 SESSION_OBJECTS_KEY = "session_objects"
 SESSION_MEMORY_SUMMARY_KEY = "session_memory_summary"
@@ -174,15 +174,38 @@ def _compact_related(related: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return {key: related[key] for key in allowed if related.get(key) is not None}
 
 
-def _candidate_artifact_rel_path(candidate_set_id: str) -> str:
+def _candidate_artifact_rel_path(
+    candidate_set_id: str,
+    *,
+    session_state: Optional[Dict[str, Any]] = None,
+) -> str:
     safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(candidate_set_id))
-    return f"{CANDIDATE_ARTIFACT_DIR}/{safe_id}.{CANDIDATE_ARTIFACT_FORMAT}"
+    return operation_rel_path(
+        OutputOperation.ANALOG_GENERATION,
+        CANDIDATE_ARTIFACT_DIR,
+        safe_id,
+        f"candidates.{CANDIDATE_ARTIFACT_FORMAT}",
+        session_state=session_state,
+        workflow_slug="analog_generation",
+    )
 
 
-def _candidate_dataset_rel_path(candidate_set_id: str, top_n: Optional[int] = None) -> str:
+def _candidate_dataset_rel_path(
+    candidate_set_id: str,
+    top_n: Optional[int] = None,
+    *,
+    session_state: Optional[Dict[str, Any]] = None,
+) -> str:
     safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(candidate_set_id))
-    suffix = f"_top_{top_n}" if top_n is not None else ""
-    return f"{CANDIDATE_ARTIFACT_DIR}/{safe_id}{suffix}.{CANDIDATE_DATASET_FORMAT}"
+    filename = f"top_{top_n}.{CANDIDATE_DATASET_FORMAT}" if top_n is not None else "candidates.csv"
+    return operation_rel_path(
+        OutputOperation.ANALOG_GENERATION,
+        CANDIDATE_ARTIFACT_DIR,
+        safe_id,
+        filename,
+        session_state=session_state,
+        workflow_slug="analog_generation",
+    )
 
 
 def _candidate_row_from_payload(
@@ -283,10 +306,15 @@ def save_candidate_set_dataset(
     rows: Sequence[Dict[str, Any]],
     *,
     top_n: Optional[int] = None,
+    session_state: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Persist a compact candidate-set CSV dataset for downstream tools."""
     row_list = list(rows or [])
-    rel_path = _candidate_dataset_rel_path(candidate_set_id, top_n=top_n)
+    rel_path = _candidate_dataset_rel_path(
+        candidate_set_id,
+        top_n=top_n,
+        session_state=session_state,
+    )
     table = pd.DataFrame(row_list)
     if table.empty:
         table = pd.DataFrame(columns=["smi", "rank", "candidate_set_id", "source"])
@@ -300,6 +328,7 @@ def save_candidate_set_artifact(
     candidates: Sequence[Any],
     *,
     metadata: Optional[Dict[str, Any]] = None,
+    session_state: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Persist full candidate payload to session-scoped storage and return its path."""
     candidate_list = list(candidates or [])
@@ -312,7 +341,7 @@ def save_candidate_set_artifact(
         "metadata": _json_safe(metadata or {}, max_items=1000),
         "candidates": _json_safe(candidate_list, max_items=max(max_items, 1000)),
     }
-    rel_path = _candidate_artifact_rel_path(candidate_set_id)
+    rel_path = _candidate_artifact_rel_path(candidate_set_id, session_state=session_state)
     with S3.open(rel_path, "w") as handle:
         json.dump(payload, handle, sort_keys=True)
     return S3.path(rel_path)
@@ -838,13 +867,18 @@ def register_generated_candidate_set(
             candidate_set_id,
             candidate_list,
             metadata=artifact_metadata,
+            session_state=session_state,
+        )
+        artifact_rel_path = _candidate_artifact_rel_path(
+            candidate_set_id,
+            session_state=session_state,
         )
         artifact_count = len(candidate_list)
         preview = compact_candidate_preview(candidate_list)
         session_state[session_key] = {
             "candidate_set_id": candidate_set_id,
             "artifact_path": artifact_path,
-            "artifact_rel_path": _candidate_artifact_rel_path(candidate_set_id),
+            "artifact_rel_path": artifact_rel_path,
             "artifact_format": CANDIDATE_ARTIFACT_FORMAT,
             "count": artifact_count,
             "preview": preview,
@@ -854,7 +888,7 @@ def register_generated_candidate_set(
             candidate_set_id,
             {
                 "artifact_path": artifact_path,
-                "artifact_rel_path": _candidate_artifact_rel_path(candidate_set_id),
+                "artifact_rel_path": artifact_rel_path,
                 "artifact_format": CANDIDATE_ARTIFACT_FORMAT,
                 "artifact_count": artifact_count,
                 "preview": preview,
@@ -873,9 +907,13 @@ def register_generated_candidate_set(
         csv_rows = _candidate_dataset_rows_from_compounds(memory, candidate_set_record)
 
     if candidates is not None and (csv_rows or ordered_ids):
-        csv_path = save_candidate_set_dataset(candidate_set_id, csv_rows)
+        csv_path = save_candidate_set_dataset(
+            candidate_set_id,
+            csv_rows,
+            session_state=session_state,
+        )
         csv_count = len(csv_rows)
-        csv_rel_path = _candidate_dataset_rel_path(candidate_set_id)
+        csv_rel_path = _candidate_dataset_rel_path(candidate_set_id, session_state=session_state)
         pointer = session_state.get(session_key)
         if not isinstance(pointer, dict):
             pointer = {
@@ -1050,7 +1088,12 @@ def materialize_candidate_set_dataset(
             source=str((payload.get("metadata") or {}).get("generation_engine") or "generated"),
             top_n=top_n,
         )
-        csv_path = save_candidate_set_dataset(candidate_set_id, rows, top_n=top_n)
+        csv_path = save_candidate_set_dataset(
+            candidate_set_id,
+            rows,
+            top_n=top_n,
+            session_state=session_state,
+        )
         return {
             "status": "materialized",
             "candidate_set_id": candidate_set_id,
@@ -1118,7 +1161,12 @@ def materialize_candidate_set_dataset(
             "candidate_set_id": candidate_set_id,
         }
 
-    csv_path = save_candidate_set_dataset(candidate_set_id, rows, top_n=top_n)
+    csv_path = save_candidate_set_dataset(
+        candidate_set_id,
+        rows,
+        top_n=top_n,
+        session_state=session_state,
+    )
     result = {
         "status": "materialized",
         "candidate_set_id": candidate_set_id,
@@ -1127,7 +1175,7 @@ def materialize_candidate_set_dataset(
     }
 
     if top_n is None:
-        csv_rel_path = _candidate_dataset_rel_path(candidate_set_id)
+        csv_rel_path = _candidate_dataset_rel_path(candidate_set_id, session_state=session_state)
         update_session_object(
             session_state,
             candidate_set_id,

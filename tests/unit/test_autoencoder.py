@@ -214,7 +214,9 @@ def test_sample_molecules_registers_autoencoder_candidate_set(monkeypatch, tmp_p
 
     memory = session_state["session_objects"]
     assert summary["registered_candidate_set_id"] == "cset_001"
-    assert summary["artifact_path"].endswith("candidate_sets/cset_001.json")
+    assert summary["artifact_path"].endswith(
+        "02_analog_generation/candidate_sets/cset_001/candidates.json"
+    )
     assert session_state["sampled_molecules"]["candidate_set_id"] == "cset_001"
     assert session_state["sampled_molecules"]["preview"] == [
         {"smiles": "CCO"},

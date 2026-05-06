@@ -30,12 +30,30 @@ Usage:
 
 from .client import S3, SESSION_ID
 from .config import S3Config, StorageConfigError, get_s3_config, is_s3_enabled
+from .layout import (
+    LAYOUT_VERSION,
+    OUTPUT_CONTEXT_KEY,
+    OutputLayout,
+    OutputOperation,
+    current_output_layout,
+    ensure_output_context,
+    operation_rel_path,
+    scoped_artifact_path,
+)
 
 __all__ = [
     "S3",
     "SESSION_ID",
     "S3Config",
     "StorageConfigError",
+    "LAYOUT_VERSION",
+    "OUTPUT_CONTEXT_KEY",
+    "OutputLayout",
+    "OutputOperation",
+    "current_output_layout",
+    "ensure_output_context",
     "get_s3_config",
     "is_s3_enabled",
+    "operation_rel_path",
+    "scoped_artifact_path",
 ]

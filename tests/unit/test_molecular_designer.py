@@ -74,7 +74,9 @@ def test_design_molecules_summary_saves_full_result_as_artifact(monkeypatch, tmp
     assert summary["session_key"] == "test_designs"
     assert summary["count_returned"] == 2
     assert len(summary["preview"]) == 2
-    assert summary["artifact_path"].endswith("candidate_sets/cset_001.json")
+    assert summary["artifact_path"].endswith(
+        "02_analog_generation/candidate_sets/cset_001/candidates.json"
+    )
     assert shared_state["test_designs"]["candidate_set_id"] == "cset_001"
     assert shared_state["test_designs"]["artifact_path"] == summary["artifact_path"]
     assert shared_state["test_designs"]["count"] == 2
@@ -208,7 +210,9 @@ def test_register_design_candidates_persists_ranked_autoencoder_candidate_set(
 
     assert summary["status"] == "registered"
     assert summary["registered_candidate_set_id"] == "cset_001"
-    assert summary["artifact_path"].endswith("candidate_sets/cset_001.json")
+    assert summary["artifact_path"].endswith(
+        "02_analog_generation/candidate_sets/cset_001/candidates.json"
+    )
     assert summary["registered_compound_ids"] == ["cmp_001", "cmp_002"]
     assert candidate_set["generation_engine"] == "autoencoder"
     assert candidate_set["generation_mode"] == "analog"
