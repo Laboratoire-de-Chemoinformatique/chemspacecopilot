@@ -276,9 +276,7 @@ def test_legacy_flat_candidate_artifact_path_still_loads(monkeypatch, tmp_path):
     _use_local_candidate_artifacts(monkeypatch, tmp_path)
     legacy_path = tmp_path / "candidate_sets" / "cset_001.json"
     legacy_path.parent.mkdir(parents=True, exist_ok=True)
-    legacy_path.write_text(
-        '{"candidate_set_id": "cset_001", "candidates": [{"smiles": "CCO"}]}'
-    )
+    legacy_path.write_text('{"candidate_set_id": "cset_001", "candidates": [{"smiles": "CCO"}]}')
 
     payload = load_candidate_artifact("candidate_sets/cset_001.json")
 

@@ -3612,9 +3612,7 @@ def save_gtm_landscape_plot(
         )
 
         title = f"{Path(landscape_file).stem} ({normalized_renderer} {normalized_type})"
-        base_name = (
-            f"{Path(landscape_file).stem}_{normalized_renderer}_{normalized_type}_landscape"
-        )
+        base_name = f"{Path(landscape_file).stem}_{normalized_renderer}_{normalized_type}_landscape"
         html_path = _chemical_space_artifact_path(
             f"{base_name}{HTML_EXTENSION}",
             "gtm",

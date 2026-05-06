@@ -744,7 +744,9 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         """Persist compact SynPlanner output for the Report Generator agent."""
         report_plan = self._build_report_ready_plan(plan, visualizations)
         self._persist_route_artifacts(report_plan, agent=agent, session_state=session_state)
-        plan_path = self._persist_plan_artifact(report_plan, agent=agent, session_state=session_state)
+        plan_path = self._persist_plan_artifact(
+            report_plan, agent=agent, session_state=session_state
+        )
         if plan_path:
             report_plan["plan_path"] = plan_path
 

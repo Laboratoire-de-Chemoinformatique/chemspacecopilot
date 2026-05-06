@@ -465,8 +465,7 @@ class TestChemblToolkit:
             "clean": "workflows/*/01_chemical_space/datasets/clean/chembl_kinase_clean.csv",
             "raw": "workflows/*/01_chemical_space/datasets/raw/chembl_kinase_raw.csv",
             "descriptor": (
-                "workflows/*/01_chemical_space/descriptors/"
-                "chembl_kinase_descriptors.parquet"
+                "workflows/*/01_chemical_space/descriptors/" "chembl_kinase_descriptors.parquet"
             ),
             "report": (
                 "workflows/*/01_chemical_space/standardization/"
