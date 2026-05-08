@@ -724,10 +724,11 @@ class SynPlannerFactory(BaseAgentFactory):
 class PeptideDesignerFactory(BaseAgentFactory):
     """Factory for creating peptide design agents.
 
-    This agent exposes a Peptide Designer facade over a Wasserstein Autoencoder
-    (WAE) trained on peptide data to encode, decode, sample, and interpolate
-    amino acid sequences. The model can generate any peptides; activity
-    landscape data comes from DBAASP (antimicrobial peptides specifically).
+    This agent exposes a Peptide Designer facade over multiple peptide design
+    engines. The default WAE engine encodes, decodes, samples, and interpolates
+    amino acid sequences; the LLM engine proposes sequence candidates from
+    natural-language objectives. The WAE model can generate any peptides;
+    activity landscape data comes from DBAASP (antimicrobial peptides specifically).
 
     Key capabilities:
     - **Encoding**: Convert peptide sequences to 100-dimensional latent vectors
@@ -749,11 +750,21 @@ class PeptideDesignerFactory(BaseAgentFactory):
             name="peptide_designer_agent",
             description="""
             You are a scientific assistant specialized in peptide sequence generation and analysis
-            through Peptide Designer. The current implementation uses a Wasserstein Autoencoder
-            (WAE) engine and works with amino acid sequences represented as space-separated
-            single-letter codes (e.g., "M L L L L L A L A L L A L L L").
+            through Peptide Designer. You operate through a peptide design engine facade so new
+            generative engines can be attached without changing agent routing.
+
+            **WAE engine**: Encode peptides to latent representations, generate novel sequences
+            by sampling from latent space, interpolate between peptides, and explore neighborhoods
+            around seed sequences.
+
+            **LLM engine**: Propose peptide sequences from design objectives or constraints, then
+            validate, normalize, deduplicate, and rank candidates before presenting them.
+
+            Amino acid sequences are represented as space-separated single-letter codes
+            (e.g., "M L L L L L A L A L L A L L L").
 
             **Core Capabilities**:
+            - **Design peptides**: Generate peptide candidates through WAE or LLM engines
             - **Encode peptides**: Convert peptide sequences to 100-dimensional latent representations
             - **Decode latent vectors**: Generate peptide sequences from latent space
             - **Sample new peptides**: Generate novel peptides from Gaussian prior

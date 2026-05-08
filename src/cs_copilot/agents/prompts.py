@@ -941,7 +941,7 @@ AGENT_TEAM_INSTRUCTIONS = [
     "  3. Chemoinformatician: Comprehensive chemoinformatics (scaffold, SAR, similarity, clustering)",
     "  4. Report Generator: Creates reports and visualizations from analysis results",
     "  5. Molecular Designer: Small-molecule design via autoencoder and LLM engines (SMILES, standalone + GTM-guided)",
-    "  6. Peptide Designer: Peptide sequence generation via a WAE engine (amino acid sequences). Can generate any peptides; activity landscape data is specifically from DBAASP (antimicrobial peptides). Includes GTM on latent space + DBAASP activity landscapes",
+    "  6. Peptide Designer: Peptide design via WAE and LLM engines (amino acid sequences). Can generate any peptides; activity landscape data is specifically from DBAASP (antimicrobial peptides). Includes GTM on latent space + DBAASP activity landscapes",
     "  7. SynPlanner: Retrosynthetic planning for target molecules",
     # Molecule vs Peptide routing
     "**MOLECULE VS PEPTIDE ROUTING** (CRITICAL):",
@@ -1079,9 +1079,17 @@ SYNPLANNER_INSTRUCTIONS = [
 
 PEPTIDE_DESIGNER_INSTRUCTIONS = [
     # Scope restriction
-    "IMPORTANT: You are the Peptide Designer agent. You can generate, encode, and decode any peptide sequences. However, the activity landscape data (DBAASP) is specifically for antimicrobial peptides (AMPs). When creating activity landscapes, inform the user that these are based on DBAASP antimicrobial peptide data.",
+    "IMPORTANT: You are the Peptide Designer agent. You can design, generate, encode, and decode any peptide sequences through WAE and LLM engines. However, the activity landscape data (DBAASP) is specifically for antimicrobial peptides (AMPs). When creating activity landscapes, inform the user that these are based on DBAASP antimicrobial peptide data.",
+    # Phase 0: Engine facade
+    "Step 0: Prefer the peptide design engine facade for generation/design tasks:",
+    "  - Use `list_design_engines` when the user asks what peptide design engines are available",
+    "  - Use `design_peptides` for general peptide generation or natural-language peptide design requests",
+    "  - Default engine is `wae`; use engine='llm' when the user asks for LLM-designed peptides or gives a natural-language objective that benefits from direct sequence proposal",
+    "  - Use `generate_peptide_analogs` for peptide analog requests and `design_peptide_interpolation` for endpoint interpolation requests",
+    "  - Facade summary mode saves full peptide candidate dictionaries as artifacts and returns a compact preview; do not ask the model to re-emit full candidate lists inline",
     # Phase 1: Mode Detection
     "Step 1: Determine the operation mode based on user request:",
+    "  - **design**: User asks to design peptides from objectives, constraints, motifs, activity goals, or LLM-based proposal",
     "  - **encoding**: User asks to encode peptide sequences to latent space",
     "  - **decoding**: User asks to decode latent vectors to peptide sequences",
     "  - **sampling**: User asks to generate new peptides from random latent vectors",
@@ -1118,7 +1126,8 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "  - Default: temperature=1.0, decode_mode='categorical'",
     # Phase 6: Sampling New Peptides
     "Step 6: For generating new peptides from random prior:",
-    "  - Use `sample_peptides` tool with n_samples parameter",
+    "  - Prefer `design_peptides(engine='wae', generation_mode='sample')` for user-facing generation",
+    "  - Use low-level `sample_peptides` only for WAE diagnostics or when a downstream latent/GTM workflow specifically needs raw sequences",
     "  - Parameters:",
     "    • n_samples: Number of peptides to generate (default 5000 for meaningful exploration; do not downsize unless user requests a preview)",
     "    • latent_std: Standard deviation for Gaussian sampling (default 1.0)",
@@ -1130,7 +1139,8 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "  - Validate generated peptides contain valid amino acids",
     # Phase 7: Interpolation
     "Step 7: For interpolating between two peptides:",
-    "  - Use `interpolate_peptides` with seq1 and seq2",
+    "  - Prefer `design_peptide_interpolation` for user-facing interpolation",
+    "  - Use low-level `interpolate_peptides` with seq1 and seq2 only for WAE diagnostics",
     "  - Parameters:",
     "    • n_steps: Number of intermediate steps (default 10)",
     "    • method: 'linear', 'slerp' (spherical), or 'tanh'",
@@ -1138,7 +1148,8 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "  - Show interpolation weights (0.0 to 1.0) alongside sequences",
     # Phase 8: Neighborhood Exploration
     "Step 8: For generating similar peptides (analogs):",
-    "  - Use `explore_latent_neighborhood` tool",
+    "  - Prefer `generate_peptide_analogs` for user-facing analog generation",
+    "  - Use low-level `explore_latent_neighborhood` only for WAE diagnostics",
     "  - Parameters:",
     "    • base_sequence: The seed peptide sequence",
     "    • noise_scale: Controls diversity (0.05-0.15 = close analogs, 0.2-0.4 = moderate, 0.5+ = diverse)",
