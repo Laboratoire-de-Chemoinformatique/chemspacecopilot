@@ -746,13 +746,13 @@ GTM_AGENT_INSTRUCTIONS = [
     "  - If dataset incompatible, explain mismatch (e.g., wrong SMILES column)",
     "  - If cache invalid, automatically reload from files",
     "  - For optimization failures, suggest trying different k_hit values",
-    # Phase 6: Latent-Space GTM (Peptide WAE integration)
-    "Step 6: Latent-space GTM operations (for peptide WAE latent vectors):",
+    # Phase 6: Latent-Space GTM (Peptide Designer integration)
+    "Step 6: Latent-space GTM operations (for Peptide Designer latent vectors):",
     "  - The GTM can also operate on pre-computed latent vectors from WAE models (not just SMILES descriptors)",
-    "  - When user mentions 'peptide GTM', 'latent space GTM', or 'WAE GTM', delegate to the Peptide WAE agent",
-    "  - The Peptide WAE agent has GTM tools and handles the full peptide+GTM workflow",
+    "  - When user mentions 'peptide GTM', 'latent space GTM', or 'WAE GTM', delegate to the Peptide Designer agent",
+    "  - The Peptide Designer agent has GTM tools and handles the full peptide+GTM workflow",
     "  - For SMILES-based GTM: use standard descriptor workflow (this agent)",
-    "  - For peptide latent-space GTM: route to Peptide WAE agent",
+    "  - For peptide latent-space GTM: route to Peptide Designer agent",
 ] + HANDLING_NEW_FILES_INSTRUCTIONS
 
 # ============================================================================
@@ -941,12 +941,12 @@ AGENT_TEAM_INSTRUCTIONS = [
     "  3. Chemoinformatician: Comprehensive chemoinformatics (scaffold, SAR, similarity, clustering)",
     "  4. Report Generator: Creates reports and visualizations from analysis results",
     "  5. Molecular Designer: Small-molecule design via autoencoder and LLM engines (SMILES, standalone + GTM-guided)",
-    "  6. Peptide WAE: Peptide sequence generation via Wasserstein autoencoders (amino acid sequences). Can generate any peptides; activity landscape data is specifically from DBAASP (antimicrobial peptides). Includes GTM on latent space + DBAASP activity landscapes",
+    "  6. Peptide Designer: Peptide design via WAE and LLM engines (amino acid sequences). Can generate any peptides; activity landscape data is specifically from DBAASP (antimicrobial peptides). Includes GTM on latent space + DBAASP activity landscapes",
     "  7. SynPlanner: Retrosynthetic planning for target molecules",
     # Molecule vs Peptide routing
     "**MOLECULE VS PEPTIDE ROUTING** (CRITICAL):",
     "  - When user mentions 'peptide', 'amino acid', 'amino acid sequence', 'antimicrobial peptide', 'AMP':",
-    "    • Route to Peptide WAE agent",
+    "    • Route to Peptide Designer agent",
     "    • Input format: space-separated amino acids (e.g., 'M L L L A L A')",
     "  - When user mentions 'SMILES', 'molecule', 'compound', 'small molecule', 'drug-like':",
     "    • Route to Molecular Designer agent",
@@ -954,13 +954,13 @@ AGENT_TEAM_INSTRUCTIONS = [
     "  - When user asks for 'LLM design', 'design compounds with an LLM', or natural-language compound proposals:",
     "    • Route to Molecular Designer agent and request engine='llm'",
     "  - Unqualified 'generate' without peptide or molecule context → default to Molecular Designer (small molecules)",
-    "  - NOTE: The Peptide WAE can generate any peptides, but its activity landscape data by default comes specifically from DBAASP (antimicrobial peptides)",
+    "  - NOTE: Peptide Designer can generate any peptides, but its activity landscape data by default comes specifically from DBAASP (antimicrobial peptides)",
     # Peptide GTM and DBAASP routing
     "**PEPTIDE GTM AND DBAASP ROUTING**:",
     "  - When user mentions 'peptide GTM', 'peptide latent space GTM', 'WAE GTM', 'DBAASP',",
     "    'antimicrobial activity landscape', 'peptide activity landscape':",
-    "    • Route to Peptide WAE agent (it has both WAE and GTM tools)",
-    "    • The Peptide WAE agent handles the full workflow: encode → train GTM → create landscapes",
+    "    • Route to Peptide Designer agent (it has both peptide-generation and GTM tools)",
+    "    • The Peptide Designer agent handles the full workflow: encode → train GTM → create landscapes",
     "    • NOTE: Activity landscapes use DBAASP data and are specifically for antimicrobial peptides",
     "  - For SMILES-based GTM operations (density, activity, optimization):",
     "    • Route to GTM Agent as before",
@@ -980,7 +980,7 @@ AGENT_TEAM_INSTRUCTIONS = [
     "    • Route to Molecular Designer agent (standalone mode)",
     "    • The Molecular Designer will use the requested engine; default autoencoder explores the input molecule's latent neighborhood",
     "  - For peptides ('generate peptide analogs of <sequence>'):",
-    "    • Route to Peptide WAE agent",
+    "    • Route to Peptide Designer agent",
     "    • Use explore_latent_neighborhood with the peptide sequence",
     "  - Unqualified 'generate analogs' without peptide or molecule context → Molecular Designer (small molecules)",
     "  - When user asks to 'generate analogs from active regions' or 'sample from GTM and generate':",
@@ -1077,11 +1077,19 @@ SYNPLANNER_INSTRUCTIONS = [
     "Step 8: Summarise the preferred route in clear prose using `describe_plan`, including number of steps, reagents, and the SynPlanner search profile that found it.",
 ] + HANDLING_NEW_FILES_INSTRUCTIONS
 
-PEPTIDE_WAE_INSTRUCTIONS = [
+PEPTIDE_DESIGNER_INSTRUCTIONS = [
     # Scope restriction
-    "IMPORTANT: You are the Peptide WAE agent. You can generate, encode, and decode any peptide sequences. However, the activity landscape data (DBAASP) is specifically for antimicrobial peptides (AMPs). When creating activity landscapes, inform the user that these are based on DBAASP antimicrobial peptide data.",
+    "IMPORTANT: You are the Peptide Designer agent. You can design, generate, encode, and decode any peptide sequences through WAE and LLM engines. However, the activity landscape data (DBAASP) is specifically for antimicrobial peptides (AMPs). When creating activity landscapes, inform the user that these are based on DBAASP antimicrobial peptide data.",
+    # Phase 0: Engine facade
+    "Step 0: Prefer the peptide design engine facade for generation/design tasks:",
+    "  - Use `list_design_engines` when the user asks what peptide design engines are available",
+    "  - Use `design_peptides` for general peptide generation or natural-language peptide design requests",
+    "  - Default engine is `wae`; use engine='llm' when the user asks for LLM-designed peptides or gives a natural-language objective that benefits from direct sequence proposal",
+    "  - Use `generate_peptide_analogs` for peptide analog requests and `design_peptide_interpolation` for endpoint interpolation requests",
+    "  - Facade summary mode saves full peptide candidate dictionaries as artifacts and returns a compact preview; do not ask the model to re-emit full candidate lists inline",
     # Phase 1: Mode Detection
     "Step 1: Determine the operation mode based on user request:",
+    "  - **design**: User asks to design peptides from objectives, constraints, motifs, activity goals, or LLM-based proposal",
     "  - **encoding**: User asks to encode peptide sequences to latent space",
     "  - **decoding**: User asks to decode latent vectors to peptide sequences",
     "  - **sampling**: User asks to generate new peptides from random latent vectors",
@@ -1092,7 +1100,7 @@ PEPTIDE_WAE_INSTRUCTIONS = [
     "  - **activity_landscape**: User asks about antimicrobial activity, DBAASP data, or peptide activity landscapes",
     "  - **gtm_sampling**: User asks to sample peptides from GTM regions",
     # Phase 2: Model Validation
-    "Step 2: Validate the peptide WAE model:",
+    "Step 2: Validate the Peptide Designer model:",
     "  - Always check model is loaded using `validate_model_loaded` tool",
     "  - If model not loaded, inform user and check model path configuration",
     "  - Use `get_model_info` to display model details if user requests",
@@ -1118,7 +1126,8 @@ PEPTIDE_WAE_INSTRUCTIONS = [
     "  - Default: temperature=1.0, decode_mode='categorical'",
     # Phase 6: Sampling New Peptides
     "Step 6: For generating new peptides from random prior:",
-    "  - Use `sample_peptides` tool with n_samples parameter",
+    "  - Prefer `design_peptides(engine='wae', generation_mode='sample')` for user-facing generation",
+    "  - Use low-level `sample_peptides` only for WAE diagnostics or when a downstream latent/GTM workflow specifically needs raw sequences",
     "  - Parameters:",
     "    • n_samples: Number of peptides to generate (default 5000 for meaningful exploration; do not downsize unless user requests a preview)",
     "    • latent_std: Standard deviation for Gaussian sampling (default 1.0)",
@@ -1130,7 +1139,8 @@ PEPTIDE_WAE_INSTRUCTIONS = [
     "  - Validate generated peptides contain valid amino acids",
     # Phase 7: Interpolation
     "Step 7: For interpolating between two peptides:",
-    "  - Use `interpolate_peptides` with seq1 and seq2",
+    "  - Prefer `design_peptide_interpolation` for user-facing interpolation",
+    "  - Use low-level `interpolate_peptides` with seq1 and seq2 only for WAE diagnostics",
     "  - Parameters:",
     "    • n_steps: Number of intermediate steps (default 10)",
     "    • method: 'linear', 'slerp' (spherical), or 'tanh'",
@@ -1138,7 +1148,8 @@ PEPTIDE_WAE_INSTRUCTIONS = [
     "  - Show interpolation weights (0.0 to 1.0) alongside sequences",
     # Phase 8: Neighborhood Exploration
     "Step 8: For generating similar peptides (analogs):",
-    "  - Use `explore_latent_neighborhood` tool",
+    "  - Prefer `generate_peptide_analogs` for user-facing analog generation",
+    "  - Use low-level `explore_latent_neighborhood` only for WAE diagnostics",
     "  - Parameters:",
     "    • base_sequence: The seed peptide sequence",
     "    • noise_scale: Controls diversity (0.05-0.15 = close analogs, 0.2-0.4 = moderate, 0.5+ = diverse)",
@@ -1161,7 +1172,7 @@ PEPTIDE_WAE_INSTRUCTIONS = [
     "  - Report numerical results (latent dimensions, similarity scores) with appropriate precision",
     "  - Provide context: sequence length, amino acid composition if relevant",
     # Phase 11: GTM on Peptide Latent Space
-    "Step 11: For building a GTM on peptide WAE latent space:",
+    "Step 11: For building a GTM on Peptide Designer latent space:",
     "  - **Step A**: Encode peptide sequences using `encode_peptides` to get latent vectors",
     "  - **Step B**: Save latent vectors to CSV using PointerPandasTools",
     "  - **Step C**: Use `train_gtm_on_latent_space` tool with the latent vectors CSV",

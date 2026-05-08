@@ -76,8 +76,10 @@ CHEMBL_MOLECULE_FIELDS = ["molecule_chembl_id", "canonical_smiles", "molecule_st
 DEFAULT_AUTOENCODER_MODEL_PATH = os.path.expanduser("~/.cache/cs_copilot/models/autoencoder")
 HUGGINGFACE_AUTOENCODER_REPO = "axelrolov/lstm_autoencoder"  # Hugging Face model repository
 
-# Peptide WAE model defaults
-DEFAULT_PEPTIDE_WAE_MODEL_PATH = os.path.expanduser("~/.cache/cs_copilot/models/peptide_wae")
+# Peptide Designer model defaults
+DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH = os.path.expanduser(
+    "~/.cache/cs_copilot/models/peptide_designer"
+)
 HUGGINGFACE_PEPTIDE_WAE_REPO = "axelrolov/wae_peptides"
 
 # GTM model defaults

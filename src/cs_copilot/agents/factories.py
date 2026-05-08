@@ -20,7 +20,7 @@ from cs_copilot.tools import (
     ChemicalSimilarityToolkit,
     GTMToolkit,
     MolecularDesignerToolkit,
-    PeptideWAEToolkit,
+    PeptideDesignerToolkit,
     PointerPandasTools,
     SessionMemoryToolkit,
     SynPlannerToolkit,
@@ -37,7 +37,7 @@ from .prompts import (
     CHEMOINFORMATICIAN_INSTRUCTIONS,  # Comprehensive chemoinformatics analysis
     GTM_AGENT_INSTRUCTIONS,  # Unified GTM agent (all GTM operations)
     MOLECULAR_DESIGNER_INSTRUCTIONS,
-    PEPTIDE_WAE_INSTRUCTIONS,  # Peptide WAE for amino acid sequence generation
+    PEPTIDE_DESIGNER_INSTRUCTIONS,  # Peptide Designer for amino acid sequence generation
     REPORT_GENERATOR_INSTRUCTIONS,  # Universal presentation layer
     ROBUSTNESS_EVALUATION_INSTRUCTIONS,
     SYNPLANNER_INSTRUCTIONS,
@@ -721,13 +721,14 @@ class SynPlannerFactory(BaseAgentFactory):
         )
 
 
-class PeptideWAEFactory(BaseAgentFactory):
-    """Factory for creating peptide WAE-based sequence generation agents.
+class PeptideDesignerFactory(BaseAgentFactory):
+    """Factory for creating peptide design agents.
 
-    This agent uses a Wasserstein Autoencoder (WAE) trained on peptide data
-    to encode, decode, sample, and interpolate amino acid sequences. The WAE
-    can generate any peptides; activity landscape data comes from DBAASP
-    (antimicrobial peptides specifically).
+    This agent exposes a Peptide Designer facade over multiple peptide design
+    engines. The default WAE engine encodes, decodes, samples, and interpolates
+    amino acid sequences; the LLM engine proposes sequence candidates from
+    natural-language objectives. The WAE model can generate any peptides;
+    activity landscape data comes from DBAASP (antimicrobial peptides specifically).
 
     Key capabilities:
     - **Encoding**: Convert peptide sequences to 100-dimensional latent vectors
@@ -742,17 +743,28 @@ class PeptideWAEFactory(BaseAgentFactory):
     Example: "M L L L L L A L A L L A L L L A L L L"
     """
 
-    agent_type = "peptide_wae"
+    agent_type = "peptide_designer"
 
     def get_agent_config(self) -> AgentConfig:
         return AgentConfig(
-            name="peptide_wae_agent",
+            name="peptide_designer_agent",
             description="""
             You are a scientific assistant specialized in peptide sequence generation and analysis
-            using Wasserstein Autoencoders (WAE). You work with amino acid sequences represented
-            as space-separated single-letter codes (e.g., "M L L L L L A L A L L A L L L").
+            through Peptide Designer. You operate through a peptide design engine facade so new
+            generative engines can be attached without changing agent routing.
+
+            **WAE engine**: Encode peptides to latent representations, generate novel sequences
+            by sampling from latent space, interpolate between peptides, and explore neighborhoods
+            around seed sequences.
+
+            **LLM engine**: Propose peptide sequences from design objectives or constraints, then
+            validate, normalize, deduplicate, and rank candidates before presenting them.
+
+            Amino acid sequences are represented as space-separated single-letter codes
+            (e.g., "M L L L L L A L A L L A L L L").
 
             **Core Capabilities**:
+            - **Design peptides**: Generate peptide candidates through WAE or LLM engines
             - **Encode peptides**: Convert peptide sequences to 100-dimensional latent representations
             - **Decode latent vectors**: Generate peptide sequences from latent space
             - **Sample new peptides**: Generate novel peptides from Gaussian prior
@@ -779,11 +791,11 @@ class PeptideWAEFactory(BaseAgentFactory):
             **Note**: Activity landscapes use DBAASP data and are specific to antimicrobial peptides.
             """,
             tools=[
-                PeptideWAEToolkit(),
+                PeptideDesignerToolkit(),
                 GTMToolkit(),
                 PointerPandasTools(),
                 save_gtm_landscape_plot,
                 save_gtm_plot,
             ],
-            instructions=PEPTIDE_WAE_INSTRUCTIONS,
+            instructions=PEPTIDE_DESIGNER_INSTRUCTIONS,
         )

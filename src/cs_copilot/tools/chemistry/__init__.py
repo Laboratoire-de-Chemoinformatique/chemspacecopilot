@@ -17,7 +17,7 @@ from .descriptors import (
     MolecularDescriptorEncoder,
 )
 from .molecular_designer_toolkit import MolecularDesignerToolkit
-from .peptide_wae_toolkit import PeptideWAEToolkit
+from .peptide_designer_toolkit import PeptideDesignerToolkit
 from .similarity_toolkit import ChemicalSimilarityToolkit
 from .synplanner_toolkit import SynPlannerToolkit
 
@@ -26,7 +26,7 @@ __all__ = [
     "ChemicalSimilarityToolkit",
     "AutoencoderToolkit",
     "MolecularDesignerToolkit",
-    "PeptideWAEToolkit",
+    "PeptideDesignerToolkit",
     "SynPlannerToolkit",
     "MolecularDescriptorEncoder",
     "DEFAULT_DESCRIPTOR_TYPE",
