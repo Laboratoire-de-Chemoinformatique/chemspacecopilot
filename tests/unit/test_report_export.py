@@ -284,6 +284,72 @@ def test_save_rich_report_numbers_section_and_top_level_figures(local_session_ro
     assert "### Figure 2. GTM activity landscape for the same compounds" in markdown_content
 
 
+def test_save_rich_report_generates_section_structure_figures(local_session_root):
+    """Structure SMILES figures should become report-local PNG assets."""
+    save_rich_report(
+        title="sEH Scaffold SAR",
+        sections=[
+            {
+                "heading": "Scaffold SAR",
+                "paragraphs": [
+                    "The benzene scaffold is a compact example used to explain SAR context."
+                ],
+                "figures": [
+                    {
+                        "structure_smiles": "c1ccccc1",
+                        "name": "Benzene scaffold SAR example",
+                        "caption": (
+                            "Representative scaffold structure used as a compact SAR "
+                            "example in the report."
+                        ),
+                    }
+                ],
+            }
+        ],
+        filename="scaffold_sar",
+        report_type="chemotype",
+        formats=["html", "pdf", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    structure_files = list((reports_dir / "assets" / "structures").glob("*.png"))
+    assert len(structure_files) == 1
+    assert structure_files[0].read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert (reports_dir / "scaffold_sar.pdf").read_bytes().startswith(b"%PDF")
+
+    html_content = (reports_dir / "scaffold_sar.html").read_text()
+    markdown_content = (reports_dir / "scaffold_sar.md").read_text()
+    expected_fragment = f"/reports/chemotype/assets/structures/{structure_files[0].name}"
+    assert "Figure 1. Benzene scaffold SAR example" in html_content
+    assert "data:image/png;base64," in html_content
+    assert "### Figure 1. Benzene scaffold SAR example" in markdown_content
+    assert expected_fragment in markdown_content
+
+
+def test_save_rich_report_rejects_invalid_structure_smiles(local_session_root):
+    """Invalid structure SMILES should fail before report files are written."""
+    with pytest.raises(ValueError, match="figure 1 has invalid structure SMILES"):
+        save_rich_report(
+            title="Invalid Structure Report",
+            sections=[
+                {
+                    "heading": "Scaffolds",
+                    "paragraphs": ["Invalid structure example."],
+                    "figures": [
+                        {
+                            "structure_smiles": "not a smiles",
+                            "caption": "This invalid structure should not be rendered.",
+                        }
+                    ],
+                }
+            ],
+            report_type="chemotype",
+            formats=["html"],
+        )
+
+    assert not _report_files(local_session_root, "chemotype", "*")
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [

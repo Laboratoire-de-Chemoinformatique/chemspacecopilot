@@ -16,6 +16,13 @@ def test_report_instructions_require_named_captioned_inline_figures():
     assert "Every available static PNG must be included as an inline report figure" in instructions
     assert "Every figure object MUST include name and caption" in instructions
     assert "Number figures sequentially across the whole report" in instructions
+    assert "GTM landscape figures MUST appear in the section that describes them" in instructions
+    assert (
+        "do not defer density or activity landscapes to a final Visualizations section"
+        in instructions
+    )
+    assert "structure_smiles or smiles" in instructions
+    assert "Do not render every valid SMILES" in instructions
 
 
 def test_report_instructions_define_required_report_structures():

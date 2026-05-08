@@ -4,6 +4,7 @@
 
 import base64
 import datetime
+import hashlib
 import html
 import io
 import logging
@@ -22,6 +23,7 @@ _REPORTS_DIR = "reports"
 _MD_EXTENSION = ".md"
 _HTML_EXTENSION = ".html"
 _PDF_EXTENSION = ".pdf"
+_PNG_EXTENSION = ".png"
 _DEFAULT_REPORT_TYPE = "report"
 _SLUG_RX = re.compile(r"[^A-Za-z0-9_-]+")
 _FIGURE_NAME_RX = re.compile(r"^\s*Figure\s+\d+\s*[\.:]\s*(?P<title>.*)$", re.IGNORECASE)
@@ -130,6 +132,7 @@ def _normalize_figure(figure: Any, index: int) -> dict[str, str]:
         caption = ""
         alt_text = ""
         artifact_path = ""
+        structure_smiles = ""
     elif isinstance(figure, dict):
         image_path = _clean_text(
             figure.get("image_path")
@@ -147,14 +150,21 @@ def _normalize_figure(figure: Any, index: int) -> dict[str, str]:
             or figure.get("interactive_path")
             or ""
         )
+        structure_smiles = _clean_text(
+            figure.get("structure_smiles")
+            or figure.get("smiles")
+            or figure.get("scaffold_smiles")
+            or figure.get("scaffold_smi")
+        )
     else:
         image_path = ""
         name = ""
         caption = ""
         alt_text = ""
         artifact_path = ""
+        structure_smiles = ""
 
-    if image_path or artifact_path:
+    if image_path or artifact_path or structure_smiles:
         if not caption:
             raise ValueError(f"figure {index} caption cannot be empty")
         name = _format_figure_name(name, caption, index)
@@ -166,6 +176,7 @@ def _normalize_figure(figure: Any, index: int) -> dict[str, str]:
         "caption": caption,
         "alt_text": alt_text,
         "artifact_path": artifact_path,
+        "structure_smiles": structure_smiles,
     }
 
 
@@ -252,6 +263,57 @@ def _read_binary_path(path: str) -> bytes:
 
     with S3.open(path, "rb") as fh:
         return fh.read()
+
+
+def _iter_report_figures(
+    sections: list[dict[str, Any]],
+    figures: list[dict[str, str]],
+):
+    for section in sections:
+        yield from section["figures"]
+    yield from figures
+
+
+def _structure_image_filename(smiles: str, index: int, basename: str) -> str:
+    digest = hashlib.sha1(smiles.encode("utf-8")).hexdigest()[:12]
+    return f"{basename}_structure_{index:03d}_{digest}{_PNG_EXTENSION}"
+
+
+def _smiles_structure_png(smiles: str) -> bytes:
+    from .formatting import smiles_to_png_bytes
+
+    try:
+        return smiles_to_png_bytes(smiles, size=(320, 240))
+    except ValueError as exc:
+        raise ValueError(f"invalid structure SMILES: {smiles}") from exc
+
+
+def _materialize_structure_figures(
+    sections: list[dict[str, Any]],
+    figures: list[dict[str, str]],
+    basename: str,
+    report_type: Optional[str],
+    session_state: Optional[Dict[str, Any]],
+) -> None:
+    for index, figure in enumerate(_iter_report_figures(sections, figures), start=1):
+        smiles = figure.get("structure_smiles", "")
+        if not smiles or figure.get("image_path"):
+            continue
+
+        filename = _structure_image_filename(smiles, index, basename)
+        rel_path = operation_rel_path(
+            OutputOperation.REPORTS,
+            _report_slug(report_type),
+            "assets",
+            "structures",
+            filename,
+            session_state=session_state,
+            workflow_slug="reports",
+        )
+        try:
+            figure["image_path"] = _write_binary_report(_smiles_structure_png(smiles), rel_path)
+        except ValueError as exc:
+            raise ValueError(f"figure {index} has {exc}") from exc
 
 
 def _image_data_url(image_path: str) -> str:
@@ -686,8 +748,10 @@ def save_rich_report(
             ``name`` (or ``figure_name``/``title``), ``caption``,
             ``image_path`` (or ``png_path``/``path``), ``alt_text``, and
             ``artifact_path`` (or ``html_path``) for an interactive companion
-            file. Captions are required for every image/artifact figure; names
-            are normalized to sequential ``Figure N. ...`` labels.
+            file. A figure may alternatively include ``structure_smiles`` (or
+            ``smiles``) to generate and embed a molecule/scaffold PNG. Captions
+            are required for every image/artifact/structure figure; names are
+            normalized to sequential ``Figure N. ...`` labels.
         filename: Optional base filename. Directory components are stripped.
             The requested output extensions are applied automatically.
         report_type: Short slug used for auto-generated filenames.
@@ -720,6 +784,13 @@ def save_rich_report(
 
     normalized_formats = _normalize_formats(formats)
     basename = _rich_report_basename(filename, report_type)
+    _materialize_structure_figures(
+        normalized_sections,
+        normalized_figures,
+        basename,
+        report_type,
+        session_state,
+    )
     saved_paths = []
 
     try:
