@@ -53,9 +53,9 @@ ChemSpace Copilot is a multi-agent system powered by the [Agno](https://docs.agn
 
 ## Features
 
-- **7 Runtime Agents + 1 Evaluation Agent** — ChEMBL data download, unified GTM operations, chemoinformatics analysis, report generation, small-molecule design, peptide WAE workflows, retrosynthetic planning, and robustness evaluation
+- **7 Runtime Agents + 1 Evaluation Agent** — ChEMBL data download, unified GTM operations, chemoinformatics analysis, report generation, small-molecule design, peptide design workflows, retrosynthetic planning, and robustness evaluation
 - **Generative Topographic Mapping** — Dimensionality reduction and visualization of chemical space via [chemographykit](https://www.piwheels.org/project/chemographykit/)
-- **Molecular and Peptide Generation** — Molecular Designer small-molecule generation with autoencoder and LLM engines plus peptide WAE generation, interpolation, and GTM-guided targeting
+- **Molecular and Peptide Generation** — Molecular Designer small-molecule generation with autoencoder and LLM engines plus Peptide Designer generation, interpolation, and GTM-guided targeting
 - **S3/MinIO Integration** — Session-scoped cloud storage with local filesystem fallback
 - **Chainlit Interface** — WebSocket-based real-time chat with password authentication, file upload, and inline molecule rendering
 - **Agentic Memory** — SQLite-backed agentic state and recent session history shared across agent workflows
@@ -197,7 +197,7 @@ The system uses a **Factory Pattern + Registry** for agent creation. The default
 | **Chemoinformatician** | Downstream chemoinformatics analysis including scaffold, similarity, clustering, and SAR workflows |
 | **Report Generator** | Formats analysis results into reports and visual outputs |
 | **Molecular Designer** | Small-molecule design via autoencoder and LLM engines, including standalone and GTM-guided modes |
-| **Peptide WAE** | Peptide sequence generation, latent-space GTM workflows, and DBAASP-backed peptide activity landscapes |
+| **Peptide Designer** | Peptide sequence generation, latent-space GTM workflows, and DBAASP-backed peptide activity landscapes |
 | **SynPlanner** | Retrosynthetic planning and route visualization for target molecules |
 
 ### Separate Evaluation Agent

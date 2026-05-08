@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-Peptide WAE toolkit for peptide sequence encoding and generation.
+Peptide Designer toolkit for peptide sequence encoding and generation.
 
-This module provides integration with the deepchemography Peptide WAE
+This module provides a peptide design facade over the deepchemography Peptide WAE
 for encoding amino acid sequences to latent representations and sampling
 new peptides from the latent space.
 """
@@ -19,7 +19,7 @@ from agno.agent import Agent
 from agno.tools.toolkit import Toolkit
 
 from cs_copilot.tools.constants import (
-    DEFAULT_PEPTIDE_WAE_MODEL_PATH,
+    DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH,
     HUGGINGFACE_PEPTIDE_WAE_REPO,
 )
 
@@ -48,19 +48,19 @@ def _filter_valid_unique_peptides(raw: List[Any]) -> List[str]:
     return out
 
 
-class PeptideWAEError(Exception):
-    """Exception raised for peptide WAE-related errors."""
+class PeptideDesignerError(Exception):
+    """Exception raised for peptide designer-related errors."""
 
     pass
 
 
-class PeptideWAEToolkit(Toolkit):
+class PeptideDesignerToolkit(Toolkit):
     """
-    Peptide WAE toolkit for amino acid sequence encoding and generation.
+    Facade toolkit for peptide sequence design.
 
-    This class provides integration with the deepchemography Peptide WAE
-    for encoding amino acid sequences to latent representations and sampling
-    new peptides from the latent space.
+    This class provides a public Peptide Designer interface over a deepchemography
+    Peptide WAE model for encoding amino acid sequences to latent representations
+    and sampling new peptides from the latent space.
 
     Input format: Space-separated single-letter amino acid codes
     Example: "M L L L L L A L A L L A L L L A L L L"
@@ -68,14 +68,14 @@ class PeptideWAEToolkit(Toolkit):
 
     def __init__(self, model_path: Optional[str] = None, device: Optional[str] = None):
         """
-        Initialize the PeptideWAEToolkit.
+        Initialize the PeptideDesignerToolkit.
 
         Args:
             model_path: Path to the trained WAE model directory.
                        If None, uses default path or downloads from HuggingFace.
             device: Device to run the model on ('cuda', 'cpu', or None for auto-detect)
         """
-        super().__init__("peptide_wae")
+        super().__init__("peptide_designer")
 
         # Set up device
         if device is None:
@@ -85,11 +85,13 @@ class PeptideWAEToolkit(Toolkit):
 
         # Set up model path
         if model_path is None:
-            model_path = os.getenv("PEPTIDE_WAE_MODEL_PATH", DEFAULT_PEPTIDE_WAE_MODEL_PATH)
-            if model_path == DEFAULT_PEPTIDE_WAE_MODEL_PATH:
-                logger.info(f"Using default peptide WAE model path: {model_path}")
+            model_path = os.getenv(
+                "PEPTIDE_DESIGNER_MODEL_PATH", DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH
+            )
+            if model_path == DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH:
+                logger.info(f"Using default Peptide Designer model path: {model_path}")
             else:
-                logger.info(f"Using PEPTIDE_WAE_MODEL_PATH from environment: {model_path}")
+                logger.info(f"Using PEPTIDE_DESIGNER_MODEL_PATH from environment: {model_path}")
 
         self.model_path = model_path
 
@@ -102,7 +104,7 @@ class PeptideWAEToolkit(Toolkit):
         self.config = None
         self._load_model()
 
-        # Register all peptide WAE tools
+        # Register all peptide design tools
         self.register(self.encode_peptides)
         self.register(self.decode_latent)
         self.register(self.sample_peptides)
@@ -135,11 +137,11 @@ class PeptideWAEToolkit(Toolkit):
         files = ["model.pt", "vocab.dict"]
 
         if all((base_path / f).exists() for f in files):
-            logger.info(f"Peptide WAE model files found at {self.model_path}")
+            logger.info(f"Peptide Designer model files found at {self.model_path}")
             return
 
         logger.warning(
-            f"Peptide WAE model files not found at {self.model_path}. "
+            f"Peptide Designer model files not found at {self.model_path}. "
             "Attempting to download from HuggingFace..."
         )
         base_path.mkdir(parents=True, exist_ok=True)
@@ -170,10 +172,10 @@ class PeptideWAEToolkit(Toolkit):
             # Verify files
             missing = [f for f in files if not (base_path / f).exists()]
             if missing:
-                raise PeptideWAEError(
+                raise PeptideDesignerError(
                     f"Downloaded files incomplete. Missing: {', '.join(missing)} at {self.model_path}"
                 )
-            logger.info(f"Successfully fetched peptide WAE model files into {self.model_path}")
+            logger.info(f"Successfully fetched Peptide Designer model files into {self.model_path}")
 
             # Cleanup cache
             try:
@@ -184,18 +186,18 @@ class PeptideWAEToolkit(Toolkit):
                 pass
 
         except ImportError as e:
-            raise PeptideWAEError(
+            raise PeptideDesignerError(
                 "huggingface_hub not installed. Install it with: pip install huggingface_hub"
             ) from e
         except Exception as e:
-            raise PeptideWAEError(
-                f"Failed to download peptide WAE model from HuggingFace "
+            raise PeptideDesignerError(
+                f"Failed to download Peptide Designer model from HuggingFace "
                 f"({HUGGINGFACE_PEPTIDE_WAE_REPO}): {repr(e)}. "
                 f"Original model path: {self.model_path}"
             ) from e
 
     def _load_model(self):
-        """Load the trained peptide WAE model and vocabulary."""
+        """Load the trained Peptide Designer WAE model and vocabulary."""
         try:
             from deepchemography.peptides import PeptideVocab, PeptideWAE, get_default_config
 
@@ -229,19 +231,19 @@ class PeptideWAEToolkit(Toolkit):
             self.model = self.model.to(self.device)
             self.model.eval()
 
-            logger.info(f"Peptide WAE model loaded successfully from {self.model_path}")
+            logger.info(f"Peptide Designer model loaded successfully from {self.model_path}")
             logger.info(f"  Vocabulary size: {self.vocab.size()}")
             logger.info(f"  Latent dimension: {self.config['z_dim']}")
             logger.info(f"  Device: {self.device}")
 
         except ImportError as e:
-            raise PeptideWAEError(f"Failed to import deepchemography.peptides: {e}") from e
+            raise PeptideDesignerError(f"Failed to import deepchemography.peptides: {e}") from e
         except Exception as e:
-            raise PeptideWAEError(f"Failed to load peptide WAE model: {e}") from e
+            raise PeptideDesignerError(f"Failed to load Peptide Designer model: {e}") from e
 
     def validate_model_loaded(self) -> bool:
         """
-        Check if the peptide WAE model is properly loaded.
+        Check if the Peptide Designer model is properly loaded.
 
         Returns:
             True if model is loaded and ready to use
@@ -256,7 +258,7 @@ class PeptideWAEToolkit(Toolkit):
             Latent dimension size (100)
         """
         if not self.validate_model_loaded():
-            raise PeptideWAEError("Model not loaded")
+            raise PeptideDesignerError("Model not loaded")
         return self.config["z_dim"]
 
     def encode_peptides_array(
@@ -285,7 +287,7 @@ class PeptideWAEToolkit(Toolkit):
         Internal helper: encode peptide sequences and return numpy array.
         """
         if not self.validate_model_loaded():
-            raise PeptideWAEError("Model not loaded")
+            raise PeptideDesignerError("Model not loaded")
 
         # Handle single sequence
         if isinstance(sequences, str):
@@ -295,7 +297,7 @@ class PeptideWAEToolkit(Toolkit):
             return_single = False
 
         if not sequences:
-            raise PeptideWAEError("No peptide sequences provided")
+            raise PeptideDesignerError("No peptide sequences provided")
 
         self.model.eval()
         latent_vectors = []
@@ -357,7 +359,7 @@ class PeptideWAEToolkit(Toolkit):
             List of peptide sequences (space-separated amino acids)
         """
         if not self.validate_model_loaded():
-            raise PeptideWAEError("Model not loaded")
+            raise PeptideDesignerError("Model not loaded")
 
         # Convert to numpy array
         z = np.array(latent_vectors)
@@ -424,7 +426,7 @@ class PeptideWAEToolkit(Toolkit):
             no agent available).
         """
         if not self.validate_model_loaded():
-            raise PeptideWAEError("Model not loaded")
+            raise PeptideDesignerError("Model not loaded")
 
         with torch.no_grad():
             z = torch.randn(n_samples, self.config["z_dim"]).to(self.device) * latent_std
@@ -495,7 +497,7 @@ class PeptideWAEToolkit(Toolkit):
             List of interpolated peptide sequences (including endpoints)
         """
         if not self.validate_model_loaded():
-            raise PeptideWAEError("Model not loaded")
+            raise PeptideDesignerError("Model not loaded")
 
         # Encode both sequences
         z1 = self._encode_peptides_ndarray([seq1])
@@ -523,7 +525,7 @@ class PeptideWAEToolkit(Toolkit):
                 w_tanh = (np.tanh(w * 4 - 2) + 1) / 2
                 z_interp = (1 - w_tanh) * z1 + w_tanh * z2
             else:
-                raise PeptideWAEError(f"Unknown interpolation method: {method}")
+                raise PeptideDesignerError(f"Unknown interpolation method: {method}")
             z_list.append(z_interp)
         z_list.append(z2)
 
@@ -548,7 +550,7 @@ class PeptideWAEToolkit(Toolkit):
             Reconstructed peptide sequence
         """
         if not self.validate_model_loaded():
-            raise PeptideWAEError("Model not loaded")
+            raise PeptideDesignerError("Model not loaded")
 
         latent = self._encode_peptides_ndarray([sequence])
         reconstructed = self.decode_latent(
@@ -579,7 +581,7 @@ class PeptideWAEToolkit(Toolkit):
             List of generated neighbor peptide sequences
         """
         if not self.validate_model_loaded():
-            raise PeptideWAEError("Model not loaded")
+            raise PeptideDesignerError("Model not loaded")
 
         # Encode base sequence
         z_base = self._encode_peptides_ndarray([base_sequence])
@@ -600,7 +602,7 @@ class PeptideWAEToolkit(Toolkit):
             Dictionary containing model information
         """
         if not self.validate_model_loaded():
-            raise PeptideWAEError("Model not loaded")
+            raise PeptideDesignerError("Model not loaded")
 
         return {
             "model_path": str(self.model_path),

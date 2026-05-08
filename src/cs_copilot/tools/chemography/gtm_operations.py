@@ -4630,7 +4630,7 @@ def encode_molecules(
 
 
 # =============================================================================
-# Latent-Space GTM Operations (for Peptide WAE integration)
+# Latent-Space GTM Operations (for Peptide Designer integration)
 # =============================================================================
 
 # Session state keys for latent GTM
@@ -4644,7 +4644,7 @@ def train_latent_gtm(
     strategy: str = "low",
 ) -> tuple:
     """
-    Train a GTM on pre-computed latent vectors (e.g. from Peptide WAE).
+    Train a GTM on pre-computed latent vectors (e.g. from Peptide Designer).
 
     Follows the pattern from the Peptides_WAE notebook: StandardScaler → torch float64 → GTM.fit().
     Uses Optuna hyperparameter optimization identical to optimize_gtm but skips descriptor computation.

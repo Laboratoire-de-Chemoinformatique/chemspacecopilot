@@ -108,7 +108,7 @@ class GTMToolkit(BaseDRToolkit):
         self.register(self.load_activity_landscape_csv)
         self.register(self.save_gtm_landscape_plot)
         self.register(self.project_data_on_gtm)
-        # Latent-space GTM tools (for peptide WAE integration)
+        # Latent-space GTM tools (for Peptide Designer integration)
         self.register(self.train_gtm_on_latent_space)
         self.register(self.load_latent_data_on_gtm)
         self.register(self.create_peptide_activity_landscapes)
@@ -1383,7 +1383,7 @@ class GTMToolkit(BaseDRToolkit):
         return result
 
     # =========================================================================
-    # Latent-Space GTM Tools (for Peptide WAE integration)
+    # Latent-Space GTM Tools (for Peptide Designer integration)
     # =========================================================================
 
     def train_gtm_on_latent_space(
@@ -1395,10 +1395,10 @@ class GTMToolkit(BaseDRToolkit):
         strategy: str = "low",
     ) -> str:
         """
-        Train a GTM on pre-computed latent vectors (e.g. from Peptide WAE encoder).
+        Train a GTM on pre-computed latent vectors (e.g. from Peptide Designer).
 
         This tool builds a Generative Topographic Map directly on latent space vectors
-        instead of molecular descriptors. Used for peptide WAE latent space analysis.
+        instead of molecular descriptors. Used for Peptide Designer latent space analysis.
 
         The latent vectors CSV should contain numeric columns representing the latent
         dimensions (e.g. z_0, z_1, ..., z_99 for a 100-dim latent space), or the

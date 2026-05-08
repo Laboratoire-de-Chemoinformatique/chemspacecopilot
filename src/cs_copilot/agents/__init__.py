@@ -30,6 +30,7 @@ Core Agents:
 - "chemoinformatician" - Comprehensive chemoinformatics (chemotype, clustering, SAR, similarity, QSAR)
 - "report_generator" - Universal presentation layer for all analysis types
 - "molecular_designer" - Small-molecule design via autoencoder and LLM engines
+- "peptide_designer" - Peptide sequence generation and latent-space GTM workflows
 
 Testing/Evaluation:
 - "robustness_evaluation" - Analyze robustness test results and metrics
