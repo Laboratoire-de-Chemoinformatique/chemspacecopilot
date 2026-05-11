@@ -27,6 +27,10 @@ _PNG_EXTENSION = ".png"
 _DEFAULT_REPORT_TYPE = "report"
 _SLUG_RX = re.compile(r"[^A-Za-z0-9_-]+")
 _FIGURE_NAME_RX = re.compile(r"^\s*Figure\s+\d+\s*[\.:]\s*(?P<title>.*)$", re.IGNORECASE)
+_SMILES_TAG_RX = re.compile(
+    r"<smiles>\s*(?P<smiles>.*?)\s*</smiles>",
+    re.IGNORECASE | re.DOTALL,
+)
 _SUPPORTED_RICH_FORMATS = {"html", "pdf", "md", "markdown"}
 
 
@@ -265,6 +269,53 @@ def _read_binary_path(path: str) -> bytes:
         return fh.read()
 
 
+def _extract_smiles_tags(text: str) -> list[str]:
+    return [
+        match.group("smiles").strip()
+        for match in _SMILES_TAG_RX.finditer(text or "")
+        if match.group("smiles").strip()
+    ]
+
+
+def _strip_smiles_tags(text: str) -> str:
+    return _SMILES_TAG_RX.sub(lambda match: match.group("smiles").strip(), text)
+
+
+def _append_smiles_tag_figures(
+    sections: list[dict[str, Any]],
+    figures: list[dict[str, str]],
+) -> None:
+    seen_smiles = {
+        figure["structure_smiles"] for figure in figures if figure.get("structure_smiles")
+    }
+    for section in sections:
+        seen_smiles.update(
+            figure["structure_smiles"]
+            for figure in section["figures"]
+            if figure.get("structure_smiles")
+        )
+
+    for section in sections:
+        tagged_smiles = []
+        for paragraph in section["paragraphs"]:
+            tagged_smiles.extend(_extract_smiles_tags(paragraph))
+
+        for smiles in tagged_smiles:
+            if smiles in seen_smiles:
+                continue
+            seen_smiles.add(smiles)
+            section["figures"].append(
+                {
+                    "name": "Reported compound structure",
+                    "image_path": "",
+                    "caption": f"Chemical structure for reported SMILES: {smiles}",
+                    "alt_text": "",
+                    "artifact_path": "",
+                    "structure_smiles": smiles,
+                }
+            )
+
+
 def _iter_report_figures(
     sections: list[dict[str, Any]],
     figures: list[dict[str, str]],
@@ -326,6 +377,7 @@ def _image_data_url(image_path: str) -> str:
 
 
 def _html_text_block(text: str) -> str:
+    text = _strip_smiles_tags(text)
     escaped = html.escape(text.strip())
     if not escaped:
         return ""
@@ -534,7 +586,7 @@ def _render_markdown_report(
     for section in sections:
         lines.extend([f"## {section['heading']}", ""])
         for paragraph in section["paragraphs"]:
-            lines.extend([paragraph, ""])
+            lines.extend([_strip_smiles_tags(paragraph), ""])
         for figure in section["figures"]:
             rendered = _markdown_figure(figure)
             if rendered:
@@ -622,7 +674,7 @@ def _render_pdf_report(
     for section in sections:
         story.append(Paragraph(html.escape(section["heading"]), styles["Heading2"]))
         for paragraph in section["paragraphs"]:
-            escaped = html.escape(paragraph).replace("\n", "<br/>")
+            escaped = html.escape(_strip_smiles_tags(paragraph)).replace("\n", "<br/>")
             story.append(Paragraph(escaped, styles["BodyText"]))
             story.append(Spacer(1, 0.08 * inch))
         for figure in section["figures"]:
@@ -743,7 +795,9 @@ def save_rich_report(
         sections: Optional ordered sections. Each section may include
             ``heading``/``title``, ``paragraphs``/``content``/``text``, and
             ``figures``. Section figures use the same shape as top-level
-            ``figures``.
+            ``figures``. SMILES wrapped in ``<smiles>...</smiles>`` inside
+            section paragraphs are automatically rendered as section-local
+            molecule figures.
         figures: Optional top-level figure list. Each figure may include
             ``name`` (or ``figure_name``/``title``), ``caption``,
             ``image_path`` (or ``png_path``/``path``), ``alt_text``, and
@@ -773,6 +827,7 @@ def save_rich_report(
     normalized_summary = _as_strings(summary)
     normalized_sections = _normalize_sections(sections)
     normalized_figures = _normalize_figures(figures)
+    _append_smiles_tag_figures(normalized_sections, normalized_figures)
     normalized_sections, normalized_figures = _renumber_report_figures(
         normalized_sections, normalized_figures
     )

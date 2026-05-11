@@ -802,6 +802,7 @@ REPORT_GENERATOR_INSTRUCTIONS = [
     "    - Activity distribution histogram",
     "  **Compound and scaffold structure figures**:",
     "    - For key structures only (top scaffolds, named SAR examples, generated/reference compounds, and notable activity outliers), add section-local figure objects with structure_smiles or smiles instead of leaving the structure only as prose.",
+    "    - If a paragraph already contains a key structure as <smiles>...</smiles>, save_rich_report will generate a section-local compound image automatically; add an explicit structure_smiles figure only when you need a custom title or caption.",
     "    - Do not render every valid SMILES in the report; choose the structures that are explicitly discussed or needed to understand the SAR/scaffold narrative.",
     "  **Synthesis reports**:",
     "    - Use the visualization paths already present in synplanner_plan['visualizations'] or synthesis_report_data['visualizations']; do not regenerate SynPlanner routes.",

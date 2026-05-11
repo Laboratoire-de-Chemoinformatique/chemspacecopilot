@@ -22,6 +22,10 @@ def test_report_instructions_require_named_captioned_inline_figures():
         in instructions
     )
     assert "structure_smiles or smiles" in instructions
+    assert (
+        "save_rich_report will generate a section-local compound image automatically"
+        in instructions
+    )
     assert "Do not render every valid SMILES" in instructions
 
 

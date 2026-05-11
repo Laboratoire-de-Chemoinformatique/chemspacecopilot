@@ -326,6 +326,46 @@ def test_save_rich_report_generates_section_structure_figures(local_session_root
     assert expected_fragment in markdown_content
 
 
+def test_save_rich_report_generates_structure_figures_from_smiles_tags(local_session_root):
+    """SMILES tags in report paragraphs should create compound image figures."""
+    smiles = "CNC(=O)c1cc(Oc2ccc(NC(=O)Nc3ccc(OC(F)(F)F)cc3)cc2)ccn1"
+    save_rich_report(
+        title="Tagged Compound Report",
+        sections=[
+            {
+                "heading": "Representative Compound",
+                "paragraphs": [
+                    (
+                        "The report highlights <smiles>"
+                        f"{smiles}"
+                        "</smiles> as a representative compound."
+                    )
+                ],
+            }
+        ],
+        filename="tagged_compound",
+        report_type="chemotype",
+        formats=["html", "pdf", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    structure_files = list((reports_dir / "assets" / "structures").glob("*.png"))
+    assert len(structure_files) == 1
+    assert structure_files[0].read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert (reports_dir / "tagged_compound.pdf").read_bytes().startswith(b"%PDF")
+
+    html_content = (reports_dir / "tagged_compound.html").read_text()
+    markdown_content = (reports_dir / "tagged_compound.md").read_text()
+    expected_fragment = f"/reports/chemotype/assets/structures/{structure_files[0].name}"
+    assert "&lt;smiles&gt;" not in html_content
+    assert f"The report highlights {smiles} as a representative compound." in html_content
+    assert "Figure 1. Reported compound structure" in html_content
+    assert "data:image/png;base64," in html_content
+    assert "<smiles>" not in markdown_content
+    assert f"The report highlights {smiles} as a representative compound." in markdown_content
+    assert expected_fragment in markdown_content
+
+
 def test_save_rich_report_rejects_invalid_structure_smiles(local_session_root):
     """Invalid structure SMILES should fail before report files are written."""
     with pytest.raises(ValueError, match="figure 1 has invalid structure SMILES"):
