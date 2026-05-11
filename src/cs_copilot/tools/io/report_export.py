@@ -27,6 +27,7 @@ _PNG_EXTENSION = ".png"
 _DEFAULT_REPORT_TYPE = "report"
 _SLUG_RX = re.compile(r"[^A-Za-z0-9_-]+")
 _FIGURE_NAME_RX = re.compile(r"^\s*Figure\s+\d+\s*[\.:]\s*(?P<title>.*)$", re.IGNORECASE)
+_STRUCTURE_ID_RX = re.compile(r"^(?P<type>Scaffold|Molecule)-(?P<number>\d+)$", re.IGNORECASE)
 _SMILES_TAG_RX = re.compile(
     r"<smiles>\s*(?P<smiles>.*?)\s*</smiles>",
     re.IGNORECASE | re.DOTALL,
@@ -106,6 +107,16 @@ def _clean_text(value: Any) -> str:
     return "" if value is None else str(value).strip()
 
 
+def _clean_optional_int(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
 def _figure_title(text: str) -> str:
     match = _FIGURE_NAME_RX.match(text)
     title = match.group("title") if match else text
@@ -129,7 +140,16 @@ def _format_figure_name(name: str, caption: str, index: int) -> str:
     return f"Figure {index}. {title}"
 
 
-def _normalize_figure(figure: Any, index: int) -> dict[str, str]:
+def _normalize_structure_type(value: Any, structure_smiles: str) -> str:
+    normalized = _clean_text(value).lower()
+    if normalized in {"scaffold", "scaffolds"}:
+        return "scaffold"
+    if normalized in {"molecule", "molecules", "compound", "compounds"}:
+        return "molecule"
+    return "molecule" if structure_smiles else ""
+
+
+def _normalize_figure(figure: Any, index: int) -> dict[str, Any]:
     if isinstance(figure, str):
         image_path = _clean_text(figure)
         name = ""
@@ -137,6 +157,12 @@ def _normalize_figure(figure: Any, index: int) -> dict[str, str]:
         alt_text = ""
         artifact_path = ""
         structure_smiles = ""
+        structure_type = ""
+        structure_id = ""
+        structure_name = ""
+        node = ""
+        description = ""
+        after_paragraph_index = None
     elif isinstance(figure, dict):
         image_path = _clean_text(
             figure.get("image_path")
@@ -160,6 +186,17 @@ def _normalize_figure(figure: Any, index: int) -> dict[str, str]:
             or figure.get("scaffold_smiles")
             or figure.get("scaffold_smi")
         )
+        raw_structure_type = figure.get("structure_type")
+        if raw_structure_type is None and (
+            figure.get("scaffold_smiles") or figure.get("scaffold_smi")
+        ):
+            raw_structure_type = "scaffold"
+        structure_type = _normalize_structure_type(raw_structure_type, structure_smiles)
+        structure_id = _clean_text(figure.get("structure_id") or figure.get("id"))
+        structure_name = _clean_text(figure.get("structure_name") or figure.get("descriptive_name"))
+        node = _clean_text(figure.get("node") or figure.get("gtm_node") or "")
+        description = _clean_text(figure.get("structure_description") or figure.get("description"))
+        after_paragraph_index = _clean_optional_int(figure.get("after_paragraph_index"))
     else:
         image_path = ""
         name = ""
@@ -167,6 +204,15 @@ def _normalize_figure(figure: Any, index: int) -> dict[str, str]:
         alt_text = ""
         artifact_path = ""
         structure_smiles = ""
+        structure_type = ""
+        structure_id = ""
+        structure_name = ""
+        node = ""
+        description = ""
+        after_paragraph_index = None
+
+    if structure_smiles and not caption:
+        caption = description
 
     if image_path or artifact_path or structure_smiles:
         if not caption:
@@ -181,10 +227,16 @@ def _normalize_figure(figure: Any, index: int) -> dict[str, str]:
         "alt_text": alt_text,
         "artifact_path": artifact_path,
         "structure_smiles": structure_smiles,
+        "structure_type": structure_type,
+        "structure_id": structure_id,
+        "structure_name": structure_name,
+        "node": node,
+        "description": description,
+        "after_paragraph_index": after_paragraph_index,
     }
 
 
-def _normalize_figures(figures: Any, start_index: int = 1) -> list[dict[str, str]]:
+def _normalize_figures(figures: Any, start_index: int = 1) -> list[dict[str, Any]]:
     if not figures:
         return []
     if not isinstance(figures, (list, tuple)):
@@ -192,6 +244,54 @@ def _normalize_figures(figures: Any, start_index: int = 1) -> list[dict[str, str
     return [
         _normalize_figure(figure, index) for index, figure in enumerate(figures, start=start_index)
     ]
+
+
+def _normalize_table(table: Any, index: int) -> dict[str, Any]:
+    if not isinstance(table, dict):
+        return {
+            "title": f"Table {index}",
+            "columns": ["Value"],
+            "rows": [{"Value": _clean_text(table)}],
+        }
+
+    title = _clean_text(table.get("title") or table.get("heading") or f"Table {index}")
+    rows = table.get("rows") or table.get("data") or []
+    if not isinstance(rows, (list, tuple)):
+        rows = [rows]
+
+    columns = _as_strings(table.get("columns") or table.get("headers"))
+    if not columns:
+        inferred_columns = []
+        for row in rows:
+            if isinstance(row, dict):
+                for key in row:
+                    if str(key) not in inferred_columns:
+                        inferred_columns.append(str(key))
+        columns = inferred_columns or ["Value"]
+
+    normalized_rows = []
+    for row in rows:
+        if isinstance(row, dict):
+            normalized_rows.append({column: _clean_text(row.get(column, "")) for column in columns})
+        elif isinstance(row, (list, tuple)):
+            normalized_rows.append(
+                {
+                    column: _clean_text(row[position]) if position < len(row) else ""
+                    for position, column in enumerate(columns)
+                }
+            )
+        else:
+            normalized_rows.append({columns[0]: _clean_text(row)})
+
+    return {"title": title, "columns": columns, "rows": normalized_rows}
+
+
+def _normalize_tables(tables: Any) -> list[dict[str, Any]]:
+    if not tables:
+        return []
+    if not isinstance(tables, (list, tuple)):
+        tables = [tables]
+    return [_normalize_table(table, index) for index, table in enumerate(tables, start=1)]
 
 
 def _normalize_sections(sections: Any) -> list[dict[str, Any]]:
@@ -208,6 +308,7 @@ def _normalize_sections(sections: Any) -> list[dict[str, Any]]:
                     "heading": f"Section {index}",
                     "paragraphs": [section],
                     "figures": [],
+                    "tables": [],
                 }
             )
             continue
@@ -218,6 +319,7 @@ def _normalize_sections(sections: Any) -> list[dict[str, Any]]:
                     "heading": f"Section {index}",
                     "paragraphs": [str(section)],
                     "figures": [],
+                    "tables": [],
                 }
             )
             continue
@@ -232,6 +334,7 @@ def _normalize_sections(sections: Any) -> list[dict[str, Any]]:
                 ),
                 "paragraphs": paragraphs,
                 "figures": _normalize_figures(section.get("figures")),
+                "tables": _normalize_tables(section.get("tables")),
             }
         )
 
@@ -240,10 +343,11 @@ def _normalize_sections(sections: Any) -> list[dict[str, Any]]:
 
 def _renumber_report_figures(
     sections: list[dict[str, Any]],
-    figures: list[dict[str, str]],
-) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    figures: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     figure_index = 1
     for section in sections:
+        section["figures"] = _ordered_section_figures(section)
         for figure in section["figures"]:
             figure["name"] = _format_figure_name(figure["name"], figure["caption"], figure_index)
             figure["alt_text"] = figure["alt_text"] or figure["name"]
@@ -281,9 +385,41 @@ def _strip_smiles_tags(text: str) -> str:
     return _SMILES_TAG_RX.sub(lambda match: match.group("smiles").strip(), text)
 
 
+def _figure_placement_key(figure: dict[str, Any], position: int) -> tuple[int, int]:
+    paragraph_index = figure.get("after_paragraph_index")
+    if isinstance(paragraph_index, int):
+        return paragraph_index, position
+    return 10**9, position
+
+
+def _ordered_section_figures(section: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        figure
+        for _position, figure in sorted(
+            enumerate(section["figures"]),
+            key=lambda item: _figure_placement_key(item[1], item[0]),
+        )
+    ]
+
+
+def _group_section_figures(
+    section: dict[str, Any],
+) -> tuple[dict[int, list[dict[str, Any]]], list[dict[str, Any]]]:
+    placed: dict[int, list[dict[str, Any]]] = {}
+    unplaced = []
+    paragraph_count = len(section["paragraphs"])
+    for figure in section["figures"]:
+        paragraph_index = figure.get("after_paragraph_index")
+        if isinstance(paragraph_index, int) and paragraph_index < paragraph_count:
+            placed.setdefault(paragraph_index, []).append(figure)
+        else:
+            unplaced.append(figure)
+    return placed, unplaced
+
+
 def _append_smiles_tag_figures(
     sections: list[dict[str, Any]],
-    figures: list[dict[str, str]],
+    figures: list[dict[str, Any]],
 ) -> None:
     seen_smiles = {
         figure["structure_smiles"] for figure in figures if figure.get("structure_smiles")
@@ -296,29 +432,88 @@ def _append_smiles_tag_figures(
         )
 
     for section in sections:
-        tagged_smiles = []
-        for paragraph in section["paragraphs"]:
-            tagged_smiles.extend(_extract_smiles_tags(paragraph))
+        for paragraph_index, paragraph in enumerate(section["paragraphs"]):
+            for smiles in _extract_smiles_tags(paragraph):
+                if smiles in seen_smiles:
+                    continue
+                seen_smiles.add(smiles)
+                section["figures"].append(
+                    {
+                        "name": "Reported compound structure",
+                        "image_path": "",
+                        "caption": f"Chemical structure for reported SMILES: {smiles}",
+                        "alt_text": "",
+                        "artifact_path": "",
+                        "structure_smiles": smiles,
+                        "structure_type": "molecule",
+                        "structure_id": "",
+                        "structure_name": "Reported compound structure",
+                        "node": "",
+                        "description": f"Chemical structure for reported SMILES: {smiles}",
+                        "after_paragraph_index": paragraph_index,
+                    }
+                )
 
-        for smiles in tagged_smiles:
-            if smiles in seen_smiles:
-                continue
-            seen_smiles.add(smiles)
-            section["figures"].append(
-                {
-                    "name": "Reported compound structure",
-                    "image_path": "",
-                    "caption": f"Chemical structure for reported SMILES: {smiles}",
-                    "alt_text": "",
-                    "artifact_path": "",
-                    "structure_smiles": smiles,
-                }
+
+def _structure_id_prefix(structure_type: str) -> str:
+    return "Scaffold" if structure_type == "scaffold" else "Molecule"
+
+
+def _structure_id_count(structure_id: str, structure_type: str) -> int:
+    match = _STRUCTURE_ID_RX.match(structure_id)
+    if not match:
+        return 0
+    if match.group("type").lower() != _structure_id_prefix(structure_type).lower():
+        return 0
+    return int(match.group("number"))
+
+
+def _structure_figure_name(figure: dict[str, Any]) -> str:
+    structure_id = figure.get("structure_id", "")
+    structure_name = figure.get("structure_name", "")
+    if structure_id and structure_name:
+        return f"{structure_id}: {structure_name}"
+    return structure_id or structure_name or figure.get("name", "")
+
+
+def _assign_structure_labels(
+    sections: list[dict[str, Any]],
+    figures: list[dict[str, Any]],
+) -> None:
+    counters = {"scaffold": 0, "molecule": 0}
+    all_figures = list(_iter_report_figures(sections, figures))
+    for figure in all_figures:
+        structure_type = figure.get("structure_type", "")
+        if not figure.get("structure_smiles") or structure_type not in counters:
+            continue
+        counters[structure_type] = max(
+            counters[structure_type],
+            _structure_id_count(figure.get("structure_id", ""), structure_type),
+        )
+
+    for figure in all_figures:
+        structure_smiles = figure.get("structure_smiles", "")
+        if not structure_smiles:
+            continue
+        structure_type = figure.get("structure_type") or "molecule"
+        if structure_type not in counters:
+            structure_type = "molecule"
+            figure["structure_type"] = structure_type
+        if not figure.get("structure_id"):
+            counters[structure_type] += 1
+            figure["structure_id"] = (
+                f"{_structure_id_prefix(structure_type)}-{counters[structure_type]}"
             )
+        if not figure.get("structure_name"):
+            figure["structure_name"] = _figure_title(figure.get("name", "")) or _caption_title(
+                figure.get("caption", "")
+            )
+        figure["name"] = _structure_figure_name(figure)
 
 
 def _iter_report_figures(
     sections: list[dict[str, Any]],
-    figures: list[dict[str, str]],
+    figures: list[dict[str, Any]],
 ):
     for section in sections:
         yield from section["figures"]
@@ -424,11 +619,31 @@ def _render_html_figure(figure: dict[str, str], embed_images: bool) -> str:
     )
 
 
+def _render_html_table(table: dict[str, Any]) -> str:
+    header = "".join(f"<th>{html.escape(column)}</th>" for column in table["columns"])
+    rows = []
+    for row in table["rows"]:
+        cells = "".join(
+            f"<td>{html.escape(str(row.get(column, '')))}</td>" for column in table["columns"]
+        )
+        rows.append(f"<tr>{cells}</tr>")
+
+    return (
+        '<div class="table-block">'
+        f"<h3>{html.escape(table['title'])}</h3>"
+        "<table>"
+        f"<thead><tr>{header}</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</div>"
+    )
+
+
 def _render_html_report(
     title: str,
     summary: list[str],
     sections: list[dict[str, Any]],
-    figures: list[dict[str, str]],
+    figures: list[dict[str, Any]],
     embed_images: bool,
 ) -> str:
     escaped_title = html.escape(title)
@@ -441,15 +656,22 @@ def _render_html_report(
 
     section_markup = []
     for section in sections:
-        paragraphs = "".join(_html_text_block(paragraph) for paragraph in section["paragraphs"])
-        section_figures = "".join(
-            _render_html_figure(figure, embed_images) for figure in section["figures"]
+        placed_figures, unplaced_figures = _group_section_figures(section)
+        section_blocks = []
+        for paragraph_index, paragraph in enumerate(section["paragraphs"]):
+            section_blocks.append(_html_text_block(paragraph))
+            section_blocks.extend(
+                _render_html_figure(figure, embed_images)
+                for figure in placed_figures.get(paragraph_index, [])
+            )
+        section_blocks.extend(_render_html_table(table) for table in section["tables"])
+        section_blocks.extend(
+            _render_html_figure(figure, embed_images) for figure in unplaced_figures
         )
         section_markup.append(
             "<section>"
             f"<h2>{html.escape(section['heading'])}</h2>"
-            f"{paragraphs}"
-            f"{section_figures}"
+            f"{''.join(section_blocks)}"
             "</section>"
         )
 
@@ -541,6 +763,26 @@ def _render_html_report(
       font-size: 13px;
       text-align: center;
     }}
+    .table-block {{
+      margin: 24px 0;
+      overflow-x: auto;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      line-height: 1.4;
+    }}
+    th, td {{
+      border: 1px solid #d9e2ec;
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }}
+    th {{
+      background: #eef2f7;
+      color: #243b53;
+    }}
   </style>
 </head>
 <body>
@@ -569,11 +811,29 @@ def _markdown_figure(figure: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
+def _markdown_table_cell(value: Any) -> str:
+    return str(value).replace("\n", " ").replace("|", "\\|").strip()
+
+
+def _markdown_table(table: dict[str, Any]) -> str:
+    lines = [f"### {table['title']}"]
+    header = "| " + " | ".join(_markdown_table_cell(column) for column in table["columns"]) + " |"
+    divider = "| " + " | ".join("---" for _column in table["columns"]) + " |"
+    lines.extend([header, divider])
+    for row in table["rows"]:
+        lines.append(
+            "| "
+            + " | ".join(_markdown_table_cell(row.get(column, "")) for column in table["columns"])
+            + " |"
+        )
+    return "\n".join(lines)
+
+
 def _render_markdown_report(
     title: str,
     summary: list[str],
     sections: list[dict[str, Any]],
-    figures: list[dict[str, str]],
+    figures: list[dict[str, Any]],
 ) -> str:
     generated = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = [f"# {title}", f"*Generated: {generated}*", ""]
@@ -585,9 +845,18 @@ def _render_markdown_report(
 
     for section in sections:
         lines.extend([f"## {section['heading']}", ""])
-        for paragraph in section["paragraphs"]:
+        placed_figures, unplaced_figures = _group_section_figures(section)
+        for paragraph_index, paragraph in enumerate(section["paragraphs"]):
             lines.extend([_strip_smiles_tags(paragraph), ""])
-        for figure in section["figures"]:
+            for figure in placed_figures.get(paragraph_index, []):
+                rendered = _markdown_figure(figure)
+                if rendered:
+                    lines.extend([rendered, ""])
+        for table in section["tables"]:
+            rendered = _markdown_table(table)
+            if rendered:
+                lines.extend([rendered, ""])
+        for figure in unplaced_figures:
             rendered = _markdown_figure(figure)
             if rendered:
                 lines.extend([rendered, ""])
@@ -606,14 +875,22 @@ def _render_pdf_report(
     title: str,
     summary: list[str],
     sections: list[dict[str, Any]],
-    figures: list[dict[str, str]],
+    figures: list[dict[str, Any]],
 ) -> bytes:
     try:
+        from reportlab.lib import colors
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import getSampleStyleSheet
         from reportlab.lib.units import inch
         from reportlab.lib.utils import ImageReader
-        from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer
+        from reportlab.platypus import (
+            Image,
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
     except ImportError as exc:
         raise RuntimeError("PDF report export requires reportlab to be installed") from exc
 
@@ -671,13 +948,54 @@ def _render_pdf_report(
             )
         story.append(Spacer(1, 0.16 * inch))
 
+    def add_table(table: dict[str, Any]) -> None:
+        story.append(Paragraph(html.escape(table["title"]), styles["Heading3"]))
+        table_data = [
+            [Paragraph(html.escape(column), styles["BodyText"]) for column in table["columns"]]
+        ]
+        for row in table["rows"]:
+            table_data.append(
+                [
+                    Paragraph(html.escape(str(row.get(column, ""))), styles["BodyText"])
+                    for column in table["columns"]
+                ]
+            )
+        column_width = document.width / max(len(table["columns"]), 1)
+        pdf_table = Table(
+            table_data,
+            colWidths=[column_width] * len(table["columns"]),
+            repeatRows=1,
+            hAlign="LEFT",
+        )
+        pdf_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#243b53")),
+                    ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d9e2ec")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
+        story.append(pdf_table)
+        story.append(Spacer(1, 0.16 * inch))
+
     for section in sections:
         story.append(Paragraph(html.escape(section["heading"]), styles["Heading2"]))
-        for paragraph in section["paragraphs"]:
+        placed_figures, unplaced_figures = _group_section_figures(section)
+        for paragraph_index, paragraph in enumerate(section["paragraphs"]):
             escaped = html.escape(_strip_smiles_tags(paragraph)).replace("\n", "<br/>")
             story.append(Paragraph(escaped, styles["BodyText"]))
             story.append(Spacer(1, 0.08 * inch))
-        for figure in section["figures"]:
+            for figure in placed_figures.get(paragraph_index, []):
+                add_figure(figure)
+        for table in section["tables"]:
+            add_table(table)
+        for figure in unplaced_figures:
             add_figure(figure)
 
     if figures:
@@ -794,18 +1112,20 @@ def save_rich_report(
         summary: Optional executive-summary bullets.
         sections: Optional ordered sections. Each section may include
             ``heading``/``title``, ``paragraphs``/``content``/``text``, and
-            ``figures``. Section figures use the same shape as top-level
-            ``figures``. SMILES wrapped in ``<smiles>...</smiles>`` inside
-            section paragraphs are automatically rendered as section-local
-            molecule figures.
+            ``figures``/``tables``. Section figures use the same shape as
+            top-level ``figures``. SMILES wrapped in ``<smiles>...</smiles>``
+            inside section paragraphs are automatically rendered as
+            section-local molecule figures.
         figures: Optional top-level figure list. Each figure may include
             ``name`` (or ``figure_name``/``title``), ``caption``,
             ``image_path`` (or ``png_path``/``path``), ``alt_text``, and
             ``artifact_path`` (or ``html_path``) for an interactive companion
             file. A figure may alternatively include ``structure_smiles`` (or
-            ``smiles``) to generate and embed a molecule/scaffold PNG. Captions
-            are required for every image/artifact/structure figure; names are
-            normalized to sequential ``Figure N. ...`` labels.
+            ``smiles``), ``structure_type``, ``structure_id``,
+            ``structure_name``, ``node``, ``description``, and
+            ``after_paragraph_index`` to generate and place a molecule/scaffold
+            PNG. Captions are required for every image/artifact/structure
+            figure; names are normalized to sequential ``Figure N. ...`` labels.
         filename: Optional base filename. Directory components are stripped.
             The requested output extensions are applied automatically.
         report_type: Short slug used for auto-generated filenames.
@@ -828,13 +1148,21 @@ def save_rich_report(
     normalized_sections = _normalize_sections(sections)
     normalized_figures = _normalize_figures(figures)
     _append_smiles_tag_figures(normalized_sections, normalized_figures)
+    _assign_structure_labels(normalized_sections, normalized_figures)
     normalized_sections, normalized_figures = _renumber_report_figures(
         normalized_sections, normalized_figures
     )
 
     has_section_text = any(section["paragraphs"] for section in normalized_sections)
     has_section_figures = any(section["figures"] for section in normalized_sections)
-    if not (normalized_summary or has_section_text or has_section_figures or normalized_figures):
+    has_section_tables = any(section["tables"] for section in normalized_sections)
+    if not (
+        normalized_summary
+        or has_section_text
+        or has_section_figures
+        or has_section_tables
+        or normalized_figures
+    ):
         raise ValueError("report content cannot be empty")
 
     normalized_formats = _normalize_formats(formats)

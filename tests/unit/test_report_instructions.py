@@ -26,6 +26,14 @@ def test_report_instructions_require_named_captioned_inline_figures():
         "save_rich_report will generate a section-local compound image automatically"
         in instructions
     )
+    assert "Scaffold-1, Scaffold-2" in instructions
+    assert "Molecule-1, Molecule-2" in instructions
+    assert "Piperidine urea phenyl scaffold" in instructions
+    assert "Top potency piperidine urea analog" in instructions
+    assert "structure_type ('scaffold' or 'molecule')" in instructions
+    assert "after_paragraph_index" in instructions
+    assert "Scaffold ID / Scaffold / SMILES / Name / Node / Description" in instructions
+    assert "Molecule ID / Molecule / SMILES / Name / Node / Description" in instructions
     assert "Do not render every valid SMILES" in instructions
 
 

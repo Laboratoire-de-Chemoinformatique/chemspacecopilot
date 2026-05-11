@@ -296,8 +296,10 @@ def test_save_rich_report_generates_section_structure_figures(local_session_root
                 ],
                 "figures": [
                     {
+                        "structure_type": "scaffold",
+                        "structure_id": "Scaffold-1",
+                        "structure_name": "Benzene scaffold",
                         "structure_smiles": "c1ccccc1",
-                        "name": "Benzene scaffold SAR example",
                         "caption": (
                             "Representative scaffold structure used as a compact SAR "
                             "example in the report."
@@ -320,10 +322,123 @@ def test_save_rich_report_generates_section_structure_figures(local_session_root
     html_content = (reports_dir / "scaffold_sar.html").read_text()
     markdown_content = (reports_dir / "scaffold_sar.md").read_text()
     expected_fragment = f"/reports/chemotype/assets/structures/{structure_files[0].name}"
-    assert "Figure 1. Benzene scaffold SAR example" in html_content
+    assert "Figure 1. Scaffold-1: Benzene scaffold" in html_content
     assert "data:image/png;base64," in html_content
-    assert "### Figure 1. Benzene scaffold SAR example" in markdown_content
+    assert "### Figure 1. Scaffold-1: Benzene scaffold" in markdown_content
     assert expected_fragment in markdown_content
+
+
+def test_save_rich_report_places_structure_figures_and_tables(local_session_root):
+    """Structure figures should support IDs, names, nodes, placement, and inventory tables."""
+    save_rich_report(
+        title="Named Structure Report",
+        sections=[
+            {
+                "heading": "SAR Highlights",
+                "paragraphs": [
+                    "Scaffold-1 anchors the dense GTM region around node 221.",
+                    "Molecule-1 is the top potency analog in node 340.",
+                ],
+                "figures": [
+                    {
+                        "structure_type": "scaffold",
+                        "structure_id": "Scaffold-1",
+                        "structure_name": "Piperidine urea phenyl scaffold",
+                        "structure_smiles": "O=C(Nc1ccccc1)NC1CCNCC1",
+                        "node": "221",
+                        "description": "Dominant scaffold in the dense map region.",
+                        "caption": "Scaffold-1 is the dominant piperidine urea phenyl scaffold.",
+                        "after_paragraph_index": 0,
+                    },
+                    {
+                        "structure_type": "molecule",
+                        "structure_id": "Molecule-1",
+                        "structure_name": "Top potency piperidine urea analog",
+                        "structure_smiles": "CNC(=O)c1cc(Oc2ccc(NC(=O)Nc3ccc(OC(F)(F)F)cc3)cc2)ccn1",
+                        "node": "340",
+                        "description": "Representative high-potency molecule.",
+                        "caption": "Molecule-1 is the representative top potency analog.",
+                        "after_paragraph_index": 1,
+                    },
+                ],
+                "tables": [
+                    {
+                        "title": "Scaffold Inventory",
+                        "columns": [
+                            "Scaffold ID",
+                            "Scaffold",
+                            "SMILES",
+                            "Name",
+                            "Node",
+                            "Description",
+                        ],
+                        "rows": [
+                            {
+                                "Scaffold ID": "Scaffold-1",
+                                "Scaffold": "Piperidine urea phenyl scaffold",
+                                "SMILES": "O=C(Nc1ccccc1)NC1CCNCC1",
+                                "Name": "Piperidine urea phenyl scaffold",
+                                "Node": "221",
+                                "Description": "Dominant scaffold in the dense map region.",
+                            }
+                        ],
+                    },
+                    {
+                        "title": "Molecule Inventory",
+                        "columns": [
+                            "Molecule ID",
+                            "Molecule",
+                            "SMILES",
+                            "Name",
+                            "Node",
+                            "Description",
+                        ],
+                        "rows": [
+                            {
+                                "Molecule ID": "Molecule-1",
+                                "Molecule": "Top potency piperidine urea analog",
+                                "SMILES": "CNC(=O)c1cc(Oc2ccc(NC(=O)Nc3ccc(OC(F)(F)F)cc3)cc2)ccn1",
+                                "Name": "Top potency piperidine urea analog",
+                                "Node": "340",
+                                "Description": "Representative high-potency molecule.",
+                            }
+                        ],
+                    },
+                ],
+            }
+        ],
+        filename="named_structures",
+        report_type="chemotype",
+        formats=["html", "pdf", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    assert len(list((reports_dir / "assets" / "structures").glob("*.png"))) == 2
+    assert (reports_dir / "named_structures.pdf").read_bytes().startswith(b"%PDF")
+
+    html_content = (reports_dir / "named_structures.html").read_text()
+    markdown_content = (reports_dir / "named_structures.md").read_text()
+    scaffold_paragraph_index = html_content.index(
+        "Scaffold-1 anchors the dense GTM region around node 221."
+    )
+    scaffold_figure_index = html_content.index(
+        "Figure 1. Scaffold-1: Piperidine urea phenyl scaffold"
+    )
+    molecule_paragraph_index = html_content.index("Molecule-1 is the top potency analog")
+    molecule_figure_index = html_content.index(
+        "Figure 2. Molecule-1: Top potency piperidine urea analog"
+    )
+    table_index = html_content.index("Scaffold Inventory")
+    assert scaffold_paragraph_index < scaffold_figure_index < molecule_paragraph_index
+    assert molecule_paragraph_index < molecule_figure_index < table_index
+    assert "<th>Scaffold ID</th>" in html_content
+    assert "<td>Scaffold-1</td>" in html_content
+    assert "<th>Molecule ID</th>" in html_content
+    assert "<td>Molecule-1</td>" in html_content
+    assert "| Scaffold ID | Scaffold | SMILES | Name | Node | Description |" in markdown_content
+    assert "| Molecule ID | Molecule | SMILES | Name | Node | Description |" in markdown_content
+    assert "### Figure 1. Scaffold-1: Piperidine urea phenyl scaffold" in markdown_content
+    assert "### Figure 2. Molecule-1: Top potency piperidine urea analog" in markdown_content
 
 
 def test_save_rich_report_generates_structure_figures_from_smiles_tags(local_session_root):
@@ -359,11 +474,52 @@ def test_save_rich_report_generates_structure_figures_from_smiles_tags(local_ses
     expected_fragment = f"/reports/chemotype/assets/structures/{structure_files[0].name}"
     assert "&lt;smiles&gt;" not in html_content
     assert f"The report highlights {smiles} as a representative compound." in html_content
-    assert "Figure 1. Reported compound structure" in html_content
+    assert "Figure 1. Molecule-1: Reported compound structure" in html_content
     assert "data:image/png;base64," in html_content
     assert "<smiles>" not in markdown_content
     assert f"The report highlights {smiles} as a representative compound." in markdown_content
     assert expected_fragment in markdown_content
+
+
+def test_save_rich_report_places_multiple_smiles_tag_figures_after_first_mentions(
+    local_session_root,
+):
+    """Auto-generated SMILES figures should appear after the paragraph that introduced them."""
+    first_smiles = "CCO"
+    second_smiles = "c1ccccc1"
+    save_rich_report(
+        title="Tagged Molecule Placement",
+        sections=[
+            {
+                "heading": "Compound Examples",
+                "paragraphs": [
+                    f"First mention introduces <smiles>{first_smiles}</smiles>.",
+                    f"Second mention introduces <smiles>{second_smiles}</smiles>.",
+                ],
+            }
+        ],
+        filename="tagged_placement",
+        report_type="chemotype",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    assert len(list((reports_dir / "assets" / "structures").glob("*.png"))) == 2
+
+    html_content = (reports_dir / "tagged_placement.html").read_text()
+    markdown_content = (reports_dir / "tagged_placement.md").read_text()
+    first_paragraph_index = html_content.index(f"First mention introduces {first_smiles}.")
+    first_figure_index = html_content.index("Figure 1. Molecule-1: Reported compound structure")
+    second_paragraph_index = html_content.index(f"Second mention introduces {second_smiles}.")
+    second_figure_index = html_content.index("Figure 2. Molecule-2: Reported compound structure")
+    assert first_paragraph_index < first_figure_index < second_paragraph_index
+    assert second_paragraph_index < second_figure_index
+    assert markdown_content.index(
+        f"First mention introduces {first_smiles}."
+    ) < markdown_content.index("### Figure 1. Molecule-1: Reported compound structure")
+    assert markdown_content.index(
+        f"Second mention introduces {second_smiles}."
+    ) < markdown_content.index("### Figure 2. Molecule-2: Reported compound structure")
 
 
 def test_save_rich_report_rejects_invalid_structure_smiles(local_session_root):
