@@ -27,7 +27,7 @@ _PNG_EXTENSION = ".png"
 _DEFAULT_REPORT_TYPE = "report"
 _SLUG_RX = re.compile(r"[^A-Za-z0-9_-]+")
 _FIGURE_NAME_RX = re.compile(r"^\s*Figure\s+\d+\s*[\.:]\s*(?P<title>.*)$", re.IGNORECASE)
-_STRUCTURE_ID_RX = re.compile(r"^(?P<type>Scaffold|Molecule)-(?P<number>\d+)$", re.IGNORECASE)
+_STRUCTURE_ID_RX = re.compile(r"^(?P<type>Scaffold|Molecule)[_-](?P<number>\d+)$", re.IGNORECASE)
 _BOLD_RX = re.compile(r"\*\*(?P<text>.+?)\*\*")
 _SMILES_TAG_RX = re.compile(
     r"<smiles>\s*(?P<smiles>.*?)\s*</smiles>",
@@ -475,6 +475,7 @@ def _append_smiles_tag_figures(
                         "node": "",
                         "description": f"Chemical structure for reported SMILES: {smiles}",
                         "after_paragraph_index": paragraph_index,
+                        "_auto_structure_figure": True,
                     }
                 )
 
@@ -495,11 +496,59 @@ def _table_structure_type(table: dict[str, Any], row: dict[str, str]) -> str:
         return "scaffold"
     if "molecule id" in columns or "molecule inventory" in title:
         return "molecule"
+    if "chembl id" in columns or "chembl_id" in columns:
+        return "molecule"
     if _row_value(row, "Scaffold ID", "Scaffold"):
         return "scaffold"
     if _row_value(row, "Molecule ID", "Molecule", "Compound ID", "Compound"):
         return "molecule"
     return ""
+
+
+def _ensure_table_id_column(table: dict[str, Any], structure_type: str) -> str:
+    prefix = _structure_id_prefix(structure_type)
+    preferred_columns = [f"{prefix} ID", "Structure ID", "ID"]
+    for column in preferred_columns:
+        for existing in table["columns"]:
+            if existing.lower() == column.lower():
+                return existing
+
+    id_column = f"{prefix} ID"
+    table["columns"].insert(0, id_column)
+    for row in table["rows"]:
+        row.setdefault(id_column, "")
+    return id_column
+
+
+def _track_structure_id_target(
+    figure: dict[str, Any],
+    row: dict[str, str],
+    column: str,
+) -> None:
+    if not column:
+        return
+    figure.setdefault("_source_id_targets", []).append((row, column))
+
+
+def _sync_structure_id_targets(figure: dict[str, Any]) -> None:
+    structure_id = figure.get("structure_id", "")
+    if not structure_id:
+        return
+    for row, column in figure.get("_source_id_targets", []):
+        if isinstance(row, dict) and column and not row.get(column):
+            row[column] = structure_id
+
+
+def _should_apply_source_structure_id(
+    current_id: str,
+    source_id: str,
+    structure_type: str,
+) -> bool:
+    if not source_id:
+        return False
+    if not current_id:
+        return True
+    return _structure_id_count(current_id, structure_type) > 0
 
 
 def _find_first_mention_index(section: dict[str, Any], terms: list[str]) -> Optional[int]:
@@ -515,15 +564,13 @@ def _append_structure_table_figures(
     sections: list[dict[str, Any]],
     figures: list[dict[str, Any]],
 ) -> None:
-    seen_smiles = {
-        figure["structure_smiles"] for figure in figures if figure.get("structure_smiles")
+    structure_figures_by_smiles = {
+        figure["structure_smiles"]: figure for figure in figures if figure.get("structure_smiles")
     }
     for section in sections:
-        seen_smiles.update(
-            figure["structure_smiles"]
-            for figure in section["figures"]
-            if figure.get("structure_smiles")
-        )
+        for figure in section["figures"]:
+            if figure.get("structure_smiles"):
+                structure_figures_by_smiles.setdefault(figure["structure_smiles"], figure)
 
     for section in sections:
         for table in section["tables"]:
@@ -538,16 +585,24 @@ def _append_structure_table_figures(
                     "Molecule SMILES",
                     "Compound SMILES",
                 )
-                if not smiles or smiles in seen_smiles:
+                if not smiles:
                     continue
 
                 prefix = _structure_id_prefix(structure_type)
                 structure_id = _row_value(
                     row,
                     f"{prefix} ID",
+                    "ChEMBL ID",
+                    "ChEMBLID",
+                    "chembl_id",
+                    "Molecule ChEMBL ID",
+                    "Compound ChEMBL ID",
                     "Structure ID",
                     "ID",
                 )
+                source_id_column = ""
+                if not structure_id:
+                    source_id_column = _ensure_table_id_column(table, structure_type)
                 structure_name = _row_value(
                     row,
                     "Name",
@@ -564,27 +619,53 @@ def _append_structure_table_figures(
                 caption_subject = ": ".join(part for part in (structure_id, structure_name) if part)
                 caption = description or f"Chemical structure for {caption_subject or smiles}."
 
-                seen_smiles.add(smiles)
-                section["figures"].append(
-                    {
-                        "name": structure_name or structure_id or "Reported structure",
-                        "image_path": "",
-                        "caption": caption,
-                        "alt_text": "",
-                        "artifact_path": "",
-                        "structure_smiles": smiles,
-                        "structure_type": structure_type,
-                        "structure_id": structure_id,
-                        "structure_name": structure_name,
-                        "node": node,
-                        "description": description,
-                        "after_paragraph_index": first_mention_index,
-                    }
-                )
+                existing_figure = structure_figures_by_smiles.get(smiles)
+                if existing_figure is not None:
+                    if not existing_figure.get("structure_type") or existing_figure.get(
+                        "_auto_structure_figure"
+                    ):
+                        existing_figure["structure_type"] = structure_type
+                    current_id = existing_figure.get("structure_id", "")
+                    if _should_apply_source_structure_id(current_id, structure_id, structure_type):
+                        existing_figure["structure_id"] = structure_id
+                    current_name = existing_figure.get("structure_name", "")
+                    if structure_name and (
+                        not current_name or current_name == "Reported compound structure"
+                    ):
+                        existing_figure["structure_name"] = structure_name
+                    if node and not existing_figure.get("node"):
+                        existing_figure["node"] = node
+                    if description and not existing_figure.get("description"):
+                        existing_figure["description"] = description
+                    _track_structure_id_target(existing_figure, row, source_id_column)
+                    _sync_structure_id_targets(existing_figure)
+                    continue
+
+                figure = {
+                    "name": structure_name or structure_id or "Reported structure",
+                    "image_path": "",
+                    "caption": caption,
+                    "alt_text": "",
+                    "artifact_path": "",
+                    "structure_smiles": smiles,
+                    "structure_type": structure_type,
+                    "structure_id": structure_id,
+                    "structure_name": structure_name,
+                    "node": node,
+                    "description": description,
+                    "after_paragraph_index": first_mention_index,
+                }
+                _track_structure_id_target(figure, row, source_id_column)
+                structure_figures_by_smiles[smiles] = figure
+                section["figures"].append(figure)
 
 
 def _structure_id_prefix(structure_type: str) -> str:
     return "Scaffold" if structure_type == "scaffold" else "Molecule"
+
+
+def _generated_structure_id(structure_type: str, count: int) -> str:
+    return f"{_structure_id_prefix(structure_type)}_{count}"
 
 
 def _structure_id_count(structure_id: str, structure_type: str) -> int:
@@ -602,6 +683,25 @@ def _structure_figure_name(figure: dict[str, Any]) -> str:
     if structure_id and structure_name:
         return f"{structure_id}: {structure_name}"
     return structure_id or structure_name or figure.get("name", "")
+
+
+def _figure_label(figure: dict[str, Any]) -> str:
+    match = re.match(r"^(Figure\s+\d+)\.", figure.get("name", ""))
+    return match.group(1) if match else "the following figure"
+
+
+def _structure_reference_text(figure: dict[str, Any]) -> str:
+    if not figure.get("structure_smiles"):
+        return ""
+    structure_id = figure.get("structure_id", "")
+    structure_name = figure.get("structure_name", "")
+    if not structure_id and not structure_name:
+        return ""
+
+    subject = structure_id
+    if structure_name and structure_name != structure_id:
+        subject = f"{subject} ({structure_name})" if subject else structure_name
+    return f"{subject} is shown in {_figure_label(figure)}."
 
 
 def _assign_structure_labels(
@@ -629,9 +729,10 @@ def _assign_structure_labels(
             figure["structure_type"] = structure_type
         if not figure.get("structure_id"):
             counters[structure_type] += 1
-            figure["structure_id"] = (
-                f"{_structure_id_prefix(structure_type)}-{counters[structure_type]}"
+            figure["structure_id"] = _generated_structure_id(
+                structure_type, counters[structure_type]
             )
+        _sync_structure_id_targets(figure)
         if not figure.get("structure_name"):
             figure["structure_name"] = _figure_title(figure.get("name", "")) or _caption_title(
                 figure.get("caption", "")
@@ -749,6 +850,13 @@ def _render_html_figure(figure: dict[str, str], embed_images: bool) -> str:
     )
 
 
+def _render_html_figure_reference(figure: dict[str, Any]) -> str:
+    reference = _structure_reference_text(figure)
+    if not reference:
+        return ""
+    return f'<p class="figure-reference">{_html_inline_markup(reference)}</p>'
+
+
 def _render_html_table(table: dict[str, Any]) -> str:
     header = "".join(f"<th>{_html_inline_markup(column)}</th>" for column in table["columns"])
     rows = []
@@ -791,12 +899,13 @@ def _render_html_report(
         for paragraph_index, paragraph in enumerate(section["paragraphs"]):
             section_blocks.append(_html_text_block(paragraph))
             section_blocks.extend(
-                _render_html_figure(figure, embed_images)
+                _render_html_figure_reference(figure) + _render_html_figure(figure, embed_images)
                 for figure in placed_figures.get(paragraph_index, [])
             )
         section_blocks.extend(_render_html_table(table) for table in section["tables"])
         section_blocks.extend(
-            _render_html_figure(figure, embed_images) for figure in unplaced_figures
+            _render_html_figure_reference(figure) + _render_html_figure(figure, embed_images)
+            for figure in unplaced_figures
         )
         section_markup.append(
             "<section>"
@@ -807,7 +916,10 @@ def _render_html_report(
 
     figures_markup = ""
     if figures:
-        rendered = "".join(_render_html_figure(figure, embed_images) for figure in figures)
+        rendered = "".join(
+            _render_html_figure_reference(figure) + _render_html_figure(figure, embed_images)
+            for figure in figures
+        )
         figures_markup = f"<section><h2>Visualizations</h2>{rendered}</section>"
 
     return f"""<!doctype html>
@@ -893,6 +1005,12 @@ def _render_html_report(
       font-size: 13px;
       text-align: center;
     }}
+    .figure-reference {{
+      color: #334e68;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 14px 0 0;
+    }}
     .table-block {{
       margin: 24px 0;
       overflow-x: auto;
@@ -931,7 +1049,11 @@ def _render_html_report(
 
 
 def _markdown_figure(figure: dict[str, str]) -> str:
-    lines = [f"### {figure['name']}"]
+    lines = []
+    reference = _structure_reference_text(figure)
+    if reference:
+        lines.extend([reference, ""])
+    lines.append(f"### {figure['name']}")
     if figure["image_path"]:
         lines.append(f"![{figure['name']}]({figure['image_path']})")
     if figure["caption"]:
@@ -1048,6 +1170,10 @@ def _render_pdf_report(
         story.append(Spacer(1, 0.12 * inch))
 
     def add_figure(figure: dict[str, str]) -> None:
+        reference = _structure_reference_text(figure)
+        if reference:
+            story.append(Paragraph(_pdf_inline_markup(reference), styles["BodyText"]))
+            story.append(Spacer(1, 0.04 * inch))
         if figure["name"]:
             story.append(Paragraph(_pdf_inline_markup(figure["name"]), styles["Heading3"]))
         image_path = figure["image_path"]

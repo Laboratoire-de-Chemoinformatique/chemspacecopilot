@@ -26,8 +26,14 @@ def test_report_instructions_require_named_captioned_inline_figures():
         "save_rich_report will generate a section-local compound image automatically"
         in instructions
     )
-    assert "Scaffold-1, Scaffold-2" in instructions
-    assert "Molecule-1, Molecule-2" in instructions
+    assert "Scaffold_1, Scaffold_2" in instructions
+    assert "Molecule_1, Molecule_2" in instructions
+    assert "If a source identifier already exists" in instructions
+    assert "ChEMBL ID" in instructions
+    assert "Only when no source ID exists" in instructions
+    assert "MUST reference the matching figure" in instructions
+    assert "CHEMBL12345, Top potency ChEMBL analog (Figure 4)" in instructions
+    assert "Scaffold_1, Piperidine urea phenyl scaffold (Figure 3)" in instructions
     assert "Piperidine urea phenyl scaffold" in instructions
     assert "Top potency piperidine urea analog" in instructions
     assert "structure_type ('scaffold' or 'molecule')" in instructions

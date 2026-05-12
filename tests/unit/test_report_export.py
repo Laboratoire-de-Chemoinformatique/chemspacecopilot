@@ -243,7 +243,7 @@ def test_save_rich_report_renders_markdown_bold_in_rich_outputs(local_session_ro
                         "columns": ["Name", "Description"],
                         "rows": [
                             {
-                                "Name": "**Molecule-1**",
+                                "Name": "**Molecule_1**",
                                 "Description": "Representative **high-potency** analog.",
                             }
                         ],
@@ -261,7 +261,7 @@ def test_save_rich_report_renders_markdown_bold_in_rich_outputs(local_session_ro
     assert "<strong>High activity</strong>" in html_content
     assert "<strong>top potency</strong>" in html_content
     assert "high-activity" in html_content
-    assert "<strong>Molecule-1</strong>" in html_content
+    assert "<strong>Molecule_1</strong>" in html_content
     assert "**High activity**" not in html_content
     assert "**top potency**" not in html_content
     assert (reports_dir / "bold_report.pdf").read_bytes().startswith(b"%PDF")
@@ -353,7 +353,7 @@ def test_save_rich_report_generates_section_structure_figures(local_session_root
                 "figures": [
                     {
                         "structure_type": "scaffold",
-                        "structure_id": "Scaffold-1",
+                        "structure_id": "Scaffold_1",
                         "structure_name": "Benzene scaffold",
                         "structure_smiles": "c1ccccc1",
                         "caption": (
@@ -378,10 +378,38 @@ def test_save_rich_report_generates_section_structure_figures(local_session_root
     html_content = (reports_dir / "scaffold_sar.html").read_text()
     markdown_content = (reports_dir / "scaffold_sar.md").read_text()
     expected_fragment = f"/reports/chemotype/assets/structures/{structure_files[0].name}"
-    assert "Figure 1. Scaffold-1: Benzene scaffold" in html_content
+    assert "Figure 1. Scaffold_1: Benzene scaffold" in html_content
     assert "data:image/png;base64," in html_content
-    assert "### Figure 1. Scaffold-1: Benzene scaffold" in markdown_content
+    assert "### Figure 1. Scaffold_1: Benzene scaffold" in markdown_content
     assert expected_fragment in markdown_content
+
+
+def test_save_rich_report_references_top_level_structure_figures(local_session_root):
+    """Top-level structure figures should also get text references in HTML and Markdown."""
+    save_rich_report(
+        title="Top-Level Structure Report",
+        summary=["CHEMBL999999 is the reference molecule for comparison."],
+        figures=[
+            {
+                "structure_type": "molecule",
+                "structure_id": "CHEMBL999999",
+                "structure_name": "Reference ChEMBL molecule",
+                "structure_smiles": "CCOc1ccc(NC(=O)NCC)cc1",
+                "caption": "Reference compound structure with an existing ChEMBL identifier.",
+            }
+        ],
+        filename="top_level_structure",
+        report_type="chemotype",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    html_content = (reports_dir / "top_level_structure.html").read_text()
+    markdown_content = (reports_dir / "top_level_structure.md").read_text()
+    assert "Figure 1. CHEMBL999999: Reference ChEMBL molecule" in html_content
+    assert "CHEMBL999999 (Reference ChEMBL molecule) is shown in Figure 1." in html_content
+    assert "### Figure 1. CHEMBL999999: Reference ChEMBL molecule" in markdown_content
+    assert "CHEMBL999999 (Reference ChEMBL molecule) is shown in Figure 1." in markdown_content
 
 
 def test_save_rich_report_places_structure_figures_and_tables(local_session_root):
@@ -392,28 +420,28 @@ def test_save_rich_report_places_structure_figures_and_tables(local_session_root
             {
                 "heading": "SAR Highlights",
                 "paragraphs": [
-                    "Scaffold-1 anchors the dense GTM region around node 221.",
-                    "Molecule-1 is the top potency analog in node 340.",
+                    "Scaffold_1 anchors the dense GTM region around node 221.",
+                    "Molecule_1 is the top potency analog in node 340.",
                 ],
                 "figures": [
                     {
                         "structure_type": "scaffold",
-                        "structure_id": "Scaffold-1",
+                        "structure_id": "Scaffold_1",
                         "structure_name": "Piperidine urea phenyl scaffold",
                         "structure_smiles": "O=C(Nc1ccccc1)NC1CCNCC1",
                         "node": "221",
                         "description": "Dominant scaffold in the dense map region.",
-                        "caption": "Scaffold-1 is the dominant piperidine urea phenyl scaffold.",
+                        "caption": "Scaffold_1 is the dominant piperidine urea phenyl scaffold.",
                         "after_paragraph_index": 0,
                     },
                     {
                         "structure_type": "molecule",
-                        "structure_id": "Molecule-1",
+                        "structure_id": "Molecule_1",
                         "structure_name": "Top potency piperidine urea analog",
                         "structure_smiles": "CNC(=O)c1cc(Oc2ccc(NC(=O)Nc3ccc(OC(F)(F)F)cc3)cc2)ccn1",
                         "node": "340",
                         "description": "Representative high-potency molecule.",
-                        "caption": "Molecule-1 is the representative top potency analog.",
+                        "caption": "Molecule_1 is the representative top potency analog.",
                         "after_paragraph_index": 1,
                     },
                 ],
@@ -430,7 +458,7 @@ def test_save_rich_report_places_structure_figures_and_tables(local_session_root
                         ],
                         "rows": [
                             {
-                                "Scaffold ID": "Scaffold-1",
+                                "Scaffold ID": "Scaffold_1",
                                 "Scaffold": "Piperidine urea phenyl scaffold",
                                 "SMILES": "O=C(Nc1ccccc1)NC1CCNCC1",
                                 "Name": "Piperidine urea phenyl scaffold",
@@ -451,7 +479,7 @@ def test_save_rich_report_places_structure_figures_and_tables(local_session_root
                         ],
                         "rows": [
                             {
-                                "Molecule ID": "Molecule-1",
+                                "Molecule ID": "Molecule_1",
                                 "Molecule": "Top potency piperidine urea analog",
                                 "SMILES": "CNC(=O)c1cc(Oc2ccc(NC(=O)Nc3ccc(OC(F)(F)F)cc3)cc2)ccn1",
                                 "Name": "Top potency piperidine urea analog",
@@ -475,26 +503,32 @@ def test_save_rich_report_places_structure_figures_and_tables(local_session_root
     html_content = (reports_dir / "named_structures.html").read_text()
     markdown_content = (reports_dir / "named_structures.md").read_text()
     scaffold_paragraph_index = html_content.index(
-        "Scaffold-1 anchors the dense GTM region around node 221."
+        "Scaffold_1 anchors the dense GTM region around node 221."
     )
     scaffold_figure_index = html_content.index(
-        "Figure 1. Scaffold-1: Piperidine urea phenyl scaffold"
+        "Figure 1. Scaffold_1: Piperidine urea phenyl scaffold"
     )
-    molecule_paragraph_index = html_content.index("Molecule-1 is the top potency analog")
+    molecule_paragraph_index = html_content.index("Molecule_1 is the top potency analog")
     molecule_figure_index = html_content.index(
-        "Figure 2. Molecule-1: Top potency piperidine urea analog"
+        "Figure 2. Molecule_1: Top potency piperidine urea analog"
     )
     table_index = html_content.index("<h3>Scaffold Inventory</h3>")
     assert scaffold_paragraph_index < scaffold_figure_index < molecule_paragraph_index
     assert molecule_paragraph_index < molecule_figure_index < table_index
     assert "<th>Scaffold ID</th>" in html_content
-    assert "<td>Scaffold-1</td>" in html_content
+    assert "<td>Scaffold_1</td>" in html_content
     assert "<th>Molecule ID</th>" in html_content
-    assert "<td>Molecule-1</td>" in html_content
+    assert "<td>Molecule_1</td>" in html_content
     assert "| Scaffold ID | Scaffold | SMILES | Name | Node | Description |" in markdown_content
     assert "| Molecule ID | Molecule | SMILES | Name | Node | Description |" in markdown_content
-    assert "### Figure 1. Scaffold-1: Piperidine urea phenyl scaffold" in markdown_content
-    assert "### Figure 2. Molecule-1: Top potency piperidine urea analog" in markdown_content
+    assert "Scaffold_1 (Piperidine urea phenyl scaffold) is shown in Figure 1." in html_content
+    assert "Molecule_1 (Top potency piperidine urea analog) is shown in Figure 2." in html_content
+    assert "Scaffold_1 (Piperidine urea phenyl scaffold) is shown in Figure 1." in markdown_content
+    assert (
+        "Molecule_1 (Top potency piperidine urea analog) is shown in Figure 2." in markdown_content
+    )
+    assert "### Figure 1. Scaffold_1: Piperidine urea phenyl scaffold" in markdown_content
+    assert "### Figure 2. Molecule_1: Top potency piperidine urea analog" in markdown_content
 
 
 def test_save_rich_report_visualizes_scaffold_inventory_rows(local_session_root):
@@ -505,7 +539,7 @@ def test_save_rich_report_visualizes_scaffold_inventory_rows(local_session_root)
             {
                 "heading": "Scaffold Summary",
                 "paragraphs": [
-                    "Scaffold-1 is a representative adamantane urea phenyl scaffold in node 321.",
+                    "Scaffold_1 is a representative adamantane urea phenyl scaffold in node 321.",
                 ],
                 "tables": [
                     {
@@ -520,7 +554,7 @@ def test_save_rich_report_visualizes_scaffold_inventory_rows(local_session_root)
                         ],
                         "rows": [
                             {
-                                "Scaffold ID": "Scaffold-1",
+                                "Scaffold ID": "Scaffold_1",
                                 "Scaffold": "Adamantane urea phenyl scaffold",
                                 "SMILES": "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2",
                                 "Name": "Adamantane urea phenyl scaffold",
@@ -545,12 +579,185 @@ def test_save_rich_report_visualizes_scaffold_inventory_rows(local_session_root)
 
     html_content = (reports_dir / "scaffold_inventory_only.html").read_text()
     markdown_content = (reports_dir / "scaffold_inventory_only.md").read_text()
-    paragraph_index = html_content.index("Scaffold-1 is a representative")
-    figure_index = html_content.index("Figure 1. Scaffold-1: Adamantane urea phenyl scaffold")
+    paragraph_index = html_content.index("Scaffold_1 is a representative")
+    figure_index = html_content.index("Figure 1. Scaffold_1: Adamantane urea phenyl scaffold")
     table_index = html_content.index("<h3>Scaffold Inventory</h3>")
     assert paragraph_index < figure_index < table_index
     assert "data:image/png;base64," in html_content
-    assert "### Figure 1. Scaffold-1: Adamantane urea phenyl scaffold" in markdown_content
+    assert "Scaffold_1 (Adamantane urea phenyl scaffold) is shown in Figure 1." in html_content
+    assert "Scaffold_1 (Adamantane urea phenyl scaffold) is shown in Figure 1." in markdown_content
+    assert "### Figure 1. Scaffold_1: Adamantane urea phenyl scaffold" in markdown_content
+
+
+def test_save_rich_report_preserves_existing_chembl_ids_for_molecule_figures(
+    local_session_root,
+):
+    """Existing molecule IDs such as ChEMBL IDs should be reused in text and figure labels."""
+    save_rich_report(
+        title="ChEMBL Molecule Report",
+        sections=[
+            {
+                "heading": "Molecule Summary",
+                "paragraphs": [
+                    "CHEMBL123456 is the reported high-potency molecule in node 17.",
+                ],
+                "tables": [
+                    {
+                        "title": "Molecule Inventory",
+                        "columns": [
+                            "ChEMBL ID",
+                            "Molecule",
+                            "SMILES",
+                            "Name",
+                            "Node",
+                            "Description",
+                        ],
+                        "rows": [
+                            {
+                                "ChEMBL ID": "CHEMBL123456",
+                                "Molecule": "Top potency ChEMBL analog",
+                                "SMILES": "CCOc1ccc(NC(=O)NCC)cc1",
+                                "Name": "Top potency ChEMBL analog",
+                                "Node": "17",
+                                "Description": "Existing ChEMBL compound identifier.",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        filename="chembl_ids",
+        report_type="chemotype",
+        formats=["html", "pdf", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    html_content = (reports_dir / "chembl_ids.html").read_text()
+    markdown_content = (reports_dir / "chembl_ids.md").read_text()
+    assert len(list((reports_dir / "assets" / "structures").glob("*.png"))) == 1
+    assert "Figure 1. CHEMBL123456: Top potency ChEMBL analog" in html_content
+    assert "CHEMBL123456 (Top potency ChEMBL analog) is shown in Figure 1." in html_content
+    assert "Molecule_1" not in html_content
+    assert "### Figure 1. CHEMBL123456: Top potency ChEMBL analog" in markdown_content
+    assert "CHEMBL123456 (Top potency ChEMBL analog) is shown in Figure 1." in markdown_content
+
+
+def test_save_rich_report_applies_table_source_ids_to_smiles_tag_figures(
+    local_session_root,
+):
+    """Source IDs from tables should upgrade matching figures created from SMILES tags."""
+    smiles = "CCOc1ccc(NC(=O)NCC)cc1"
+    save_rich_report(
+        title="Tagged ChEMBL Molecule Report",
+        sections=[
+            {
+                "heading": "Molecule Summary",
+                "paragraphs": [
+                    f"The source compound is introduced as <smiles>{smiles}</smiles>.",
+                ],
+                "tables": [
+                    {
+                        "title": "Molecule Inventory",
+                        "columns": [
+                            "ChEMBL ID",
+                            "Molecule",
+                            "SMILES",
+                            "Name",
+                            "Node",
+                            "Description",
+                        ],
+                        "rows": [
+                            {
+                                "ChEMBL ID": "CHEMBL777777",
+                                "Molecule": "Known ChEMBL analog",
+                                "SMILES": smiles,
+                                "Name": "Known ChEMBL analog",
+                                "Node": "23",
+                                "Description": "Table source ID should be reused.",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        filename="tagged_chembl_ids",
+        report_type="chemotype",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    html_content = (reports_dir / "tagged_chembl_ids.html").read_text()
+    markdown_content = (reports_dir / "tagged_chembl_ids.md").read_text()
+    assert len(list((reports_dir / "assets" / "structures").glob("*.png"))) == 1
+    assert "Figure 1. CHEMBL777777: Known ChEMBL analog" in html_content
+    assert "CHEMBL777777 (Known ChEMBL analog) is shown in Figure 1." in html_content
+    assert "Molecule_1" not in html_content
+    assert "### Figure 1. CHEMBL777777: Known ChEMBL analog" in markdown_content
+    assert "CHEMBL777777 (Known ChEMBL analog) is shown in Figure 1." in markdown_content
+
+
+def test_save_rich_report_adds_generated_ids_to_inventory_tables(local_session_root):
+    """Rows without source IDs should get generated IDs reused in text, tables, and figures."""
+    save_rich_report(
+        title="Generated Structure ID Report",
+        sections=[
+            {
+                "heading": "Generated IDs",
+                "paragraphs": [
+                    "The adamantane urea phenyl scaffold is explicitly discussed in node 321.",
+                    "The representative analog is explicitly discussed in node 17.",
+                ],
+                "tables": [
+                    {
+                        "title": "Scaffold Inventory",
+                        "columns": ["Scaffold", "SMILES", "Name", "Node", "Description"],
+                        "rows": [
+                            {
+                                "Scaffold": "Adamantane urea phenyl scaffold",
+                                "SMILES": "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2",
+                                "Name": "Adamantane urea phenyl scaffold",
+                                "Node": "321",
+                                "Description": "No source scaffold ID was available.",
+                            }
+                        ],
+                    },
+                    {
+                        "title": "Molecule Inventory",
+                        "columns": ["Molecule", "SMILES", "Name", "Node", "Description"],
+                        "rows": [
+                            {
+                                "Molecule": "Representative low-activity analog",
+                                "SMILES": "CCOc1ccc(NC(=O)NCC)cc1",
+                                "Name": "Representative low-activity analog",
+                                "Node": "17",
+                                "Description": "No source molecule ID was available.",
+                            }
+                        ],
+                    },
+                ],
+            }
+        ],
+        filename="generated_structure_ids",
+        report_type="chemotype",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    html_content = (reports_dir / "generated_structure_ids.html").read_text()
+    markdown_content = (reports_dir / "generated_structure_ids.md").read_text()
+    assert len(list((reports_dir / "assets" / "structures").glob("*.png"))) == 2
+    assert "Figure 1. Scaffold_1: Adamantane urea phenyl scaffold" in html_content
+    assert "Figure 2. Molecule_1: Representative low-activity analog" in html_content
+    assert "<th>Scaffold ID</th>" in html_content
+    assert "<td>Scaffold_1</td>" in html_content
+    assert "<th>Molecule ID</th>" in html_content
+    assert "<td>Molecule_1</td>" in html_content
+    assert "Scaffold_1 (Adamantane urea phenyl scaffold) is shown in Figure 1." in html_content
+    assert "Molecule_1 (Representative low-activity analog) is shown in Figure 2." in html_content
+    assert "| Scaffold ID | Scaffold | SMILES | Name | Node | Description |" in markdown_content
+    assert "| Molecule ID | Molecule | SMILES | Name | Node | Description |" in markdown_content
+    assert "| Scaffold_1 | Adamantane urea phenyl scaffold |" in markdown_content
+    assert "| Molecule_1 | Representative low-activity analog |" in markdown_content
 
 
 def test_save_rich_report_generates_structure_figures_from_smiles_tags(local_session_root):
@@ -586,10 +793,12 @@ def test_save_rich_report_generates_structure_figures_from_smiles_tags(local_ses
     expected_fragment = f"/reports/chemotype/assets/structures/{structure_files[0].name}"
     assert "&lt;smiles&gt;" not in html_content
     assert f"The report highlights {smiles} as a representative compound." in html_content
-    assert "Figure 1. Molecule-1: Reported compound structure" in html_content
+    assert "Figure 1. Molecule_1: Reported compound structure" in html_content
+    assert "Molecule_1 (Reported compound structure) is shown in Figure 1." in html_content
     assert "data:image/png;base64," in html_content
     assert "<smiles>" not in markdown_content
     assert f"The report highlights {smiles} as a representative compound." in markdown_content
+    assert "Molecule_1 (Reported compound structure) is shown in Figure 1." in markdown_content
     assert expected_fragment in markdown_content
 
 
@@ -621,17 +830,17 @@ def test_save_rich_report_places_multiple_smiles_tag_figures_after_first_mention
     html_content = (reports_dir / "tagged_placement.html").read_text()
     markdown_content = (reports_dir / "tagged_placement.md").read_text()
     first_paragraph_index = html_content.index(f"First mention introduces {first_smiles}.")
-    first_figure_index = html_content.index("Figure 1. Molecule-1: Reported compound structure")
+    first_figure_index = html_content.index("Figure 1. Molecule_1: Reported compound structure")
     second_paragraph_index = html_content.index(f"Second mention introduces {second_smiles}.")
-    second_figure_index = html_content.index("Figure 2. Molecule-2: Reported compound structure")
+    second_figure_index = html_content.index("Figure 2. Molecule_2: Reported compound structure")
     assert first_paragraph_index < first_figure_index < second_paragraph_index
     assert second_paragraph_index < second_figure_index
     assert markdown_content.index(
         f"First mention introduces {first_smiles}."
-    ) < markdown_content.index("### Figure 1. Molecule-1: Reported compound structure")
+    ) < markdown_content.index("### Figure 1. Molecule_1: Reported compound structure")
     assert markdown_content.index(
         f"Second mention introduces {second_smiles}."
-    ) < markdown_content.index("### Figure 2. Molecule-2: Reported compound structure")
+    ) < markdown_content.index("### Figure 2. Molecule_2: Reported compound structure")
 
 
 def test_save_rich_report_rejects_invalid_structure_smiles(local_session_root):
