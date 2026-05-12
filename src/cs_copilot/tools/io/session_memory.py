@@ -45,6 +45,7 @@ _OBJECT_TYPES: Dict[str, Tuple[str, str]] = {
     "node": ("nodes", "node"),
     "dataset": ("datasets", "ds"),
     "analysis": ("analyses", "ana"),
+    "figure": ("figures", "fig"),
     "route": ("routes", "route"),
     "report": ("reports", "rep"),
 }
@@ -1324,6 +1325,7 @@ def _resolve_current(
         "node",
         "dataset",
         "analysis",
+        "figure",
         "route",
         "report",
     ):
@@ -1354,7 +1356,7 @@ def _resolve_numbered_reference(
     candidates: Sequence[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
     match = re.search(
-        r"\b(?:compound|candidate set|candidate|map|zone|node|dataset|analysis|route|report)\s+(\d+)\b",
+        r"\b(?:compound|candidate set|candidate|map|zone|node|dataset|analysis|figure|route|report)\s+(\d+)\b",
         reference_lower,
     )
     if not match:
@@ -1483,6 +1485,9 @@ def _compact_record_for_summary(record: Dict[str, Any]) -> Dict[str, Any]:
         "clean_dataset_path": record.get("clean_dataset_path"),
         "raw_dataset_path": record.get("raw_dataset_path"),
         "descriptor_parquet_path": record.get("descriptor_parquet_path"),
+        "figure_kind": record.get("figure_kind"),
+        "renderer": record.get("renderer"),
+        "report_role": record.get("report_role"),
     }
 
 
@@ -1519,6 +1524,19 @@ def _compact_record_line(record: Dict[str, Any], object_type: str) -> str:
         bits.append(f"node={record['node_index']}")
     if object_type == "route" and record.get("target_smiles"):
         bits.append(f"target={record['target_smiles']}")
+    if object_type == "figure":
+        if record.get("figure_kind"):
+            bits.append(f"kind={record['figure_kind']}")
+        if record.get("renderer"):
+            bits.append(f"renderer={record['renderer']}")
+        if record.get("report_role"):
+            bits.append(f"role={record['report_role']}")
+        paths = record.get("paths") or {}
+        if isinstance(paths, dict):
+            if paths.get("png_path"):
+                bits.append(f"png={paths['png_path']}")
+            elif paths.get("html_path"):
+                bits.append(f"html={paths['html_path']}")
     return " | ".join(bit for bit in bits if bit)
 
 
@@ -1690,7 +1708,8 @@ class SessionMemoryToolkit(Toolkit):
         session_state: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
-        Summarize important compounds, candidate sets, maps, zones, nodes, analyses, and routes.
+        Summarize important compounds, candidate sets, maps, zones, nodes,
+        analyses, figures, and routes.
 
         Args:
             session_state: Shared session state injected by Agno.

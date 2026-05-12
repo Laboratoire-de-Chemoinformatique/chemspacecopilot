@@ -98,11 +98,27 @@ def test_register_map_zone_and_node_records():
         "node",
         {"map_id": map_id, "zone_id": zone_id, "node_index": 10, "x": 1, "y": 2},
     )
+    figure_id = register_session_object(
+        state,
+        "figure",
+        {
+            "figure_kind": "gtm_density",
+            "renderer": "altair",
+            "report_role": "inline_static",
+            "paths": {"png_path": "s3://bucket/density.png"},
+        },
+        label="Density figure",
+    )
 
     assert map_id == "map_001"
     assert zone_id == "zone_001"
     assert node_id == "node_map_001_10"
+    assert figure_id == "fig_001"
     assert state["session_objects"]["current"]["zone"] == zone_id
+    assert state["session_objects"]["current"]["figure"] == figure_id
+    assert state["session_objects"]["figures"][figure_id]["figure_kind"] == "gtm_density"
+    assert "fig_001" in state["session_memory_summary"]
+    assert "png=s3://bucket/density.png" in state["session_memory_summary"]
 
 
 def test_session_memory_toolkit_resolves_and_selects():

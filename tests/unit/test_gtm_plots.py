@@ -148,13 +148,23 @@ def test_save_gtm_plot_styles_projected_compounds_as_red_larger_points(monkeypat
     monkeypatch.setattr(gtm_operations, "altair_points_chart", _fake_points_chart)
     monkeypatch.setattr(gtm_operations, "_write_chart_outputs", lambda *_args, **_kwargs: None)
 
-    result = gtm_operations.save_gtm_plot("analogs.csv", "model.pkl.gz")
+    agent = SimpleNamespace(session_state={})
+    result = gtm_operations.save_gtm_plot("analogs.csv", "model.pkl.gz", agent=agent)
 
     assert "GTM plot saved to S3" in result
     assert calls["points_color"] == gtm_operations.PROJECTED_POINTS_COLOR
     assert calls["points_size"] == gtm_operations.PROJECTED_POINTS_SIZE
     assert calls["points_size"] > gtm_operations.DEFAULT_POINTS_SIZE
     assert calls["points_opacity"] == gtm_operations.PROJECTED_POINTS_OPACITY
+    figures = agent.session_state["session_objects"]["figures"]
+    assert list(figures) == ["fig_001"]
+    figure = figures["fig_001"]
+    assert figure["figure_kind"] == "gtm_density"
+    assert figure["renderer"] == "altair"
+    assert figure["report_role"] == "inline_static"
+    assert figure["paths"]["png_path"].endswith("model_gtm_plot.png")
+    assert figure["color_encoding"]["encoded_variable"] == "compound density per GTM node"
+    assert figure["overlays"][0]["color"] == gtm_operations.PROJECTED_POINTS_COLOR
 
 
 @pytest.mark.parametrize(
@@ -244,13 +254,27 @@ def test_save_gtm_landscape_plot_dispatches_to_matching_renderer(
     monkeypatch.setattr(gtm_operations, renderer_name, _fake_renderer)
     monkeypatch.setattr(gtm_operations, "_write_chart_outputs", _fake_write)
 
-    result = gtm_operations.save_gtm_landscape_plot(str(landscape_path), landscape_type)
+    agent = SimpleNamespace(session_state={})
+    result = gtm_operations.save_gtm_landscape_plot(
+        str(landscape_path),
+        landscape_type,
+        agent=agent,
+    )
 
     assert renderer_name == calls["renderer"]
     assert landscape_type in result.lower()
     assert calls["table"].equals(table)
     assert calls["html_path"].endswith(f"{expected_suffix}.html")
     assert calls["png_path"].endswith(f"{expected_suffix}.png")
+    figure = agent.session_state["session_objects"]["figures"]["fig_001"]
+    assert (
+        figure["figure_kind"]
+        == ("gtm_density" if landscape_type == "density" else f"gtm_{landscape_type}")
+        or figure["figure_kind"] == f"gtm_activity_{landscape_type}"
+    )
+    assert figure["renderer"] == "altair"
+    assert figure["report_role"] == "inline_static"
+    assert figure["paths"]["png_path"].endswith(f"{expected_suffix}.png")
 
 
 @pytest.mark.parametrize(
@@ -430,6 +454,42 @@ def test_save_gtm_landscape_plot_altair_overlays_projected_points(
     assert calls["overlay_table"]["source"].tolist() == ["analogs", "analogs"]
     assert calls["overlay_num_nodes"] == 4
     assert "projected compound overlay" in result
+
+
+def test_save_gtm_landscape_plot_altair_adds_marked_node_labels(monkeypatch, tmp_path):
+    """Discussed nodes passed as mark_nodes should be added as an Altair label layer."""
+
+    landscape_path = tmp_path / "density.csv"
+    table = pd.DataFrame(
+        {
+            "x": [1, 1, 2, 2],
+            "y": [1, 2, 1, 2],
+            "nodes": [0, 1, 2, 3],
+            "density": [1.0, 2.0, 3.0, 4.0],
+            "filtered_density": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+    table.to_csv(landscape_path, index=False)
+    calls = {}
+
+    def _fake_labels(source_table, mark_nodes):
+        calls["label_table"] = source_table.copy()
+        calls["mark_nodes"] = mark_nodes
+        return alt.Chart(pd.DataFrame({"x": [1], "y": [1], "nodes": [1]})).mark_text()
+
+    monkeypatch.setattr(gtm_operations, "_build_node_labels_layer", _fake_labels)
+    monkeypatch.setattr(gtm_operations, "_write_chart_outputs", lambda *_args, **_kwargs: None)
+
+    result = gtm_operations.save_gtm_landscape_plot(
+        str(landscape_path),
+        "density",
+        renderer="altair",
+        mark_nodes=[1, 3],
+    )
+
+    assert calls["mark_nodes"] == [1, 3]
+    assert calls["label_table"].equals(table)
+    assert "Altair density landscape saved to S3" in result
 
 
 @pytest.mark.parametrize(
