@@ -28,6 +28,7 @@ _DEFAULT_REPORT_TYPE = "report"
 _SLUG_RX = re.compile(r"[^A-Za-z0-9_-]+")
 _FIGURE_NAME_RX = re.compile(r"^\s*Figure\s+\d+\s*[\.:]\s*(?P<title>.*)$", re.IGNORECASE)
 _STRUCTURE_ID_RX = re.compile(r"^(?P<type>Scaffold|Molecule)-(?P<number>\d+)$", re.IGNORECASE)
+_BOLD_RX = re.compile(r"\*\*(?P<text>.+?)\*\*")
 _SMILES_TAG_RX = re.compile(
     r"<smiles>\s*(?P<smiles>.*?)\s*</smiles>",
     re.IGNORECASE | re.DOTALL,
@@ -385,6 +386,29 @@ def _strip_smiles_tags(text: str) -> str:
     return _SMILES_TAG_RX.sub(lambda match: match.group("smiles").strip(), text)
 
 
+def _inline_markup(text: Any, *, bold_tag: str) -> str:
+    text = _strip_smiles_tags(_clean_text(text))
+    rendered = []
+    cursor = 0
+    for match in _BOLD_RX.finditer(text):
+        bold_text = match.group("text")
+        if not bold_text:
+            continue
+        rendered.append(html.escape(text[cursor : match.start()]))
+        rendered.append(f"<{bold_tag}>{html.escape(bold_text)}</{bold_tag}>")
+        cursor = match.end()
+    rendered.append(html.escape(text[cursor:]))
+    return "".join(rendered)
+
+
+def _html_inline_markup(text: Any) -> str:
+    return _inline_markup(text, bold_tag="strong")
+
+
+def _pdf_inline_markup(text: Any) -> str:
+    return _inline_markup(text, bold_tag="b")
+
+
 def _figure_placement_key(figure: dict[str, Any], position: int) -> tuple[int, int]:
     paragraph_index = figure.get("after_paragraph_index")
     if isinstance(paragraph_index, int):
@@ -573,18 +597,20 @@ def _image_data_url(image_path: str) -> str:
 
 def _html_text_block(text: str) -> str:
     text = _strip_smiles_tags(text)
-    escaped = html.escape(text.strip())
-    if not escaped:
+    stripped = text.strip()
+    if not stripped:
         return ""
-    if "\n" in text and ("|" in text or text.lstrip().startswith(("-", "*"))):
-        return f"<pre>{escaped}</pre>"
-    return f"<p>{escaped.replace(chr(10), '<br>')}</p>"
+    rendered = _html_inline_markup(stripped)
+    lstripped = text.lstrip()
+    if "\n" in text and ("|" in text or lstripped.startswith(("- ", "* "))):
+        return f"<pre>{rendered}</pre>"
+    return f"<p>{rendered.replace(chr(10), '<br>')}</p>"
 
 
 def _render_html_figure(figure: dict[str, str], embed_images: bool) -> str:
     name = html.escape(figure["name"])
     image_path = figure["image_path"]
-    caption = html.escape(figure["caption"])
+    caption = _html_inline_markup(figure["caption"])
     alt_text = html.escape(figure["alt_text"])
     artifact_path = figure["artifact_path"]
 
@@ -620,17 +646,17 @@ def _render_html_figure(figure: dict[str, str], embed_images: bool) -> str:
 
 
 def _render_html_table(table: dict[str, Any]) -> str:
-    header = "".join(f"<th>{html.escape(column)}</th>" for column in table["columns"])
+    header = "".join(f"<th>{_html_inline_markup(column)}</th>" for column in table["columns"])
     rows = []
     for row in table["rows"]:
         cells = "".join(
-            f"<td>{html.escape(str(row.get(column, '')))}</td>" for column in table["columns"]
+            f"<td>{_html_inline_markup(row.get(column, ''))}</td>" for column in table["columns"]
         )
         rows.append(f"<tr>{cells}</tr>")
 
     return (
         '<div class="table-block">'
-        f"<h3>{html.escape(table['title'])}</h3>"
+        f"<h3>{_html_inline_markup(table['title'])}</h3>"
         "<table>"
         f"<thead><tr>{header}</tr></thead>"
         f"<tbody>{''.join(rows)}</tbody>"
@@ -651,7 +677,7 @@ def _render_html_report(
 
     summary_markup = ""
     if summary:
-        items = "".join(f"<li>{html.escape(item)}</li>" for item in summary)
+        items = "".join(f"<li>{_html_inline_markup(item)}</li>" for item in summary)
         summary_markup = f"<section><h2>Executive Summary</h2><ul>{items}</ul></section>"
 
     section_markup = []
@@ -907,19 +933,19 @@ def _render_pdf_report(
     story = []
     generated = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    story.append(Paragraph(html.escape(title), styles["Title"]))
+    story.append(Paragraph(_pdf_inline_markup(title), styles["Title"]))
     story.append(Paragraph(f"Generated: {generated}", styles["Normal"]))
     story.append(Spacer(1, 0.18 * inch))
 
     if summary:
         story.append(Paragraph("Executive Summary", styles["Heading2"]))
         for item in summary:
-            story.append(Paragraph(f"- {html.escape(item)}", styles["BodyText"]))
+            story.append(Paragraph(f"- {_pdf_inline_markup(item)}", styles["BodyText"]))
         story.append(Spacer(1, 0.12 * inch))
 
     def add_figure(figure: dict[str, str]) -> None:
         if figure["name"]:
-            story.append(Paragraph(html.escape(figure["name"]), styles["Heading3"]))
+            story.append(Paragraph(_pdf_inline_markup(figure["name"]), styles["Heading3"]))
         image_path = figure["image_path"]
         if image_path:
             try:
@@ -938,7 +964,7 @@ def _render_pdf_report(
                 )
 
         if figure["caption"]:
-            story.append(Paragraph(html.escape(figure["caption"]), styles["Italic"]))
+            story.append(Paragraph(_pdf_inline_markup(figure["caption"]), styles["Italic"]))
         if figure["artifact_path"]:
             story.append(
                 Paragraph(
@@ -949,14 +975,17 @@ def _render_pdf_report(
         story.append(Spacer(1, 0.16 * inch))
 
     def add_table(table: dict[str, Any]) -> None:
-        story.append(Paragraph(html.escape(table["title"]), styles["Heading3"]))
+        story.append(Paragraph(_pdf_inline_markup(table["title"]), styles["Heading3"]))
         table_data = [
-            [Paragraph(html.escape(column), styles["BodyText"]) for column in table["columns"]]
+            [
+                Paragraph(_pdf_inline_markup(column), styles["BodyText"])
+                for column in table["columns"]
+            ]
         ]
         for row in table["rows"]:
             table_data.append(
                 [
-                    Paragraph(html.escape(str(row.get(column, ""))), styles["BodyText"])
+                    Paragraph(_pdf_inline_markup(row.get(column, "")), styles["BodyText"])
                     for column in table["columns"]
                 ]
             )
@@ -985,11 +1014,11 @@ def _render_pdf_report(
         story.append(Spacer(1, 0.16 * inch))
 
     for section in sections:
-        story.append(Paragraph(html.escape(section["heading"]), styles["Heading2"]))
+        story.append(Paragraph(_pdf_inline_markup(section["heading"]), styles["Heading2"]))
         placed_figures, unplaced_figures = _group_section_figures(section)
         for paragraph_index, paragraph in enumerate(section["paragraphs"]):
-            escaped = html.escape(_strip_smiles_tags(paragraph)).replace("\n", "<br/>")
-            story.append(Paragraph(escaped, styles["BodyText"]))
+            rendered = _pdf_inline_markup(paragraph).replace("\n", "<br/>")
+            story.append(Paragraph(rendered, styles["BodyText"]))
             story.append(Spacer(1, 0.08 * inch))
             for figure in placed_figures.get(paragraph_index, []):
                 add_figure(figure)

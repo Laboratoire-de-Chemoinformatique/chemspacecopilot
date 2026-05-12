@@ -8,7 +8,11 @@ import re
 import pytest
 
 from cs_copilot.storage import S3
-from cs_copilot.tools.io.report_export import save_markdown_report, save_rich_report
+from cs_copilot.tools.io.report_export import (
+    _pdf_inline_markup,
+    save_markdown_report,
+    save_rich_report,
+)
 
 _TINY_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR42mP8z8BQDwAFgwJ"
@@ -210,6 +214,58 @@ def test_save_rich_report_defaults_to_html_and_pdf(local_session_root, stored_pn
     assert "This figure shows the GTM density landscape for EGFR compounds" in html_content
     assert "s3://bucket/sessions/test/map.html" in html_content
     assert pdf_files[0].read_bytes().startswith(b"%PDF")
+
+
+def test_save_rich_report_renders_markdown_bold_in_rich_outputs(local_session_root, stored_png):
+    """Markdown-style bold should render as rich text instead of literal asterisks."""
+    assert _pdf_inline_markup("Potency is **high** & selective") == (
+        "Potency is <b>high</b> &amp; selective"
+    )
+
+    save_rich_report(
+        title="Bold **SAR** Report",
+        summary=["**High activity** is concentrated in node 340."],
+        sections=[
+            {
+                "heading": "Activity **Highlights**",
+                "paragraphs": [
+                    "The **top potency** analog is separated from the dense region.",
+                ],
+                "figures": [
+                    {
+                        "image_path": stored_png,
+                        "caption": "The map highlights **high-activity** nodes.",
+                    }
+                ],
+                "tables": [
+                    {
+                        "title": "Bold **Structure** Table",
+                        "columns": ["Name", "Description"],
+                        "rows": [
+                            {
+                                "Name": "**Molecule-1**",
+                                "Description": "Representative **high-potency** analog.",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        filename="bold_report",
+        report_type="chemotype",
+        formats=["html", "pdf", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    html_content = (reports_dir / "bold_report.html").read_text()
+    assert "<strong>High activity</strong>" in html_content
+    assert "<strong>top potency</strong>" in html_content
+    assert "high-activity" in html_content
+    assert "<strong>Molecule-1</strong>" in html_content
+    assert "**High activity**" not in html_content
+    assert "**top potency**" not in html_content
+    assert (reports_dir / "bold_report.pdf").read_bytes().startswith(b"%PDF")
+    assert "**High activity** is concentrated" in (reports_dir / "bold_report.md").read_text()
 
 
 def test_save_rich_report_can_emit_markdown_companion(local_session_root, stored_png):
