@@ -1208,6 +1208,7 @@ class GTMToolkit(BaseDRToolkit):
             "html_path": artifact.html_path,
             "png_path": artifact.png_path,
             "renderer": artifact.renderer,
+            "figure_metadata": artifact.figure_metadata,
         }
         for state in update_state_targets(agent, session_state):
             data_file_paths = state.get("data_file_paths", {})
@@ -1230,6 +1231,15 @@ class GTMToolkit(BaseDRToolkit):
                     landscape_files["landscape_plot"] = plot_paths[0]
                 else:
                     landscape_files["landscape_plot_plotly"] = plot_paths[0]
+            register_session_object(
+                state,
+                "figure",
+                artifact.figure_metadata,
+                label=artifact.figure_metadata.get("title_subject"),
+                source_agent=getattr(agent, "name", None),
+                source_tool="create_activity_landscapes",
+                set_current=True,
+            )
 
             dataset_id = register_session_object(
                 state,

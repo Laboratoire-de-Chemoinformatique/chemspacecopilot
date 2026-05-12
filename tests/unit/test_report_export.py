@@ -8,6 +8,7 @@ import re
 import pytest
 
 from cs_copilot.storage import S3
+from cs_copilot.tools.io.figure_metadata import build_figure_metadata, register_figure_metadata
 from cs_copilot.tools.io.report_export import (
     _html_inline_markup,
     _pdf_inline_markup,
@@ -449,7 +450,7 @@ def test_save_rich_report_omits_plotly_gtm_outputs(local_session_root, stored_pn
 
 
 def test_save_rich_report_corrects_density_caption_colors(local_session_root, stored_png):
-    """Density captions should not claim a red/orange-vs-blue scale for grayscale plots."""
+    """Density titles/captions should not assign blue/red to density or potent nodes."""
     save_rich_report(
         title="Density Caption Report",
         sections=[
@@ -459,12 +460,29 @@ def test_save_rich_report_corrects_density_caption_colors(local_session_root, st
                 "figures": [
                     {
                         "image_path": stored_png,
+                        "figure_metadata": build_figure_metadata(
+                            figure_kind="gtm_density",
+                            renderer="altair",
+                            report_role="inline_static",
+                            title_subject="GTM Density Map with Annotated Dense and Potent Nodes",
+                            paths={"png_path": stored_png},
+                            color_encoding={
+                                "role": "cell_color",
+                                "field": "filtered_density",
+                                "encoded_variable": "compound density per GTM node",
+                                "palette": "greys",
+                                "low_value_meaning": "sparse or empty nodes",
+                                "high_value_meaning": "higher compound density",
+                            },
+                        ),
                         "caption": (
                             "Color intensity represents compound density per node, with "
                             "red/orange indicating highly populated regions and blue indicating "
                             "sparse regions."
                         ),
-                        "name": "GTM density landscape",
+                        "name": (
+                            "GTM Density Map with Annotated Dense (blue) and Potent (red) Nodes"
+                        ),
                     }
                 ],
             }
@@ -477,12 +495,196 @@ def test_save_rich_report_corrects_density_caption_colors(local_session_root, st
     reports_dir = _report_dir(local_session_root, "gtm_density")
     html_content = (reports_dir / "density_caption.html").read_text()
     markdown_content = (reports_dir / "density_caption.md").read_text()
+    assert "Figure 1. GTM Density Map with Annotated Dense and Potent Nodes" in html_content
+    assert "(blue)" not in html_content
+    assert "(red)" not in html_content
     assert "red/orange" not in html_content
     assert "blue indicating sparse" not in html_content
-    assert "grayscale legend" in html_content
-    assert "darker cells indicate higher compound density" in html_content
+    assert "greys colorscale" in html_content
+    assert "Higher legend values indicate higher compound density" in html_content
+    assert "### Figure 1. GTM Density Map with Annotated Dense and Potent Nodes" in markdown_content
     assert "red/orange" not in markdown_content
-    assert "grayscale legend" in markdown_content
+    assert "greys colorscale" in markdown_content
+
+
+def test_save_rich_report_preserves_projected_red_marker_wording(local_session_root, stored_png):
+    """Red marker wording should survive when it refers to projected datapoints."""
+    save_rich_report(
+        title="Density Projection Report",
+        sections=[
+            {
+                "heading": "GTM Density Analysis",
+                "paragraphs": ["Density map includes projected analog positions."],
+                "figures": [
+                    {
+                        "image_path": stored_png,
+                        "caption": (
+                            "The density PNG uses grayscale density cells; red projected "
+                            "data points show newly projected compounds."
+                        ),
+                        "name": "GTM density map with projected data points (red)",
+                    }
+                ],
+            }
+        ],
+        filename="density_projection",
+        report_type="gtm_density",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "gtm_density")
+    html_content = (reports_dir / "density_projection.html").read_text()
+    markdown_content = (reports_dir / "density_projection.md").read_text()
+    assert "projected data points (red)" in html_content
+    assert "red projected data points show newly projected compounds" in html_content
+    assert "projected data points (red)" in markdown_content
+
+
+def test_save_rich_report_uses_density_colorscale_metadata(local_session_root, stored_png):
+    """Density captions should describe the recorded colorscale, not a fixed palette."""
+    metadata = build_figure_metadata(
+        figure_kind="gtm_density",
+        renderer="altair",
+        report_role="inline_static",
+        title_subject="GTM density landscape with custom scale",
+        paths={"png_path": stored_png},
+        color_encoding={
+            "role": "cell_color",
+            "field": "filtered_density",
+            "encoded_variable": "compound density per GTM node",
+            "palette": "viridis",
+            "low_value_meaning": "lower compound density",
+            "high_value_meaning": "higher compound density",
+        },
+        overlays=[
+            {
+                "role": "projected_points",
+                "color": "red",
+                "symbol": "markers",
+                "meaning": "projected compounds",
+            }
+        ],
+        node_labels=[221, 340],
+    )
+
+    save_rich_report(
+        title="Metadata Density Report",
+        sections=[
+            {
+                "heading": "GTM Density Analysis",
+                "paragraphs": ["Density analysis discusses nodes 221 and 340."],
+                "figures": [
+                    {
+                        "figure_metadata": metadata,
+                        "caption": "Color intensity uses red/orange for dense regions.",
+                    }
+                ],
+            }
+        ],
+        filename="metadata_density",
+        report_type="gtm_density",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "gtm_density")
+    html_content = (reports_dir / "metadata_density.html").read_text()
+    markdown_content = (reports_dir / "metadata_density.md").read_text()
+    assert "viridis colorscale" in html_content
+    assert "Red markers show projected compounds." in html_content
+    assert "Labeled GTM nodes: 221, 340." in html_content
+    assert "red/orange" not in html_content
+    assert "grayscale" not in html_content
+    assert "viridis colorscale" in markdown_content
+
+
+def test_save_rich_report_resolves_registered_figure_metadata(
+    local_session_root,
+    stored_png,
+):
+    """Report figures can refer to session figure IDs instead of duplicating path metadata."""
+    session_state = {}
+    figure_id = register_figure_metadata(
+        session_state,
+        build_figure_metadata(
+            figure_kind="gtm_activity_regression",
+            renderer="altair",
+            report_role="inline_static",
+            title_subject="GTM regression activity landscape",
+            paths={"png_path": stored_png, "html_path": "s3://bucket/activity.html"},
+            color_encoding={
+                "role": "cell_color",
+                "field": "filtered_reg_density",
+                "encoded_variable": "node-level predicted activity",
+                "palette": "lighttealblue",
+                "low_value_meaning": "lower predicted activity",
+                "high_value_meaning": "higher predicted activity",
+            },
+        ),
+    )
+
+    save_rich_report(
+        title="Registered Figure Report",
+        sections=[
+            {
+                "heading": "GTM Activity Analysis",
+                "paragraphs": ["Activity analysis interprets the registered landscape."],
+                "figures": [{"figure_id": figure_id}],
+            }
+        ],
+        filename="registered_figure",
+        report_type="gtm_activity",
+        formats=["html", "md"],
+        session_state=session_state,
+    )
+
+    reports_dir = _report_dir(local_session_root, "gtm_activity")
+    html_content = (reports_dir / "registered_figure.html").read_text()
+    markdown_content = (reports_dir / "registered_figure.md").read_text()
+    assert "Figure 1. GTM regression activity landscape" in html_content
+    assert "lighttealblue colorscale" in html_content
+    assert "data:image/png;base64," in html_content
+    assert "activity.html" not in html_content
+    assert stored_png in markdown_content
+
+
+def test_save_rich_report_excludes_interactive_only_figure_metadata(
+    local_session_root,
+    stored_png,
+):
+    """Plotly/interactive-only figure metadata should not create inline report figures."""
+    metadata = build_figure_metadata(
+        figure_kind="gtm_activity_regression",
+        renderer="plotly",
+        report_role="interactive_only",
+        title_subject="Plotly activity landscape",
+        paths={"png_path": stored_png, "html_path": "s3://bucket/plotly.html"},
+        color_encoding={
+            "role": "cell_color",
+            "encoded_variable": "node-level predicted activity",
+            "palette": "custom",
+        },
+    )
+
+    save_rich_report(
+        title="Interactive Only Figure Report",
+        sections=[
+            {
+                "heading": "GTM Activity Analysis",
+                "paragraphs": ["Activity analysis has enough text to save."],
+                "figures": [{"figure_metadata": metadata}],
+            }
+        ],
+        filename="interactive_only",
+        report_type="gtm_activity",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "gtm_activity")
+    html_content = (reports_dir / "interactive_only.html").read_text()
+    markdown_content = (reports_dir / "interactive_only.md").read_text()
+    assert "Plotly activity landscape" not in html_content
+    assert "plotly.html" not in html_content
+    assert "Plotly activity landscape" not in markdown_content
 
 
 def test_save_rich_report_generates_section_structure_figures(local_session_root):

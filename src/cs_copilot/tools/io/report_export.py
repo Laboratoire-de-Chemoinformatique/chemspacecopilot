@@ -14,6 +14,13 @@ from typing import Any, Dict, Optional
 
 from cs_copilot.storage import S3, OutputOperation, operation_rel_path
 
+from .figure_metadata import (
+    REPORTABLE_FIGURE_ROLES,
+    figure_caption_facts,
+    normalize_figure_metadata,
+    report_image_path,
+    session_figure_metadata,
+)
 from .session_memory import register_session_object
 from .utils import get_mime_type
 
@@ -42,6 +49,17 @@ _PLAIN_SMILES_RX = re.compile(
     r"(?<![A-Za-z0-9_])(?P<smiles>[A-Za-z0-9@+\-\[\]\(\)=#$\\/%.]{5,})(?![A-Za-z0-9_])"
 )
 _SUPPORTED_RICH_FORMATS = {"html", "pdf", "md", "markdown"}
+_FIGURE_METADATA_KEYS = {
+    "figure_kind",
+    "renderer",
+    "report_role",
+    "title_subject",
+    "paths",
+    "color_encoding",
+    "overlays",
+    "node_labels",
+    "caption_facts",
+}
 _STRUCTURE_ID_FIELDS = (
     "structure_id",
     "structure id",
@@ -199,6 +217,73 @@ def _format_figure_name(name: str, caption: str, index: int) -> str:
     return f"Figure {index}. {title}"
 
 
+def _looks_like_figure_metadata(value: Any) -> bool:
+    return isinstance(value, dict) and any(key in value for key in _FIGURE_METADATA_KEYS)
+
+
+def _figure_input_paths(figure: dict[str, Any]) -> dict[str, str]:
+    paths = figure.get("paths") if isinstance(figure.get("paths"), dict) else {}
+    normalized = {str(key): _clean_text(value) for key, value in paths.items() if value}
+    png_path = _clean_text(
+        figure.get("png_path")
+        or figure.get("image_path")
+        or figure.get("path")
+        or figure.get("src")
+    )
+    html_path = _clean_text(
+        figure.get("html_path") or figure.get("artifact_path") or figure.get("interactive_path")
+    )
+    if png_path and "png_path" not in normalized:
+        normalized["png_path"] = png_path
+    if html_path and "html_path" not in normalized:
+        normalized["html_path"] = html_path
+    return normalized
+
+
+def _merge_figure_metadata(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        if value not in (None, "", [], {}):
+            merged[key] = value
+    if isinstance(base.get("paths"), dict) or isinstance(override.get("paths"), dict):
+        paths = {}
+        if isinstance(base.get("paths"), dict):
+            paths.update(base["paths"])
+        if isinstance(override.get("paths"), dict):
+            paths.update({key: value for key, value in override["paths"].items() if value})
+        merged["paths"] = paths
+    return normalize_figure_metadata(merged)
+
+
+def _resolve_figure_metadata(
+    figure: dict[str, Any],
+    session_state: Optional[Dict[str, Any]],
+) -> dict[str, Any]:
+    figure_id = _clean_text(figure.get("figure_id") or figure.get("session_figure_id"))
+    metadata = session_figure_metadata(session_state, figure_id)
+
+    inline_metadata = figure.get("figure_metadata")
+    if not _looks_like_figure_metadata(inline_metadata):
+        inline_metadata = figure.get("metadata")
+    if _looks_like_figure_metadata(inline_metadata):
+        metadata = _merge_figure_metadata(metadata, inline_metadata)
+
+    if _looks_like_figure_metadata(figure):
+        direct_metadata = {key: figure[key] for key in _FIGURE_METADATA_KEYS if key in figure}
+        direct_metadata.setdefault("paths", _figure_input_paths(figure))
+        metadata = _merge_figure_metadata(metadata, direct_metadata)
+
+    return metadata
+
+
+def _metadata_title(metadata: dict[str, Any]) -> str:
+    return _clean_text(metadata.get("title_subject") or metadata.get("label"))
+
+
+def _metadata_caption(metadata: dict[str, Any]) -> str:
+    return " ".join(figure_caption_facts(metadata))
+
+
 def _normalize_structure_type(value: Any, structure_smiles: str) -> str:
     normalized = _clean_text(value).lower()
     if normalized in {"scaffold", "scaffolds"}:
@@ -208,7 +293,13 @@ def _normalize_structure_type(value: Any, structure_smiles: str) -> str:
     return "molecule" if structure_smiles else ""
 
 
-def _normalize_figure(figure: Any, index: int) -> dict[str, Any]:
+def _normalize_figure(
+    figure: Any,
+    index: int,
+    session_state: Optional[Dict[str, Any]] = None,
+) -> dict[str, Any]:
+    figure_metadata: dict[str, Any] = {}
+    figure_id = ""
     if isinstance(figure, str):
         image_path = _clean_text(figure)
         name = ""
@@ -223,16 +314,28 @@ def _normalize_figure(figure: Any, index: int) -> dict[str, Any]:
         description = ""
         after_paragraph_index = None
     elif isinstance(figure, dict):
+        figure_metadata = _resolve_figure_metadata(figure, session_state)
+        figure_id = _clean_text(
+            figure.get("figure_id") or figure.get("session_figure_id") or figure_metadata.get("id")
+        )
+        metadata_image_path = report_image_path(figure_metadata)
+        metadata_title = _metadata_title(figure_metadata)
+        metadata_caption = _metadata_caption(figure_metadata)
         image_path = _clean_text(
             figure.get("image_path")
             or figure.get("png_path")
             or figure.get("path")
             or figure.get("src")
+            or metadata_image_path
             or ""
         )
-        caption = _clean_text(figure.get("caption") or figure.get("description"))
-        name = _clean_text(figure.get("name") or figure.get("figure_name") or figure.get("title"))
-        alt_text = _clean_text(figure.get("alt_text") or figure.get("alt"))
+        caption = _clean_text(
+            figure.get("caption") or figure.get("description") or metadata_caption
+        )
+        name = _clean_text(
+            figure.get("name") or figure.get("figure_name") or figure.get("title") or metadata_title
+        )
+        alt_text = _clean_text(figure.get("alt_text") or figure.get("alt") or metadata_title)
         artifact_path = _clean_text(
             figure.get("artifact_path")
             or figure.get("html_path")
@@ -292,7 +395,7 @@ def _normalize_figure(figure: Any, index: int) -> dict[str, Any]:
     if structure_smiles and not caption:
         caption = description
 
-    if image_path or artifact_path or structure_smiles:
+    if image_path or artifact_path or structure_smiles or figure_metadata:
         if not caption:
             raise ValueError(f"figure {index} caption cannot be empty")
         name = _format_figure_name(name, caption, index)
@@ -311,16 +414,23 @@ def _normalize_figure(figure: Any, index: int) -> dict[str, Any]:
         "node": node,
         "description": description,
         "after_paragraph_index": after_paragraph_index,
+        "figure_id": figure_id,
+        "figure_metadata": figure_metadata,
     }
 
 
-def _normalize_figures(figures: Any, start_index: int = 1) -> list[dict[str, Any]]:
+def _normalize_figures(
+    figures: Any,
+    start_index: int = 1,
+    session_state: Optional[Dict[str, Any]] = None,
+) -> list[dict[str, Any]]:
     if not figures:
         return []
     if not isinstance(figures, (list, tuple)):
         figures = [figures]
     return [
-        _normalize_figure(figure, index) for index, figure in enumerate(figures, start=start_index)
+        _normalize_figure(figure, index, session_state=session_state)
+        for index, figure in enumerate(figures, start=start_index)
     ]
 
 
@@ -372,7 +482,10 @@ def _normalize_tables(tables: Any) -> list[dict[str, Any]]:
     return [_normalize_table(table, index) for index, table in enumerate(tables, start=1)]
 
 
-def _normalize_sections(sections: Any) -> list[dict[str, Any]]:
+def _normalize_sections(
+    sections: Any,
+    session_state: Optional[Dict[str, Any]] = None,
+) -> list[dict[str, Any]]:
     if not sections:
         return []
     if not isinstance(sections, (list, tuple)):
@@ -411,7 +524,10 @@ def _normalize_sections(sections: Any) -> list[dict[str, Any]]:
                     section.get("heading") or section.get("title") or f"Section {index}"
                 ),
                 "paragraphs": paragraphs,
-                "figures": _normalize_figures(section.get("figures")),
+                "figures": _normalize_figures(
+                    section.get("figures"),
+                    session_state=session_state,
+                ),
                 "tables": _normalize_tables(section.get("tables")),
             }
         )
@@ -805,7 +921,8 @@ def _find_context_section(
 
 
 def _figure_context_text(figure: dict[str, Any]) -> str:
-    return " ".join(
+    metadata = normalize_figure_metadata(figure.get("figure_metadata"))
+    bits = [
         _clean_text(figure.get(key))
         for key in (
             "name",
@@ -815,8 +932,18 @@ def _figure_context_text(figure: dict[str, Any]) -> str:
             "structure_id",
             "structure_name",
             "description",
+            "figure_id",
         )
-    ).lower()
+    ]
+    bits.extend(
+        [
+            metadata.get("figure_kind", ""),
+            metadata.get("renderer", ""),
+            metadata.get("title_subject", ""),
+            " ".join(str(node) for node in metadata.get("node_labels") or []),
+        ]
+    )
+    return " ".join(_clean_text(bit) for bit in bits).lower()
 
 
 def _is_gtm_landscape_context(context: str) -> bool:
@@ -835,18 +962,115 @@ def _remove_sentences_matching(text: str, *terms: str) -> str:
     return " ".join(sentence for sentence in kept if sentence).strip()
 
 
+_VISUAL_ENCODING_TERMS = (
+    "color",
+    "colour",
+    "colorscale",
+    "colour scale",
+    "color scale",
+    "legend",
+    "red",
+    "orange",
+    "blue",
+    "green",
+    "purple",
+    "gray",
+    "grey",
+    "grayscale",
+    "greyscale",
+    "dark",
+    "light",
+    "marker",
+)
+
+
+def _sentence_mentions_visual_encoding(sentence: str) -> bool:
+    lowered = sentence.lower()
+    return any(term in lowered for term in _VISUAL_ENCODING_TERMS)
+
+
+def _remove_visual_encoding_sentences(text: str) -> str:
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    kept = [
+        sentence
+        for sentence in sentences
+        if sentence.strip() and not _sentence_mentions_visual_encoding(sentence)
+    ]
+    return " ".join(kept).strip()
+
+
+def _append_missing_sentences(text: str, sentences: list[str]) -> str:
+    current = _clean_text(text)
+    current_lower = current.lower()
+    additions = []
+    for sentence in sentences:
+        cleaned = _clean_text(sentence)
+        if cleaned and cleaned.lower() not in current_lower:
+            additions.append(cleaned)
+    return " ".join(part for part in [current, *additions] if part).strip()
+
+
+def _apply_figure_metadata_text(figure: dict[str, Any]) -> bool:
+    metadata = normalize_figure_metadata(figure.get("figure_metadata"))
+    if not metadata:
+        return False
+
+    caption_facts = figure_caption_facts(metadata)
+    if caption_facts:
+        caption = _clean_text(figure.get("caption"))
+        if any(_sentence_mentions_visual_encoding(sentence) for sentence in caption_facts):
+            caption = _remove_visual_encoding_sentences(caption)
+        figure["caption"] = _append_missing_sentences(caption, caption_facts)
+
+    if metadata.get("figure_kind") == "gtm_density":
+        name = figure.get("name", "")
+        if name:
+            figure["name"] = _strip_density_name_color_notes(name)
+        alt_text = figure.get("alt_text", "")
+        if alt_text and ("blue" in alt_text.lower() or "red" in alt_text.lower()):
+            figure["alt_text"] = _strip_density_name_color_notes(alt_text)
+    return True
+
+
+def _strip_density_name_color_notes(name: str) -> str:
+    corrected = re.sub(r"\s*\(blue\)", "", name, flags=re.IGNORECASE)
+
+    def _red_replacement(match: re.Match[str]) -> str:
+        prefix = corrected[max(0, match.start() - 50) : match.start()].lower()
+        return match.group(0) if "projected" in prefix else ""
+
+    corrected = re.sub(r"\s*\(red\)", _red_replacement, corrected, flags=re.IGNORECASE)
+    corrected = re.sub(
+        r"\b(?:blue|red)\s+(?=nodes?\b)",
+        "",
+        corrected,
+        flags=re.IGNORECASE,
+    )
+    return " ".join(corrected.split()).strip()
+
+
 def _drop_plotly_report_outputs(figures: list[dict[str, Any]]) -> list[dict[str, Any]]:
     kept = []
     for figure in figures:
         image_path = _clean_text(figure.get("image_path"))
         artifact_path = _clean_text(figure.get("artifact_path"))
         context = _figure_context_text(figure)
+        metadata = normalize_figure_metadata(figure.get("figure_metadata"))
+        renderer = _clean_text(metadata.get("renderer")).lower()
+        report_role = _clean_text(metadata.get("report_role"))
 
-        if "plotly" in image_path.lower():
+        if (
+            metadata
+            and report_role not in REPORTABLE_FIGURE_ROLES
+            and not figure.get("structure_smiles")
+        ):
+            continue
+
+        if renderer == "plotly" or "plotly" in image_path.lower():
             continue
 
         if artifact_path and (
-            "plotly" in artifact_path.lower() or _is_gtm_landscape_context(context)
+            metadata or "plotly" in artifact_path.lower() or _is_gtm_landscape_context(context)
         ):
             figure["artifact_path"] = ""
             figure["caption"] = _remove_sentences_matching(figure.get("caption", ""), "plotly")
@@ -856,21 +1080,39 @@ def _drop_plotly_report_outputs(figures: list[dict[str, Any]]) -> list[dict[str,
 
 
 def _correct_density_caption_color_scale(figure: dict[str, Any]) -> None:
+    if _apply_figure_metadata_text(figure):
+        return
+
     context = _figure_context_text(figure)
     caption = figure.get("caption", "")
     caption_lower = caption.lower()
-    if "density" not in context or "density" not in caption_lower:
-        return
-    if not ("red/orange" in caption_lower or ("red" in caption_lower and "blue" in caption_lower)):
+    name = figure.get("name", "")
+    name_lower = name.lower()
+    if "density" not in context:
         return
 
-    corrected = _remove_sentences_matching(caption, "red", "blue")
-    corrected = _remove_sentences_matching(corrected, "red/orange")
-    replacement = (
-        "The density PNG uses a grayscale legend: darker cells indicate higher "
-        "compound density, and lighter cells indicate sparse or empty nodes."
-    )
-    figure["caption"] = f"{corrected} {replacement}".strip()
+    if "blue" in name_lower or "red" in name_lower:
+        original_name = name
+        figure["name"] = _strip_density_name_color_notes(name)
+        alt_text = figure.get("alt_text", "")
+        alt_text_lower = alt_text.lower()
+        if alt_text == original_name or "blue" in alt_text_lower or "red" in alt_text_lower:
+            figure["alt_text"] = _strip_density_name_color_notes(alt_text)
+
+    if "density" not in caption_lower:
+        return
+
+    if "red" in caption_lower and "projected" in caption_lower and "blue" not in caption_lower:
+        return
+
+    if "red/orange" in caption_lower or ("red" in caption_lower and "blue" in caption_lower):
+        corrected = _remove_sentences_matching(caption, "red", "blue")
+        corrected = _remove_sentences_matching(corrected, "red/orange")
+        replacement = (
+            "The density-cell colors follow the plot legend; higher legend values indicate "
+            "more populated nodes and lower legend values indicate sparse or empty nodes."
+        )
+        figure["caption"] = f"{corrected} {replacement}".strip()
 
 
 def _prepare_report_figures_for_rendering(
@@ -1815,7 +2057,10 @@ def save_rich_report(
             ``name`` (or ``figure_name``/``title``), ``caption``,
             ``image_path`` (or ``png_path``/``path``), ``alt_text``, and
             ``artifact_path`` (or ``html_path``) for an interactive companion
-            file. A figure may alternatively include ``structure_smiles`` (or
+            file. A figure may alternatively include ``figure_id`` to resolve a
+            registered session figure, or ``figure_metadata`` to drive image
+            selection, title/caption facts, color semantics, overlays, and
+            report inclusion. Structure figures may include ``structure_smiles`` (or
             ``smiles``), ``structure_type``, ``structure_id``,
             ``structure_name``, ``node``, ``description``, and
             ``after_paragraph_index`` to generate and place a molecule/scaffold
@@ -1840,8 +2085,8 @@ def save_rich_report(
         raise ValueError("title cannot be empty")
 
     normalized_summary = _as_strings(summary)
-    normalized_sections = _normalize_sections(sections)
-    normalized_figures = _normalize_figures(figures)
+    normalized_sections = _normalize_sections(sections, session_state=session_state)
+    normalized_figures = _normalize_figures(figures, session_state=session_state)
     _append_smiles_tag_figures(normalized_sections, normalized_figures)
     _append_plain_smiles_figures(normalized_sections, normalized_figures)
     _append_structure_table_figures(normalized_sections, normalized_figures)

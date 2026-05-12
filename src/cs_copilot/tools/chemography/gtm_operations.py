@@ -19,7 +19,7 @@ import gzip
 import hashlib
 import math
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -94,6 +94,12 @@ from ..constants import (
     SEQUENCE_COLUMN,
     SMILES_COLUMN,
 )
+from ..io.figure_metadata import (
+    REPORT_ROLE_INLINE_STATIC,
+    REPORT_ROLE_INTERACTIVE_ONLY,
+    build_figure_metadata,
+    register_figure_metadata,
+)
 from ..io.formatting import df_as_str, has_integer_sqrt, smiles_to_png_bytes, value_counts_df
 from ..io.utils import validate_positive_int
 
@@ -134,6 +140,198 @@ PROJECTED_POINTS_OPACITY = 0.95
 def _agent_session_state(agent: Optional[Agent]) -> Optional[dict[str, Any]]:
     state = getattr(agent, "session_state", None)
     return state if isinstance(state, dict) else None
+
+
+def _figure_report_role(renderer: LandscapeRenderer, png_written: bool) -> str:
+    return (
+        REPORT_ROLE_INLINE_STATIC
+        if renderer == "altair" and png_written
+        else REPORT_ROLE_INTERACTIVE_ONLY
+    )
+
+
+def _figure_kind(landscape_type: LandscapeType) -> str:
+    if landscape_type == "density":
+        return "gtm_density"
+    if landscape_type in {"classification", "regression"}:
+        return f"gtm_activity_{landscape_type}"
+    return f"gtm_{landscape_type}"
+
+
+def _register_agent_figure(
+    agent: Optional[Agent],
+    metadata: dict[str, Any],
+    *,
+    source_tool: str,
+) -> Optional[str]:
+    state = _agent_session_state(agent)
+    if state is None:
+        return None
+    return register_figure_metadata(
+        state,
+        metadata,
+        label=metadata.get("title_subject"),
+        source_agent=getattr(agent, "name", None),
+        source_tool=source_tool,
+        set_current=True,
+    )
+
+
+def _iter_altair_color_encodings(spec: Any) -> Iterable[dict[str, Any]]:
+    if isinstance(spec, dict):
+        encoding = spec.get("encoding")
+        if isinstance(encoding, dict) and isinstance(encoding.get("color"), dict):
+            yield encoding["color"]
+        for value in spec.values():
+            yield from _iter_altair_color_encodings(value)
+    elif isinstance(spec, list):
+        for item in spec:
+            yield from _iter_altair_color_encodings(item)
+
+
+def _altair_color_encoding_metadata(
+    chart: alt.Chart,
+    *,
+    encoded_variable: str,
+    high_value_meaning: str,
+    low_value_meaning: str,
+    default_field: str,
+) -> dict[str, Any]:
+    """Extract the actual Altair color encoding from a generated chart."""
+    try:
+        color_encoding = next(_iter_altair_color_encodings(chart.to_dict(validate=False)))
+    except Exception:
+        color_encoding = {}
+
+    scale = color_encoding.get("scale") if isinstance(color_encoding, dict) else {}
+    if not isinstance(scale, dict):
+        scale = {}
+    palette = scale.get("scheme")
+    if not palette and scale.get("range"):
+        palette = "custom"
+
+    legend = color_encoding.get("legend") if isinstance(color_encoding, dict) else {}
+    if not isinstance(legend, dict):
+        legend = {}
+
+    return {
+        "role": "cell_color",
+        "field": color_encoding.get("field") or default_field,
+        "encoded_variable": encoded_variable,
+        "palette": palette or "",
+        "scale": scale,
+        "legend_title": color_encoding.get("title") or legend.get("title") or "",
+        "low_value_meaning": low_value_meaning,
+        "high_value_meaning": high_value_meaning,
+    }
+
+
+def _plotly_color_encoding_metadata(
+    fig: Any,
+    *,
+    encoded_variable: str,
+    high_value_meaning: str,
+    low_value_meaning: str,
+    default_field: str,
+) -> dict[str, Any]:
+    """Extract best-effort Plotly colorscale metadata from a generated figure."""
+    figure_dict = {}
+    try:
+        figure_dict = fig.to_dict()
+    except Exception:
+        pass
+
+    layout = figure_dict.get("layout") if isinstance(figure_dict, dict) else {}
+    coloraxis = layout.get("coloraxis") if isinstance(layout, dict) else {}
+    colorscale = coloraxis.get("colorscale") if isinstance(coloraxis, dict) else None
+    palette = "custom" if colorscale else ""
+    return {
+        "role": "cell_color",
+        "field": default_field,
+        "encoded_variable": encoded_variable,
+        "palette": palette,
+        "scale": {"colorscale": colorscale} if colorscale else {},
+        "legend_title": "",
+        "low_value_meaning": low_value_meaning,
+        "high_value_meaning": high_value_meaning,
+    }
+
+
+def _landscape_color_semantics(landscape_type: LandscapeType) -> dict[str, str]:
+    if landscape_type == "density":
+        return {
+            "encoded_variable": "compound density per GTM node",
+            "high_value_meaning": "higher compound density",
+            "low_value_meaning": "sparse or empty nodes",
+            "default_field": "filtered_density",
+        }
+    if landscape_type == "classification":
+        return {
+            "encoded_variable": "class probability per GTM node",
+            "high_value_meaning": "higher class probability",
+            "low_value_meaning": "lower class probability",
+            "default_field": "second_class_prob",
+        }
+    if landscape_type == "regression":
+        return {
+            "encoded_variable": "node-level predicted activity",
+            "high_value_meaning": "higher predicted activity",
+            "low_value_meaning": "lower predicted activity",
+            "default_field": "filtered_reg_density",
+        }
+    return {
+        "encoded_variable": "query match category per GTM node",
+        "high_value_meaning": "nodes matching the query criteria",
+        "low_value_meaning": "nodes not matching the query criteria",
+        "default_field": "criteria_satisfied",
+    }
+
+
+def _projected_overlay_metadata(present: bool) -> list[dict[str, Any]]:
+    if not present:
+        return []
+    return [
+        {
+            "role": "projected_points",
+            "color": PROJECTED_POINTS_COLOR,
+            "symbol": "markers",
+            "meaning": "projected compounds",
+        }
+    ]
+
+
+def _gtm_figure_metadata(
+    *,
+    landscape_type: LandscapeType,
+    renderer: LandscapeRenderer,
+    title_subject: str,
+    html_path: str,
+    png_path: Optional[str],
+    png_written: bool,
+    color_encoding: dict[str, Any],
+    mark_nodes: Optional[Sequence[int]] = None,
+    projected_overlay: bool = False,
+    dataset_path: Optional[str] = None,
+    model_path: Optional[str] = None,
+    source_table_path: Optional[str] = None,
+) -> dict[str, Any]:
+    return build_figure_metadata(
+        figure_kind=_figure_kind(landscape_type),
+        renderer=renderer,
+        report_role=_figure_report_role(renderer, png_written),
+        title_subject=title_subject,
+        paths={
+            "html_path": html_path,
+            "png_path": png_path,
+            "source_table_path": source_table_path,
+        },
+        color_encoding=color_encoding,
+        overlays=_projected_overlay_metadata(projected_overlay),
+        node_labels=list(mark_nodes or []),
+        dataset_path=dataset_path,
+        model_path=model_path,
+        landscape_type=landscape_type,
+    )
 
 
 def chemical_space_artifact_path(
@@ -193,6 +391,7 @@ class ActivityLandscapeArtifact:
     html_path: str
     png_path: Optional[str]
     png_written: bool
+    figure_metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def find_smiles_column(df: pd.DataFrame) -> str:
@@ -3366,20 +3565,36 @@ def create_activity_landscape_artifact(
             f"{s3_html} and {s3_png}"
         )
 
+        color_semantics = _landscape_color_semantics(detected_type)
+
         if normalized_renderer == "altair":
             chart = create_activity_landscapes(
                 source_activity, node_threshold, chart_width, chart_height
             )
+            color_encoding = _altair_color_encoding_metadata(chart, **color_semantics)
             _write_chart_outputs(chart, s3_html, s3_png)
             png_written = True
         else:
             fig = create_activity_landscapes_plotly(
                 source_activity, node_threshold, chart_width, chart_height
             )
+            color_encoding = _plotly_color_encoding_metadata(fig, **color_semantics)
             png_written = _write_plotly_outputs(fig, s3_html, s3_png)
 
         logger.info(
             f"Successfully created {normalized_renderer} {detected_type} activity landscape"
+        )
+        metadata = _gtm_figure_metadata(
+            landscape_type=detected_type,
+            renderer=normalized_renderer,
+            title_subject=f"GTM {detected_type} activity landscape for {Path(dataset).stem}",
+            html_path=S3.path(s3_html),
+            png_path=S3.path(s3_png) if png_written else None,
+            png_written=png_written,
+            color_encoding=color_encoding,
+            dataset_path=dataset,
+            model_path=gtm_model,
+            source_table_path=S3.path(landscape_csv),
         )
         return ActivityLandscapeArtifact(
             table=source_activity,
@@ -3389,6 +3604,7 @@ def create_activity_landscape_artifact(
             html_path=S3.path(s3_html),
             png_path=S3.path(s3_png) if png_written else None,
             png_written=png_written,
+            figure_metadata=metadata,
         )
 
     except Exception as e:
@@ -3440,6 +3656,11 @@ def create_activity_landscapes_tool(
         renderer=renderer,
         descriptor_type=descriptor_type,
         agent=agent,
+    )
+    _register_agent_figure(
+        agent,
+        artifact.figure_metadata,
+        source_tool="create_activity_landscapes",
     )
     return format_activity_landscape_artifact(artifact)
 
@@ -3493,6 +3714,10 @@ def save_gtm_plot(
 
         # Compute charts and molecule info
         density_chart = altair_discrete_density_landscape(source, title=model_header)
+        color_encoding = _altair_color_encoding_metadata(
+            density_chart,
+            **_landscape_color_semantics("density"),
+        )
         source_mols = _projected_points_from_projection(df, resps)
 
         # Create points layer
@@ -3538,6 +3763,20 @@ def save_gtm_plot(
         # Save files
         logger.debug(f"Saving GTM plot to {s3_html} and {s3_png}")
         _write_chart_outputs(chart, s3_html, s3_png)
+        metadata = _gtm_figure_metadata(
+            landscape_type="density",
+            renderer="altair",
+            title_subject=f"GTM density map for {model_header}",
+            html_path=S3.path(s3_html),
+            png_path=S3.path(s3_png),
+            png_written=True,
+            color_encoding=color_encoding,
+            mark_nodes=mark_nodes,
+            projected_overlay=not source_mols.empty,
+            dataset_path=dataset_file,
+            model_path=gtm_model_file,
+        )
+        _register_agent_figure(agent, metadata, source_tool="save_gtm_plot")
 
         logger.info(f"Successfully created GTM plot: {s3_html}, {s3_png}")
         return f"GTM plot saved to S3: `{S3.path(s3_html)}` and `{S3.path(s3_png)}`"
@@ -3633,8 +3872,11 @@ def save_gtm_landscape_plot(
             f"{html_path} and {png_path}"
         )
 
+        color_semantics = _landscape_color_semantics(normalized_type)
+
         if normalized_renderer == "altair":
             chart = _create_altair_landscape_chart(source_table, normalized_type, title=title)
+            color_encoding = _altair_color_encoding_metadata(chart, **color_semantics)
             layers = [chart]
             if overlay_points is not None:
                 layers.append(
@@ -3656,12 +3898,28 @@ def save_gtm_landscape_plot(
             if mark_nodes:
                 logger.warning("mark_nodes is ignored for Plotly landscape plots")
             fig = _create_plotly_landscape_figure(source_table, normalized_type, title=title)
+            color_encoding = _plotly_color_encoding_metadata(fig, **color_semantics)
             if overlay_points is not None:
                 fig = _add_projected_points_trace(fig, overlay_points)
             fig.update_layout(width=chart_width, height=chart_height)
             png_written = _write_plotly_outputs(fig, html_path, png_path)
 
         logger.info(f"Successfully created {normalized_renderer} {normalized_type} landscape plot")
+        metadata = _gtm_figure_metadata(
+            landscape_type=normalized_type,
+            renderer=normalized_renderer,
+            title_subject=f"GTM {normalized_type} landscape for {Path(landscape_file).stem}",
+            html_path=S3.path(html_path),
+            png_path=S3.path(png_path) if png_written else None,
+            png_written=png_written,
+            color_encoding=color_encoding,
+            mark_nodes=mark_nodes if normalized_renderer == "altair" else None,
+            projected_overlay=overlay_points is not None,
+            source_table_path=landscape_file,
+            dataset_path=overlay_dataset_file,
+            model_path=gtm_model_file,
+        )
+        _register_agent_figure(agent, metadata, source_tool="save_gtm_landscape_plot")
         overlay_note = " with projected compound overlay" if overlay_points is not None else ""
         if png_written:
             return (

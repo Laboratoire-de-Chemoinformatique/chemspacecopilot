@@ -13,8 +13,10 @@ def test_report_instructions_require_named_captioned_inline_figures():
     """Report Generator instructions should enforce named, captioned inline figures."""
     instructions = _report_instructions_text()
 
-    assert "Every available non-Plotly static PNG must be included" in instructions
-    assert "Every figure object MUST include name and caption" in instructions
+    assert (
+        "Every available non-Plotly static PNG or registered inline_static figure" in instructions
+    )
+    assert "Every figure object MUST include name and caption unless" in instructions
     assert "Number figures sequentially across the whole report" in instructions
     assert (
         "GTM density landscape figures MUST appear directly after density analysis" in instructions
@@ -30,10 +32,14 @@ def test_report_instructions_require_named_captioned_inline_figures():
     assert "pass mark_nodes for every GTM node discussed in the density text" in instructions
     assert "pass mark_nodes for every GTM node discussed in the activity text" in instructions
     assert "Every GTM node discussed in the report text MUST be explicitly labeled" in instructions
-    assert "Density plots use a grayscale legend" in instructions
-    assert "do not describe density as red/orange vs blue" in instructions
+    assert "Use the registered figure metadata for colorscale" in instructions
+    assert "do not invent density color meanings" in instructions
+    assert (
+        "label dense/potent nodes by color unless the metadata explicitly says so" in instructions
+    )
     assert "Include only the static PNG" in instructions
     assert "do not include Plotly PNGs, Plotly HTML, or Plotly artifact_path" in instructions
+    assert "Prefer registered session figure metadata" in instructions
     assert "Do not put Plotly paths or GTM interactive .html artifact_path values" in instructions
     assert "structure_smiles or smiles" in instructions
     assert (
