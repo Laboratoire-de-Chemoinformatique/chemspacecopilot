@@ -432,6 +432,42 @@ def test_save_gtm_landscape_plot_altair_overlays_projected_points(
     assert "projected compound overlay" in result
 
 
+def test_save_gtm_landscape_plot_altair_adds_marked_node_labels(monkeypatch, tmp_path):
+    """Discussed nodes passed as mark_nodes should be added as an Altair label layer."""
+
+    landscape_path = tmp_path / "density.csv"
+    table = pd.DataFrame(
+        {
+            "x": [1, 1, 2, 2],
+            "y": [1, 2, 1, 2],
+            "nodes": [0, 1, 2, 3],
+            "density": [1.0, 2.0, 3.0, 4.0],
+            "filtered_density": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+    table.to_csv(landscape_path, index=False)
+    calls = {}
+
+    def _fake_labels(source_table, mark_nodes):
+        calls["label_table"] = source_table.copy()
+        calls["mark_nodes"] = mark_nodes
+        return alt.Chart(pd.DataFrame({"x": [1], "y": [1], "nodes": [1]})).mark_text()
+
+    monkeypatch.setattr(gtm_operations, "_build_node_labels_layer", _fake_labels)
+    monkeypatch.setattr(gtm_operations, "_write_chart_outputs", lambda *_args, **_kwargs: None)
+
+    result = gtm_operations.save_gtm_landscape_plot(
+        str(landscape_path),
+        "density",
+        renderer="altair",
+        mark_nodes=[1, 3],
+    )
+
+    assert calls["mark_nodes"] == [1, 3]
+    assert calls["label_table"].equals(table)
+    assert "Altair density landscape saved to S3" in result
+
+
 @pytest.mark.parametrize(
     ("landscape_type", "renderer_name", "table"),
     [

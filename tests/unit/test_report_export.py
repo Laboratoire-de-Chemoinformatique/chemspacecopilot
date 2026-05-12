@@ -9,6 +9,7 @@ import pytest
 
 from cs_copilot.storage import S3
 from cs_copilot.tools.io.report_export import (
+    _html_inline_markup,
     _pdf_inline_markup,
     save_markdown_report,
     save_rich_report,
@@ -212,7 +213,7 @@ def test_save_rich_report_defaults_to_html_and_pdf(local_session_root, stored_pn
     assert "data:image/png;base64," in html_content
     assert "Figure 1. GTM density landscape for EGFR compounds" in html_content
     assert "This figure shows the GTM density landscape for EGFR compounds" in html_content
-    assert "s3://bucket/sessions/test/map.html" in html_content
+    assert "s3://bucket/sessions/test/map.html" not in html_content
     assert pdf_files[0].read_bytes().startswith(b"%PDF")
 
 
@@ -220,6 +221,16 @@ def test_save_rich_report_renders_markdown_bold_in_rich_outputs(local_session_ro
     """Markdown-style bold should render as rich text instead of literal asterisks."""
     assert _pdf_inline_markup("Potency is **high** & selective") == (
         "Potency is <b>high</b> &amp; selective"
+    )
+    assert _html_inline_markup(
+        "<strong>High activity</strong> and <string>selectivity</string> <script>x</script>"
+    ) == (
+        "<strong>High activity</strong> and <strong>selectivity</strong> "
+        "&lt;script&gt;x&lt;/script&gt;"
+    )
+    assert (
+        _pdf_inline_markup("<strong>High activity</strong> and <string>selectivity</string>")
+        == "<b>High activity</b> and <b>selectivity</b>"
     )
 
     save_rich_report(
@@ -229,7 +240,8 @@ def test_save_rich_report_renders_markdown_bold_in_rich_outputs(local_session_ro
             {
                 "heading": "Activity **Highlights**",
                 "paragraphs": [
-                    "The **top potency** analog is separated from the dense region.",
+                    "The **top potency** analog is separated from the dense region. "
+                    "<strong>Node 340</strong> and <string>Node 217</string> are highlighted.",
                 ],
                 "figures": [
                     {
@@ -260,6 +272,10 @@ def test_save_rich_report_renders_markdown_bold_in_rich_outputs(local_session_ro
     html_content = (reports_dir / "bold_report.html").read_text()
     assert "<strong>High activity</strong>" in html_content
     assert "<strong>top potency</strong>" in html_content
+    assert "<strong>Node 340</strong>" in html_content
+    assert "<strong>Node 217</strong>" in html_content
+    assert "&lt;strong&gt;Node 340&lt;/strong&gt;" not in html_content
+    assert "&lt;string&gt;Node 217&lt;/string&gt;" not in html_content
     assert "high-activity" in html_content
     assert "<strong>Molecule_1</strong>" in html_content
     assert "**High activity**" not in html_content
@@ -301,7 +317,7 @@ def test_save_rich_report_can_emit_markdown_companion(local_session_root, stored
     assert "![Figure 1. Activity landscape for BRAF analog generation]" in markdown_content
     assert "The Altair activity landscape highlights" in markdown_content
     assert stored_png in markdown_content
-    assert "s3://bucket/sessions/test/landscape_plotly.html" in markdown_content
+    assert "s3://bucket/sessions/test/landscape_plotly.html" not in markdown_content
 
 
 def test_save_rich_report_numbers_section_and_top_level_figures(local_session_root, stored_png):
@@ -338,6 +354,135 @@ def test_save_rich_report_numbers_section_and_top_level_figures(local_session_ro
     assert "Figure 2. GTM activity landscape for the same compounds" in html_content
     assert "### Figure 1. GTM density landscape with projected compounds" in markdown_content
     assert "### Figure 2. GTM activity landscape for the same compounds" in markdown_content
+
+
+def test_save_rich_report_moves_gtm_landscapes_into_matching_sections(
+    local_session_root, stored_png
+):
+    """Top-level GTM landscapes should render beside density/activity analysis when possible."""
+    save_rich_report(
+        title="Section-Local GTM Report",
+        sections=[
+            {
+                "heading": "GTM Density Analysis",
+                "paragraphs": ["Density analysis identifies Node 221 as the main hotspot."],
+            },
+            {
+                "heading": "GTM Activity Analysis",
+                "paragraphs": [
+                    "Activity analysis identifies Node 340 as the highest-potency area."
+                ],
+            },
+        ],
+        figures=[
+            {
+                "image_path": stored_png,
+                "caption": "GTM density landscape with Node 221 labeled.",
+                "name": "GTM density landscape for source compounds",
+            },
+            {
+                "image_path": stored_png,
+                "caption": "GTM activity landscape with Node 340 labeled.",
+                "name": "GTM activity landscape for source compounds",
+            },
+        ],
+        filename="section_local_gtm",
+        report_type="combined",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "combined")
+    html_content = (reports_dir / "section_local_gtm.html").read_text()
+    markdown_content = (reports_dir / "section_local_gtm.md").read_text()
+    density_section_index = html_content.index("<h2>GTM Density Analysis</h2>")
+    density_figure_index = html_content.index("Figure 1. GTM density landscape")
+    activity_section_index = html_content.index("<h2>GTM Activity Analysis</h2>")
+    activity_figure_index = html_content.index("Figure 2. GTM activity landscape")
+    assert density_section_index < density_figure_index < activity_section_index
+    assert activity_section_index < activity_figure_index
+    assert "<h2>Visualizations</h2>" not in html_content
+    assert "## Visualizations" not in markdown_content
+
+
+def test_save_rich_report_omits_plotly_gtm_outputs(local_session_root, stored_png):
+    """Report figures should keep static PNGs and omit Plotly images/artifact links."""
+    save_rich_report(
+        title="PNG Only GTM Report",
+        sections=[
+            {
+                "heading": "GTM Activity Analysis",
+                "paragraphs": ["Activity analysis identifies Node 340 as the key area."],
+            }
+        ],
+        figures=[
+            {
+                "image_path": stored_png,
+                "caption": (
+                    "GTM activity landscape with Node 340 labeled. "
+                    "The interactive Plotly version supports drill-down."
+                ),
+                "name": "GTM activity landscape Altair PNG",
+                "artifact_path": "s3://bucket/plots/activity_plotly_regression.html",
+            },
+            {
+                "image_path": "s3://bucket/plots/activity_plotly_regression.png",
+                "caption": "Plotly smooth GTM activity landscape.",
+                "name": "Plotly activity landscape",
+            },
+        ],
+        filename="png_only_gtm",
+        report_type="combined",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "combined")
+    html_content = (reports_dir / "png_only_gtm.html").read_text()
+    markdown_content = (reports_dir / "png_only_gtm.md").read_text()
+    assert "Figure 1. GTM activity landscape Altair PNG" in html_content
+    assert "data:image/png;base64," in html_content
+    assert "activity_plotly_regression.html" not in html_content
+    assert "activity_plotly_regression.png" not in html_content
+    assert "interactive Plotly version" not in html_content
+    assert "Plotly activity landscape" not in html_content
+    assert "activity_plotly_regression.html" not in markdown_content
+    assert "activity_plotly_regression.png" not in markdown_content
+
+
+def test_save_rich_report_corrects_density_caption_colors(local_session_root, stored_png):
+    """Density captions should not claim a red/orange-vs-blue scale for grayscale plots."""
+    save_rich_report(
+        title="Density Caption Report",
+        sections=[
+            {
+                "heading": "GTM Density Analysis",
+                "paragraphs": ["Density analysis identifies Node 221 as the densest node."],
+                "figures": [
+                    {
+                        "image_path": stored_png,
+                        "caption": (
+                            "Color intensity represents compound density per node, with "
+                            "red/orange indicating highly populated regions and blue indicating "
+                            "sparse regions."
+                        ),
+                        "name": "GTM density landscape",
+                    }
+                ],
+            }
+        ],
+        filename="density_caption",
+        report_type="gtm_density",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "gtm_density")
+    html_content = (reports_dir / "density_caption.html").read_text()
+    markdown_content = (reports_dir / "density_caption.md").read_text()
+    assert "red/orange" not in html_content
+    assert "blue indicating sparse" not in html_content
+    assert "grayscale legend" in html_content
+    assert "darker cells indicate higher compound density" in html_content
+    assert "red/orange" not in markdown_content
+    assert "grayscale legend" in markdown_content
 
 
 def test_save_rich_report_generates_section_structure_figures(local_session_root):
@@ -589,6 +734,42 @@ def test_save_rich_report_visualizes_scaffold_inventory_rows(local_session_root)
     assert "### Figure 1. Scaffold_1: Adamantane urea phenyl scaffold" in markdown_content
 
 
+def test_save_rich_report_generates_structure_figures_from_plain_scaffold_smiles(
+    local_session_root,
+):
+    """Discussed untagged scaffold SMILES should still produce structure figures."""
+    save_rich_report(
+        title="Plain Scaffold SMILES Report",
+        sections=[
+            {
+                "heading": "Scaffold Analysis",
+                "paragraphs": [
+                    (
+                        "- Piperidine urea scaffold (40 compounds): "
+                        "O=C(Nc1ccccc1)NC1CCNCC1 - dominant dense-node scaffold."
+                    )
+                ],
+            }
+        ],
+        filename="plain_scaffold_smiles",
+        report_type="chemotype",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    structure_files = list((reports_dir / "assets" / "structures").glob("*.png"))
+    assert len(structure_files) == 1
+    assert structure_files[0].read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+    html_content = (reports_dir / "plain_scaffold_smiles.html").read_text()
+    markdown_content = (reports_dir / "plain_scaffold_smiles.md").read_text()
+    paragraph_index = html_content.index("Piperidine urea scaffold")
+    figure_index = html_content.index("Figure 1. Scaffold_1: Piperidine urea scaffold")
+    assert paragraph_index < figure_index
+    assert "Scaffold_1 (Piperidine urea scaffold) is shown in Figure 1." in html_content
+    assert "### Figure 1. Scaffold_1: Piperidine urea scaffold" in markdown_content
+
+
 def test_save_rich_report_preserves_existing_chembl_ids_for_molecule_figures(
     local_session_root,
 ):
@@ -640,6 +821,106 @@ def test_save_rich_report_preserves_existing_chembl_ids_for_molecule_figures(
     assert "Molecule_1" not in html_content
     assert "### Figure 1. CHEMBL123456: Top potency ChEMBL analog" in markdown_content
     assert "CHEMBL123456 (Top potency ChEMBL analog) is shown in Figure 1." in markdown_content
+
+
+def test_save_rich_report_uses_generic_dataset_ids_and_names(local_session_root):
+    """Dataset-provided IDs and display names should drive structure figure labels."""
+    save_rich_report(
+        title="Generic Source Structure Report",
+        sections=[
+            {
+                "heading": "Source Molecule Summary",
+                "paragraphs": [
+                    "SRC-42 is the dataset-supplied kinase analog discussed in node 8.",
+                ],
+                "tables": [
+                    {
+                        "title": "Structure Inventory",
+                        "columns": [
+                            "source_id",
+                            "display_name",
+                            "smiles",
+                            "node_index",
+                            "description",
+                        ],
+                        "rows": [
+                            {
+                                "source_id": "SRC-42",
+                                "display_name": "Dataset supplied kinase analog",
+                                "smiles": "CCOc1ccc(NC(=O)NCC)cc1",
+                                "node_index": "8",
+                                "description": "Generic source identifier from an uploaded dataset.",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        filename="generic_source_ids",
+        report_type="chemotype",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    html_content = (reports_dir / "generic_source_ids.html").read_text()
+    markdown_content = (reports_dir / "generic_source_ids.md").read_text()
+    assert len(list((reports_dir / "assets" / "structures").glob("*.png"))) == 1
+    assert "Figure 1. SRC-42: Dataset supplied kinase analog" in html_content
+    assert "SRC-42 (Dataset supplied kinase analog) is shown in Figure 1." in html_content
+    assert "Molecule_1" not in html_content
+    assert "### Figure 1. SRC-42: Dataset supplied kinase analog" in markdown_content
+    assert "SRC-42 (Dataset supplied kinase analog) is shown in Figure 1." in markdown_content
+
+
+def test_save_rich_report_uses_generic_scaffold_ids_and_names(local_session_root):
+    """Scaffold IDs/names should be source-agnostic across inventory schemas."""
+    save_rich_report(
+        title="Generic Scaffold Report",
+        sections=[
+            {
+                "heading": "Scaffold Summary",
+                "paragraphs": [
+                    "SCF-A anchors the recurring bicyclic scaffold family in node 19.",
+                ],
+                "tables": [
+                    {
+                        "title": "Uploaded Scaffold Inventory",
+                        "columns": [
+                            "scaffold_id",
+                            "scaffold_name",
+                            "smiles",
+                            "node",
+                            "notes",
+                        ],
+                        "rows": [
+                            {
+                                "scaffold_id": "SCF-A",
+                                "scaffold_name": "Recurring bicyclic scaffold",
+                                "smiles": "c1ccc2ccccc2c1",
+                                "node": "19",
+                                "notes": "Generic scaffold identifier from a source file.",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        filename="generic_scaffold_ids",
+        report_type="chemotype",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    html_content = (reports_dir / "generic_scaffold_ids.html").read_text()
+    markdown_content = (reports_dir / "generic_scaffold_ids.md").read_text()
+    paragraph_index = html_content.index("SCF-A anchors the recurring")
+    figure_index = html_content.index("Figure 1. SCF-A: Recurring bicyclic scaffold")
+    table_index = html_content.index("<h3>Uploaded Scaffold Inventory</h3>")
+    assert paragraph_index < figure_index < table_index
+    assert "SCF-A (Recurring bicyclic scaffold) is shown in Figure 1." in html_content
+    assert "Scaffold_1" not in html_content
+    assert "### Figure 1. SCF-A: Recurring bicyclic scaffold" in markdown_content
+    assert "SCF-A (Recurring bicyclic scaffold) is shown in Figure 1." in markdown_content
 
 
 def test_save_rich_report_applies_table_source_ids_to_smiles_tag_figures(

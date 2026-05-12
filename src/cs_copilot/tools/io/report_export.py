@@ -28,12 +28,53 @@ _DEFAULT_REPORT_TYPE = "report"
 _SLUG_RX = re.compile(r"[^A-Za-z0-9_-]+")
 _FIGURE_NAME_RX = re.compile(r"^\s*Figure\s+\d+\s*[\.:]\s*(?P<title>.*)$", re.IGNORECASE)
 _STRUCTURE_ID_RX = re.compile(r"^(?P<type>Scaffold|Molecule)[_-](?P<number>\d+)$", re.IGNORECASE)
-_BOLD_RX = re.compile(r"\*\*(?P<text>.+?)\*\*")
+_INLINE_EMPHASIS_RX = re.compile(
+    r"\*\*(?P<markdown_text>.+?)\*\*"
+    r"|<\s*(?P<tag>strong|b|string)\s*>\s*(?P<tag_text>.*?)\s*</\s*(?P=tag)\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
 _SMILES_TAG_RX = re.compile(
     r"<smiles>\s*(?P<smiles>.*?)\s*</smiles>",
     re.IGNORECASE | re.DOTALL,
 )
+_HTML_TAG_RX = re.compile(r"<[^>]+>")
+_PLAIN_SMILES_RX = re.compile(
+    r"(?<![A-Za-z0-9_])(?P<smiles>[A-Za-z0-9@+\-\[\]\(\)=#$\\/%.]{5,})(?![A-Za-z0-9_])"
+)
 _SUPPORTED_RICH_FORMATS = {"html", "pdf", "md", "markdown"}
+_STRUCTURE_ID_FIELDS = (
+    "structure_id",
+    "structure id",
+    "source_id",
+    "source id",
+    "external_id",
+    "external id",
+    "dataset_id",
+    "dataset id",
+    "record_id",
+    "record id",
+    "compound_id",
+    "compound id",
+    "molecule_id",
+    "molecule id",
+    "scaffold_id",
+    "scaffold id",
+    "chembl_id",
+    "chembl id",
+    "ChEMBL ID",
+    "id",
+    "ID",
+)
+_STRUCTURE_CONTEXT_TERMS = (
+    "scaffold",
+    "molecule",
+    "compound",
+    "analog",
+    "sar",
+    "chemotype",
+    "structure",
+)
+_MAX_AUTO_STRUCTURE_FIGURES_PER_SECTION = 8
 
 
 def _report_slug(report_type: Optional[str]) -> str:
@@ -106,6 +147,23 @@ def _as_strings(value: Any) -> list[str]:
 
 def _clean_text(value: Any) -> str:
     return "" if value is None else str(value).strip()
+
+
+def _key_token(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value).lower())
+
+
+def _mapping_value(mapping: dict[str, Any], *keys: str) -> str:
+    lowered = {str(key).lower(): value for key, value in mapping.items()}
+    normalized = {_key_token(key): value for key, value in mapping.items()}
+    for key in keys:
+        value = lowered.get(str(key).lower())
+        if _clean_text(value):
+            return _clean_text(value)
+        value = normalized.get(_key_token(key))
+        if _clean_text(value):
+            return _clean_text(value)
+    return ""
 
 
 def _clean_optional_int(value: Any) -> Optional[int]:
@@ -193,8 +251,27 @@ def _normalize_figure(figure: Any, index: int) -> dict[str, Any]:
         ):
             raw_structure_type = "scaffold"
         structure_type = _normalize_structure_type(raw_structure_type, structure_smiles)
-        structure_id = _clean_text(figure.get("structure_id") or figure.get("id"))
-        structure_name = _clean_text(figure.get("structure_name") or figure.get("descriptive_name"))
+        structure_id = _mapping_value(figure, *_STRUCTURE_ID_FIELDS)
+        structure_name = _mapping_value(
+            figure,
+            "structure_name",
+            "structure name",
+            "display_name",
+            "display name",
+            "preferred_name",
+            "preferred name",
+            "pref_name",
+            "pref name",
+            "compound_name",
+            "compound name",
+            "molecule_name",
+            "molecule name",
+            "scaffold_name",
+            "scaffold name",
+            "descriptive_name",
+            "descriptive name",
+            "label",
+        )
         node = _clean_text(figure.get("node") or figure.get("gtm_node") or "")
         description = _clean_text(figure.get("structure_description") or figure.get("description"))
         after_paragraph_index = _clean_optional_int(figure.get("after_paragraph_index"))
@@ -386,12 +463,110 @@ def _strip_smiles_tags(text: str) -> str:
     return _SMILES_TAG_RX.sub(lambda match: match.group("smiles").strip(), text)
 
 
+def _strip_html_tags(text: str) -> str:
+    return _HTML_TAG_RX.sub("", text)
+
+
+def _looks_like_structure_context(text: str) -> bool:
+    lowered = text.lower()
+    return any(term in lowered for term in _STRUCTURE_CONTEXT_TERMS)
+
+
+def _is_valid_smiles(smiles: str) -> bool:
+    try:
+        from rdkit import Chem
+    except ImportError:
+        return False
+
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+    except Exception:
+        return False
+    return mol is not None and mol.GetNumAtoms() > 0
+
+
+def _plain_smiles_candidates(text: str) -> list[str]:
+    candidates = []
+    for match in _PLAIN_SMILES_RX.finditer(text):
+        smiles = match.group("smiles").strip(".,;:")
+        if smiles and _is_valid_smiles(smiles) and smiles not in candidates:
+            candidates.append(smiles)
+    return candidates
+
+
+def _structure_name_from_plain_text(text: str, smiles: str, structure_type: str) -> str:
+    before = text.split(smiles, maxsplit=1)[0]
+    before = before.rsplit(":", maxsplit=1)[0] if ":" in before else before
+    before = re.sub(r"^\s*[-*]\s*", "", before).strip()
+    before = re.sub(r"\([^)]*\)\s*$", "", before).strip()
+    words = before.split()
+    if len(words) > 8:
+        before = " ".join(words[-8:])
+    before = before.strip(" .:-")
+    if before:
+        return before
+    return "Reported scaffold" if structure_type == "scaffold" else "Reported molecule"
+
+
+def _append_plain_smiles_figures(
+    sections: list[dict[str, Any]],
+    figures: list[dict[str, Any]],
+) -> None:
+    seen_smiles = {
+        figure["structure_smiles"] for figure in figures if figure.get("structure_smiles")
+    }
+    for section in sections:
+        seen_smiles.update(
+            figure["structure_smiles"]
+            for figure in section["figures"]
+            if figure.get("structure_smiles")
+        )
+
+    for section in sections:
+        section_context = _strip_html_tags(_clean_text(section.get("heading", "")))
+        generated_count = 0
+        for paragraph_index, paragraph in enumerate(section["paragraphs"]):
+            if generated_count >= _MAX_AUTO_STRUCTURE_FIGURES_PER_SECTION:
+                break
+            plain_text = _strip_html_tags(_strip_smiles_tags(paragraph))
+            context = f"{section_context} {plain_text}"
+            if not _looks_like_structure_context(context):
+                continue
+
+            structure_type = "scaffold" if "scaffold" in context.lower() else "molecule"
+            for smiles in _plain_smiles_candidates(plain_text):
+                if smiles in seen_smiles:
+                    continue
+                seen_smiles.add(smiles)
+                structure_name = _structure_name_from_plain_text(plain_text, smiles, structure_type)
+                section["figures"].append(
+                    {
+                        "name": structure_name,
+                        "image_path": "",
+                        "caption": f"Chemical structure for {structure_name}: {smiles}",
+                        "alt_text": "",
+                        "artifact_path": "",
+                        "structure_smiles": smiles,
+                        "structure_type": structure_type,
+                        "structure_id": "",
+                        "structure_name": structure_name,
+                        "node": "",
+                        "description": f"Chemical structure for {structure_name}: {smiles}",
+                        "after_paragraph_index": paragraph_index,
+                        "_auto_structure_figure": True,
+                    }
+                )
+                generated_count += 1
+                if generated_count >= _MAX_AUTO_STRUCTURE_FIGURES_PER_SECTION:
+                    break
+
+
 def _inline_markup(text: Any, *, bold_tag: str) -> str:
     text = _strip_smiles_tags(_clean_text(text))
     rendered = []
     cursor = 0
-    for match in _BOLD_RX.finditer(text):
-        bold_text = match.group("text")
+    for match in _INLINE_EMPHASIS_RX.finditer(text):
+        bold_text = match.group("markdown_text") or match.group("tag_text")
         if not bold_text:
             continue
         rendered.append(html.escape(text[cursor : match.start()]))
@@ -481,26 +656,66 @@ def _append_smiles_tag_figures(
 
 
 def _row_value(row: dict[str, str], *keys: str) -> str:
-    lowered = {str(key).lower(): value for key, value in row.items()}
-    for key in keys:
-        value = lowered.get(key.lower())
-        if value:
-            return value
-    return ""
+    return _mapping_value(row, *keys)
+
+
+def _table_has_column(table: dict[str, Any], *keys: str) -> bool:
+    columns = {_key_token(column) for column in table["columns"]}
+    return any(_key_token(key) in columns for key in keys)
 
 
 def _table_structure_type(table: dict[str, Any], row: dict[str, str]) -> str:
-    columns = {str(column).lower() for column in table["columns"]}
     title = str(table["title"]).lower()
-    if "scaffold id" in columns or "scaffold inventory" in title:
+    if (
+        _table_has_column(table, "Scaffold ID", "scaffold_id", "Scaffold SMILES", "Scaffold Name")
+        or "scaffold" in title
+        or _row_value(row, "Scaffold ID", "scaffold_id", "Scaffold SMILES", "Scaffold Name")
+    ):
         return "scaffold"
-    if "molecule id" in columns or "molecule inventory" in title:
+    if (
+        _table_has_column(
+            table,
+            "Molecule ID",
+            "molecule_id",
+            "Compound ID",
+            "compound_id",
+            "Molecule SMILES",
+            "Compound SMILES",
+            "Molecule Name",
+            "Compound Name",
+        )
+        or "molecule" in title
+        or "compound" in title
+        or _row_value(
+            row,
+            "Molecule ID",
+            "molecule_id",
+            "Compound ID",
+            "compound_id",
+            "Molecule SMILES",
+            "Compound SMILES",
+            "Molecule Name",
+            "Compound Name",
+        )
+    ):
         return "molecule"
-    if "chembl id" in columns or "chembl_id" in columns:
+    if _table_has_column(table, "chembl id", "chembl_id"):
         return "molecule"
-    if _row_value(row, "Scaffold ID", "Scaffold"):
+    if _row_value(row, "Scaffold ID", "Scaffold", "scaffold_id", "scaffold_name"):
         return "scaffold"
-    if _row_value(row, "Molecule ID", "Molecule", "Compound ID", "Compound"):
+    if _row_value(
+        row,
+        "Molecule ID",
+        "Molecule",
+        "molecule_id",
+        "molecule_name",
+        "Compound ID",
+        "Compound",
+        "compound_id",
+        "compound_name",
+    ):
+        return "molecule"
+    if _row_value(row, *_STRUCTURE_ID_FIELDS) and _row_value(row, "SMILES", "Structure SMILES"):
         return "molecule"
     return ""
 
@@ -552,12 +767,175 @@ def _should_apply_source_structure_id(
 
 
 def _find_first_mention_index(section: dict[str, Any], terms: list[str]) -> Optional[int]:
+    mention_index = _find_actual_mention_index(section, terms)
+    if mention_index is not None:
+        return mention_index
+    return len(section["paragraphs"]) - 1 if section["paragraphs"] else None
+
+
+def _find_actual_mention_index(section: dict[str, Any], terms: list[str]) -> Optional[int]:
     normalized_terms = [term.lower() for term in terms if term]
     for paragraph_index, paragraph in enumerate(section["paragraphs"]):
         normalized_paragraph = _strip_smiles_tags(paragraph).lower()
         if any(term in normalized_paragraph for term in normalized_terms):
             return paragraph_index
-    return len(section["paragraphs"]) - 1 if section["paragraphs"] else None
+    return None
+
+
+def _section_heading_matches(section: dict[str, Any], terms: tuple[str, ...]) -> bool:
+    heading = str(section.get("heading", "")).lower()
+    return any(term in heading for term in terms)
+
+
+def _find_context_section(
+    sections: list[dict[str, Any]],
+    heading_terms: tuple[str, ...],
+    paragraph_terms: list[str],
+) -> tuple[Optional[dict[str, Any]], Optional[int]]:
+    for section in sections:
+        if _section_heading_matches(section, heading_terms):
+            return section, _find_first_mention_index(section, paragraph_terms)
+
+    for section in sections:
+        paragraph_index = _find_actual_mention_index(section, paragraph_terms)
+        if paragraph_index is not None:
+            return section, paragraph_index
+
+    return None, None
+
+
+def _figure_context_text(figure: dict[str, Any]) -> str:
+    return " ".join(
+        _clean_text(figure.get(key))
+        for key in (
+            "name",
+            "caption",
+            "artifact_path",
+            "image_path",
+            "structure_id",
+            "structure_name",
+            "description",
+        )
+    ).lower()
+
+
+def _is_gtm_landscape_context(context: str) -> bool:
+    return (
+        "gtm" in context or "landscape" in context or "density" in context or "activity" in context
+    )
+
+
+def _remove_sentences_matching(text: str, *terms: str) -> str:
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    kept = [
+        sentence
+        for sentence in sentences
+        if not all(term.lower() in sentence.lower() for term in terms)
+    ]
+    return " ".join(sentence for sentence in kept if sentence).strip()
+
+
+def _drop_plotly_report_outputs(figures: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    kept = []
+    for figure in figures:
+        image_path = _clean_text(figure.get("image_path"))
+        artifact_path = _clean_text(figure.get("artifact_path"))
+        context = _figure_context_text(figure)
+
+        if "plotly" in image_path.lower():
+            continue
+
+        if artifact_path and (
+            "plotly" in artifact_path.lower() or _is_gtm_landscape_context(context)
+        ):
+            figure["artifact_path"] = ""
+            figure["caption"] = _remove_sentences_matching(figure.get("caption", ""), "plotly")
+
+        kept.append(figure)
+    return kept
+
+
+def _correct_density_caption_color_scale(figure: dict[str, Any]) -> None:
+    context = _figure_context_text(figure)
+    caption = figure.get("caption", "")
+    caption_lower = caption.lower()
+    if "density" not in context or "density" not in caption_lower:
+        return
+    if not ("red/orange" in caption_lower or ("red" in caption_lower and "blue" in caption_lower)):
+        return
+
+    corrected = _remove_sentences_matching(caption, "red", "blue")
+    corrected = _remove_sentences_matching(corrected, "red/orange")
+    replacement = (
+        "The density PNG uses a grayscale legend: darker cells indicate higher "
+        "compound density, and lighter cells indicate sparse or empty nodes."
+    )
+    figure["caption"] = f"{corrected} {replacement}".strip()
+
+
+def _prepare_report_figures_for_rendering(
+    sections: list[dict[str, Any]],
+    figures: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    for section in sections:
+        section["figures"] = _drop_plotly_report_outputs(section["figures"])
+        for figure in section["figures"]:
+            _correct_density_caption_color_scale(figure)
+
+    figures = _drop_plotly_report_outputs(figures)
+    for figure in figures:
+        _correct_density_caption_color_scale(figure)
+    return figures
+
+
+def _move_contextual_top_level_figures(
+    sections: list[dict[str, Any]],
+    figures: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not sections or not figures:
+        return figures
+
+    remaining = []
+    for figure in figures:
+        target_section = None
+        target_paragraph_index = None
+        context = _figure_context_text(figure)
+
+        if figure.get("structure_smiles"):
+            structure_terms = [
+                figure.get("structure_id", ""),
+                figure.get("structure_name", ""),
+                figure.get("structure_smiles", ""),
+            ]
+            for section in sections:
+                target_paragraph_index = _find_actual_mention_index(section, structure_terms)
+                if target_paragraph_index is not None:
+                    target_section = section
+                    break
+        elif "density" in context and ("gtm" in context or "landscape" in context):
+            target_section, target_paragraph_index = _find_context_section(
+                sections,
+                ("density",),
+                ["density", "density map", "density landscape", "gtm map"],
+            )
+        elif any(term in context for term in ("activity", "potency", "pchembl")) and (
+            "gtm" in context or "landscape" in context
+        ):
+            target_section, target_paragraph_index = _find_context_section(
+                sections,
+                ("activity", "sar", "potency"),
+                ["activity", "potency", "pchembl", "activity landscape"],
+            )
+
+        if target_section is None:
+            remaining.append(figure)
+            continue
+
+        if figure.get("after_paragraph_index") is None:
+            figure["after_paragraph_index"] = target_paragraph_index
+        target_section["figures"].append(figure)
+
+    return remaining
 
 
 def _append_structure_table_figures(
@@ -581,9 +959,15 @@ def _append_structure_table_figures(
                 smiles = _row_value(
                     row,
                     "SMILES",
+                    "smiles",
+                    "Structure SMILES",
+                    "structure_smiles",
                     "Scaffold SMILES",
+                    "scaffold_smiles",
                     "Molecule SMILES",
+                    "molecule_smiles",
                     "Compound SMILES",
+                    "compound_smiles",
                 )
                 if not smiles:
                     continue
@@ -592,26 +976,72 @@ def _append_structure_table_figures(
                 structure_id = _row_value(
                     row,
                     f"{prefix} ID",
+                    f"{prefix}_id",
+                    "Structure ID",
+                    "structure_id",
+                    "Source ID",
+                    "source_id",
+                    "External ID",
+                    "external_id",
+                    "Dataset ID",
+                    "dataset_id",
+                    "Record ID",
+                    "record_id",
+                    "Compound ID",
+                    "compound_id",
+                    "Molecule ID",
+                    "molecule_id",
+                    "Scaffold ID",
+                    "scaffold_id",
                     "ChEMBL ID",
                     "ChEMBLID",
                     "chembl_id",
                     "Molecule ChEMBL ID",
                     "Compound ChEMBL ID",
-                    "Structure ID",
                     "ID",
                 )
                 source_id_column = ""
                 if not structure_id:
                     source_id_column = _ensure_table_id_column(table, structure_type)
-                structure_name = _row_value(
-                    row,
-                    "Name",
-                    prefix,
-                    "Structure",
-                    "Compound",
-                )
+                if structure_type == "scaffold":
+                    structure_name = _row_value(
+                        row,
+                        "Scaffold Name",
+                        "scaffold_name",
+                        "Scaffold",
+                        "Structure Name",
+                        "structure_name",
+                        "Display Name",
+                        "display_name",
+                        "Preferred Name",
+                        "preferred_name",
+                        "Pref Name",
+                        "pref_name",
+                        "Name",
+                        "Label",
+                    )
+                else:
+                    structure_name = _row_value(
+                        row,
+                        "Molecule Name",
+                        "molecule_name",
+                        "Compound Name",
+                        "compound_name",
+                        "Molecule",
+                        "Compound",
+                        "Structure Name",
+                        "structure_name",
+                        "Display Name",
+                        "display_name",
+                        "Preferred Name",
+                        "preferred_name",
+                        "Pref Name",
+                        "pref_name",
+                        "Name",
+                        "Label",
+                    )
                 description = _row_value(row, "Description", "Notes", "Comment")
-                node = _row_value(row, "Node", "GTM Node", "node")
+                node = _row_value(row, "Node", "GTM Node", "GTM Node ID", "node", "node_index")
                 first_mention_index = _find_first_mention_index(
                     section,
                     [structure_id, structure_name, smiles],
@@ -637,6 +1067,11 @@ def _append_structure_table_figures(
                         existing_figure["node"] = node
                     if description and not existing_figure.get("description"):
                         existing_figure["description"] = description
+                    if (
+                        first_mention_index is not None
+                        and existing_figure.get("after_paragraph_index") is None
+                    ):
+                        existing_figure["after_paragraph_index"] = first_mention_index
                     _track_structure_id_target(existing_figure, row, source_id_column)
                     _sync_structure_id_targets(existing_figure)
                     continue
@@ -813,7 +1248,7 @@ def _html_text_block(text: str) -> str:
 
 
 def _render_html_figure(figure: dict[str, str], embed_images: bool) -> str:
-    name = html.escape(figure["name"])
+    name = _html_inline_markup(figure["name"])
     image_path = figure["image_path"]
     caption = _html_inline_markup(figure["caption"])
     alt_text = html.escape(figure["alt_text"])
@@ -885,6 +1320,7 @@ def _render_html_report(
     embed_images: bool,
 ) -> str:
     escaped_title = html.escape(title)
+    rendered_title = _html_inline_markup(title)
     generated = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     summary_markup = ""
@@ -909,7 +1345,7 @@ def _render_html_report(
         )
         section_markup.append(
             "<section>"
-            f"<h2>{html.escape(section['heading'])}</h2>"
+            f"<h2>{_html_inline_markup(section['heading'])}</h2>"
             f"{''.join(section_blocks)}"
             "</section>"
         )
@@ -1036,7 +1472,7 @@ def _render_html_report(
 <body>
   <main>
     <header>
-      <h1>{escaped_title}</h1>
+      <h1>{rendered_title}</h1>
       <p class="meta">Generated: {generated}</p>
     </header>
     {summary_markup}
@@ -1407,7 +1843,12 @@ def save_rich_report(
     normalized_sections = _normalize_sections(sections)
     normalized_figures = _normalize_figures(figures)
     _append_smiles_tag_figures(normalized_sections, normalized_figures)
+    _append_plain_smiles_figures(normalized_sections, normalized_figures)
     _append_structure_table_figures(normalized_sections, normalized_figures)
+    normalized_figures = _move_contextual_top_level_figures(normalized_sections, normalized_figures)
+    normalized_figures = _prepare_report_figures_for_rendering(
+        normalized_sections, normalized_figures
+    )
     _assign_structure_labels(normalized_sections, normalized_figures)
     normalized_sections, normalized_figures = _renumber_report_figures(
         normalized_sections, normalized_figures
