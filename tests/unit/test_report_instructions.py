@@ -34,6 +34,7 @@ def test_report_instructions_require_named_captioned_inline_figures():
     assert "after_paragraph_index" in instructions
     assert "Scaffold ID / Scaffold / SMILES / Name / Node / Description" in instructions
     assert "Molecule ID / Molecule / SMILES / Name / Node / Description" in instructions
+    assert "Scaffold inventory table rows with scaffold SMILES" in instructions
     assert "Do not render every valid SMILES" in instructions
 
 

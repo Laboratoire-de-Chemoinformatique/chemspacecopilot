@@ -807,6 +807,7 @@ REPORT_GENERATOR_INSTRUCTIONS = [
     "    - Add section-local figure objects with structure_type ('scaffold' or 'molecule'), structure_id, structure_name, structure_smiles or smiles, node when known, description, caption, and after_paragraph_index pointing to the paragraph where the structure is first mentioned.",
     "    - If a paragraph already contains a key structure as <smiles>...</smiles>, save_rich_report will generate a section-local compound image automatically; add an explicit structure_smiles figure only when you need a custom title or caption.",
     "    - Create structure inventory tables when structures are discussed: Scaffold ID / Scaffold / SMILES / Name / Node / Description for scaffolds, and Molecule ID / Molecule / SMILES / Name / Node / Description for molecules.",
+    "    - Scaffold inventory table rows with scaffold SMILES are also rendered as scaffold structure figures; still mention each Scaffold-N in nearby prose so the image is placed after its first mention.",
     "    - Do not render every valid SMILES in the report; choose the structures that are explicitly discussed or needed to understand the SAR/scaffold narrative.",
     "  **Synthesis reports**:",
     "    - Use the visualization paths already present in synplanner_plan['visualizations'] or synthesis_report_data['visualizations']; do not regenerate SynPlanner routes.",

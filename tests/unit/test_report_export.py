@@ -484,7 +484,7 @@ def test_save_rich_report_places_structure_figures_and_tables(local_session_root
     molecule_figure_index = html_content.index(
         "Figure 2. Molecule-1: Top potency piperidine urea analog"
     )
-    table_index = html_content.index("Scaffold Inventory")
+    table_index = html_content.index("<h3>Scaffold Inventory</h3>")
     assert scaffold_paragraph_index < scaffold_figure_index < molecule_paragraph_index
     assert molecule_paragraph_index < molecule_figure_index < table_index
     assert "<th>Scaffold ID</th>" in html_content
@@ -495,6 +495,62 @@ def test_save_rich_report_places_structure_figures_and_tables(local_session_root
     assert "| Molecule ID | Molecule | SMILES | Name | Node | Description |" in markdown_content
     assert "### Figure 1. Scaffold-1: Piperidine urea phenyl scaffold" in markdown_content
     assert "### Figure 2. Molecule-1: Top potency piperidine urea analog" in markdown_content
+
+
+def test_save_rich_report_visualizes_scaffold_inventory_rows(local_session_root):
+    """Scaffold inventory rows should generate scaffold images without explicit figures."""
+    save_rich_report(
+        title="Scaffold Inventory Report",
+        sections=[
+            {
+                "heading": "Scaffold Summary",
+                "paragraphs": [
+                    "Scaffold-1 is a representative adamantane urea phenyl scaffold in node 321.",
+                ],
+                "tables": [
+                    {
+                        "title": "Scaffold Inventory",
+                        "columns": [
+                            "Scaffold ID",
+                            "Scaffold",
+                            "SMILES",
+                            "Name",
+                            "Node",
+                            "Description",
+                        ],
+                        "rows": [
+                            {
+                                "Scaffold ID": "Scaffold-1",
+                                "Scaffold": "Adamantane urea phenyl scaffold",
+                                "SMILES": "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2",
+                                "Name": "Adamantane urea phenyl scaffold",
+                                "Node": "321",
+                                "Description": "High-potency peripheral scaffold.",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        filename="scaffold_inventory_only",
+        report_type="chemotype",
+        formats=["html", "pdf", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    structure_files = list((reports_dir / "assets" / "structures").glob("*.png"))
+    assert len(structure_files) == 1
+    assert structure_files[0].read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert (reports_dir / "scaffold_inventory_only.pdf").read_bytes().startswith(b"%PDF")
+
+    html_content = (reports_dir / "scaffold_inventory_only.html").read_text()
+    markdown_content = (reports_dir / "scaffold_inventory_only.md").read_text()
+    paragraph_index = html_content.index("Scaffold-1 is a representative")
+    figure_index = html_content.index("Figure 1. Scaffold-1: Adamantane urea phenyl scaffold")
+    table_index = html_content.index("<h3>Scaffold Inventory</h3>")
+    assert paragraph_index < figure_index < table_index
+    assert "data:image/png;base64," in html_content
+    assert "### Figure 1. Scaffold-1: Adamantane urea phenyl scaffold" in markdown_content
 
 
 def test_save_rich_report_generates_structure_figures_from_smiles_tags(local_session_root):

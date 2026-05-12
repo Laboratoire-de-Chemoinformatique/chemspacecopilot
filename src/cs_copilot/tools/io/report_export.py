@@ -479,6 +479,110 @@ def _append_smiles_tag_figures(
                 )
 
 
+def _row_value(row: dict[str, str], *keys: str) -> str:
+    lowered = {str(key).lower(): value for key, value in row.items()}
+    for key in keys:
+        value = lowered.get(key.lower())
+        if value:
+            return value
+    return ""
+
+
+def _table_structure_type(table: dict[str, Any], row: dict[str, str]) -> str:
+    columns = {str(column).lower() for column in table["columns"]}
+    title = str(table["title"]).lower()
+    if "scaffold id" in columns or "scaffold inventory" in title:
+        return "scaffold"
+    if "molecule id" in columns or "molecule inventory" in title:
+        return "molecule"
+    if _row_value(row, "Scaffold ID", "Scaffold"):
+        return "scaffold"
+    if _row_value(row, "Molecule ID", "Molecule", "Compound ID", "Compound"):
+        return "molecule"
+    return ""
+
+
+def _find_first_mention_index(section: dict[str, Any], terms: list[str]) -> Optional[int]:
+    normalized_terms = [term.lower() for term in terms if term]
+    for paragraph_index, paragraph in enumerate(section["paragraphs"]):
+        normalized_paragraph = _strip_smiles_tags(paragraph).lower()
+        if any(term in normalized_paragraph for term in normalized_terms):
+            return paragraph_index
+    return len(section["paragraphs"]) - 1 if section["paragraphs"] else None
+
+
+def _append_structure_table_figures(
+    sections: list[dict[str, Any]],
+    figures: list[dict[str, Any]],
+) -> None:
+    seen_smiles = {
+        figure["structure_smiles"] for figure in figures if figure.get("structure_smiles")
+    }
+    for section in sections:
+        seen_smiles.update(
+            figure["structure_smiles"]
+            for figure in section["figures"]
+            if figure.get("structure_smiles")
+        )
+
+    for section in sections:
+        for table in section["tables"]:
+            for row in table["rows"]:
+                structure_type = _table_structure_type(table, row)
+                if not structure_type:
+                    continue
+                smiles = _row_value(
+                    row,
+                    "SMILES",
+                    "Scaffold SMILES",
+                    "Molecule SMILES",
+                    "Compound SMILES",
+                )
+                if not smiles or smiles in seen_smiles:
+                    continue
+
+                prefix = _structure_id_prefix(structure_type)
+                structure_id = _row_value(
+                    row,
+                    f"{prefix} ID",
+                    "Structure ID",
+                    "ID",
+                )
+                structure_name = _row_value(
+                    row,
+                    "Name",
+                    prefix,
+                    "Structure",
+                    "Compound",
+                )
+                description = _row_value(row, "Description", "Notes", "Comment")
+                node = _row_value(row, "Node", "GTM Node", "node")
+                first_mention_index = _find_first_mention_index(
+                    section,
+                    [structure_id, structure_name, smiles],
+                )
+                caption_subject = ": ".join(part for part in (structure_id, structure_name) if part)
+                caption = description or f"Chemical structure for {caption_subject or smiles}."
+
+                seen_smiles.add(smiles)
+                section["figures"].append(
+                    {
+                        "name": structure_name or structure_id or "Reported structure",
+                        "image_path": "",
+                        "caption": caption,
+                        "alt_text": "",
+                        "artifact_path": "",
+                        "structure_smiles": smiles,
+                        "structure_type": structure_type,
+                        "structure_id": structure_id,
+                        "structure_name": structure_name,
+                        "node": node,
+                        "description": description,
+                        "after_paragraph_index": first_mention_index,
+                    }
+                )
+
+
 def _structure_id_prefix(structure_type: str) -> str:
     return "Scaffold" if structure_type == "scaffold" else "Molecule"
 
@@ -1177,6 +1281,7 @@ def save_rich_report(
     normalized_sections = _normalize_sections(sections)
     normalized_figures = _normalize_figures(figures)
     _append_smiles_tag_figures(normalized_sections, normalized_figures)
+    _append_structure_table_figures(normalized_sections, normalized_figures)
     _assign_structure_labels(normalized_sections, normalized_figures)
     normalized_sections, normalized_figures = _renumber_report_figures(
         normalized_sections, normalized_figures
