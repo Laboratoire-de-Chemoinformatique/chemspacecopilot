@@ -48,6 +48,11 @@ _HTML_TAG_RX = re.compile(r"<[^>]+>")
 _PLAIN_SMILES_RX = re.compile(
     r"(?<![A-Za-z0-9_])(?P<smiles>[A-Za-z0-9@+\-\[\]\(\)=#$\\/%.]{5,})(?![A-Za-z0-9_])"
 )
+_GTM_NODE_MENTION_RX = re.compile(
+    r"\b(?:GTM\s+)?nodes?\s*(?:#|number|id)?\s*"
+    r"(?P<values>\d+(?:\s*(?:,|/|&|and|to|[-–—→>]+)\s*\d+)*)",
+    re.IGNORECASE,
+)
 _SOURCE_ID_SPLIT_RX = re.compile(r"\s*(?:\||;|,)\s*")
 _SUPPORTED_RICH_FORMATS = {"html", "pdf", "md", "markdown"}
 _FIGURE_METADATA_KEYS = {
@@ -1205,6 +1210,79 @@ def _figure_context_text(figure: dict[str, Any]) -> str:
     return " ".join(_clean_text(bit) for bit in bits).lower()
 
 
+def _mentioned_gtm_nodes(text: Any) -> set[int]:
+    nodes: set[int] = set()
+    plain_text = _strip_html_tags(_strip_smiles_tags(_clean_text(text)))
+    for match in _GTM_NODE_MENTION_RX.finditer(plain_text):
+        nodes.update(int(value) for value in re.findall(r"\d+", match.group("values")))
+    return nodes
+
+
+def _metadata_node_labels(figure: dict[str, Any]) -> set[int]:
+    metadata = normalize_figure_metadata(figure.get("figure_metadata"))
+    labels = set()
+    for label in metadata.get("node_labels") or []:
+        try:
+            labels.add(int(label))
+        except (TypeError, ValueError):
+            continue
+    return labels
+
+
+def _is_gtm_node_plot_figure(figure: dict[str, Any]) -> bool:
+    if figure.get("structure_smiles"):
+        return False
+
+    metadata = normalize_figure_metadata(figure.get("figure_metadata"))
+    figure_kind = _clean_text(metadata.get("figure_kind")).lower()
+    if figure_kind.startswith("gtm_"):
+        return True
+
+    context = _figure_context_text(figure)
+    return ("gtm" in context or "landscape" in context) and any(
+        term in context for term in ("density", "activity", "map", "potency", "pchembl")
+    )
+
+
+def _validate_gtm_node_labels(sections: list[dict[str, Any]]) -> None:
+    for section in sections:
+        figures_by_paragraph: dict[int, list[dict[str, Any]]] = {}
+        for figure in section["figures"]:
+            paragraph_index = figure.get("after_paragraph_index")
+            if not isinstance(paragraph_index, int) and len(section["paragraphs"]) == 1:
+                paragraph_index = 0
+            if isinstance(paragraph_index, int):
+                figures_by_paragraph.setdefault(paragraph_index, []).append(figure)
+
+        for paragraph_index, paragraph in enumerate(section["paragraphs"]):
+            mentioned_nodes = _mentioned_gtm_nodes(paragraph)
+            if not mentioned_nodes:
+                continue
+
+            gtm_figures = [
+                figure
+                for figure in figures_by_paragraph.get(paragraph_index, [])
+                if _is_gtm_node_plot_figure(figure)
+            ]
+            if not gtm_figures:
+                continue
+
+            labeled_nodes: set[int] = set()
+            for figure in gtm_figures:
+                labeled_nodes.update(_metadata_node_labels(figure))
+
+            missing_nodes = sorted(mentioned_nodes - labeled_nodes)
+            if missing_nodes:
+                missing_text = ", ".join(str(node) for node in missing_nodes)
+                expected_nodes = ", ".join(str(node) for node in sorted(mentioned_nodes))
+                raise ValueError(
+                    "GTM node labels missing for section "
+                    f"'{section['heading']}', paragraph {paragraph_index}: "
+                    f"{missing_text}. Regenerate the matching GTM plot with "
+                    f"mark_nodes=[{expected_nodes}] before saving the report."
+                )
+
+
 def _is_gtm_landscape_context(context: str) -> bool:
     return (
         "gtm" in context or "landscape" in context or "density" in context or "activity" in context
@@ -2293,6 +2371,7 @@ def save_rich_report(
     normalized_figures = _prepare_report_figures_for_rendering(
         normalized_sections, normalized_figures
     )
+    _validate_gtm_node_labels(normalized_sections)
     _assign_structure_labels(normalized_sections, normalized_figures)
     normalized_sections, normalized_figures = _renumber_report_figures(
         normalized_sections, normalized_figures
