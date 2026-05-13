@@ -48,6 +48,7 @@ _HTML_TAG_RX = re.compile(r"<[^>]+>")
 _PLAIN_SMILES_RX = re.compile(
     r"(?<![A-Za-z0-9_])(?P<smiles>[A-Za-z0-9@+\-\[\]\(\)=#$\\/%.]{5,})(?![A-Za-z0-9_])"
 )
+_SOURCE_ID_SPLIT_RX = re.compile(r"\s*(?:\||;|,)\s*")
 _SUPPORTED_RICH_FORMATS = {"html", "pdf", "md", "markdown"}
 _FIGURE_METADATA_KEYS = {
     "figure_kind",
@@ -73,16 +74,137 @@ _STRUCTURE_ID_FIELDS = (
     "record id",
     "compound_id",
     "compound id",
+    "compound_ids",
+    "compound ids",
     "molecule_id",
     "molecule id",
+    "molecule_ids",
+    "molecule ids",
     "scaffold_id",
     "scaffold id",
+    "scaffold_ids",
+    "scaffold ids",
+    "molecule_chembl_id",
+    "molecule chembl id",
+    "molecule_chembl_ids",
+    "molecule chembl ids",
     "chembl_id",
     "chembl id",
+    "chembl_ids",
+    "chembl ids",
     "ChEMBL ID",
+    "ChEMBL IDs",
     "id",
     "ID",
 )
+_MOLECULE_SOURCE_ID_FIELDS = (
+    "structure_id",
+    "structure id",
+    "source_id",
+    "source id",
+    "external_id",
+    "external id",
+    "dataset_id",
+    "dataset id",
+    "record_id",
+    "record id",
+    "compound_id",
+    "compound id",
+    "compound_ids",
+    "compound ids",
+    "molecule_id",
+    "molecule id",
+    "molecule_ids",
+    "molecule ids",
+    "molecule_chembl_id",
+    "molecule chembl id",
+    "molecule_chembl_ids",
+    "molecule chembl ids",
+    "parent_molecule_chembl_id",
+    "parent molecule chembl id",
+    "parent_molecule_chembl_ids",
+    "parent molecule chembl ids",
+    "chembl_id",
+    "chembl id",
+    "chembl_ids",
+    "chembl ids",
+    "ChEMBL ID",
+    "ChEMBL IDs",
+    "Molecule ChEMBL ID",
+    "Molecule ChEMBL IDs",
+    "Compound ChEMBL ID",
+    "Compound ChEMBL IDs",
+    "ID",
+    "id",
+)
+_SCAFFOLD_SOURCE_ID_FIELDS = (
+    "scaffold_id",
+    "scaffold id",
+    "scaffold_ids",
+    "scaffold ids",
+    "structure_id",
+    "structure id",
+    "source_id",
+    "source id",
+    "external_id",
+    "external id",
+    "dataset_id",
+    "dataset id",
+    "record_id",
+    "record id",
+    "ID",
+    "id",
+)
+_MOLECULE_DISPLAY_NAME_FIELDS = (
+    "molecule_name",
+    "molecule name",
+    "compound_name",
+    "compound name",
+    "molecule",
+    "compound",
+    "structure_name",
+    "structure name",
+    "display_name",
+    "display name",
+    "preferred_name",
+    "preferred name",
+    "pref_name",
+    "pref name",
+    "user_name",
+    "user name",
+    "user_provided_name",
+    "user provided name",
+    "descriptive_name",
+    "descriptive name",
+    "common_name",
+    "common name",
+    "name",
+    "label",
+)
+_SCAFFOLD_DISPLAY_NAME_FIELDS = (
+    "scaffold_name",
+    "scaffold name",
+    "scaffold",
+    "structure_name",
+    "structure name",
+    "display_name",
+    "display name",
+    "preferred_name",
+    "preferred name",
+    "pref_name",
+    "pref name",
+    "user_name",
+    "user name",
+    "user_provided_name",
+    "user provided name",
+    "descriptive_name",
+    "descriptive name",
+    "common_name",
+    "common name",
+    "name",
+    "label",
+)
+_MISSING_SOURCE_ID_VALUES = {"", "-", "na", "n/a", "nan", "none", "null"}
 _STRUCTURE_CONTEXT_TERMS = (
     "scaffold",
     "molecule",
@@ -167,20 +289,124 @@ def _clean_text(value: Any) -> str:
     return "" if value is None else str(value).strip()
 
 
+def _has_text_value(value: Any) -> bool:
+    if isinstance(value, (list, tuple, set)):
+        return any(_has_text_value(item) for item in value)
+    return bool(_clean_text(value))
+
+
 def _key_token(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value).lower())
 
 
-def _mapping_value(mapping: dict[str, Any], *keys: str) -> str:
+def _mapping_raw_value(mapping: dict[str, Any], *keys: str) -> Any:
     lowered = {str(key).lower(): value for key, value in mapping.items()}
     normalized = {_key_token(key): value for key, value in mapping.items()}
     for key in keys:
         value = lowered.get(str(key).lower())
-        if _clean_text(value):
-            return _clean_text(value)
+        if _has_text_value(value):
+            return value
         value = normalized.get(_key_token(key))
-        if _clean_text(value):
-            return _clean_text(value)
+        if _has_text_value(value):
+            return value
+    return ""
+
+
+def _mapping_value(mapping: dict[str, Any], *keys: str) -> str:
+    return _clean_text(_mapping_raw_value(mapping, *keys))
+
+
+def _source_id_candidates(structure_type: str) -> tuple[str, ...]:
+    if structure_type == "scaffold":
+        return _SCAFFOLD_SOURCE_ID_FIELDS
+    return _MOLECULE_SOURCE_ID_FIELDS
+
+
+def _display_name_candidates(structure_type: str) -> tuple[str, ...]:
+    if structure_type == "scaffold":
+        return _SCAFFOLD_DISPLAY_NAME_FIELDS
+    return _MOLECULE_DISPLAY_NAME_FIELDS
+
+
+def _source_ids_from_value(value: Any) -> list[str]:
+    if isinstance(value, (list, tuple, set)):
+        ids: list[str] = []
+        items = sorted(value, key=str) if isinstance(value, set) else value
+        for item in items:
+            ids.extend(_source_ids_from_value(item))
+        return list(dict.fromkeys(ids))
+
+    raw = _clean_text(value)
+    if not raw:
+        return []
+
+    ids = []
+    for part in _SOURCE_ID_SPLIT_RX.split(raw):
+        source_id = part.strip().strip("[]'\"")
+        if source_id.lower() in _MISSING_SOURCE_ID_VALUES:
+            continue
+        if source_id and source_id not in ids:
+            ids.append(source_id)
+    return ids
+
+
+def _mapping_source_id(mapping: dict[str, Any], *keys: str) -> str:
+    raw_value = _mapping_raw_value(mapping, *keys)
+    return "|".join(_source_ids_from_value(raw_value))
+
+
+def _resolve_structure_identity(
+    mapping: dict[str, Any],
+    structure_type: str,
+) -> dict[str, str]:
+    normalized_type = "scaffold" if structure_type == "scaffold" else "molecule"
+    return {
+        "structure_id": _mapping_source_id(
+            mapping,
+            *_source_id_candidates(normalized_type),
+        ),
+        "structure_name": _mapping_value(
+            mapping,
+            *_display_name_candidates(normalized_type),
+        ),
+    }
+
+
+def _infer_structure_type_from_mapping(mapping: dict[str, Any]) -> str:
+    if _mapping_source_id(mapping, "scaffold_id", "scaffold_ids") or _mapping_value(
+        mapping,
+        "scaffold_name",
+        "scaffold name",
+        "scaffold",
+        "scaffold_smiles",
+        "scaffold smiles",
+        "scaffold_smi",
+    ):
+        return "scaffold"
+    if _mapping_source_id(
+        mapping,
+        "compound_id",
+        "compound_ids",
+        "molecule_id",
+        "molecule_ids",
+        "molecule_chembl_id",
+        "molecule_chembl_ids",
+        "chembl_id",
+        "chembl_ids",
+    ) or _mapping_value(
+        mapping,
+        "molecule_name",
+        "molecule name",
+        "compound_name",
+        "compound name",
+        "molecule",
+        "compound",
+        "molecule_smiles",
+        "molecule smiles",
+        "compound_smiles",
+        "compound smiles",
+    ):
+        return "molecule"
     return ""
 
 
@@ -353,28 +579,16 @@ def _normalize_figure(
             figure.get("scaffold_smiles") or figure.get("scaffold_smi")
         ):
             raw_structure_type = "scaffold"
+        if raw_structure_type is None:
+            raw_structure_type = _infer_structure_type_from_mapping(figure)
         structure_type = _normalize_structure_type(raw_structure_type, structure_smiles)
-        structure_id = _mapping_value(figure, *_STRUCTURE_ID_FIELDS)
-        structure_name = _mapping_value(
-            figure,
-            "structure_name",
-            "structure name",
-            "display_name",
-            "display name",
-            "preferred_name",
-            "preferred name",
-            "pref_name",
-            "pref name",
-            "compound_name",
-            "compound name",
-            "molecule_name",
-            "molecule name",
-            "scaffold_name",
-            "scaffold name",
-            "descriptive_name",
-            "descriptive name",
-            "label",
+        identity = (
+            _resolve_structure_identity(figure, structure_type)
+            if structure_type
+            else {"structure_id": "", "structure_name": ""}
         )
+        structure_id = identity["structure_id"]
+        structure_name = identity["structure_name"]
         node = _clean_text(figure.get("node") or figure.get("gtm_node") or "")
         description = _clean_text(figure.get("structure_description") or figure.get("description"))
         after_paragraph_index = _clean_optional_int(figure.get("after_paragraph_index"))
@@ -783,9 +997,27 @@ def _table_has_column(table: dict[str, Any], *keys: str) -> bool:
 def _table_structure_type(table: dict[str, Any], row: dict[str, str]) -> str:
     title = str(table["title"]).lower()
     if (
-        _table_has_column(table, "Scaffold ID", "scaffold_id", "Scaffold SMILES", "Scaffold Name")
+        _table_has_column(
+            table,
+            "Scaffold ID",
+            "scaffold_id",
+            "scaffold_ids",
+            "Scaffold SMILES",
+            "scaffold_smiles",
+            "Scaffold Name",
+            "scaffold_name",
+        )
         or "scaffold" in title
-        or _row_value(row, "Scaffold ID", "scaffold_id", "Scaffold SMILES", "Scaffold Name")
+        or _row_value(
+            row,
+            "Scaffold ID",
+            "scaffold_id",
+            "scaffold_ids",
+            "Scaffold SMILES",
+            "scaffold_smiles",
+            "Scaffold Name",
+            "scaffold_name",
+        )
     ):
         return "scaffold"
     if (
@@ -793,12 +1025,20 @@ def _table_structure_type(table: dict[str, Any], row: dict[str, str]) -> str:
             table,
             "Molecule ID",
             "molecule_id",
+            "molecule_ids",
+            "molecule_chembl_id",
+            "molecule_chembl_ids",
             "Compound ID",
             "compound_id",
+            "compound_ids",
             "Molecule SMILES",
+            "molecule_smiles",
             "Compound SMILES",
+            "compound_smiles",
             "Molecule Name",
+            "molecule_name",
             "Compound Name",
+            "compound_name",
         )
         or "molecule" in title
         or "compound" in title
@@ -806,28 +1046,47 @@ def _table_structure_type(table: dict[str, Any], row: dict[str, str]) -> str:
             row,
             "Molecule ID",
             "molecule_id",
+            "molecule_ids",
+            "molecule_chembl_id",
+            "molecule_chembl_ids",
             "Compound ID",
             "compound_id",
+            "compound_ids",
             "Molecule SMILES",
+            "molecule_smiles",
             "Compound SMILES",
+            "compound_smiles",
             "Molecule Name",
+            "molecule_name",
             "Compound Name",
+            "compound_name",
         )
     ):
         return "molecule"
-    if _table_has_column(table, "chembl id", "chembl_id"):
+    if _table_has_column(table, "chembl id", "chembl_id", "chembl_ids"):
         return "molecule"
-    if _row_value(row, "Scaffold ID", "Scaffold", "scaffold_id", "scaffold_name"):
+    if _row_value(
+        row,
+        "Scaffold ID",
+        "Scaffold",
+        "scaffold_id",
+        "scaffold_ids",
+        "scaffold_name",
+    ):
         return "scaffold"
     if _row_value(
         row,
         "Molecule ID",
         "Molecule",
         "molecule_id",
+        "molecule_ids",
+        "molecule_chembl_id",
+        "molecule_chembl_ids",
         "molecule_name",
         "Compound ID",
         "Compound",
         "compound_id",
+        "compound_ids",
         "compound_name",
     ):
         return "molecule"
@@ -1214,74 +1473,12 @@ def _append_structure_table_figures(
                 if not smiles:
                     continue
 
-                prefix = _structure_id_prefix(structure_type)
-                structure_id = _row_value(
-                    row,
-                    f"{prefix} ID",
-                    f"{prefix}_id",
-                    "Structure ID",
-                    "structure_id",
-                    "Source ID",
-                    "source_id",
-                    "External ID",
-                    "external_id",
-                    "Dataset ID",
-                    "dataset_id",
-                    "Record ID",
-                    "record_id",
-                    "Compound ID",
-                    "compound_id",
-                    "Molecule ID",
-                    "molecule_id",
-                    "Scaffold ID",
-                    "scaffold_id",
-                    "ChEMBL ID",
-                    "ChEMBLID",
-                    "chembl_id",
-                    "Molecule ChEMBL ID",
-                    "Compound ChEMBL ID",
-                    "ID",
-                )
+                identity = _resolve_structure_identity(row, structure_type)
+                structure_id = identity["structure_id"]
                 source_id_column = ""
                 if not structure_id:
                     source_id_column = _ensure_table_id_column(table, structure_type)
-                if structure_type == "scaffold":
-                    structure_name = _row_value(
-                        row,
-                        "Scaffold Name",
-                        "scaffold_name",
-                        "Scaffold",
-                        "Structure Name",
-                        "structure_name",
-                        "Display Name",
-                        "display_name",
-                        "Preferred Name",
-                        "preferred_name",
-                        "Pref Name",
-                        "pref_name",
-                        "Name",
-                        "Label",
-                    )
-                else:
-                    structure_name = _row_value(
-                        row,
-                        "Molecule Name",
-                        "molecule_name",
-                        "Compound Name",
-                        "compound_name",
-                        "Molecule",
-                        "Compound",
-                        "Structure Name",
-                        "structure_name",
-                        "Display Name",
-                        "display_name",
-                        "Preferred Name",
-                        "preferred_name",
-                        "Pref Name",
-                        "pref_name",
-                        "Name",
-                        "Label",
-                    )
+                structure_name = identity["structure_name"]
                 description = _row_value(row, "Description", "Notes", "Comment")
                 node = _row_value(row, "Node", "GTM Node", "GTM Node ID", "node", "node_index")
                 first_mention_index = _find_first_mention_index(
@@ -1302,7 +1499,9 @@ def _append_structure_table_figures(
                         existing_figure["structure_id"] = structure_id
                     current_name = existing_figure.get("structure_name", "")
                     if structure_name and (
-                        not current_name or current_name == "Reported compound structure"
+                        not current_name
+                        or current_name == "Reported compound structure"
+                        or existing_figure.get("_auto_structure_figure")
                     ):
                         existing_figure["structure_name"] = structure_name
                     if node and not existing_figure.get("node"):
@@ -2102,16 +2301,15 @@ def save_rich_report(
     has_section_text = any(section["paragraphs"] for section in normalized_sections)
     has_section_figures = any(section["figures"] for section in normalized_sections)
     has_section_tables = any(section["tables"] for section in normalized_sections)
-    if not (
-        normalized_summary
-        or has_section_text
-        or has_section_figures
-        or has_section_tables
-        or normalized_figures
-    ):
+    has_report_body = (
+        has_section_text or has_section_figures or has_section_tables or normalized_figures
+    )
+    normalized_formats = _normalize_formats(formats)
+    if normalized_summary and not has_report_body:
+        raise ValueError("report body content cannot be empty")
+    if not normalized_summary and not has_report_body:
         raise ValueError("report content cannot be empty")
 
-    normalized_formats = _normalize_formats(formats)
     basename = _rich_report_basename(filename, report_type)
     _materialize_structure_figures(
         normalized_sections,
