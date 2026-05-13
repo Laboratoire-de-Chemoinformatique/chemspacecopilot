@@ -380,11 +380,25 @@ def test_save_rich_report_moves_gtm_landscapes_into_matching_sections(
                 "image_path": stored_png,
                 "caption": "GTM density landscape with Node 221 labeled.",
                 "name": "GTM density landscape for source compounds",
+                "figure_metadata": build_figure_metadata(
+                    figure_kind="gtm_density",
+                    renderer="altair",
+                    report_role="inline_static",
+                    title_subject="GTM density landscape for source compounds",
+                    node_labels=[221],
+                ),
             },
             {
                 "image_path": stored_png,
                 "caption": "GTM activity landscape with Node 340 labeled.",
                 "name": "GTM activity landscape for source compounds",
+                "figure_metadata": build_figure_metadata(
+                    figure_kind="gtm_activity_regression",
+                    renderer="altair",
+                    report_role="inline_static",
+                    title_subject="GTM activity landscape for source compounds",
+                    node_labels=[340],
+                ),
             },
         ],
         filename="section_local_gtm",
@@ -423,6 +437,13 @@ def test_save_rich_report_omits_plotly_gtm_outputs(local_session_root, stored_pn
                     "The interactive Plotly version supports drill-down."
                 ),
                 "name": "GTM activity landscape Altair PNG",
+                "figure_metadata": build_figure_metadata(
+                    figure_kind="gtm_activity_regression",
+                    renderer="altair",
+                    report_role="inline_static",
+                    title_subject="GTM activity landscape Altair PNG",
+                    node_labels=[340],
+                ),
                 "artifact_path": "s3://bucket/plots/activity_plotly_regression.html",
             },
             {
@@ -447,6 +468,75 @@ def test_save_rich_report_omits_plotly_gtm_outputs(local_session_root, stored_pn
     assert "Plotly activity landscape" not in html_content
     assert "activity_plotly_regression.html" not in markdown_content
     assert "activity_plotly_regression.png" not in markdown_content
+
+
+def test_save_rich_report_rejects_gtm_figure_without_discussed_node_labels(
+    local_session_root, stored_png
+):
+    """A GTM plot adjacent to node prose must record matching node_labels metadata."""
+    with pytest.raises(ValueError, match=r"GTM node labels missing.*221.*mark_nodes=\[221\]"):
+        save_rich_report(
+            title="Missing Node Labels Report",
+            sections=[
+                {
+                    "heading": "GTM Density Analysis",
+                    "paragraphs": ["Density analysis identifies Node 221 as the main hotspot."],
+                    "figures": [
+                        {
+                            "image_path": stored_png,
+                            "caption": "GTM density landscape.",
+                            "name": "GTM density landscape for source compounds",
+                            "figure_metadata": build_figure_metadata(
+                                figure_kind="gtm_density",
+                                renderer="altair",
+                                report_role="inline_static",
+                                title_subject="GTM density landscape for source compounds",
+                            ),
+                        }
+                    ],
+                }
+            ],
+            filename="missing_node_labels",
+            report_type="gtm_density",
+            formats=["html"],
+        )
+
+    assert not _report_files(local_session_root, "gtm_density", "missing_node_labels*")
+
+
+def test_save_rich_report_rejects_top_level_gtm_figure_with_partial_node_labels(
+    local_session_root, stored_png
+):
+    """Moved top-level GTM figures must label every node discussed in the target paragraph."""
+    with pytest.raises(ValueError, match=r"GTM node labels missing.*340.*mark_nodes=\[221, 340\]"):
+        save_rich_report(
+            title="Partial Node Labels Report",
+            sections=[
+                {
+                    "heading": "GTM Density Analysis",
+                    "paragraphs": ["Density analysis discusses nodes 221 and 340."],
+                }
+            ],
+            figures=[
+                {
+                    "image_path": stored_png,
+                    "caption": "GTM density landscape with Node 221 labeled.",
+                    "name": "GTM density landscape for source compounds",
+                    "figure_metadata": build_figure_metadata(
+                        figure_kind="gtm_density",
+                        renderer="altair",
+                        report_role="inline_static",
+                        title_subject="GTM density landscape for source compounds",
+                        node_labels=[221],
+                    ),
+                }
+            ],
+            filename="partial_node_labels",
+            report_type="gtm_density",
+            formats=["html"],
+        )
+
+    assert not _report_files(local_session_root, "gtm_density", "partial_node_labels*")
 
 
 def test_save_rich_report_corrects_density_caption_colors(local_session_root, stored_png):
@@ -474,6 +564,7 @@ def test_save_rich_report_corrects_density_caption_colors(local_session_root, st
                                 "low_value_meaning": "sparse or empty nodes",
                                 "high_value_meaning": "higher compound density",
                             },
+                            node_labels=[221],
                         ),
                         "caption": (
                             "Color intensity represents compound density per node, with "
