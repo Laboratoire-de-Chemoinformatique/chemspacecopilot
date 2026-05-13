@@ -32,6 +32,8 @@ def test_report_instructions_require_named_captioned_inline_figures():
     assert "pass mark_nodes for every GTM node discussed in the density text" in instructions
     assert "pass mark_nodes for every GTM node discussed in the activity text" in instructions
     assert "Every GTM node discussed in the report text MUST be explicitly labeled" in instructions
+    assert "Never save a rich report with only title/summary" in instructions
+    assert "saving a summary-only file" in instructions
     assert "Use the registered figure metadata for colorscale" in instructions
     assert "do not invent density color meanings" in instructions
     assert (
@@ -49,14 +51,15 @@ def test_report_instructions_require_named_captioned_inline_figures():
     assert "a scaffold/SAR paragraph contains an untagged valid SMILES" in instructions
     assert "Scaffold_1, Scaffold_2" in instructions
     assert "Molecule_1, Molecule_2" in instructions
-    assert "If any dataset/source identifier already exists" in instructions
+    assert "Resolve molecule and scaffold IDs separately" in instructions
     assert (
-        "structure_id, source_id, external_id, compound_id, molecule_id, scaffold_id"
-        in instructions
+        "compound_id/compound_ids, molecule_id/molecule_ids, "
+        "molecule_chembl_id/molecule_chembl_ids" in instructions
     )
+    assert "scaffold_id/scaffold_ids before generic structure/source IDs" in instructions
     assert "dataset-provided display names" in instructions
     assert "ChEMBL ID" in instructions
-    assert "Only when no source ID exists" in instructions
+    assert "Only when no type-specific source ID exists" in instructions
     assert "MUST reference the matching figure" in instructions
     assert "CMPD-123, top potency source analog (Figure 4)" in instructions
     assert "Scaffold_1, Piperidine urea phenyl scaffold (Figure 3)" in instructions

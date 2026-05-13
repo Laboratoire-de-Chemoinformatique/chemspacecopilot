@@ -1179,6 +1179,174 @@ def test_save_rich_report_applies_table_source_ids_to_smiles_tag_figures(
     assert "CHEMBL777777 (Known ChEMBL analog) is shown in Figure 1." in markdown_content
 
 
+def test_save_rich_report_uses_collapsed_molecule_source_ids(local_session_root):
+    """Collapsed molecule source IDs should be visible instead of generated IDs."""
+    save_rich_report(
+        title="Collapsed Molecule ID Report",
+        sections=[
+            {
+                "heading": "Collapsed Molecule Summary",
+                "paragraphs": [
+                    "CHEMBL111111|CHEMBL222222 is the duplicate-collapsed source analog.",
+                ],
+                "tables": [
+                    {
+                        "title": "Molecule Inventory",
+                        "columns": [
+                            "molecule_chembl_ids",
+                            "Molecule",
+                            "SMILES",
+                            "Name",
+                            "Node",
+                            "Description",
+                        ],
+                        "rows": [
+                            {
+                                "molecule_chembl_ids": "CHEMBL111111|CHEMBL222222",
+                                "Molecule": "Duplicate-collapsed ChEMBL analog",
+                                "SMILES": "CCOc1ccc(NC(=O)NCC)cc1",
+                                "Name": "Duplicate-collapsed ChEMBL analog",
+                                "Node": "17",
+                                "Description": "Two source ChEMBL records collapsed to one structure.",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        filename="collapsed_molecule_ids",
+        report_type="chemotype",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    html_content = (reports_dir / "collapsed_molecule_ids.html").read_text()
+    markdown_content = (reports_dir / "collapsed_molecule_ids.md").read_text()
+    source_ids = "CHEMBL111111|CHEMBL222222"
+    assert f"Figure 1. {source_ids}: Duplicate-collapsed ChEMBL analog" in html_content
+    assert f"{source_ids} (Duplicate-collapsed ChEMBL analog) is shown in Figure 1." in html_content
+    assert "Molecule_1" not in html_content
+    assert f"### Figure 1. {source_ids}: Duplicate-collapsed ChEMBL analog" in markdown_content
+    assert f"{source_ids} (Duplicate-collapsed ChEMBL analog) is shown in Figure 1." in (
+        markdown_content
+    )
+
+
+def test_save_rich_report_uses_collapsed_scaffold_source_ids(local_session_root):
+    """Collapsed scaffold source IDs should not be replaced by Scaffold_N labels."""
+    save_rich_report(
+        title="Collapsed Scaffold ID Report",
+        sections=[
+            {
+                "heading": "Collapsed Scaffold Summary",
+                "paragraphs": [
+                    "SCF-A|SCF-B anchors the recurring bicyclic scaffold family in node 19.",
+                ],
+                "tables": [
+                    {
+                        "title": "Scaffold Inventory",
+                        "columns": [
+                            "scaffold_ids",
+                            "scaffold_name",
+                            "smiles",
+                            "node",
+                            "notes",
+                        ],
+                        "rows": [
+                            {
+                                "scaffold_ids": "SCF-A|SCF-B",
+                                "scaffold_name": "Duplicate-collapsed bicyclic scaffold",
+                                "smiles": "c1ccc2ccccc2c1",
+                                "node": "19",
+                                "notes": "Two source scaffold records collapsed to one scaffold.",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        filename="collapsed_scaffold_ids",
+        report_type="chemotype",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    html_content = (reports_dir / "collapsed_scaffold_ids.html").read_text()
+    markdown_content = (reports_dir / "collapsed_scaffold_ids.md").read_text()
+    source_ids = "SCF-A|SCF-B"
+    assert f"Figure 1. {source_ids}: Duplicate-collapsed bicyclic scaffold" in html_content
+    assert f"{source_ids} (Duplicate-collapsed bicyclic scaffold) is shown in Figure 1." in (
+        html_content
+    )
+    assert "Scaffold_1" not in html_content
+    assert f"### Figure 1. {source_ids}: Duplicate-collapsed bicyclic scaffold" in (
+        markdown_content
+    )
+    assert f"{source_ids} (Duplicate-collapsed bicyclic scaffold) is shown in Figure 1." in (
+        markdown_content
+    )
+
+
+def test_save_rich_report_upgrades_smiles_tag_with_collapsed_source_ids(
+    local_session_root,
+):
+    """Auto-created SMILES figures should pick up collapsed source IDs from tables."""
+    smiles = "CCOc1ccc(NC(=O)NCC)cc1"
+    save_rich_report(
+        title="Tagged Collapsed Molecule Report",
+        sections=[
+            {
+                "heading": "Tagged Molecule Summary",
+                "paragraphs": [
+                    f"The duplicate-collapsed source compound is <smiles>{smiles}</smiles>.",
+                ],
+                "tables": [
+                    {
+                        "title": "Molecule Inventory",
+                        "columns": [
+                            "molecule_chembl_ids",
+                            "Molecule",
+                            "SMILES",
+                            "Name",
+                            "Node",
+                            "Description",
+                        ],
+                        "rows": [
+                            {
+                                "molecule_chembl_ids": "CHEMBL333333|CHEMBL444444",
+                                "Molecule": "Tagged duplicate-collapsed ChEMBL analog",
+                                "SMILES": smiles,
+                                "Name": "Tagged duplicate-collapsed ChEMBL analog",
+                                "Node": "23",
+                                "Description": "Table source IDs should be reused.",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        filename="tagged_collapsed_molecule_ids",
+        report_type="chemotype",
+        formats=["html", "md"],
+    )
+
+    reports_dir = _report_dir(local_session_root, "chemotype")
+    html_content = (reports_dir / "tagged_collapsed_molecule_ids.html").read_text()
+    markdown_content = (reports_dir / "tagged_collapsed_molecule_ids.md").read_text()
+    source_ids = "CHEMBL333333|CHEMBL444444"
+    assert f"Figure 1. {source_ids}: Tagged duplicate-collapsed ChEMBL analog" in html_content
+    assert f"{source_ids} (Tagged duplicate-collapsed ChEMBL analog) is shown in Figure 1." in (
+        html_content
+    )
+    assert "Molecule_1" not in html_content
+    assert f"### Figure 1. {source_ids}: Tagged duplicate-collapsed ChEMBL analog" in (
+        markdown_content
+    )
+    assert f"{source_ids} (Tagged duplicate-collapsed ChEMBL analog) is shown in Figure 1." in (
+        markdown_content
+    )
+
+
 def test_save_rich_report_adds_generated_ids_to_inventory_tables(local_session_root):
     """Rows without source IDs should get generated IDs reused in text, tables, and figures."""
     save_rich_report(
@@ -1355,6 +1523,10 @@ def test_save_rich_report_rejects_invalid_structure_smiles(local_session_root):
     [
         ({"title": "", "summary": ["x"]}, "title cannot be empty"),
         ({"title": "Empty"}, "report content cannot be empty"),
+        (
+            {"title": "Summary only", "summary": ["Only an executive-summary bullet."]},
+            "report body content cannot be empty",
+        ),
         ({"title": "Bad format", "summary": ["x"], "formats": ["docx"]}, "unsupported"),
         (
             {"title": "No caption", "figures": [{"image_path": "some_plot.png"}]},
