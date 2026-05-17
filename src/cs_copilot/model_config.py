@@ -5,7 +5,7 @@ Centralized model configuration for Cs_copilot.
 
 Reads the `.modelconf` file (simple key=value format) and returns
 the appropriate agno Model instance.  Environment variables
-MODEL_PROVIDER, MODEL_ID and OLLAMA_HOST take precedence over
+MODEL_PROVIDER, MODEL_ID, MODEL_MAX_TOKENS and OLLAMA_HOST take precedence over
 the config file, making it easy to override in Docker / CI.
 
 Also provides retry wrappers (`run_with_retry`, `arun_with_retry`)
@@ -28,6 +28,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/cs_copilot 
 DEFAULT_PROVIDER = "deepseek"
 DEFAULT_MODEL_ID = "deepseek-chat"
 DEFAULT_OLLAMA_HOST = "http://localhost:11434"
+DEFAULT_OPENROUTER_MAX_TOKENS = 8192
 
 VALID_PROVIDERS = ("deepseek", "ollama", "openrouter")
 
@@ -103,6 +104,10 @@ def parse_modelconf(config_path: Optional[str] = None) -> Dict[str, str]:
     if env_ollama_host:
         conf["ollama_host"] = env_ollama_host
 
+    env_max_tokens = os.getenv("MODEL_MAX_TOKENS")
+    if env_max_tokens:
+        conf["max_tokens"] = env_max_tokens
+
     # Apply defaults for missing keys
     conf.setdefault("provider", DEFAULT_PROVIDER)
     conf.setdefault("model_id", DEFAULT_MODEL_ID)
@@ -122,6 +127,24 @@ def parse_modelconf(config_path: Optional[str] = None) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 # Model factory
 # ---------------------------------------------------------------------------
+
+
+def _parse_positive_int(value: Optional[str], *, key: str) -> Optional[int]:
+    """Parse a positive integer config value."""
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{key} must be a positive integer, got {value!r}") from exc
+    if parsed <= 0:
+        raise ValueError(f"{key} must be a positive integer, got {value!r}")
+    return parsed
+
+
+def _is_openrouter_deepseek_model(model_id: str) -> bool:
+    """Return true for DeepSeek model ids routed through OpenRouter."""
+    return model_id.strip().lower().startswith("deepseek/")
 
 
 def load_model_from_config(config_path: Optional[str] = None) -> Any:
@@ -153,8 +176,17 @@ def load_model_from_config(config_path: Optional[str] = None) -> Any:
         from agno.models.openrouter import OpenRouter
 
         api_key = os.getenv("OPENROUTER_API_KEY")
-        logger.info(f"Using OpenRouter model '{model_id}'")
-        return OpenRouter(id=model_id, api_key=api_key)
+        max_tokens = _parse_positive_int(conf.get("max_tokens"), key="max_tokens")
+        if max_tokens is None:
+            max_tokens = DEFAULT_OPENROUTER_MAX_TOKENS
+
+        logger.info(f"Using OpenRouter model '{model_id}' with max_tokens={max_tokens}")
+        model = OpenRouter(id=model_id, api_key=api_key, max_tokens=max_tokens)
+        if _is_openrouter_deepseek_model(model_id):
+            # Match Agno's native DeepSeek model: structured outputs are not reliable
+            # for DeepSeek, even when accessed through the OpenRouter gateway.
+            model.supports_native_structured_outputs = False
+        return model
 
     # provider == "deepseek"
     from agno.models.deepseek import DeepSeek

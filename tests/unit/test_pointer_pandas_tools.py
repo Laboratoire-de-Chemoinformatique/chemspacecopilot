@@ -158,6 +158,46 @@ class TestPointerPandasTools:
         result_df = tools.dataframes[result["dataframe_name"]]
         assert list(result_df.columns) == ["molecule_chembl_id", "standard_value"]
 
+    def test_run_dataframe_operation_accepts_function_parameters_alias(self, tools, sample_df):
+        """Some model gateways use function_parameters instead of operation_parameters."""
+        tools.dataframes["test_df"] = sample_df
+
+        result = tools.run_dataframe_operation(
+            dataframe_name="test_df",
+            operation="sort_values",
+            function_parameters=json.dumps({"by": "standard_value", "ascending": False}),
+        )
+
+        result_df = tools.dataframes[result["dataframe_name"]]
+        assert result_df["standard_value"].tolist() == [300, 200, 100]
+
+    def test_run_dataframe_operation_infers_sort_for_boolean_operation(self, tools, sample_df):
+        """Recover from OpenRouter tool calls that put True in operation for sort args."""
+        tools.dataframes["test_df"] = sample_df
+
+        result = tools.run_dataframe_operation(
+            dataframe_name="test_df",
+            operation=True,
+            function_parameters={"by": "standard_value", "ascending": False},
+        )
+
+        result_df = tools.dataframes[result["dataframe_name"]]
+        assert result_df["standard_value"].tolist() == [300, 200, 100]
+
+    def test_run_dataframe_operation_prefers_operation_parameters(self, tools, sample_df):
+        """The canonical parameter name wins if both parameter aliases are present."""
+        tools.dataframes["test_df"] = sample_df
+
+        result = tools.run_dataframe_operation(
+            dataframe_name="test_df",
+            operation="select",
+            operation_parameters={"columns": ["molecule_chembl_id"]},
+            function_parameters={"columns": ["standard_value"]},
+        )
+
+        result_df = tools.dataframes[result["dataframe_name"]]
+        assert list(result_df.columns) == ["molecule_chembl_id"]
+
     def test_load_dataframe_from_session_resolves_top_level_dataframe(self, tools):
         session_df = pd.DataFrame({"smi": ["CCO"], "activity_final": [7.0]})
 
