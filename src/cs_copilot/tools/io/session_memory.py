@@ -33,8 +33,9 @@ LOADABLE_SESSION_PATH_PRIORITY = {
     "primary_data_csv": 4,
     "dataset_path": 5,
     "raw_dataset_path": 6,
-    "csv_path": 7,
-    "path": 8,
+    "filtered_dataset_path": 7,
+    "csv_path": 8,
+    "path": 9,
 }
 
 _OBJECT_TYPES: Dict[str, Tuple[str, str]] = {
@@ -1484,6 +1485,7 @@ def _compact_record_for_summary(record: Dict[str, Any]) -> Dict[str, Any]:
         "dataset_path": record.get("dataset_path"),
         "clean_dataset_path": record.get("clean_dataset_path"),
         "raw_dataset_path": record.get("raw_dataset_path"),
+        "filtered_dataset_path": record.get("filtered_dataset_path"),
         "descriptor_parquet_path": record.get("descriptor_parquet_path"),
         "figure_kind": record.get("figure_kind"),
         "renderer": record.get("renderer"),
@@ -1516,6 +1518,8 @@ def _compact_record_line(record: Dict[str, Any], object_type: str) -> str:
             bits.append(f"dataset={record['dataset_path']}")
         if record.get("raw_dataset_path"):
             bits.append(f"raw={record['raw_dataset_path']}")
+        if record.get("filtered_dataset_path"):
+            bits.append(f"filtered={record['filtered_dataset_path']}")
         if record.get("descriptor_parquet_path"):
             bits.append(f"descriptors={record['descriptor_parquet_path']}")
     if object_type == "zone" and record.get("node_ids"):

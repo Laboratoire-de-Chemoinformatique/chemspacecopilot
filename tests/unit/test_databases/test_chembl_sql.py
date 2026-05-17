@@ -45,6 +45,36 @@ class TestRestChemblFetcher:
             target_organism__icontains="Homo sapiens",
         )
 
+    def test_fetch_assays_enriches_target_metadata(self):
+        mock_client = Mock()
+        mock_client.assay.filter.return_value = [
+            {
+                "assay_chembl_id": "CHEMBL_A1",
+                "description": "CDK2 biochemical assay",
+                "target_chembl_id": "CHEMBL_TARGET_1",
+            }
+        ]
+        mock_client.target.filter.return_value.only.return_value = [
+            {
+                "target_chembl_id": "CHEMBL_TARGET_1",
+                "pref_name": "Cyclin-dependent kinase 2",
+                "target_type": "SINGLE PROTEIN",
+                "organism": "Homo sapiens",
+                "tax_id": 9606,
+                "species_group_flag": 0,
+            }
+        ]
+
+        fetcher = RestChemblFetcher(lambda: mock_client)
+        result = fetcher.fetch_assays("CDK2")
+
+        assert result[0]["target_pref_name"] == "Cyclin-dependent kinase 2"
+        assert result[0]["target_type"] == "SINGLE PROTEIN"
+        assert result[0]["target_organism"] == "Homo sapiens"
+        assert result[0]["target_tax_id"] == 9606
+        assert result[0]["target_species_group_flag"] == 0
+        mock_client.target.filter.assert_called_once_with(target_chembl_id__in=["CHEMBL_TARGET_1"])
+
     def test_fetch_activities(self):
         mock_client = Mock()
         mock_activities = [{"activity_id": 1, "molecule_chembl_id": "CHEMBL1"}]
@@ -158,6 +188,11 @@ class TestSqlChemblFetcher:
                 "assay_type": "B",
                 "assay_organism": "Homo sapiens",
                 "target_chembl_id": "CHEMBL2345",
+                "target_pref_name": "Cyclin-dependent kinase 2",
+                "target_type": "SINGLE PROTEIN",
+                "target_organism": "Homo sapiens",
+                "target_tax_id": 9606,
+                "target_species_group_flag": 0,
             }
         ]
         fetcher, conn = self._make_fetcher(assay_data)
@@ -166,10 +201,17 @@ class TestSqlChemblFetcher:
         assert len(result) == 1
         assert result[0]["assay_chembl_id"] == "CHEMBL123"
         assert result[0]["description"] == "CDK2 kinase assay"
+        assert result[0]["target_pref_name"] == "Cyclin-dependent kinase 2"
 
         # Verify SQL was called with keyword parameter
         call_args = conn.execute.call_args
+        sql_text = str(call_args[0][0])
         params = call_args[0][1]
+        assert "td.pref_name AS target_pref_name" in sql_text
+        assert "td.target_type" in sql_text
+        assert "td.organism AS target_organism" in sql_text
+        assert "td.tax_id AS target_tax_id" in sql_text
+        assert "td.species_group_flag AS target_species_group_flag" in sql_text
         assert params["keyword_pattern"] == "%CDK2%"
 
     def test_fetch_assays_with_organism(self):

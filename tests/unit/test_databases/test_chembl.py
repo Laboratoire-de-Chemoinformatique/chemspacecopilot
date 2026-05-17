@@ -536,6 +536,216 @@ class TestChemblToolkit:
         with pytest.raises(ValueError, match="assay_types must be a list/sequence, not a dict"):
             toolkit.fetch_compounds("kinase", assay_types={"B": True, "F": False})
 
+    def test_short_keyword_filter_rejects_protein_pref_name(self, monkeypatch):
+        toolkit = ChemblToolkit()
+        df = pd.DataFrame(
+            [
+                {
+                    "activity_id": 1,
+                    "assay_chembl_id": "CHEMBL_A1",
+                    "query_keywords": "BRAF",
+                    "target_pref_name": "Beta-secretase 1",
+                    "target_type": "SINGLE PROTEIN",
+                    "description": "BACE1 biochemical assay",
+                    "smi": "CCO",
+                },
+                {
+                    "activity_id": 2,
+                    "assay_chembl_id": "CHEMBL_A2",
+                    "query_keywords": "kinase",
+                    "target_pref_name": "B-Raf proto-oncogene serine/threonine-protein kinase",
+                    "target_type": "SINGLE PROTEIN",
+                    "description": "BRAF biochemical assay",
+                    "smi": "CCC",
+                },
+            ]
+        )
+        saved = []
+
+        def fake_save(self, filtered_df, *, query_slug, session_state):
+            saved.append(filtered_df.copy())
+            return "filtered.csv"
+
+        def fake_judge(self, judge_items, **kwargs):
+            assert judge_items[0]["judge_basis"] == "target_pref_name"
+            assert judge_items[0]["value"] == "Beta-secretase 1"
+            return {
+                item["item_id"]: chembl_module._ChemblJudgeDecision(
+                    item_id=item["item_id"],
+                    keep=False,
+                    explanation="Unrelated protein target.",
+                )
+                for item in judge_items
+            }
+
+        monkeypatch.setattr(ChemblToolkit, "_save_filtered_rows", fake_save)
+        monkeypatch.setattr(ChemblToolkit, "_run_chembl_retrieval_judge", fake_judge)
+
+        result = toolkit._filter_suspicious_short_keyword_rows(
+            df,
+            keywords=["BRAF", "kinase"],
+            target_query="BRAF kinase",
+            organism_filter=None,
+            query_slug="braf_kinase",
+            agent=Mock(model=object()),
+            session_state={},
+        )
+
+        assert result.summary["suspicious_row_count"] == 1
+        assert result.summary["filtered_row_count"] == 1
+        assert result.filtered_rows_path == "filtered.csv"
+        assert result.retained_df["activity_id"].tolist() == [2]
+        assert saved[0]["filter_reason"].tolist() == ["llm_judge_rejected"]
+
+    def test_short_keyword_filter_falls_back_to_description_when_pref_name_missing(
+        self, monkeypatch
+    ):
+        toolkit = ChemblToolkit()
+        df = pd.DataFrame(
+            [
+                {
+                    "activity_id": 1,
+                    "assay_chembl_id": "CHEMBL_A1",
+                    "query_keywords": "CDK2",
+                    "target_pref_name": None,
+                    "target_type": "SINGLE PROTEIN",
+                    "description": "Cyclin-dependent kinase 2 enzyme inhibition assay",
+                    "smi": "CCO",
+                }
+            ]
+        )
+
+        def fake_judge(self, judge_items, **kwargs):
+            assert judge_items[0]["judge_basis"] == "description"
+            return {
+                item["item_id"]: chembl_module._ChemblJudgeDecision(
+                    item_id=item["item_id"],
+                    keep=True,
+                    explanation="Description names CDK2.",
+                )
+                for item in judge_items
+            }
+
+        monkeypatch.setattr(ChemblToolkit, "_run_chembl_retrieval_judge", fake_judge)
+
+        result = toolkit._filter_suspicious_short_keyword_rows(
+            df,
+            keywords=["CDK2"],
+            target_query="CDK2",
+            organism_filter=None,
+            query_slug="cdk2",
+            agent=Mock(model=object()),
+            session_state={},
+        )
+
+        assert result.summary["filtered_row_count"] == 0
+        assert result.retained_df["activity_id"].tolist() == [1]
+
+    def test_short_keyword_filter_uses_organism_basis(self, monkeypatch):
+        toolkit = ChemblToolkit()
+        df = pd.DataFrame(
+            [
+                {
+                    "activity_id": 1,
+                    "assay_chembl_id": "CHEMBL_A1",
+                    "query_keywords": "HIV",
+                    "target_type": "ORGANISM",
+                    "target_organism": "Human immunodeficiency virus 1",
+                    "assay_organism": "Homo sapiens",
+                    "description": "HIV-1 antiviral assay",
+                    "smi": "CCO",
+                }
+            ]
+        )
+
+        def fake_judge(self, judge_items, **kwargs):
+            assert judge_items[0]["judge_scope"] == "organism"
+            assert judge_items[0]["judge_basis"] == "target_organism"
+            return {
+                item["item_id"]: chembl_module._ChemblJudgeDecision(
+                    item_id=item["item_id"],
+                    keep=True,
+                    explanation="Target organism matches HIV-1.",
+                )
+                for item in judge_items
+            }
+
+        monkeypatch.setattr(ChemblToolkit, "_run_chembl_retrieval_judge", fake_judge)
+
+        result = toolkit._filter_suspicious_short_keyword_rows(
+            df,
+            keywords=["HIV"],
+            target_query="HIV",
+            organism_filter="HIV-1",
+            query_slug="hiv",
+            agent=Mock(model=object()),
+            session_state={},
+        )
+
+        assert result.summary["filtered_row_count"] == 0
+        assert result.retained_df["activity_id"].tolist() == [1]
+
+    def test_short_keyword_filter_unavailable_judge_filters_rows(self, monkeypatch):
+        toolkit = ChemblToolkit()
+        df = pd.DataFrame(
+            [
+                {
+                    "activity_id": 1,
+                    "assay_chembl_id": "CHEMBL_A1",
+                    "query_keywords": "CDK2",
+                    "target_pref_name": "Cyclin-dependent kinase 2",
+                    "target_type": "SINGLE PROTEIN",
+                    "description": "CDK2 biochemical assay",
+                    "smi": "CCO",
+                }
+            ]
+        )
+        saved = []
+
+        def fake_save(self, filtered_df, *, query_slug, session_state):
+            saved.append(filtered_df.copy())
+            return "filtered.csv"
+
+        monkeypatch.setattr(ChemblToolkit, "_save_filtered_rows", fake_save)
+
+        result = toolkit._filter_suspicious_short_keyword_rows(
+            df,
+            keywords=["CDK2"],
+            target_query="CDK2",
+            organism_filter=None,
+            query_slug="cdk2",
+            agent=None,
+            session_state={},
+        )
+
+        assert result.summary["judge_status"] == "unavailable"
+        assert result.summary["filtered_row_count"] == 1
+        assert result.retained_df.empty
+        assert saved[0]["filter_reason"].tolist() == ["judge_unavailable"]
+
+    def test_retrieval_filtering_report_section_is_appended(self, tmp_path):
+        toolkit = ChemblToolkit()
+        report_path = tmp_path / "report.md"
+        report_path.write_text("# Dataset Standardization Report\n")
+
+        toolkit._append_retrieval_filtering_report(
+            str(report_path),
+            {
+                "suspicious_row_count": 2,
+                "filtered_row_count": 1,
+                "retained_row_count": 10,
+                "retrieved_row_count": 11,
+                "judge_status": "completed",
+                "fallback_policy": "filter_rows",
+                "filtered_rows_path": "filtered.csv",
+                "decision_counts": {"llm_judge_rejected": 1},
+            },
+        )
+
+        report = report_path.read_text()
+        assert "## ChEMBL Retrieval Filtering" in report
+        assert "Filtered rows artifact: `filtered.csv`" in report
+
     @patch.object(ChemblToolkit, "_ensure_client")
     @patch("cs_copilot.tools.databases.chembl.S3")
     def test_fetch_compounds_multi_keyword_tracks_keywords(
@@ -547,8 +757,22 @@ class TestChemblToolkit:
         # Two keywords: "cdk2" and "kinase"
         # activity_id=1 appears for both keywords (overlap)
         # activity_id=2 only from "cdk2", activity_id=3 only from "kinase"
-        assays_cdk2 = [{"assay_chembl_id": "CHEMBL_A1"}]
-        assays_kinase = [{"assay_chembl_id": "CHEMBL_A2"}]
+        assays_cdk2 = [
+            {
+                "assay_chembl_id": "CHEMBL_A1",
+                "target_pref_name": "Cyclin-dependent kinase 2",
+                "target_type": "SINGLE PROTEIN",
+                "description": "CDK2 biochemical assay",
+            }
+        ]
+        assays_kinase = [
+            {
+                "assay_chembl_id": "CHEMBL_A2",
+                "target_pref_name": "Protein kinase",
+                "target_type": "SINGLE PROTEIN",
+                "description": "Kinase biochemical assay",
+            }
+        ]
 
         activities_cdk2 = [
             {
@@ -616,10 +840,25 @@ class TestChemblToolkit:
             saved_dfs.append(df.copy())
             return original_prepare(df, *args, **kwargs)
 
+        def keep_short_keyword_hits(self, judge_items, **kwargs):
+            return {
+                item["item_id"]: chembl_module._ChemblJudgeDecision(
+                    item_id=item["item_id"],
+                    keep=True,
+                    explanation="Test keeps short-keyword matches.",
+                )
+                for item in judge_items
+            }
+
         monkeypatch.setattr(chembl_module, "prepare_clean_dataset", capture_prepare)
+        monkeypatch.setattr(
+            ChemblToolkit,
+            "_run_chembl_retrieval_judge",
+            keep_short_keyword_hits,
+        )
 
         toolkit = ChemblToolkit()
-        toolkit.fetch_compounds("cdk2, kinase")
+        toolkit.fetch_compounds("cdk2, kinase", agent=Mock(model=object(), session_state={}))
 
         assert len(saved_dfs) == 1
         df = saved_dfs[0]

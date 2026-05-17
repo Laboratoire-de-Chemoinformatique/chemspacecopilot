@@ -208,12 +208,12 @@ CHEMBL_INSTRUCTIONS = [
     "  - Handle rate limiting by implementing appropriate delays",
     # Step 10: Data Processing and Storage
     "Step 10: When working with dataframes, use inplace operations to modify dataframes (e.g., `df.drop(..., inplace=True)`) to avoid printing entire dataframes to the console, which can cause context window issues. Avoid operations like `df.assign()` that return new dataframes and may be printed.",
-    "Step 11: `fetch_compounds` produces two dataset artifacts: raw_dataset_path for provenance and clean_dataset_path for all downstream work.",
+    "Step 11: `fetch_compounds` produces raw_dataset_path for retained retrieval provenance, clean_dataset_path for all downstream work, and filtered_dataset_path when short-keyword ChEMBL hits are removed.",
     "  - The clean CSV is one row per final standardized achiral compound and contains merged IDs plus final processed activity values.",
     "  - Descriptors are written separately to descriptor_parquet_path, and that Parquet includes the final activity values.",
     "Step 12: Use session_state['data_file_paths']['clean_dataset_path'] for downstream agents. `dataset_path` is a backward-compatible alias for the clean dataset, not the raw dataset.",
-    "Step 13: Confirm raw dataset, clean dataset, descriptor Parquet, and standardization report paths are saved.",
-    "Step 14: Provide the user with all artifact paths and summarize invalid rows, duplicates after each step, raw-to-final SMILES collapses, and activity merge policy.",
+    "Step 13: Confirm raw dataset, clean dataset, filtered rows dataset when present, descriptor Parquet, and standardization report paths are saved.",
+    "Step 14: Provide the user with all artifact paths and summarize ChEMBL retrieval filtering, invalid rows, duplicates after each step, raw-to-final SMILES collapses, and activity merge policy.",
 ] + HANDLING_NEW_FILES_INSTRUCTIONS
 
 # ============================================================================
@@ -936,7 +936,7 @@ AGENT_TEAM_INSTRUCTIONS = [
     # Shared session working memory
     "**SESSION WORKING MEMORY**:",
     "  - Important compounds, GTM maps, zones, nodes, datasets, analyses, routes, and reports are stored in `session_state['session_objects']` and summarized in `session_state['session_memory_summary']`.",
-    "  - Dataset objects distinguish raw_dataset_path for provenance from clean_dataset_path for downstream analysis. Prefer clean_dataset_path everywhere; dataset_path is only a backward-compatible clean-data alias.",
+    "  - Dataset objects distinguish raw_dataset_path for retained retrieval provenance from clean_dataset_path for downstream analysis. Prefer clean_dataset_path everywhere; dataset_path is only a backward-compatible clean-data alias. When present, filtered_dataset_path contains ChEMBL rows removed before standardization by short-keyword retrieval validation.",
     "  - Descriptor vectors for clean datasets live in descriptor_parquet_path, and that Parquet includes final activity values aligned to the clean SMILES rows.",
     "  - Standardization reports live in standardization_report_path and should be used when explaining invalid rows, duplicate/collapse counts, stereochemistry removal, and activity merge policy.",
     "  - Use the session memory tools when the user says 'that compound', 'the previous molecule', 'the active zone', 'those nodes', 'the current map', or similar references.",

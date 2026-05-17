@@ -4,15 +4,19 @@
 ChEMBL-specific database toolkit implementation.
 """
 
+import json
 import logging
 import re
 import time
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
 import pandas as pd
 from agno.agent import Agent
+from pydantic import BaseModel, Field
 
-from cs_copilot.storage import S3
+from cs_copilot.storage import S3, OutputOperation, scoped_artifact_path
 from cs_copilot.tools.chemistry.activity_schema import build_compound_memory_preview
 from cs_copilot.tools.chemistry.clean_dataset import prepare_clean_dataset
 from cs_copilot.tools.chemistry.standardize import standardize_smiles_column
@@ -90,6 +94,30 @@ def _build_punctuation_regex(keyword: str) -> str | None:
 logger = logging.getLogger(__name__)
 
 
+class _ChemblJudgeDecision(BaseModel):
+    item_id: str = Field(..., description="Exact item_id from the validation request.")
+    keep: bool = Field(..., description="Whether rows represented by this item should be kept.")
+    explanation: Optional[str] = Field(
+        default=None,
+        description="Brief reason for the keep/filter decision.",
+    )
+
+
+class _ChemblJudgeResponse(BaseModel):
+    decisions: list[_ChemblJudgeDecision] = Field(
+        default_factory=list,
+        description="Validation decisions for suspicious short-keyword retrieval items.",
+    )
+
+
+@dataclass
+class _ChemblRetrievalFilterResult:
+    retained_df: pd.DataFrame
+    filtered_df: pd.DataFrame
+    filtered_rows_path: Optional[str]
+    summary: Dict[str, Any]
+
+
 class ChemblToolkit(BaseDatabaseToolkit):
     """
     ChEMBL-specific database toolkit implementation.
@@ -125,6 +153,20 @@ class ChemblToolkit(BaseDatabaseToolkit):
         "assay_type",
         "assay_organism",
         "target_chembl_id",
+        "target_pref_name",
+        "target_type",
+        "target_organism",
+        "target_tax_id",
+        "target_species_group_flag",
+    ]
+
+    TARGET_METADATA_COLUMNS = [
+        "target_chembl_id",
+        "target_pref_name",
+        "target_type",
+        "target_organism",
+        "target_tax_id",
+        "target_species_group_flag",
     ]
 
     def __init__(
@@ -603,12 +645,44 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 f"Removed {duplicates_removed} duplicate records. Final dataset: {len(merged_df)} records"
             )
 
-            # Step 5: Prepare raw, clean, descriptor, and report artifacts.
             query_slug = "_".join(
                 [kw.replace(" ", "_") for kw in keywords[:3]]
             )  # Limit to first 3 keywords for filename
             if len(keywords) > 3:
                 query_slug += "_and_more"
+            if agent is not None and not isinstance(getattr(agent, "session_state", None), dict):
+                agent.session_state = {}
+            session_for_artifacts = session_state or getattr(agent, "session_state", None)
+
+            filtering = self._filter_suspicious_short_keyword_rows(
+                merged_df,
+                keywords=keywords,
+                target_query=query,
+                organism_filter=organism,
+                query_slug=query_slug,
+                agent=agent,
+                session_state=session_for_artifacts,
+            )
+            merged_df = filtering.retained_df
+
+            if merged_df.empty:
+                filtering_report_path = self._write_retrieval_filtering_only_report(
+                    query_slug,
+                    filtering.summary,
+                    session_for_artifacts,
+                )
+                for state in update_state_targets(agent, session_state):
+                    state.setdefault("data_file_paths", {})
+                    state["data_file_paths"]["filtered_dataset_path"] = filtering.filtered_rows_path
+                    state["data_file_paths"]["standardization_report_path"] = filtering_report_path
+                return self._format_all_rows_filtered_message(
+                    keywords,
+                    filtering.summary,
+                    filtering.filtered_rows_path,
+                    filtering_report_path,
+                )
+
+            # Step 5: Prepare raw, clean, descriptor, and report artifacts.
             prepared = prepare_clean_dataset(
                 merged_df,
                 source_name=f"chembl_{query_slug}",
@@ -617,7 +691,12 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 clean_filename=f"chembl_{query_slug}_clean.csv",
                 descriptor_filename=f"chembl_{query_slug}_descriptors.parquet",
                 report_filename=f"chembl_{query_slug}_standardization_report.md",
-                session_state=session_state or getattr(agent, "session_state", None),
+                session_state=session_for_artifacts,
+            )
+            prepared.standardization_summary["chembl_retrieval_filtering"] = filtering.summary
+            self._append_retrieval_filtering_report(
+                prepared.standardization_report_path,
+                filtering.summary,
             )
             total_assays = len(all_assay_ids)
             clean_df = prepared.clean_df
@@ -636,6 +715,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 state["data_file_paths"][
                     "standardization_report_path"
                 ] = prepared.standardization_report_path
+                if filtering.filtered_rows_path:
+                    state["data_file_paths"]["filtered_dataset_path"] = filtering.filtered_rows_path
                 state["data_file_paths"]["dataset_path"] = prepared.clean_dataset_path
                 dataset_id = register_session_object(
                     state,
@@ -646,9 +727,14 @@ class ChemblToolkit(BaseDatabaseToolkit):
                         "clean_dataset_path": prepared.clean_dataset_path,
                         "descriptor_parquet_path": prepared.descriptor_parquet_path,
                         "standardization_report_path": prepared.standardization_report_path,
+                        "filtered_dataset_path": filtering.filtered_rows_path,
                         "query_keywords": keywords,
                         "row_count": int(len(clean_df)),
                         "raw_row_count": int(len(merged_df)),
+                        "retrieved_raw_row_count": int(filtering.summary["retrieved_row_count"]),
+                        "retrieval_filtered_row_count": int(
+                            filtering.summary["filtered_row_count"]
+                        ),
                         "unique_compounds": int(clean_df["smiles"].nunique()),
                         "assay_count": total_assays,
                         "organism_filter": organism,
@@ -700,11 +786,459 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 descriptor_parquet_path=prepared.descriptor_parquet_path,
                 standardization_report_path=prepared.standardization_report_path,
                 standardization_summary=prepared.standardization_summary,
+                retrieval_filtering_summary=filtering.summary,
             )
 
         except Exception as e:
             logger.error(f"Error fetching ChEMBL compounds: {e}")
             raise
+
+    def _filter_suspicious_short_keyword_rows(
+        self,
+        df: pd.DataFrame,
+        *,
+        keywords: Sequence[str],
+        target_query: str,
+        organism_filter: Optional[str],
+        query_slug: str,
+        agent: Optional[Agent],
+        session_state: Optional[Dict[str, Any]],
+    ) -> _ChemblRetrievalFilterResult:
+        """Filter rows that were retrieved only by short ChEMBL keyword hits."""
+        base_summary: Dict[str, Any] = {
+            "enabled": True,
+            "short_keyword_threshold": 5,
+            "fallback_policy": "filter_rows",
+            "retrieved_row_count": int(len(df)),
+            "suspicious_row_count": 0,
+            "filtered_row_count": 0,
+            "retained_row_count": int(len(df)),
+            "filtered_rows_path": None,
+            "judge_status": "not_needed",
+            "query_keywords": list(keywords),
+            "organism_filter": organism_filter,
+        }
+        if df.empty or "query_keywords" not in df.columns:
+            return _ChemblRetrievalFilterResult(
+                retained_df=df.copy(),
+                filtered_df=df.iloc[0:0].copy(),
+                filtered_rows_path=None,
+                summary=base_summary,
+            )
+
+        suspicious_mask = df["query_keywords"].apply(self._short_keyword_only)
+        suspicious_df = df[suspicious_mask].copy()
+        base_summary["suspicious_row_count"] = int(len(suspicious_df))
+        if suspicious_df.empty:
+            return _ChemblRetrievalFilterResult(
+                retained_df=df.copy(),
+                filtered_df=df.iloc[0:0].copy(),
+                filtered_rows_path=None,
+                summary=base_summary,
+            )
+
+        judge_items, row_items = self._build_judge_items(suspicious_df, organism_filter)
+        filtered_metadata: Dict[Any, Dict[str, Any]] = {}
+
+        missing_basis_indices = set(suspicious_df.index) - set(row_items)
+        for row_index in missing_basis_indices:
+            filtered_metadata[row_index] = {
+                "filter_reason": "missing_judge_basis",
+                "judge_basis": None,
+                "judge_value": None,
+                "judge_decision": "filter",
+                "judge_explanation": (
+                    "No target preferred name, organism, or assay description was available "
+                    "to validate a short-keyword hit."
+                ),
+            }
+
+        decisions: Dict[str, _ChemblJudgeDecision] = {}
+        if judge_items:
+            try:
+                decisions = self._run_chembl_retrieval_judge(
+                    judge_items,
+                    target_query=target_query,
+                    organism_filter=organism_filter,
+                    keywords=keywords,
+                    agent=agent,
+                )
+                base_summary["judge_status"] = "completed"
+            except Exception as exc:
+                logger.warning("ChEMBL short-keyword judge unavailable: %s", exc)
+                base_summary["judge_status"] = "unavailable"
+                for row_index, item in row_items.items():
+                    filtered_metadata[row_index] = {
+                        "filter_reason": "judge_unavailable",
+                        "judge_basis": item["judge_basis"],
+                        "judge_value": item["value"],
+                        "judge_decision": "filter",
+                        "judge_explanation": (
+                            "Short-keyword hit could not be validated because the judge "
+                            "was unavailable or returned invalid output."
+                        ),
+                    }
+
+        for row_index, item in row_items.items():
+            if row_index in filtered_metadata:
+                continue
+            decision = decisions.get(item["item_id"])
+            if decision is None:
+                filtered_metadata[row_index] = {
+                    "filter_reason": "judge_unavailable",
+                    "judge_basis": item["judge_basis"],
+                    "judge_value": item["value"],
+                    "judge_decision": "filter",
+                    "judge_explanation": (
+                        "Short-keyword hit did not receive a valid judge decision."
+                    ),
+                }
+                continue
+            if not decision.keep:
+                filtered_metadata[row_index] = {
+                    "filter_reason": "llm_judge_rejected",
+                    "judge_basis": item["judge_basis"],
+                    "judge_value": item["value"],
+                    "judge_decision": "filter",
+                    "judge_explanation": decision.explanation,
+                }
+
+        filtered_indices = list(filtered_metadata)
+        if filtered_indices:
+            filtered_df = df.loc[filtered_indices].copy()
+            for column in (
+                "filter_reason",
+                "judge_basis",
+                "judge_value",
+                "judge_decision",
+                "judge_explanation",
+            ):
+                filtered_df[column] = [
+                    filtered_metadata[row_index].get(column) for row_index in filtered_indices
+                ]
+            retained_df = df.drop(index=filtered_indices).copy()
+        else:
+            filtered_df = df.iloc[0:0].copy()
+            retained_df = df.copy()
+
+        filtered_rows_path = self._save_filtered_rows(
+            filtered_df,
+            query_slug=query_slug,
+            session_state=session_state,
+        )
+        base_summary.update(
+            {
+                "filtered_row_count": int(len(filtered_df)),
+                "retained_row_count": int(len(retained_df)),
+                "filtered_rows_path": filtered_rows_path,
+                "decision_counts": (
+                    filtered_df["filter_reason"].value_counts().to_dict()
+                    if not filtered_df.empty and "filter_reason" in filtered_df.columns
+                    else {}
+                ),
+            }
+        )
+        return _ChemblRetrievalFilterResult(
+            retained_df=retained_df,
+            filtered_df=filtered_df,
+            filtered_rows_path=filtered_rows_path,
+            summary=base_summary,
+        )
+
+    @staticmethod
+    def _is_short_keyword(keyword: Any) -> bool:
+        return len(str(keyword or "").strip()) < 5
+
+    def _short_keyword_only(self, query_keywords: Any) -> bool:
+        keywords = [kw.strip() for kw in str(query_keywords or "").split("|") if kw.strip()]
+        return bool(keywords) and all(self._is_short_keyword(keyword) for keyword in keywords)
+
+    def _build_judge_items(
+        self,
+        suspicious_df: pd.DataFrame,
+        organism_filter: Optional[str],
+    ) -> tuple[list[Dict[str, Any]], Dict[Any, Dict[str, Any]]]:
+        items_by_key: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+        row_items: Dict[Any, Dict[str, Any]] = {}
+
+        for row_index, row in suspicious_df.iterrows():
+            scope = self._infer_judge_scope(row, organism_filter)
+            basis_column = self._judge_basis_column(row, scope)
+            basis_value = self._clean_cell_value(row.get(basis_column))
+            if not basis_column or not basis_value:
+                continue
+
+            key = (scope, basis_column, basis_value)
+            item = items_by_key.get(key)
+            if item is None:
+                item = {
+                    "item_id": f"item_{len(items_by_key) + 1}",
+                    "judge_scope": scope,
+                    "judge_basis": basis_column,
+                    "value": basis_value,
+                    "row_count": 0,
+                    "assay_chembl_ids": [],
+                    "sample_descriptions": [],
+                }
+                items_by_key[key] = item
+
+            item["row_count"] += 1
+            assay_id = self._clean_cell_value(row.get("assay_chembl_id"))
+            if assay_id and assay_id not in item["assay_chembl_ids"]:
+                item["assay_chembl_ids"].append(assay_id)
+            description = self._clean_cell_value(row.get("description"))
+            if description and description not in item["sample_descriptions"]:
+                item["sample_descriptions"].append(description)
+            item["assay_chembl_ids"] = item["assay_chembl_ids"][:10]
+            item["sample_descriptions"] = item["sample_descriptions"][:3]
+            row_items[row_index] = item
+
+        return list(items_by_key.values()), row_items
+
+    def _infer_judge_scope(self, row: pd.Series, organism_filter: Optional[str]) -> str:
+        target_type = self._clean_cell_value(row.get("target_type")).lower()
+        if any(token in target_type for token in ("organism", "cell-line", "cell line", "tissue")):
+            return "organism"
+        if "protein" in target_type or self._clean_cell_value(row.get("target_pref_name")):
+            return "protein"
+        if organism_filter and any(
+            token in str(organism_filter).lower()
+            for token in ("virus", "viral", "hiv", "influenza", "sars", "coronavirus")
+        ):
+            return "organism"
+        return "protein"
+
+    def _judge_basis_column(self, row: pd.Series, scope: str) -> Optional[str]:
+        if scope == "organism":
+            for column in ("target_organism", "assay_organism", "description"):
+                if self._clean_cell_value(row.get(column)):
+                    return column
+            return None
+
+        if self._clean_cell_value(row.get("target_pref_name")):
+            return "target_pref_name"
+        if self._clean_cell_value(row.get("description")):
+            return "description"
+        return None
+
+    @staticmethod
+    def _clean_cell_value(value: Any) -> str:
+        if value is None:
+            return ""
+        try:
+            if bool(pd.isna(value)):
+                return ""
+        except (TypeError, ValueError):
+            pass
+        text = str(value).strip()
+        if text.lower() in {"", "nan", "none", "null"}:
+            return ""
+        return text
+
+    def _run_chembl_retrieval_judge(
+        self,
+        judge_items: list[Dict[str, Any]],
+        *,
+        target_query: str,
+        organism_filter: Optional[str],
+        keywords: Sequence[str],
+        agent: Optional[Agent],
+    ) -> Dict[str, _ChemblJudgeDecision]:
+        model = getattr(agent, "model", None)
+        if model is None:
+            raise RuntimeError("No agent model is available for ChEMBL short-keyword judging.")
+
+        prompt = self._build_retrieval_judge_prompt(
+            judge_items,
+            target_query=target_query,
+            organism_filter=organism_filter,
+            keywords=keywords,
+        )
+        judge = Agent(
+            model=model,
+            name="chembl_short_keyword_retrieval_judge",
+            description="Validate suspicious ChEMBL rows retrieved by short search keywords.",
+            instructions=[
+                "Decide whether each item is consistent with the requested ChEMBL target.",
+                "Return one decision for every provided item_id.",
+                "Reject unrelated proteins, organisms, assay systems, and generic short-string hits.",
+                "Keep only direct matches, accepted synonyms, orthologs within the requested context, "
+                "or organism strain/parent-name matches.",
+            ],
+            output_schema=_ChemblJudgeResponse,
+            structured_outputs=True,
+            use_json_mode=True,
+            markdown=False,
+            telemetry=False,
+        )
+        response = judge.run(prompt, stream=False)
+        parsed = self._parse_retrieval_judge_response(response.content)
+        decisions = {decision.item_id: decision for decision in parsed.decisions}
+        missing = {item["item_id"] for item in judge_items} - set(decisions)
+        if missing:
+            raise ValueError(f"Judge omitted decisions for item ids: {sorted(missing)}")
+        return decisions
+
+    @staticmethod
+    def _build_retrieval_judge_prompt(
+        judge_items: list[Dict[str, Any]],
+        *,
+        target_query: str,
+        organism_filter: Optional[str],
+        keywords: Sequence[str],
+    ) -> str:
+        return (
+            "Validate ChEMBL activity rows that were retrieved only through short "
+            "search keywords, which are prone to false substring matches.\n"
+            f"Original target/query context: {target_query}\n"
+            f"Search keywords: {', '.join(keywords)}\n"
+            f"Organism filter: {organism_filter or 'none'}\n\n"
+            "For protein scope, keep target preferred names only when they are the "
+            "requested protein, a direct synonym, or a clear ortholog in context. "
+            "If the basis is an assay description, keep it only when the description "
+            "clearly names the requested protein/target.\n"
+            "For organism scope, keep organism names only when they match the requested "
+            "organism, virus, strain, or accepted parent/synonym. If the basis is an "
+            "assay description, keep it only when the description clearly refers to the "
+            "requested organism.\n\n"
+            "Return structured decisions with item_id, keep, and explanation.\n"
+            f"Items:\n{json.dumps(judge_items, indent=2, sort_keys=True)}"
+        )
+
+    @staticmethod
+    def _parse_retrieval_judge_response(content: Any) -> _ChemblJudgeResponse:
+        if isinstance(content, _ChemblJudgeResponse):
+            return content
+        if isinstance(content, dict):
+            return _ChemblJudgeResponse.model_validate(content)
+        if hasattr(content, "model_dump"):
+            return _ChemblJudgeResponse.model_validate(content.model_dump())
+        if isinstance(content, str):
+            text = content.strip()
+            if text.startswith("```"):
+                text = re.sub(r"^```(?:json)?\s*", "", text)
+                text = re.sub(r"\s*```$", "", text).strip()
+            try:
+                return _ChemblJudgeResponse.model_validate_json(text)
+            except Exception:
+                return _ChemblJudgeResponse.model_validate(json.loads(text))
+        raise ValueError(f"Unsupported judge response type: {type(content)!r}")
+
+    def _save_filtered_rows(
+        self,
+        filtered_df: pd.DataFrame,
+        *,
+        query_slug: str,
+        session_state: Optional[Dict[str, Any]],
+    ) -> Optional[str]:
+        if filtered_df.empty:
+            return None
+        filename = f"chembl_{query_slug}_suspicious_filtered.csv"
+        rel_path = scoped_artifact_path(
+            filename,
+            OutputOperation.CHEMICAL_SPACE,
+            "datasets",
+            "filtered",
+            session_state=session_state,
+            workflow_slug="chemical_space",
+        )
+        with S3.open(rel_path, "w") as handle:
+            filtered_df.to_csv(handle, index=False)
+        return S3.path(rel_path)
+
+    def _append_retrieval_filtering_report(
+        self,
+        report_path: str,
+        filtering_summary: Dict[str, Any],
+    ) -> None:
+        if not filtering_summary or filtering_summary.get("suspicious_row_count", 0) == 0:
+            return
+        section = self._format_retrieval_filtering_report_section(filtering_summary)
+        try:
+            if self._is_remote_or_explicit_path(report_path):
+                try:
+                    with S3.open(report_path, "r") as handle:
+                        existing = handle.read()
+                except Exception:
+                    existing = ""
+                if not isinstance(existing, str):
+                    existing = ""
+                with S3.open(report_path, "w") as handle:
+                    handle.write(existing.rstrip() + "\n\n" + section)
+            else:
+                path = Path(report_path)
+                existing = path.read_text() if path.exists() else ""
+                path.write_text(existing.rstrip() + "\n\n" + section)
+        except Exception as exc:
+            logger.warning("Could not append ChEMBL retrieval filtering report: %s", exc)
+
+    def _write_retrieval_filtering_only_report(
+        self,
+        query_slug: str,
+        filtering_summary: Dict[str, Any],
+        session_state: Optional[Dict[str, Any]],
+    ) -> str:
+        filename = f"chembl_{query_slug}_standardization_report.md"
+        rel_path = scoped_artifact_path(
+            filename,
+            OutputOperation.CHEMICAL_SPACE,
+            "standardization",
+            session_state=session_state,
+            workflow_slug="chemical_space",
+        )
+        report = (
+            "# Dataset Standardization Report\n\n"
+            "No molecular standardization was run because all retrieved ChEMBL rows "
+            "were removed during retrieval validation.\n\n"
+            f"{self._format_retrieval_filtering_report_section(filtering_summary)}"
+        )
+        with S3.open(rel_path, "w") as handle:
+            handle.write(report)
+        return S3.path(rel_path)
+
+    @staticmethod
+    def _is_remote_or_explicit_path(path: str) -> bool:
+        return isinstance(path, str) and (
+            path.startswith("s3://") or path.startswith("/") or path.startswith("file://")
+        )
+
+    @staticmethod
+    def _format_retrieval_filtering_report_section(summary: Dict[str, Any]) -> str:
+        filtered_path = summary.get("filtered_rows_path") or "None"
+        decision_counts = summary.get("decision_counts") or {}
+        return (
+            "## ChEMBL Retrieval Filtering\n"
+            "- Applied before molecular standardization to rows retrieved only by "
+            "query keywords shorter than 5 characters.\n"
+            f"- Retrieved rows before filtering: {summary.get('retrieved_row_count', 0)}\n"
+            f"- Suspicious short-keyword rows evaluated: "
+            f"{summary.get('suspicious_row_count', 0)}\n"
+            f"- Rows filtered out: {summary.get('filtered_row_count', 0)}\n"
+            f"- Rows retained for standardization: {summary.get('retained_row_count', 0)}\n"
+            f"- Judge status: {summary.get('judge_status', 'unknown')}\n"
+            f"- Fallback policy: {summary.get('fallback_policy', 'filter_rows')}\n"
+            f"- Filtered rows artifact: `{filtered_path}`\n"
+            f"- Filter reasons: "
+            f"`{json.dumps(decision_counts, sort_keys=True, default=str)}`\n"
+        )
+
+    @staticmethod
+    def _format_all_rows_filtered_message(
+        keywords: Sequence[str],
+        filtering_summary: Dict[str, Any],
+        filtered_rows_path: Optional[str],
+        filtering_report_path: Optional[str],
+    ) -> str:
+        keywords_str = ", ".join([f"'{kw}'" for kw in keywords])
+        return (
+            "No clean ChEMBL dataset was created because all retrieved rows were "
+            "filtered during short-keyword validation.\n"
+            f"Keywords: {keywords_str}\n"
+            f"Suspicious rows evaluated: {filtering_summary.get('suspicious_row_count', 0)}\n"
+            f"Rows filtered out: {filtering_summary.get('filtered_row_count', 0)}\n"
+            f"Filtered rows artifact: `{filtered_rows_path}`\n"
+            f"Retrieval filtering report: `{filtering_report_path}`"
+        )
 
     @staticmethod
     def _memory_compound_preview(df: pd.DataFrame, limit: int = 50) -> list[Dict[str, Any]]:
@@ -760,6 +1294,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
         if assay_df.empty or "assay_chembl_id" not in assay_df.columns:
             logger.warning("Assay data missing assay_chembl_id; skipping assay merge")
             return activities_df
+        for column in self.TARGET_METADATA_COLUMNS:
+            if column not in assay_df.columns:
+                assay_df[column] = None
 
         return activities_df.merge(
             assay_df,
@@ -796,6 +1333,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         descriptor_parquet_path: Optional[str] = None,
         standardization_report_path: Optional[str] = None,
         standardization_summary: Optional[Dict[str, Any]] = None,
+        retrieval_filtering_summary: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Format success message for ChEMBL data fetch."""
         sample_row = df.head(1).to_string(index=False) if not df.empty else "No data"
@@ -833,6 +1371,17 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
         if duplicates_removed > 0:
             message += f"🔄 Removed {duplicates_removed} duplicate raw activity records\n"
+
+        if retrieval_filtering_summary and retrieval_filtering_summary.get("suspicious_row_count"):
+            filtered_count = retrieval_filtering_summary.get("filtered_row_count", 0)
+            filtered_path = retrieval_filtering_summary.get("filtered_rows_path")
+            message += (
+                "🧯 Short-keyword retrieval filtering: "
+                f"evaluated {retrieval_filtering_summary.get('suspicious_row_count', 0)} "
+                f"suspicious rows and filtered {filtered_count}\n"
+            )
+            if filtered_path:
+                message += f"📄 Filtered rows: `{filtered_path}`\n"
 
         if standardization_summary:
             message += (
