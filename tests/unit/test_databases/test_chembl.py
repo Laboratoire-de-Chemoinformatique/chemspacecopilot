@@ -981,6 +981,101 @@ class TestChemblToolkit:
         assert result.summary["filtered_row_count"] == 0
         assert result.retained_df["activity_id"].tolist() == [1]
 
+    def test_metadata_filter_partial_judge_keeps_omitted_rows(self, monkeypatch):
+        toolkit = ChemblToolkit()
+        df = pd.DataFrame(
+            [
+                {
+                    "activity_id": 1,
+                    "assay_chembl_id": "CHEMBL_A1",
+                    "query_keywords": "BRAF kinase",
+                    "target_pref_name": "Beta-secretase 1",
+                    "target_type": "SINGLE PROTEIN",
+                    "target_organism": None,
+                    "description": "BACE1 biochemical assay",
+                    "smi": "CCO",
+                },
+                {
+                    "activity_id": 2,
+                    "assay_chembl_id": "CHEMBL_A2",
+                    "query_keywords": "BRAF kinase",
+                    "target_pref_name": "B-Raf proto-oncogene serine/threonine-protein kinase",
+                    "target_type": "SINGLE PROTEIN",
+                    "target_organism": None,
+                    "description": "BRAF biochemical assay",
+                    "smi": "CCC",
+                },
+            ]
+        )
+
+        def partial_metadata_judge(self, judge_items, **kwargs):
+            assert len(judge_items) == 2
+            rejected_item = next(
+                item for item in judge_items if item["target_pref_name"] == "Beta-secretase 1"
+            )
+            return {
+                rejected_item["item_id"]: chembl_module._ChemblJudgeDecision(
+                    item_id=rejected_item["item_id"],
+                    keep=False,
+                    explanation="Wrong protein target.",
+                )
+            }
+
+        monkeypatch.setattr(ChemblToolkit, "_run_chembl_metadata_judge", partial_metadata_judge)
+
+        result = toolkit._filter_suspicious_short_keyword_rows(
+            df,
+            keywords=["BRAF kinase"],
+            target_query="BRAF kinase",
+            organism_filter=None,
+            query_slug="braf_kinase",
+            agent=Mock(model=object()),
+            session_state={},
+        )
+
+        assert result.summary["metadata_judge_status"] == "partial"
+        assert result.summary["metadata_missing_decision_count"] == 1
+        assert result.summary["metadata_filtered_row_count"] == 1
+        assert result.retained_df["activity_id"].tolist() == [2]
+
+    def test_metadata_judge_returns_partial_decisions_when_item_omitted(
+        self, monkeypatch
+    ):
+        toolkit = ChemblToolkit()
+
+        class FakeResponse:
+            content = {
+                "decisions": [
+                    {
+                        "item_id": "metadata_item_1",
+                        "keep": True,
+                        "explanation": "Returned decision.",
+                    }
+                ]
+            }
+
+        class FakeAgent:
+            def __init__(self, **kwargs):
+                pass
+
+            def run(self, prompt, stream=False):
+                return FakeResponse()
+
+        monkeypatch.setattr(chembl_module, "Agent", FakeAgent)
+
+        decisions = toolkit._run_chembl_metadata_judge(
+            [
+                {"item_id": "metadata_item_1"},
+                {"item_id": "metadata_item_2"},
+            ],
+            target_query="BRAF kinase",
+            organism_filter=None,
+            keywords=["BRAF kinase"],
+            agent=Mock(model=object()),
+        )
+
+        assert list(decisions) == ["metadata_item_1"]
+
     def test_retrieval_filter_combines_short_keyword_and_metadata_judges(
         self, monkeypatch
     ):

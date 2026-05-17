@@ -813,6 +813,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
             "retrieved_row_count": int(len(df)),
             "suspicious_row_count": 0,
             "metadata_judge_row_count": 0,
+            "metadata_missing_decision_count": 0,
             "filtered_row_count": 0,
             "metadata_filtered_row_count": 0,
             "retained_row_count": int(len(df)),
@@ -910,6 +911,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
         metadata_decisions: Dict[str, _ChemblJudgeDecision] = {}
         if metadata_items:
+            expected_metadata_item_ids = {item["item_id"] for item in metadata_items}
             try:
                 metadata_decisions = self._run_chembl_metadata_judge(
                     metadata_items,
@@ -918,29 +920,35 @@ class ChemblToolkit(BaseDatabaseToolkit):
                     keywords=keywords,
                     agent=agent,
                 )
-                base_summary["metadata_judge_status"] = "completed"
+                missing_metadata_item_ids = expected_metadata_item_ids - set(
+                    metadata_decisions
+                )
+                base_summary["metadata_missing_decision_count"] = len(
+                    missing_metadata_item_ids
+                )
+                base_summary["metadata_judge_status"] = (
+                    "partial" if missing_metadata_item_ids else "completed"
+                )
             except Exception as exc:
                 logger.warning("ChEMBL target metadata judge unavailable: %s", exc)
                 base_summary["metadata_judge_status"] = "unavailable"
 
         metadata_filtered_count = 0
-        if metadata_decisions:
-            for row_index, item in metadata_row_items.items():
-                if row_index in filtered_metadata:
-                    continue
-                decision = metadata_decisions.get(item["item_id"])
-                if decision is None:
-                    base_summary["metadata_judge_status"] = "unavailable"
-                    continue
-                if not decision.keep:
-                    filtered_metadata[row_index] = {
-                        "filter_reason": "metadata_llm_judge_rejected",
-                        "judge_basis": item["judge_basis"],
-                        "judge_value": item["value"],
-                        "judge_decision": "filter",
-                        "judge_explanation": decision.explanation,
-                    }
-                    metadata_filtered_count += 1
+        for row_index, item in metadata_row_items.items():
+            if row_index in filtered_metadata:
+                continue
+            decision = metadata_decisions.get(item["item_id"])
+            if decision is None:
+                continue
+            if not decision.keep:
+                filtered_metadata[row_index] = {
+                    "filter_reason": "metadata_llm_judge_rejected",
+                    "judge_basis": item["judge_basis"],
+                    "judge_value": item["value"],
+                    "judge_decision": "filter",
+                    "judge_explanation": decision.explanation,
+                }
+                metadata_filtered_count += 1
 
         filtered_indices = list(filtered_metadata)
         if filtered_indices:
@@ -1239,7 +1247,11 @@ class ChemblToolkit(BaseDatabaseToolkit):
         decisions = {decision.item_id: decision for decision in parsed.decisions}
         missing = {item["item_id"] for item in judge_items} - set(decisions)
         if missing:
-            raise ValueError(f"Metadata judge omitted decisions for item ids: {sorted(missing)}")
+            logger.warning(
+                "ChEMBL metadata judge omitted decisions for item ids: %s; "
+                "keeping rows represented by omitted items.",
+                sorted(missing),
+            )
         return decisions
 
     @staticmethod
@@ -1425,6 +1437,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
             f"- Short-keyword judge status: {summary.get('judge_status', 'unknown')}\n"
             f"- Target metadata judge status: "
             f"{summary.get('metadata_judge_status', 'unknown')}\n"
+            f"- Target metadata omitted decisions: "
+            f"{summary.get('metadata_missing_decision_count', 0)}\n"
             f"- Fallback policy: {summary.get('fallback_policy', 'filter_rows')}\n"
             f"- Short-keyword fallback policy: "
             f"{summary.get('fallback_policy', 'filter_rows')}\n"
@@ -1614,6 +1628,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 "rows with populated target metadata and filtered "
                 f"{retrieval_filtering_summary.get('metadata_filtered_row_count', 0)}\n"
             )
+            missing_count = retrieval_filtering_summary.get("metadata_missing_decision_count", 0)
+            if missing_count:
+                message += f"🧯 Target metadata judge omitted {missing_count} item(s); kept them\n"
             filtered_path = retrieval_filtering_summary.get("filtered_rows_path")
             if filtered_path and not retrieval_filtering_summary.get("suspicious_row_count"):
                 message += f"📄 Filtered rows: `{filtered_path}`\n"
