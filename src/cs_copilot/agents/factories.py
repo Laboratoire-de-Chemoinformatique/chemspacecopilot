@@ -345,6 +345,7 @@ class ChEMBLDownloaderFactory(BaseAgentFactory):
                     "dataset_path": None,  # Backward-compatible alias for clean_dataset_path.
                     "raw_dataset_path": None,
                     "clean_dataset_path": None,
+                    "filtered_dataset_path": None,
                     "descriptor_parquet_path": None,
                     "standardization_report_path": None,
                 }
@@ -517,6 +518,7 @@ class MolecularDesignerFactory(BaseAgentFactory):
                     "dataset_path": None,  # Backward-compatible alias for clean_dataset_path.
                     "raw_dataset_path": None,
                     "clean_dataset_path": None,
+                    "filtered_dataset_path": None,
                     "descriptor_parquet_path": None,
                     "standardization_report_path": None,
                 },

@@ -64,6 +64,15 @@ class ChemblDataFetcher(ABC):
 class RestChemblFetcher(ChemblDataFetcher):
     """Fetches ChEMBL data via the REST API (chembl_webresource_client)."""
 
+    TARGET_FIELDS = [
+        "target_chembl_id",
+        "pref_name",
+        "target_type",
+        "organism",
+        "tax_id",
+        "species_group_flag",
+    ]
+
     def __init__(self, ensure_client_fn: Callable):
         self._ensure_client = ensure_client_fn
 
@@ -75,7 +84,62 @@ class RestChemblFetcher(ChemblDataFetcher):
             filter_kwargs: Dict[str, Any] = {"description__icontains": keyword}
         if organism:
             filter_kwargs["target_organism__icontains"] = organism
-        return list(client.assay.filter(**filter_kwargs))
+        assays = [
+            self._normalize_assay_record(record) for record in client.assay.filter(**filter_kwargs)
+        ]
+        return self._enrich_assays_with_target_metadata(client, assays)
+
+    def _enrich_assays_with_target_metadata(
+        self,
+        client: Any,
+        assays: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        target_ids = sorted(
+            {
+                str(assay.get("target_chembl_id")).strip()
+                for assay in assays
+                if assay.get("target_chembl_id")
+            }
+        )
+        if not target_ids:
+            return assays
+
+        try:
+            target_records = list(
+                client.target.filter(target_chembl_id__in=target_ids).only(self.TARGET_FIELDS)
+            )
+        except Exception as exc:
+            logger.warning("Could not enrich ChEMBL assays with target metadata: %s", exc)
+            return assays
+
+        target_lookup = {
+            record.get("target_chembl_id"): record
+            for record in target_records
+            if record.get("target_chembl_id")
+        }
+        for assay in assays:
+            target = target_lookup.get(assay.get("target_chembl_id")) or {}
+            assay["target_pref_name"] = assay.get("target_pref_name") or target.get("pref_name")
+            assay["target_type"] = assay.get("target_type") or target.get("target_type")
+            assay["target_organism"] = assay.get("target_organism") or target.get("organism")
+            assay["target_tax_id"] = assay.get("target_tax_id") or target.get("tax_id")
+            assay["target_species_group_flag"] = assay.get(
+                "target_species_group_flag"
+            ) or target.get("species_group_flag")
+        return assays
+
+    @staticmethod
+    def _normalize_assay_record(record: Dict[str, Any]) -> Dict[str, Any]:
+        assay = dict(record)
+        if "target_pref_name" not in assay and "pref_name" in assay:
+            assay["target_pref_name"] = assay.get("pref_name")
+        if "target_organism" not in assay and "organism" in assay:
+            assay["target_organism"] = assay.get("organism")
+        if "target_tax_id" not in assay and "tax_id" in assay:
+            assay["target_tax_id"] = assay.get("tax_id")
+        if "target_species_group_flag" not in assay and "species_group_flag" in assay:
+            assay["target_species_group_flag"] = assay.get("species_group_flag")
+        return assay
 
     def fetch_activities(self, assay_ids, assay_type_codes, fields):
         client = self._ensure_client()
@@ -251,7 +315,12 @@ class SqlChemblFetcher(ChemblDataFetcher):
                 a.description,
                 a.assay_type,
                 a.assay_organism,
-                td.chembl_id AS target_chembl_id
+                td.chembl_id AS target_chembl_id,
+                td.pref_name AS target_pref_name,
+                td.target_type,
+                td.organism AS target_organism,
+                td.tax_id AS target_tax_id,
+                td.species_group_flag AS target_species_group_flag
             FROM assays a
             LEFT JOIN target_dictionary td ON a.tid = td.tid
             WHERE {where_clause}
