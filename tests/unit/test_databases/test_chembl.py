@@ -332,7 +332,7 @@ class TestChemblToolkit:
         mock_s3.path.side_effect = lambda rel: rel
 
         toolkit = ChemblToolkit()
-        result = toolkit.fetch_compounds("kinase", max_records=100)
+        result = toolkit.fetch_compounds("kinase")
 
         assert "✅ Fetched" in result
         assert "kinase" in result
@@ -404,7 +404,6 @@ class TestChemblToolkit:
             "virus",
             organism="HIV-1",
             assay_types=["binding", "functional"],
-            max_records=50,
         )
 
         assert "Assay types filtered: Binding, Functional" in result
@@ -456,7 +455,7 @@ class TestChemblToolkit:
         original_prefix = S3.prefix
         S3.prefix = "sessions/test-session"
         try:
-            result = ChemblToolkit().fetch_compounds("kinase", max_records=100)
+            result = ChemblToolkit().fetch_compounds("kinase")
         finally:
             S3.prefix = original_prefix
 
@@ -485,13 +484,6 @@ class TestChemblToolkit:
 
         with pytest.raises(ValueError, match="query must be a non-empty string"):
             toolkit.fetch_compounds("")
-
-    def test_fetch_compounds_invalid_max_records(self):
-        """Test compound fetching with invalid max_records."""
-        toolkit = ChemblToolkit()
-
-        with pytest.raises(ValueError, match="max_records must be a positive integer"):
-            toolkit.fetch_compounds("kinase", max_records=-1)
 
     def test_fetch_compounds_invalid_assay_type(self):
         """Test validation for unsupported assay type labels."""
@@ -968,7 +960,7 @@ class TestChemblIntegration:
             toolkit = ChemblToolkit()
 
             # Step 1: Fetch compounds
-            fetch_result = toolkit.fetch_compounds("kinase", max_records=10)
+            fetch_result = toolkit.fetch_compounds("kinase")
             assert "✅ Fetched" in fetch_result
 
             # Step 2: Describe dataset

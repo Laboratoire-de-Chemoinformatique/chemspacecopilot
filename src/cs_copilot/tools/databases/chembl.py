@@ -20,7 +20,6 @@ from cs_copilot.tools.io.session_memory import (
     register_session_object,
     update_state_targets,
 )
-from cs_copilot.tools.io.utils import validate_positive_int
 
 from .base import BaseDatabaseToolkit, DatabaseError, NotFound, RateLimited, ValidationError
 from .chembl_fetcher import ChemblDataFetcher, RestChemblFetcher, SqlChemblFetcher
@@ -448,7 +447,6 @@ class ChemblToolkit(BaseDatabaseToolkit):
     def fetch_compounds(
         self,
         query: str = "bioactivity data",
-        max_records: Optional[int] = None,
         organism: Optional[str] = None,
         assay_types: Optional[Sequence[str]] = None,
         mechanism: Optional[str] = None,
@@ -463,7 +461,6 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 - A single string (e.g., "kinase")
                 - A comma-separated string (e.g., "kinase, BRAF, PPAR-alpha")
                 - Multiple queries will be processed separately and merged
-            max_records: Maximum number of records to return per keyword (None for all)
             organism: Optional organism filter (e.g., "Homo sapiens", "Influenza A")
             assay_types: Optional list of assay types to keep. MUST be a list, not a dict.
                 Examples:
@@ -486,9 +483,6 @@ class ChemblToolkit(BaseDatabaseToolkit):
         """
         if not query or not isinstance(query, str):
             raise ValueError("query must be a non-empty string")
-
-        if max_records is not None:
-            validate_positive_int(max_records, "max_records")
 
         if mechanism is not None:
             if not isinstance(mechanism, str):
