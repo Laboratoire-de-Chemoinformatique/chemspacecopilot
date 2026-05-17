@@ -1038,9 +1038,7 @@ class TestChemblToolkit:
         assert result.summary["metadata_filtered_row_count"] == 1
         assert result.retained_df["activity_id"].tolist() == [2]
 
-    def test_metadata_judge_returns_partial_decisions_when_item_omitted(
-        self, monkeypatch
-    ):
+    def test_metadata_judge_returns_partial_decisions_when_item_omitted(self, monkeypatch):
         toolkit = ChemblToolkit()
 
         class FakeResponse:
@@ -1076,9 +1074,7 @@ class TestChemblToolkit:
 
         assert list(decisions) == ["metadata_item_1"]
 
-    def test_retrieval_filter_combines_short_keyword_and_metadata_judges(
-        self, monkeypatch
-    ):
+    def test_retrieval_filter_combines_short_keyword_and_metadata_judges(self, monkeypatch):
         toolkit = ChemblToolkit()
         df = pd.DataFrame(
             [

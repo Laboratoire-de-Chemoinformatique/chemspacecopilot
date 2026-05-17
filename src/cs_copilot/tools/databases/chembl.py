@@ -920,12 +920,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
                     keywords=keywords,
                     agent=agent,
                 )
-                missing_metadata_item_ids = expected_metadata_item_ids - set(
-                    metadata_decisions
-                )
-                base_summary["metadata_missing_decision_count"] = len(
-                    missing_metadata_item_ids
-                )
+                missing_metadata_item_ids = expected_metadata_item_ids - set(metadata_decisions)
+                base_summary["metadata_missing_decision_count"] = len(missing_metadata_item_ids)
                 base_summary["metadata_judge_status"] = (
                     "partial" if missing_metadata_item_ids else "completed"
                 )
@@ -1601,9 +1597,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         if duplicates_removed > 0:
             message += f"🔄 Removed {duplicates_removed} duplicate raw activity records\n"
 
-        if retrieval_filtering_summary and retrieval_filtering_summary.get(
-            "suspicious_row_count"
-        ):
+        if retrieval_filtering_summary and retrieval_filtering_summary.get("suspicious_row_count"):
             filtered_count = retrieval_filtering_summary.get("filtered_row_count", 0)
             metadata_filtered_count = retrieval_filtering_summary.get(
                 "metadata_filtered_row_count",
