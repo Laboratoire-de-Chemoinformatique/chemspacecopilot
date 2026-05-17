@@ -305,7 +305,7 @@ class PointerPandasTools(PandasTools):
         self,
         dataframe_name: str,
         create_using_function: str,
-        function_parameters: Optional[Dict[str, Any]] = None,
+        function_parameters: Optional[Union[Dict[str, Any], str]] = None,
     ) -> Dict[str, Union[str, pd.DataFrame]]:
         """Create a pandas DataFrame using various methods.
 
@@ -506,8 +506,9 @@ class PointerPandasTools(PandasTools):
     def run_dataframe_operation(
         self,
         dataframe_name: str,
-        operation: str,
-        operation_parameters: Optional[Dict[str, Any]] = None,
+        operation: Union[str, bool],
+        operation_parameters: Optional[Union[Dict[str, Any], str]] = None,
+        function_parameters: Optional[Union[Dict[str, Any], str]] = None,
     ) -> Union[pd.DataFrame, pd.Series, Dict, str, float, int]:
         """Run operations on existing DataFrames.
 
@@ -515,6 +516,7 @@ class PointerPandasTools(PandasTools):
             dataframe_name: Name of the DataFrame to operate on
             operation: Operation to perform
             operation_parameters: Parameters for the operation
+            function_parameters: Backwards-compatible alias for operation_parameters.
 
         Returns:
             Operation result (DataFrame, Series, scalar, etc.)
@@ -525,6 +527,22 @@ class PointerPandasTools(PandasTools):
         """
         if not dataframe_name:
             raise ValueError("dataframe_name cannot be empty")
+
+        if operation_parameters is None and function_parameters is not None:
+            operation_parameters = function_parameters
+
+        if isinstance(operation, bool):
+            inferred_params = _coerce_parameter_mapping(
+                operation_parameters, "operation_parameters"
+            )
+            if any(key in inferred_params for key in ("by", "sort_by", "order_by")):
+                operation = "sort_values"
+                operation_parameters = inferred_params
+            else:
+                raise ValueError(
+                    "operation must be a pandas operation string, got boolean. "
+                    "Use values like 'sort_values', 'head', 'query', or 'select'."
+                )
 
         if not operation:
             raise ValueError("operation cannot be empty")

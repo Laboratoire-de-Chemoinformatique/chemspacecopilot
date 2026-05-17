@@ -9,9 +9,14 @@ provider=deepseek
 
 # Model ID (provider-specific)
 # For deepseek: "deepseek-chat", "deepseek-reasoner"
-# For openrouter: any OpenRouter model id, e.g. "deepseek/deepseek-v3.2", "openai/gpt-5-mini"
+# For openrouter: any OpenRouter model id, e.g. "deepseek/deepseek-v3.2", "openai/gpt-5-mini".
+# OpenRouter uses max_tokens=8192 by default in this app to avoid truncating long tool-call
+# arguments such as report payloads. Override with max_tokens below or MODEL_MAX_TOKENS.
 # For ollama: any model available on your Ollama instance, e.g. "llama3.1", "qwen2.5:72b"
 model_id=deepseek-chat
+
+# Optional response token budget for OpenRouter only.
+# max_tokens=8192
 
 # Ollama host (only used when provider=ollama, optional)
 # Default: http://localhost:11434
