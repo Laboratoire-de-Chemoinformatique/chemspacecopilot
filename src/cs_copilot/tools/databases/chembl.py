@@ -804,21 +804,26 @@ class ChemblToolkit(BaseDatabaseToolkit):
         agent: Optional[Agent],
         session_state: Optional[Dict[str, Any]],
     ) -> _ChemblRetrievalFilterResult:
-        """Filter rows that were retrieved only by short ChEMBL keyword hits."""
+        """Filter suspicious short-keyword hits and incorrect populated target metadata."""
         base_summary: Dict[str, Any] = {
             "enabled": True,
             "short_keyword_threshold": 5,
             "fallback_policy": "filter_rows",
+            "metadata_fallback_policy": "keep_rows",
             "retrieved_row_count": int(len(df)),
             "suspicious_row_count": 0,
+            "metadata_judge_row_count": 0,
+            "metadata_missing_decision_count": 0,
             "filtered_row_count": 0,
+            "metadata_filtered_row_count": 0,
             "retained_row_count": int(len(df)),
             "filtered_rows_path": None,
             "judge_status": "not_needed",
+            "metadata_judge_status": "not_needed",
             "query_keywords": list(keywords),
             "organism_filter": organism_filter,
         }
-        if df.empty or "query_keywords" not in df.columns:
+        if df.empty:
             return _ChemblRetrievalFilterResult(
                 retained_df=df.copy(),
                 filtered_df=df.iloc[0:0].copy(),
@@ -826,82 +831,120 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 summary=base_summary,
             )
 
-        suspicious_mask = df["query_keywords"].apply(self._short_keyword_only)
-        suspicious_df = df[suspicious_mask].copy()
+        if "query_keywords" in df.columns:
+            suspicious_mask = df["query_keywords"].apply(self._short_keyword_only)
+            suspicious_df = df[suspicious_mask].copy()
+        else:
+            suspicious_df = df.iloc[0:0].copy()
         base_summary["suspicious_row_count"] = int(len(suspicious_df))
-        if suspicious_df.empty:
-            return _ChemblRetrievalFilterResult(
-                retained_df=df.copy(),
-                filtered_df=df.iloc[0:0].copy(),
-                filtered_rows_path=None,
-                summary=base_summary,
-            )
-
-        judge_items, row_items = self._build_judge_items(suspicious_df, organism_filter)
         filtered_metadata: Dict[Any, Dict[str, Any]] = {}
 
-        missing_basis_indices = set(suspicious_df.index) - set(row_items)
-        for row_index in missing_basis_indices:
-            filtered_metadata[row_index] = {
-                "filter_reason": "missing_judge_basis",
-                "judge_basis": None,
-                "judge_value": None,
-                "judge_decision": "filter",
-                "judge_explanation": (
-                    "No target preferred name, organism, or assay description was available "
-                    "to validate a short-keyword hit."
-                ),
-            }
+        if not suspicious_df.empty:
+            judge_items, row_items = self._build_judge_items(suspicious_df, organism_filter)
 
-        decisions: Dict[str, _ChemblJudgeDecision] = {}
-        if judge_items:
-            try:
-                decisions = self._run_chembl_retrieval_judge(
-                    judge_items,
-                    target_query=target_query,
-                    organism_filter=organism_filter,
-                    keywords=keywords,
-                    agent=agent,
-                )
-                base_summary["judge_status"] = "completed"
-            except Exception as exc:
-                logger.warning("ChEMBL short-keyword judge unavailable: %s", exc)
-                base_summary["judge_status"] = "unavailable"
-                for row_index, item in row_items.items():
+            missing_basis_indices = set(suspicious_df.index) - set(row_items)
+            for row_index in missing_basis_indices:
+                filtered_metadata[row_index] = {
+                    "filter_reason": "missing_judge_basis",
+                    "judge_basis": None,
+                    "judge_value": None,
+                    "judge_decision": "filter",
+                    "judge_explanation": (
+                        "No target preferred name, organism, or assay description was available "
+                        "to validate a short-keyword hit."
+                    ),
+                }
+
+            decisions: Dict[str, _ChemblJudgeDecision] = {}
+            if judge_items:
+                try:
+                    decisions = self._run_chembl_retrieval_judge(
+                        judge_items,
+                        target_query=target_query,
+                        organism_filter=organism_filter,
+                        keywords=keywords,
+                        agent=agent,
+                    )
+                    base_summary["judge_status"] = "completed"
+                except Exception as exc:
+                    logger.warning("ChEMBL short-keyword judge unavailable: %s", exc)
+                    base_summary["judge_status"] = "unavailable"
+                    for row_index, item in row_items.items():
+                        filtered_metadata[row_index] = {
+                            "filter_reason": "judge_unavailable",
+                            "judge_basis": item["judge_basis"],
+                            "judge_value": item["value"],
+                            "judge_decision": "filter",
+                            "judge_explanation": (
+                                "Short-keyword hit could not be validated because the judge "
+                                "was unavailable or returned invalid output."
+                            ),
+                        }
+
+            for row_index, item in row_items.items():
+                if row_index in filtered_metadata:
+                    continue
+                decision = decisions.get(item["item_id"])
+                if decision is None:
                     filtered_metadata[row_index] = {
                         "filter_reason": "judge_unavailable",
                         "judge_basis": item["judge_basis"],
                         "judge_value": item["value"],
                         "judge_decision": "filter",
                         "judge_explanation": (
-                            "Short-keyword hit could not be validated because the judge "
-                            "was unavailable or returned invalid output."
+                            "Short-keyword hit did not receive a valid judge decision."
                         ),
                     }
+                    continue
+                if not decision.keep:
+                    filtered_metadata[row_index] = {
+                        "filter_reason": "llm_judge_rejected",
+                        "judge_basis": item["judge_basis"],
+                        "judge_value": item["value"],
+                        "judge_decision": "filter",
+                        "judge_explanation": decision.explanation,
+                    }
 
-        for row_index, item in row_items.items():
+        metadata_candidates = df.drop(index=list(filtered_metadata), errors="ignore")
+        metadata_items, metadata_row_items = self._build_metadata_judge_items(metadata_candidates)
+        base_summary["metadata_judge_row_count"] = int(len(metadata_row_items))
+
+        metadata_decisions: Dict[str, _ChemblJudgeDecision] = {}
+        if metadata_items:
+            expected_metadata_item_ids = {item["item_id"] for item in metadata_items}
+            try:
+                metadata_decisions = self._run_chembl_metadata_judge(
+                    metadata_items,
+                    target_query=target_query,
+                    organism_filter=organism_filter,
+                    keywords=keywords,
+                    agent=agent,
+                )
+                missing_metadata_item_ids = expected_metadata_item_ids - set(metadata_decisions)
+                base_summary["metadata_missing_decision_count"] = len(missing_metadata_item_ids)
+                base_summary["metadata_judge_status"] = (
+                    "partial" if missing_metadata_item_ids else "completed"
+                )
+            except Exception as exc:
+                logger.warning("ChEMBL target metadata judge unavailable: %s", exc)
+                base_summary["metadata_judge_status"] = "unavailable"
+
+        metadata_filtered_count = 0
+        for row_index, item in metadata_row_items.items():
             if row_index in filtered_metadata:
                 continue
-            decision = decisions.get(item["item_id"])
+            decision = metadata_decisions.get(item["item_id"])
             if decision is None:
-                filtered_metadata[row_index] = {
-                    "filter_reason": "judge_unavailable",
-                    "judge_basis": item["judge_basis"],
-                    "judge_value": item["value"],
-                    "judge_decision": "filter",
-                    "judge_explanation": (
-                        "Short-keyword hit did not receive a valid judge decision."
-                    ),
-                }
                 continue
             if not decision.keep:
                 filtered_metadata[row_index] = {
-                    "filter_reason": "llm_judge_rejected",
+                    "filter_reason": "metadata_llm_judge_rejected",
                     "judge_basis": item["judge_basis"],
                     "judge_value": item["value"],
                     "judge_decision": "filter",
                     "judge_explanation": decision.explanation,
                 }
+                metadata_filtered_count += 1
 
         filtered_indices = list(filtered_metadata)
         if filtered_indices:
@@ -929,6 +972,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         base_summary.update(
             {
                 "filtered_row_count": int(len(filtered_df)),
+                "metadata_filtered_row_count": metadata_filtered_count,
                 "retained_row_count": int(len(retained_df)),
                 "filtered_rows_path": filtered_rows_path,
                 "decision_counts": (
@@ -995,6 +1039,63 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
         return list(items_by_key.values()), row_items
 
+    def _build_metadata_judge_items(
+        self,
+        df: pd.DataFrame,
+    ) -> tuple[list[Dict[str, Any]], Dict[Any, Dict[str, Any]]]:
+        items_by_key: Dict[tuple[str, str, str, str], Dict[str, Any]] = {}
+        row_items: Dict[Any, Dict[str, Any]] = {}
+
+        for row_index, row in df.iterrows():
+            target_type = self._clean_cell_value(row.get("target_type"))
+            target_pref_name = self._clean_cell_value(row.get("target_pref_name"))
+            target_organism = self._clean_cell_value(row.get("target_organism"))
+
+            fields_to_validate = []
+            if target_pref_name and self._is_protein_target_row(row):
+                fields_to_validate.append("target_pref_name")
+            if target_organism:
+                fields_to_validate.append("target_organism")
+            if not fields_to_validate:
+                continue
+
+            query_keywords = self._clean_cell_value(row.get("query_keywords"))
+            key = (target_type, target_pref_name, target_organism, query_keywords)
+            item = items_by_key.get(key)
+            if item is None:
+                item = {
+                    "item_id": f"metadata_item_{len(items_by_key) + 1}",
+                    "judge_scope": "target_metadata",
+                    "judge_basis": "|".join(fields_to_validate),
+                    "fields_to_validate": fields_to_validate,
+                    "target_type": target_type or None,
+                    "target_pref_name": target_pref_name or None,
+                    "target_organism": target_organism or None,
+                    "query_keywords": query_keywords or None,
+                    "value": self._format_metadata_judge_value(
+                        fields_to_validate,
+                        target_pref_name,
+                        target_organism,
+                    ),
+                    "row_count": 0,
+                    "assay_chembl_ids": [],
+                    "sample_descriptions": [],
+                }
+                items_by_key[key] = item
+
+            item["row_count"] += 1
+            assay_id = self._clean_cell_value(row.get("assay_chembl_id"))
+            if assay_id and assay_id not in item["assay_chembl_ids"]:
+                item["assay_chembl_ids"].append(assay_id)
+            description = self._clean_cell_value(row.get("description"))
+            if description and description not in item["sample_descriptions"]:
+                item["sample_descriptions"].append(description)
+            item["assay_chembl_ids"] = item["assay_chembl_ids"][:10]
+            item["sample_descriptions"] = item["sample_descriptions"][:3]
+            row_items[row_index] = item
+
+        return list(items_by_key.values()), row_items
+
     def _infer_judge_scope(self, row: pd.Series, organism_filter: Optional[str]) -> str:
         target_type = self._clean_cell_value(row.get("target_type")).lower()
         if any(token in target_type for token in ("organism", "cell-line", "cell line", "tissue")):
@@ -1020,6 +1121,27 @@ class ChemblToolkit(BaseDatabaseToolkit):
         if self._clean_cell_value(row.get("description")):
             return "description"
         return None
+
+    def _is_protein_target_row(self, row: pd.Series) -> bool:
+        target_type = self._clean_cell_value(row.get("target_type")).lower()
+        if "protein" in target_type:
+            return True
+        if target_type:
+            return False
+        return bool(self._clean_cell_value(row.get("target_pref_name")))
+
+    @staticmethod
+    def _format_metadata_judge_value(
+        fields_to_validate: Sequence[str],
+        target_pref_name: str,
+        target_organism: str,
+    ) -> str:
+        values = []
+        if "target_pref_name" in fields_to_validate:
+            values.append(f"target_pref_name={target_pref_name}")
+        if "target_organism" in fields_to_validate:
+            values.append(f"target_organism={target_organism}")
+        return "; ".join(values)
 
     @staticmethod
     def _clean_cell_value(value: Any) -> str:
@@ -1079,6 +1201,55 @@ class ChemblToolkit(BaseDatabaseToolkit):
             raise ValueError(f"Judge omitted decisions for item ids: {sorted(missing)}")
         return decisions
 
+    def _run_chembl_metadata_judge(
+        self,
+        judge_items: list[Dict[str, Any]],
+        *,
+        target_query: str,
+        organism_filter: Optional[str],
+        keywords: Sequence[str],
+        agent: Optional[Agent],
+    ) -> Dict[str, _ChemblJudgeDecision]:
+        model = getattr(agent, "model", None)
+        if model is None:
+            raise RuntimeError("No agent model is available for ChEMBL metadata judging.")
+
+        prompt = self._build_metadata_judge_prompt(
+            judge_items,
+            target_query=target_query,
+            organism_filter=organism_filter,
+            keywords=keywords,
+        )
+        judge = Agent(
+            model=model,
+            name="chembl_target_metadata_judge",
+            description="Validate populated ChEMBL target metadata against the requested target.",
+            instructions=[
+                "Decide whether each ChEMBL target metadata item is consistent with the request.",
+                "Return one decision for every provided item_id.",
+                "Reject rows with populated target metadata that clearly refers to the wrong "
+                "protein target or organism.",
+                "Keep rows when the populated metadata is consistent, broadly compatible, "
+                "or the request does not specify enough context to identify a conflict.",
+            ],
+            output_schema=_ChemblJudgeResponse,
+            structured_outputs=True,
+            use_json_mode=True,
+            markdown=False,
+            telemetry=False,
+        )
+        response = judge.run(prompt, stream=False)
+        parsed = self._parse_retrieval_judge_response(response.content)
+        decisions = {decision.item_id: decision for decision in parsed.decisions}
+        missing = {item["item_id"] for item in judge_items} - set(decisions)
+        if missing:
+            logger.warning(
+                "ChEMBL metadata judge omitted decisions for item ids: %s; "
+                "keeping rows represented by omitted items.",
+                sorted(missing),
+            )
+        return decisions
+
     @staticmethod
     def _build_retrieval_judge_prompt(
         judge_items: list[Dict[str, Any]],
@@ -1101,6 +1272,33 @@ class ChemblToolkit(BaseDatabaseToolkit):
             "organism, virus, strain, or accepted parent/synonym. If the basis is an "
             "assay description, keep it only when the description clearly refers to the "
             "requested organism.\n\n"
+            "Return structured decisions with item_id, keep, and explanation.\n"
+            f"Items:\n{json.dumps(judge_items, indent=2, sort_keys=True)}"
+        )
+
+    @staticmethod
+    def _build_metadata_judge_prompt(
+        judge_items: list[Dict[str, Any]],
+        *,
+        target_query: str,
+        organism_filter: Optional[str],
+        keywords: Sequence[str],
+    ) -> str:
+        return (
+            "Validate populated ChEMBL target metadata before molecular standardization.\n"
+            f"Original target/query context: {target_query}\n"
+            f"Search keywords: {', '.join(keywords)}\n"
+            f"Organism filter: {organism_filter or 'none'}\n\n"
+            "Judge only the fields listed in fields_to_validate for each item. Rows where "
+            "target_pref_name or target_organism is empty are intentionally not included.\n"
+            "For target_pref_name, validate protein targets: keep direct target matches, "
+            "accepted synonyms, clear orthologs in context, and broad family members when "
+            "the request asks for a family. Reject clearly different proteins or targets.\n"
+            "For target_organism, reject only when the populated organism conflicts with "
+            "an organism, virus, strain, species, or host explicitly requested in the query "
+            "or organism filter. If no organism scope is requested or inferable, keep it.\n"
+            "If any populated field being validated is clearly incorrect, set keep=false. "
+            "Otherwise set keep=true.\n\n"
             "Return structured decisions with item_id, keep, and explanation.\n"
             f"Items:\n{json.dumps(judge_items, indent=2, sort_keys=True)}"
         )
@@ -1151,7 +1349,13 @@ class ChemblToolkit(BaseDatabaseToolkit):
         report_path: str,
         filtering_summary: Dict[str, Any],
     ) -> None:
-        if not filtering_summary or filtering_summary.get("suspicious_row_count", 0) == 0:
+        if not filtering_summary:
+            return
+        if (
+            filtering_summary.get("suspicious_row_count", 0) == 0
+            and filtering_summary.get("metadata_judge_row_count", 0) == 0
+            and filtering_summary.get("filtered_row_count", 0) == 0
+        ):
             return
         section = self._format_retrieval_filtering_report_section(filtering_summary)
         try:
@@ -1206,17 +1410,36 @@ class ChemblToolkit(BaseDatabaseToolkit):
     def _format_retrieval_filtering_report_section(summary: Dict[str, Any]) -> str:
         filtered_path = summary.get("filtered_rows_path") or "None"
         decision_counts = summary.get("decision_counts") or {}
+        metadata_filtered_count = summary.get("metadata_filtered_row_count", 0)
+        short_filtered_count = max(
+            summary.get("filtered_row_count", 0) - metadata_filtered_count,
+            0,
+        )
         return (
             "## ChEMBL Retrieval Filtering\n"
-            "- Applied before molecular standardization to rows retrieved only by "
-            "query keywords shorter than 5 characters.\n"
+            "- Applied before molecular standardization to short-keyword retrieval hits "
+            "and populated target metadata.\n"
             f"- Retrieved rows before filtering: {summary.get('retrieved_row_count', 0)}\n"
             f"- Suspicious short-keyword rows evaluated: "
             f"{summary.get('suspicious_row_count', 0)}\n"
+            f"- Target metadata rows evaluated: "
+            f"{summary.get('metadata_judge_row_count', 0)}\n"
             f"- Rows filtered out: {summary.get('filtered_row_count', 0)}\n"
+            f"- Rows filtered by short-keyword judge: {short_filtered_count}\n"
+            f"- Rows filtered by target metadata judge: "
+            f"{metadata_filtered_count}\n"
             f"- Rows retained for standardization: {summary.get('retained_row_count', 0)}\n"
             f"- Judge status: {summary.get('judge_status', 'unknown')}\n"
+            f"- Short-keyword judge status: {summary.get('judge_status', 'unknown')}\n"
+            f"- Target metadata judge status: "
+            f"{summary.get('metadata_judge_status', 'unknown')}\n"
+            f"- Target metadata omitted decisions: "
+            f"{summary.get('metadata_missing_decision_count', 0)}\n"
             f"- Fallback policy: {summary.get('fallback_policy', 'filter_rows')}\n"
+            f"- Short-keyword fallback policy: "
+            f"{summary.get('fallback_policy', 'filter_rows')}\n"
+            f"- Target metadata fallback policy: "
+            f"{summary.get('metadata_fallback_policy', 'keep_rows')}\n"
             f"- Filtered rows artifact: `{filtered_path}`\n"
             f"- Filter reasons: "
             f"`{json.dumps(decision_counts, sort_keys=True, default=str)}`\n"
@@ -1232,9 +1455,11 @@ class ChemblToolkit(BaseDatabaseToolkit):
         keywords_str = ", ".join([f"'{kw}'" for kw in keywords])
         return (
             "No clean ChEMBL dataset was created because all retrieved rows were "
-            "filtered during short-keyword validation.\n"
+            "filtered during retrieval validation.\n"
             f"Keywords: {keywords_str}\n"
             f"Suspicious rows evaluated: {filtering_summary.get('suspicious_row_count', 0)}\n"
+            f"Target metadata rows evaluated: "
+            f"{filtering_summary.get('metadata_judge_row_count', 0)}\n"
             f"Rows filtered out: {filtering_summary.get('filtered_row_count', 0)}\n"
             f"Filtered rows artifact: `{filtered_rows_path}`\n"
             f"Retrieval filtering report: `{filtering_report_path}`"
@@ -1374,13 +1599,34 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
         if retrieval_filtering_summary and retrieval_filtering_summary.get("suspicious_row_count"):
             filtered_count = retrieval_filtering_summary.get("filtered_row_count", 0)
+            metadata_filtered_count = retrieval_filtering_summary.get(
+                "metadata_filtered_row_count",
+                0,
+            )
+            short_filtered_count = max(filtered_count - metadata_filtered_count, 0)
             filtered_path = retrieval_filtering_summary.get("filtered_rows_path")
             message += (
                 "🧯 Short-keyword retrieval filtering: "
                 f"evaluated {retrieval_filtering_summary.get('suspicious_row_count', 0)} "
-                f"suspicious rows and filtered {filtered_count}\n"
+                f"suspicious rows and filtered {short_filtered_count}\n"
             )
             if filtered_path:
+                message += f"📄 Filtered rows: `{filtered_path}`\n"
+
+        if retrieval_filtering_summary and retrieval_filtering_summary.get(
+            "metadata_judge_row_count"
+        ):
+            message += (
+                "🧯 Target metadata filtering: "
+                f"evaluated {retrieval_filtering_summary.get('metadata_judge_row_count', 0)} "
+                "rows with populated target metadata and filtered "
+                f"{retrieval_filtering_summary.get('metadata_filtered_row_count', 0)}\n"
+            )
+            missing_count = retrieval_filtering_summary.get("metadata_missing_decision_count", 0)
+            if missing_count:
+                message += f"🧯 Target metadata judge omitted {missing_count} item(s); kept them\n"
+            filtered_path = retrieval_filtering_summary.get("filtered_rows_path")
+            if filtered_path and not retrieval_filtering_summary.get("suspicious_row_count"):
                 message += f"📄 Filtered rows: `{filtered_path}`\n"
 
         if standardization_summary:
