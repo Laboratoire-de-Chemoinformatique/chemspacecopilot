@@ -57,11 +57,25 @@ services:
       # GPU Configuration
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+      # Advanced Agno message-exchange logging
+      # Set CS_COPILOT_AGNO_LOG=1 to dump every agent ↔ LLM and agent ↔ agent
+      # exchange (system prompt, messages, tool calls, metrics) as JSONL into
+      # CS_COPILOT_AGNO_LOG_DIR (default ./logs/agno).
+      - CS_COPILOT_AGNO_LOG=${CS_COPILOT_AGNO_LOG:-0}
+      - CS_COPILOT_AGNO_LOG_DIR=${CS_COPILOT_AGNO_LOG_DIR:-/app/logs/agno}
+      - CS_COPILOT_AGNO_LOG_TRUNCATE=${CS_COPILOT_AGNO_LOG_TRUNCATE:-0}
+      # Optional OpenInference / OpenTelemetry tracing (set to 1 to enable).
+      - CS_COPILOT_OTEL=${CS_COPILOT_OTEL:-0}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_HEADERS=${OTEL_EXPORTER_OTLP_HEADERS:-}
     volumes:
       # Persistent storage for SQLite databases
       - ./data:/app/data
       # Models directory
       - ./models:/app/models
+      # Agno JSONL exchange logs (mirrors CS_COPILOT_AGNO_LOG_DIR default)
+      - ./logs:/app/logs
     depends_on:
       minio:
         condition: service_healthy

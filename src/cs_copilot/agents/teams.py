@@ -182,5 +182,15 @@ def get_cs_copilot_agent_team(
         show_members_responses=show_members_responses,
     )
 
+    # Install JSONL message-exchange logging hooks on the team coordinator
+    # (no-op unless the CS_COPILOT_AGNO_LOG env var is set). Member agents
+    # already had hooks attached inside the factory.
+    try:
+        from cs_copilot.tracking.agno_logging import attach_agno_hooks
+
+        attach_agno_hooks(team, scope="team")
+    except Exception as hook_err:
+        logger.warning("Failed to attach agno_logging hooks to team: %s", hook_err)
+
     logger.info("Successfully created Cs_copilot Agent Team")
     return team

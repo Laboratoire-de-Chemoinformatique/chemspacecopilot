@@ -148,6 +148,19 @@ class BaseAgentFactory(ABC):
 
             agent = Agent(**agent_kwargs)
 
+            # Install JSONL message-exchange logging hooks (no-op unless the
+            # CS_COPILOT_AGNO_LOG env var is set).
+            try:
+                from cs_copilot.tracking.agno_logging import attach_agno_hooks
+
+                attach_agno_hooks(agent, scope="agent")
+            except Exception as hook_err:
+                self.logger.warning(
+                    "Failed to attach agno_logging hooks to %s: %s",
+                    config.name,
+                    hook_err,
+                )
+
             # Wrap agent methods with MLflow tracking if enabled
             if enable_mlflow_tracking:
                 agent = self._wrap_agent_with_tracking(agent, config)

@@ -24,8 +24,12 @@ from cs_copilot.agents.teams import get_cs_copilot_agent_team
 from cs_copilot.model_config import _is_retriable, arun_with_retry, load_model_from_config
 from cs_copilot.storage import S3
 from cs_copilot.tools.io.formatting import smiles_to_png_bytes
+from cs_copilot.tracking.agno_otel import init_otel as _init_agno_otel
 
 load_dotenv()
+
+# Optional OpenInference / OTel tracing for Agno (no-op unless CS_COPILOT_OTEL=1).
+_init_agno_otel()
 
 # Ensure the data/ directory exists (used by Agno for its SQLite session DB).
 # The Dockerfile creates /app/data; this handles local runs outside Docker.

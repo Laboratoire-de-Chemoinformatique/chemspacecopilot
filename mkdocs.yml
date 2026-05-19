@@ -71,4 +71,5 @@ nav:
   - Testing:
       - Unit Tests: testing/unit.md
       - Robustness Tests: testing/robustness.md
+  - Logging: logging.md
   - Contributing: contributing.md

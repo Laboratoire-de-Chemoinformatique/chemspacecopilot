@@ -37,8 +37,13 @@ from cs_copilot.model_config import (  # noqa: E402
     parse_modelconf,
 )
 from cs_copilot.storage import S3  # noqa: E402
+from cs_copilot.tracking.agno_logging import configure_session as _configure_agno_log_session  # noqa: E402
+from cs_copilot.tracking.agno_otel import init_otel as _init_agno_otel  # noqa: E402
 
 logging.disable(logging.NOTSET)
+
+# Optional OpenInference / OTel tracing for Agno (no-op unless CS_COPILOT_OTEL=1).
+_init_agno_otel()
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +234,9 @@ async def run_repl():
     # Session
     session_id = uuid.uuid4().hex[:12]
     S3.prefix = f"sessions/{session_id}"
+
+    # Bind the JSONL log sink to this session id (no-op unless CS_COPILOT_AGNO_LOG=1).
+    _configure_agno_log_session(session_id)
 
     # Agent team
     renderer.print_info("Initializing agent team\u2026")
