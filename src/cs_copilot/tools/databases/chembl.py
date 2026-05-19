@@ -38,6 +38,45 @@ _HYPHEN_OR_SPACE_RUN = re.compile(r"[-\s]+")
 _LETTER_DIGIT_BOUNDARY = re.compile(r"(?<=[a-zA-Z])(?=\d)")
 
 
+CHEMBL_RETRIEVAL_JUDGE_TEMPLATE = (
+    "Validate ChEMBL activity rows that were retrieved only through short "
+    "search keywords, which are prone to false substring matches.\n"
+    "Original target/query context: {target_query}\n"
+    "Search keywords: {keywords_csv}\n"
+    "Organism filter: {organism_filter}\n\n"
+    "For protein scope, keep target preferred names only when they are the "
+    "requested protein, a direct synonym, or a clear ortholog in context. "
+    "If the basis is an assay description, keep it only when the description "
+    "clearly names the requested protein/target.\n"
+    "For organism scope, keep organism names only when they match the requested "
+    "organism, virus, strain, or accepted parent/synonym. If the basis is an "
+    "assay description, keep it only when the description clearly refers to the "
+    "requested organism.\n\n"
+    "Return structured decisions with item_id, keep, and explanation.\n"
+    "Items:\n{items_json}"
+)
+
+
+CHEMBL_METADATA_JUDGE_TEMPLATE = (
+    "Validate populated ChEMBL target metadata before molecular standardization.\n"
+    "Original target/query context: {target_query}\n"
+    "Search keywords: {keywords_csv}\n"
+    "Organism filter: {organism_filter}\n\n"
+    "Judge only the fields listed in fields_to_validate for each item. Rows where "
+    "target_pref_name or target_organism is empty are intentionally not included.\n"
+    "For target_pref_name, validate protein targets: keep direct target matches, "
+    "accepted synonyms, clear orthologs in context, and broad family members when "
+    "the request asks for a family. Reject clearly different proteins or targets.\n"
+    "For target_organism, reject only when the populated organism conflicts with "
+    "an organism, virus, strain, species, or host explicitly requested in the query "
+    "or organism filter. If no organism scope is requested or inferable, keep it.\n"
+    "If any populated field being validated is clearly incorrect, set keep=false. "
+    "Otherwise set keep=true.\n\n"
+    "Return structured decisions with item_id, keep, and explanation.\n"
+    "Items:\n{items_json}"
+)
+
+
 def _build_punctuation_regex(keyword: str) -> str | None:
     """Build a regex that matches all hyphen/space variants of *keyword*.
 
@@ -492,6 +531,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
         organism: Optional[str] = None,
         assay_types: Optional[Sequence[str]] = None,
         mechanism: Optional[str] = None,
+        enable_retrieval_judge: bool = True,
+        enable_metadata_judge: bool = True,
         agent: Optional[Agent] = None,
         session_state: Optional[Dict[str, Any]] = None,
     ) -> str:
@@ -514,6 +555,15 @@ class ChemblToolkit(BaseDatabaseToolkit):
             mechanism: Optional mechanism of action filter. When provided, only assays
                 whose description contains this term (case-insensitive) are kept.
                 Examples: "agonist", "antagonist", "modulator", "inverse agonist", None.
+            enable_retrieval_judge: When True (default), run the short-keyword
+                retrieval LLM-as-judge step on the configured Agno model. Set to
+                False to skip that judge entirely (e.g. when an external reasoner
+                is doing the filtering itself); rows otherwise flagged as
+                suspicious are then kept and the judge_status is reported as
+                "disabled".
+            enable_metadata_judge: When True (default), run the populated-target
+                metadata LLM-as-judge step. Set to False to skip it under the
+                same conditions as enable_retrieval_judge.
             session_state: Shared session state auto-injected by Agno.
 
         Returns:
@@ -662,6 +712,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 query_slug=query_slug,
                 agent=agent,
                 session_state=session_for_artifacts,
+                enable_retrieval_judge=enable_retrieval_judge,
+                enable_metadata_judge=enable_metadata_judge,
             )
             merged_df = filtering.retained_df
 
@@ -803,6 +855,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
         query_slug: str,
         agent: Optional[Agent],
         session_state: Optional[Dict[str, Any]],
+        enable_retrieval_judge: bool = True,
+        enable_metadata_judge: bool = True,
     ) -> _ChemblRetrievalFilterResult:
         """Filter suspicious short-keyword hits and incorrect populated target metadata."""
         base_summary: Dict[str, Any] = {
@@ -856,7 +910,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 }
 
             decisions: Dict[str, _ChemblJudgeDecision] = {}
-            if judge_items:
+            if judge_items and not enable_retrieval_judge:
+                base_summary["judge_status"] = "disabled"
+            elif judge_items:
                 try:
                     decisions = self._run_chembl_retrieval_judge(
                         judge_items,
@@ -881,36 +937,39 @@ class ChemblToolkit(BaseDatabaseToolkit):
                             ),
                         }
 
-            for row_index, item in row_items.items():
-                if row_index in filtered_metadata:
-                    continue
-                decision = decisions.get(item["item_id"])
-                if decision is None:
-                    filtered_metadata[row_index] = {
-                        "filter_reason": "judge_unavailable",
-                        "judge_basis": item["judge_basis"],
-                        "judge_value": item["value"],
-                        "judge_decision": "filter",
-                        "judge_explanation": (
-                            "Short-keyword hit did not receive a valid judge decision."
-                        ),
-                    }
-                    continue
-                if not decision.keep:
-                    filtered_metadata[row_index] = {
-                        "filter_reason": "llm_judge_rejected",
-                        "judge_basis": item["judge_basis"],
-                        "judge_value": item["value"],
-                        "judge_decision": "filter",
-                        "judge_explanation": decision.explanation,
-                    }
+            if enable_retrieval_judge:
+                for row_index, item in row_items.items():
+                    if row_index in filtered_metadata:
+                        continue
+                    decision = decisions.get(item["item_id"])
+                    if decision is None:
+                        filtered_metadata[row_index] = {
+                            "filter_reason": "judge_unavailable",
+                            "judge_basis": item["judge_basis"],
+                            "judge_value": item["value"],
+                            "judge_decision": "filter",
+                            "judge_explanation": (
+                                "Short-keyword hit did not receive a valid judge decision."
+                            ),
+                        }
+                        continue
+                    if not decision.keep:
+                        filtered_metadata[row_index] = {
+                            "filter_reason": "llm_judge_rejected",
+                            "judge_basis": item["judge_basis"],
+                            "judge_value": item["value"],
+                            "judge_decision": "filter",
+                            "judge_explanation": decision.explanation,
+                        }
 
         metadata_candidates = df.drop(index=list(filtered_metadata), errors="ignore")
         metadata_items, metadata_row_items = self._build_metadata_judge_items(metadata_candidates)
         base_summary["metadata_judge_row_count"] = int(len(metadata_row_items))
 
         metadata_decisions: Dict[str, _ChemblJudgeDecision] = {}
-        if metadata_items:
+        if metadata_items and not enable_metadata_judge:
+            base_summary["metadata_judge_status"] = "disabled"
+        elif metadata_items:
             expected_metadata_item_ids = {item["item_id"] for item in metadata_items}
             try:
                 metadata_decisions = self._run_chembl_metadata_judge(
@@ -1258,22 +1317,11 @@ class ChemblToolkit(BaseDatabaseToolkit):
         organism_filter: Optional[str],
         keywords: Sequence[str],
     ) -> str:
-        return (
-            "Validate ChEMBL activity rows that were retrieved only through short "
-            "search keywords, which are prone to false substring matches.\n"
-            f"Original target/query context: {target_query}\n"
-            f"Search keywords: {', '.join(keywords)}\n"
-            f"Organism filter: {organism_filter or 'none'}\n\n"
-            "For protein scope, keep target preferred names only when they are the "
-            "requested protein, a direct synonym, or a clear ortholog in context. "
-            "If the basis is an assay description, keep it only when the description "
-            "clearly names the requested protein/target.\n"
-            "For organism scope, keep organism names only when they match the requested "
-            "organism, virus, strain, or accepted parent/synonym. If the basis is an "
-            "assay description, keep it only when the description clearly refers to the "
-            "requested organism.\n\n"
-            "Return structured decisions with item_id, keep, and explanation.\n"
-            f"Items:\n{json.dumps(judge_items, indent=2, sort_keys=True)}"
+        return CHEMBL_RETRIEVAL_JUDGE_TEMPLATE.format(
+            target_query=target_query,
+            keywords_csv=", ".join(keywords),
+            organism_filter=organism_filter or "none",
+            items_json=json.dumps(judge_items, indent=2, sort_keys=True),
         )
 
     @staticmethod
@@ -1284,23 +1332,11 @@ class ChemblToolkit(BaseDatabaseToolkit):
         organism_filter: Optional[str],
         keywords: Sequence[str],
     ) -> str:
-        return (
-            "Validate populated ChEMBL target metadata before molecular standardization.\n"
-            f"Original target/query context: {target_query}\n"
-            f"Search keywords: {', '.join(keywords)}\n"
-            f"Organism filter: {organism_filter or 'none'}\n\n"
-            "Judge only the fields listed in fields_to_validate for each item. Rows where "
-            "target_pref_name or target_organism is empty are intentionally not included.\n"
-            "For target_pref_name, validate protein targets: keep direct target matches, "
-            "accepted synonyms, clear orthologs in context, and broad family members when "
-            "the request asks for a family. Reject clearly different proteins or targets.\n"
-            "For target_organism, reject only when the populated organism conflicts with "
-            "an organism, virus, strain, species, or host explicitly requested in the query "
-            "or organism filter. If no organism scope is requested or inferable, keep it.\n"
-            "If any populated field being validated is clearly incorrect, set keep=false. "
-            "Otherwise set keep=true.\n\n"
-            "Return structured decisions with item_id, keep, and explanation.\n"
-            f"Items:\n{json.dumps(judge_items, indent=2, sort_keys=True)}"
+        return CHEMBL_METADATA_JUDGE_TEMPLATE.format(
+            target_query=target_query,
+            keywords_csv=", ".join(keywords),
+            organism_filter=organism_filter or "none",
+            items_json=json.dumps(judge_items, indent=2, sort_keys=True),
         )
 
     @staticmethod

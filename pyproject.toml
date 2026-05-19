@@ -67,10 +67,14 @@ packages = ["src/cs_copilot"]
 
 [project.scripts]
 cscopilot = "cs_copilot.cli:main"
+cscopilot-mcp = "cs_copilot.mcp.__main__:main"
 
 [project.optional-dependencies]
 postgresql = [
     "psycopg2-binary>=2.9.9",
+]
+mcp = [
+    "mcp>=1.2,<2",
 ]
 
 [dependency-groups]
@@ -143,4 +147,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m \"not live\""
+markers = [
+    "live: tests that spawn subprocesses or hit external services (skipped by default; opt in with `-m live`)",
+]
