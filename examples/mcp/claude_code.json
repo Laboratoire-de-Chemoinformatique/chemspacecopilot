@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "chemspace": {
+      "command": "cscopilot-mcp",
+      "args": [
+        "--session-id",
+        "demo",
+        "--workflow-slug",
+        "chemical_space",
+        "--log-level",
+        "info"
+      ],
+      "env": {
+        "SESSION_ID": "demo",
+        "USE_S3": "false"
+      }
+    }
+  }
+}

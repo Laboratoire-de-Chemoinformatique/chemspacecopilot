@@ -1022,6 +1022,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+mcp = [
+    { name = "mcp" },
+]
 postgresql = [
     { name = "psycopg2-binary" },
 ]
@@ -1062,6 +1065,7 @@ requires-dist = [
     { name = "lancedb", specifier = ">=0.25.2" },
     { name = "lxml-html-clean", specifier = ">=0.4.3" },
     { name = "marimo", specifier = ">=0.18.4" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
     { name = "newspaper4k", specifier = ">=0.9.3.1" },
     { name = "numba", specifier = ">=0.62.1" },
     { name = "ollama", specifier = ">=0.4.0" },
@@ -1090,7 +1094,7 @@ requires-dist = [
     { name = "ugtm", specifier = ">=2.1.0.post2" },
     { name = "vl-convert-python", specifier = ">=1.8.0" },
 ]
-provides-extras = ["postgresql"]
+provides-extras = ["postgresql", "mcp"]
 
 [package.metadata.requires-dev]
 dev = [

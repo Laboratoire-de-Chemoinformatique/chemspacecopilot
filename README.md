@@ -184,6 +184,23 @@ Notes:
 
 An example workflow is available in `notebooks/cs_copilot.ipynb`.
 
+### MCP server (optional)
+
+An optional Model Context Protocol server lets external MCP clients
+(Codex, Claude Code) drive ChemSpace toolkits, prompts, and session
+artifacts directly — the external client is the reasoning engine; the Agno
+multi-agent team is not invoked. The default Chainlit and CLI runtimes are
+unaffected.
+
+```bash
+uv sync --extra mcp
+cscopilot-mcp --session-id demo --workflow-slug chemical_space
+```
+
+Example client configs ship under `examples/mcp/`
+(`claude_code.json`, `codex.toml`). See `docs/mcp.md` for the full tool /
+prompt / resource catalog and the ChEMBL LLM-as-judge gating contract.
+
 ## Architecture
 
 The system uses a **Factory Pattern + Registry** for agent creation. The default team orchestrator coordinates seven runtime agents, and an eighth agent is available separately for robustness analysis:
