@@ -8,16 +8,19 @@ with automatic session-based path management.
 """
 
 import builtins
+import contextvars
 import datetime
 import logging
 import os
 import uuid
+from pathlib import Path, PurePosixPath
 
 import fsspec
 
 from .config import get_s3_config, is_s3_enabled
 
 logger = logging.getLogger(__name__)
+LOCAL_STORAGE_ROOT = Path("data")
 
 # Generate a per-run session ID when SESSION_ID is unset or blank
 _ENV_SESSION_ID = os.getenv("SESSION_ID")
@@ -30,8 +33,24 @@ else:
     logger.info("SESSION_ID is set from environment")
     SESSION_ID = _ENV_SESSION_ID
 
+_DEFAULT_PREFIX = f"sessions/{SESSION_ID}"
+_SESSION_PREFIX: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "cs_copilot_s3_prefix",
+    default=None,
+)
 
-class S3:
+
+class _S3Meta(type):
+    @property
+    def prefix(cls) -> str:
+        return cls.current_prefix()
+
+    @prefix.setter
+    def prefix(cls, value: str) -> None:
+        cls.set_session_prefix(value)
+
+
+class S3(metaclass=_S3Meta):
     """
     Unified storage client for S3/MinIO and local file operations.
 
@@ -66,22 +85,43 @@ class S3:
     ...     data = f.read()
     """
 
-    prefix = f"sessions/{SESSION_ID}"
+    _fallback_prefix = _DEFAULT_PREFIX
     logger.info(f"Initialized S3 client with SESSION_ID: {SESSION_ID}")
+
+    @classmethod
+    def set_session_prefix(cls, prefix: str) -> None:
+        """Set the storage prefix for the current execution context.
+
+        Chainlit serves multiple chat sessions in one Python process.  A plain
+        class-level prefix is shared across concurrent chats, so relative
+        storage paths can leak into another user's session.  The context-local
+        prefix isolates async tasks while keeping ``S3.prefix`` as a fallback
+        for CLI/tests/backwards compatibility.
+        """
+        normalized = str(prefix).strip("/")
+        if not normalized:
+            raise ValueError("prefix cannot be empty")
+        cls._fallback_prefix = normalized
+        _SESSION_PREFIX.set(normalized)
+
+    @classmethod
+    def current_prefix(cls) -> str:
+        """Return the active context-local prefix, falling back to ``S3.prefix``."""
+        return _SESSION_PREFIX.get() or cls._fallback_prefix
 
     @classmethod
     def path(cls, rel: str) -> str:
         """
-        Convert a relative path to an S3 URL.
+        Convert a relative path to an S3 URL or local session path.
 
-        If an absolute S3 URL is provided (starts with s3://),
-        it is returned unchanged.
+        Explicit S3 and local paths are returned unchanged. Relative paths are
+        resolved against the active backend.
 
         Args:
             rel: Relative path or absolute S3 URL
 
         Returns:
-            str: Full S3 URL
+            str: Full S3 URL or local path
 
         Examples:
         ---------
@@ -91,13 +131,15 @@ class S3:
         >>> S3.path("s3://mybucket/data.csv")
         's3://mybucket/data.csv'
         """
-        # If an absolute S3 URL is provided, pass it through unchanged
-        if isinstance(rel, str) and rel.startswith("s3://"):
+        if cls._is_s3_url(rel) or cls._is_explicit_local_path(rel):
             return rel
 
-        # Always produce a URL; works with fsspec & pandas
         config = get_s3_config()
-        return f"s3://{config.bucket_name}/{cls.prefix}/{rel}".strip("/")
+        if not is_s3_enabled():
+            return os.fspath(cls._local_session_path(rel))
+
+        key = PurePosixPath(cls.current_prefix().strip("/")) / str(rel).lstrip("/")
+        return f"s3://{config.bucket_name}/{key.as_posix()}"
 
     @classmethod
     def open(cls, rel: str, mode: str = "rb"):
@@ -135,23 +177,38 @@ class S3:
         ...     df = pd.read_csv(f)
         """
         config = get_s3_config()
-        use_s3 = is_s3_enabled()
 
-        # 1) Absolute S3 URL → open as-is
-        if isinstance(rel, str) and rel.startswith("s3://"):
+        if cls._is_s3_url(rel):
             return fsspec.open(rel, mode=mode, **config.to_storage_options())
 
-        # 2) Explicit local files (absolute paths or file://) → always open locally
-        if isinstance(rel, str) and (rel.startswith("/") or rel.startswith("file://")):
+        if cls._is_explicit_local_path(rel):
             if rel.startswith("file://"):
                 return fsspec.open(rel, mode=mode)
-            return builtins.open(rel, mode)
+            return cls._open_local_path(Path(rel), mode)
 
-        # 3) If S3 is disabled, allow relative local file access
-        if not use_s3:
-            if isinstance(rel, str) and rel.startswith("file://"):
-                return fsspec.open(rel, mode=mode)
-            return builtins.open(rel, mode)
+        if not is_s3_enabled():
+            return cls._open_local_path(cls._local_session_path(rel), mode)
 
-        # 4) Otherwise treat as a key relative to the session prefix and force S3
         return fsspec.open(cls.path(rel), mode=mode, **config.to_storage_options())
+
+    @staticmethod
+    def _is_s3_url(path: str) -> bool:
+        return isinstance(path, str) and path.startswith("s3://")
+
+    @staticmethod
+    def _is_explicit_local_path(path: str) -> bool:
+        return isinstance(path, str) and (path.startswith("/") or path.startswith("file://"))
+
+    @classmethod
+    def _local_session_path(cls, rel: str) -> Path:
+        return LOCAL_STORAGE_ROOT / Path(cls.current_prefix().strip("/")) / Path(rel)
+
+    @staticmethod
+    def _is_write_mode(mode: str) -> bool:
+        return any(flag in mode for flag in ("w", "a", "x", "+"))
+
+    @classmethod
+    def _open_local_path(cls, path: Path, mode: str):
+        if cls._is_write_mode(mode):
+            path.parent.mkdir(parents=True, exist_ok=True)
+        return builtins.open(path, mode)

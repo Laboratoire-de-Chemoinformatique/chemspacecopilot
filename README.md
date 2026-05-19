@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/logo_dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/logo_light.png">
-    <img src="docs/logo_light.png" alt="ChemSpace Copilot Logo" width="200"/>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo_dark_readme.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/logo_light_readme.png">
+    <img src="docs/logo_light_readme.png" alt="ChemSpace Copilot" width="720"/>
   </picture>
 </p>
 
@@ -37,7 +37,7 @@
 
 ## Overview
 
-ChemSpace Copilot is a multi-agent system powered by the [Agno](https://docs.agno.com/) framework. The default runtime team coordinates seven specialized AI agents for ChEMBL bioactivity download, unified GTM workflows, downstream chemoinformatics, report generation, small-molecule generation, peptide generation, and retrosynthetic planning. A separate robustness evaluation agent is available for analyzing prompt-robustness test outputs. The GTM engine is provided by [chemographykit](https://www.piwheels.org/project/chemographykit/).
+ChemSpace Copilot is a multi-agent system powered by the [Agno](https://docs.agno.com/) framework. The default runtime team coordinates seven specialized AI agents for ChEMBL bioactivity download, unified GTM workflows, downstream chemoinformatics, report generation, small-molecule design, peptide generation, and retrosynthetic planning. A separate robustness evaluation agent is available for analyzing prompt-robustness test outputs. The GTM engine is provided by [chemographykit](https://www.piwheels.org/project/chemographykit/).
 
 ```
 ┌─────────────────────────────────────────┐
@@ -53,9 +53,9 @@ ChemSpace Copilot is a multi-agent system powered by the [Agno](https://docs.agn
 
 ## Features
 
-- **7 Runtime Agents + 1 Evaluation Agent** — ChEMBL data download, unified GTM operations, chemoinformatics analysis, report generation, small-molecule generation, peptide WAE workflows, retrosynthetic planning, and robustness evaluation
+- **7 Runtime Agents + 1 Evaluation Agent** — ChEMBL data download, unified GTM operations, chemoinformatics analysis, report generation, small-molecule design, peptide design workflows, retrosynthetic planning, and robustness evaluation
 - **Generative Topographic Mapping** — Dimensionality reduction and visualization of chemical space via [chemographykit](https://www.piwheels.org/project/chemographykit/)
-- **Molecular and Peptide Generation** — LSTM autoencoder-based small-molecule generation plus peptide WAE generation, interpolation, and GTM-guided targeting
+- **Molecular and Peptide Generation** — Molecular Designer small-molecule generation with autoencoder and LLM engines plus Peptide Designer generation with WAE and LLM engines, interpolation, and GTM-guided targeting
 - **S3/MinIO Integration** — Session-scoped cloud storage with local filesystem fallback
 - **Chainlit Interface** — WebSocket-based real-time chat with password authentication, file upload, and inline molecule rendering
 - **Agentic Memory** — SQLite-backed agentic state and recent session history shared across agent workflows
@@ -75,6 +75,12 @@ docker compose build chainlit-app
 
 Access the application at **http://localhost:8000**
 
+To remove the docker-compose installation and rebuild it from scratch use:
+```bash
+docker compose down --volumes --remove-orphans --rmi all
+```
+WARNING! This would wipe all the previously generated assets on S3 and the previously run sessions of the chatbot.
+
 See the [Docker guide](docs/getting-started/docker.md) for the full Docker deployment guide.
 
 ### Option 2: Local Installation
@@ -93,12 +99,21 @@ DEEPSEEK_API_KEY=your-api-key-here
 # MODEL_ID=deepseek-chat
 # OLLAMA_HOST=http://localhost:11434
 
-# Optional — S3/MinIO storage (disable with USE_S3=false)
-USE_S3=true
+# Optional — S3/MinIO storage (set USE_S3=true only when you want remote storage)
+USE_S3=false
+# When enabled:
 S3_ENDPOINT_URL=http://localhost:9000
 MINIO_ACCESS_KEY=cs_copilot
 MINIO_SECRET_KEY=chempwd123
 ASSETS_BUCKET=chatbot-assets
+
+# Optional — ChEMBL local MySQL (faster queries, offline use)
+# Download dump: https://chembl.gitbook.io/chembl-interface-documentation/downloads
+# CHEMBL_MYSQL_HOST=localhost
+# CHEMBL_MYSQL_PORT=3306
+# CHEMBL_MYSQL_USER=chembl
+# CHEMBL_MYSQL_PASSWORD=
+# CHEMBL_MYSQL_DATABASE=chembl_36
 ```
 
 The repository also includes a tracked `.modelconf` file. Edit it if you want to switch from the default DeepSeek backend to a local Ollama model.
@@ -177,12 +192,12 @@ The system uses a **Factory Pattern + Registry** for agent creation. The default
 
 | Agent | Role |
 |-------|------|
-| **ChEMBL Downloader** | Downloads and filters bioactivity data from the ChEMBL database |
+| **ChEMBL Downloader** | Downloads and filters bioactivity data from ChEMBL (REST API by default; optional [local MySQL backend](https://chembl.gitbook.io/chembl-interface-documentation/downloads)) |
 | **GTM Agent** | Unified GTM operations: build, load, density analysis, activity landscapes, projection, and GTM sampling support |
 | **Chemoinformatician** | Downstream chemoinformatics analysis including scaffold, similarity, clustering, and SAR workflows |
 | **Report Generator** | Formats analysis results into reports and visual outputs |
-| **Autoencoder** | Small-molecule generation via LSTM autoencoders, including standalone and GTM-guided modes |
-| **Peptide WAE** | Peptide sequence generation, latent-space GTM workflows, and DBAASP-backed peptide activity landscapes |
+| **Molecular Designer** | Small-molecule design via autoencoder and LLM engines, including standalone and GTM-guided modes |
+| **Peptide Designer** | Peptide design via WAE and LLM engines, latent-space GTM workflows, and DBAASP-backed peptide activity landscapes |
 | **SynPlanner** | Retrosynthetic planning and route visualization for target molecules |
 
 ### Separate Evaluation Agent

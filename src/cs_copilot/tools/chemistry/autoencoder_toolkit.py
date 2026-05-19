@@ -11,10 +11,12 @@ from the latent space.
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 import numpy as np
 import torch
+from agno.agent import Agent
+from rdkit import Chem
 from tqdm import tqdm
 
 from cs_copilot.storage import S3
@@ -22,11 +24,45 @@ from cs_copilot.tools.constants import (
     DEFAULT_AUTOENCODER_MODEL_PATH,
     HUGGINGFACE_AUTOENCODER_REPO,
 )
+from cs_copilot.tools.io.session_memory import (
+    compact_candidate_preview,
+    register_compounds_from_candidates,
+    register_generated_candidate_set,
+    register_session_object,
+    update_state_targets,
+)
 
 from .base_chemistry import BaseChemistryToolkit, ChemistryError
 from .standardize import standardize_smiles
 
 logger = logging.getLogger(__name__)
+
+SampleReturnFormat = Literal["summary", "list"]
+
+
+def _filter_valid_unique_smiles(raw: List[Any]) -> List[str]:
+    """Drop non-string entries, invalid SMILES, and duplicates (by canonical form).
+
+    Gaussian prior sampling produces many invalid/duplicate SMILES; this filter
+    yields the chemically meaningful subset used by downstream analysis.
+    """
+    seen: set = set()
+    out: List[str] = []
+    for s in raw:
+        if not isinstance(s, str) or not s:
+            continue
+        std = standardize_smiles(s)
+        if std is None:
+            continue
+        mol = Chem.MolFromSmiles(std)
+        if mol is None:
+            continue
+        canonical = Chem.MolToSmiles(mol)
+        if canonical in seen:
+            continue
+        seen.add(canonical)
+        out.append(canonical)
+    return out
 
 
 class AutoencoderError(ChemistryError):
@@ -225,13 +261,13 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
             # Use S3.open() for loading - handles both S3 URLs and local paths transparently
             with S3.open(config_path, "rb") as f:
-                self.config = torch.load(f, weights_only=False)
+                self.config = torch.load(f, weights_only=False, map_location=self.device)
 
             with S3.open(vocab_path, "rb") as f:
-                self.vocab = torch.load(f, weights_only=False)
+                self.vocab = torch.load(f, weights_only=False, map_location=self.device)
 
             with S3.open(model_path, "rb") as f:
-                model_state = torch.load(f, weights_only=False)
+                model_state = torch.load(f, weights_only=False, map_location=self.device)
 
             # Initialize and load the model
             self.model = LSTMAutoencoder(self.vocab, self.config)
@@ -351,7 +387,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
     def sample_from_latent(
         self,
         z: Optional[np.ndarray] = None,
-        n_samples: int = 10,
+        n_samples: int = 5000,
         latent_std: float = 1.0,
         max_len: int = 100,
         temp: float = 1.0,
@@ -364,7 +400,10 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
         Args:
             z: Optional latent vectors (numpy array). If None, samples from Gaussian
-            n_samples: Number of samples to generate (only used if z is None)
+            n_samples: Number of samples to generate when z is None. Default 5000 —
+                the recommended minimum for meaningful chemical-space exploration
+                after validity/uniqueness filtering. Pass a smaller value
+                explicitly for quick demos.
             latent_std: Standard deviation for Gaussian sampling (only used if z is None)
             max_len: Maximum length of generated SMILES
             temp: Temperature for sampling (higher = more random, lower = more deterministic)
@@ -422,26 +461,46 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
     def sample_molecules(
         self,
-        n_samples: int = 10,
+        n_samples: int = 5000,
         latent_std: float = 1.0,
         temperature: float = 1.0,
         decode_mode: str = "sample",
         max_length: int = 100,
-    ) -> List[str]:
+        filter_valid_unique: bool = True,
+        return_format: SampleReturnFormat = "summary",
+        session_key: str = "sampled_molecules",
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Union[List[str], Dict[str, Any]]:
         """
         Sample new molecules from the latent space using Gaussian prior.
 
         Args:
-            n_samples: Number of molecules to generate
+            n_samples: Number of molecules to generate. Defaults to 5000 for
+                meaningful chemical-space exploration; explicit smaller values
+                are respected.
             latent_std: Standard deviation for Gaussian sampling
             temperature: Temperature for sampling (higher = more random)
             decode_mode: 'greedy' for deterministic, 'sample' for stochastic
             max_length: Maximum length of generated SMILES
+            filter_valid_unique: If True (default), drop non-parseable SMILES
+                and deduplicate by canonical form before returning.
+            return_format: "summary" (default) saves the full list as a
+                candidate-set artifact and returns a compact dict with count,
+                preview, session key, and artifact path. "list" returns
+                the raw List[str] directly (legacy behavior — may inflate LLM
+                context with large n_samples).
+            session_key: Key under which the artifact pointer is stored in
+                session state when return_format="summary".
+            agent: Agent instance (auto-injected by agno). Required for
+                "summary" format; if None, gracefully falls back to "list".
+            session_state: Shared session state auto-injected by Agno.
 
         Returns:
-            List of generated SMILES strings
+            Dict summary (default) or List[str] (when return_format="list" or
+            no session state available).
         """
-        return self.sample_from_latent(
+        raw = self.sample_from_latent(
             z=None,
             n_samples=n_samples,
             latent_std=latent_std,
@@ -449,6 +508,100 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             decode=decode_mode,
             max_len=max_length,
         )
+
+        sampled = _filter_valid_unique_smiles(raw) if filter_valid_unique else list(raw)
+
+        state_targets = update_state_targets(agent, session_state)
+        registered_compound_ids: List[str] = []
+        registered_candidate_set_id: Optional[str] = None
+        registered_artifact_path: Optional[str] = None
+        for state in state_targets:
+            use_state_for_summary = state is session_state or (
+                session_state is None and not registered_compound_ids
+            )
+            candidate_ids = register_compounds_from_candidates(
+                state,
+                sampled,
+                source_agent=getattr(agent, "name", None),
+                source_tool="sample_molecules",
+                label_prefix="Autoencoder sample",
+                related={"session_key": session_key},
+                provenance={
+                    "origin_type": "generated",
+                    "origin_agent": "autoencoder_toolkit",
+                    "generation_engine": "autoencoder",
+                },
+                set_current_first=bool(sampled),
+            )
+            if use_state_for_summary:
+                registered_compound_ids = candidate_ids
+            candidate_set_id = register_generated_candidate_set(
+                state,
+                candidate_ids,
+                source_agent=getattr(agent, "name", None),
+                source_tool="sample_molecules",
+                origin_agent="autoencoder_toolkit",
+                generation_engine="autoencoder",
+                generation_mode="sample",
+                session_key=session_key,
+                label="Autoencoder sampled candidates",
+                count_attempted=n_samples,
+                metadata={
+                    "latent_std": latent_std,
+                    "temperature": temperature,
+                    "decode_mode": decode_mode,
+                    "filter_valid_unique": filter_valid_unique,
+                },
+                candidates=sampled,
+            )
+            pointer = state.get(session_key)
+            artifact_path = pointer.get("artifact_path") if isinstance(pointer, dict) else None
+            if use_state_for_summary:
+                registered_candidate_set_id = candidate_set_id
+                registered_artifact_path = artifact_path
+            register_session_object(
+                state,
+                "analysis",
+                {
+                    "analysis_type": "autoencoder_sampling",
+                    "session_key": session_key,
+                    "count_attempted": n_samples,
+                    "count_returned": len(sampled),
+                    "compound_ids": candidate_ids,
+                    "candidate_set_id": candidate_set_id,
+                    "artifact_path": artifact_path,
+                },
+                label="Autoencoder sampling run",
+                source_agent=getattr(agent, "name", None),
+                source_tool="sample_molecules",
+                set_current=True,
+                current_role="analysis",
+            )
+
+        if return_format == "list" or not state_targets:
+            if return_format == "summary" and not state_targets:
+                logger.info(
+                    "sample_molecules called with return_format='summary' but no session "
+                    "state was available; falling back to raw list."
+                )
+            return sampled
+
+        return {
+            "count_attempted": n_samples,
+            "count_returned": len(sampled),
+            "filter_valid_unique": filter_valid_unique,
+            "preview": compact_candidate_preview(sampled),
+            "session_key": session_key,
+            "registered_compound_ids": registered_compound_ids,
+            "registered_candidate_set_id": registered_candidate_set_id,
+            "artifact_path": registered_artifact_path,
+            "artifact_format": "json" if registered_artifact_path else None,
+            "note": (
+                f"Full {len(sampled)}-item SMILES list saved as an artifact. Use "
+                "registered_candidate_set_id or artifact_path for downstream analysis "
+                "(property calculation, clustering, GTM projection, etc.)."
+            ),
+        }
 
     def interpolate_molecules(
         self,

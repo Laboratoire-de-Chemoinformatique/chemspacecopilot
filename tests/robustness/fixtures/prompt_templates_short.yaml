@@ -1,11 +1,11 @@
 prompts:
   full_pipeline:
-    base: "Fetch kinase 2 inhibitor data, prepare GTM, describe the density landscape, prepare and describe the activity landscape, choose the most dense nodes and analyze the chemotypes in them. What assays do they correspond to? Are actives/inactives well separated? Summarize in detail."
+    base: "Fetch CDK2 inhibitor data, prepare GTM, describe the density landscape, prepare and describe the activity landscape, choose the most dense nodes and analyze the chemotypes in them. What assays do they correspond to? Are actives/inactives well separated? Summarize in detail."
     variations:
       - "Retrieve CDK2 inhibitor bioactivity from ChEMBL, build a GTM, describe density and activity landscapes, analyze dense-region scaffolds/assays, assess class separation, and summarize."
 
   chembl_download:
-    base: "Download kinase 2 inhibitor data from ChEMBL"
+    base: "Download CDK2 inhibitor data from ChEMBL"
     variations:
       - "Fetch CDK2 bioactivity from ChEMBL."
 
@@ -59,6 +59,17 @@ prompts:
         variations:
           - "Fetch ChEMBL HIV-1 RT pIC50 inhibition data."
 
+  chembl_specificity_floor:
+    base_prompts:
+      - base: "Fetch kinase 2 inhibitor data from ChEMBL"
+        requires_clarification: true
+        variations:
+          - "Pull kinase-2 inhibitors from ChEMBL."
+      - base: "Retrieve receptor 5 ligands from ChEMBL"
+        requires_clarification: true
+        variations:
+          - "Get receptor-5 binders from ChEMBL."
+
   gtm_optimization:
     base: "Build a GTM map"
     variations:
@@ -80,21 +91,21 @@ prompts:
       - "Find dense regions, decompose scaffolds, report assays, assess class separation."
 
   autoencoder_sampling:
-    base: "Sample from autoencoder model"
+    base: "Use Molecular Designer with the autoencoder engine to sample molecules"
     variations:
-      - "Generate molecules with the autoencoder."
+      - "Generate molecules with Molecular Designer."
 
   gtm_guided_sampling:
-    base: "Sample from autoencoder model using GTM dense nodes as guidance"
+    base: "Use Molecular Designer with GTM dense nodes as guidance"
     variations:
-      - "Generate autoencoder molecules guided by dense GTM regions."
+      - "Generate molecules with Molecular Designer guided by dense GTM regions."
 
   interpolation:
-    base: "Interpolate between two molecules using the autoencoder"
+    base: "Interpolate between two molecules using Molecular Designer"
     variations:
       - "Interpolate between two SMILES in latent space."
 
   latent_exploration:
-    base: "Explore the latent space around a given molecule using the autoencoder"
+    base: "Explore the latent space around a given molecule using Molecular Designer"
     variations:
       - "Generate similar molecules by exploring a compound's latent neighborhood."

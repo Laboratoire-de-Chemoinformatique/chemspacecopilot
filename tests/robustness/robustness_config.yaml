@@ -88,16 +88,16 @@ tests:
     description: "Test chemotype analysis robustness"
     depends_on: ["density_analysis"]
 
-  # Autoencoder tests
+  # Molecular Designer tests
   autoencoder_sampling:
     enabled: false
     prompt_key: "autoencoder_sampling"
-    description: "Test basic autoencoder molecule generation robustness"
+    description: "Test basic Molecular Designer autoencoder-engine generation robustness"
 
   gtm_guided_sampling:
     enabled: false
     prompt_key: "gtm_guided_sampling"
-    description: "Test GTM-guided autoencoder sampling robustness"
+    description: "Test GTM-guided Molecular Designer generation robustness"
     depends_on: ["gtm_optimization"]
 
   interpolation:

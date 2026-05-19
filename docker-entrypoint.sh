@@ -6,6 +6,18 @@ set -e
 
 echo "🧪 Cs_copilot Container Starting..."
 
+# On the arm64 (NGC PyTorch) base image, libucc.so.1 (needed by torch)
+# depends on a newer libucs.so.0 that lives in /opt/hpcx/ucx/lib. A stale
+# system libucs.so.0 in /lib/aarch64-linux-gnu gets loaded first on some
+# import paths and causes:
+#   ImportError: libucc.so.1: undefined symbol: ucs_config_doc_nop
+# Prepend the HPC-X paths to LD_LIBRARY_PATH when they exist so the fresh
+# libucs is picked up. On amd64 (python:3.11-slim), /opt/hpcx does not
+# exist and the block is skipped.
+if [ -d /opt/hpcx/ucx/lib ] && [ -d /opt/hpcx/ucc/lib ]; then
+    export LD_LIBRARY_PATH="/opt/hpcx/ucx/lib:/opt/hpcx/ucc/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
 # Path to persisted secret in mounted volume
 SECRET_FILE="/app/data/.chainlit_secret"
 

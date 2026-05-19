@@ -4,16 +4,29 @@
 Enhanced PandasTools with pointer-based dataframe management and S3 support.
 """
 
+import ast
+import json
 import logging
-from typing import Dict, Optional, Union
+from typing import Any, Dict, Optional, Union
 from uuid import uuid4
 
 import pandas as pd
 from agno.tools.pandas import PandasTools
 
 from cs_copilot.storage import S3
-from cs_copilot.tools.chemistry.standardize import standardize_smiles_column
+from cs_copilot.tools.chemistry.activity_schema import build_compound_memory_preview
+from cs_copilot.tools.chemistry.clean_dataset import prepare_clean_dataset
+from cs_copilot.tools.chemistry.smiles_columns import (
+    find_smiles_column_name,
+    format_smiles_column_expectation,
+    smiles_column_exact_names,
+)
 from cs_copilot.tools.constants import MAX_COL_WIDTH, SAMPLE_COLS, SAMPLE_ROWS
+from cs_copilot.tools.io.session_memory import (
+    register_session_object,
+    resolve_loadable_session_data,
+    update_state_targets,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +124,34 @@ def _normalize_param_aliases(params: dict, canonical: str, aliases: tuple[str, .
             return
 
 
+def _coerce_parameter_mapping(value: Any, param_name: str) -> dict[str, Any]:
+    """Accept dict parameters even when a tool runtime serialized them as strings."""
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value.copy()
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return {}
+        for parser in (json.loads, ast.literal_eval):
+            try:
+                parsed = parser(stripped)
+            except (json.JSONDecodeError, ValueError, SyntaxError):
+                continue
+            if isinstance(parsed, dict):
+                return parsed.copy()
+            raise ValueError(
+                f"{param_name} must decode to a JSON/object dictionary, "
+                f"got {type(parsed).__name__}"
+            )
+        raise ValueError(
+            f"{param_name} must be a dictionary or JSON object string. "
+            f"Received string: {stripped[:200]}"
+        )
+    raise ValueError(f"{param_name} must be a dictionary, got {type(value).__name__}")
+
+
 def _coerce_columns(value, param_name: str) -> list[str]:
     if value is None:
         raise ValueError(f"{param_name} parameter must be provided")
@@ -187,6 +228,17 @@ def _resolve(obj, registry: dict):
     return obj
 
 
+def _raw_dataset_path_for_input(df_path: str, registry: dict[str, pd.DataFrame]) -> Optional[str]:
+    """Return an existing raw path when df_path is a loadable file, not a dataframe key."""
+    if df_path in registry:
+        return None
+    if df_path.endswith((".csv", ".csv.gz", ".tsv", ".tab", ".txt")):
+        return S3.path(df_path)
+    if df_path.startswith(("s3://", "/", "file://")):
+        return S3.path(df_path)
+    return None
+
+
 class PointerPandasTools(PandasTools):
     """
     Enhanced PandasTools with pointer-based dataframe management.
@@ -198,11 +250,62 @@ class PointerPandasTools(PandasTools):
     - Automatic CSV path normalization
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.register(self.load_dataframe_from_session)
+
+    def load_dataframe_from_session(
+        self,
+        dataframe_name: str,
+        session_key: str,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, str]:
+        """
+        Load a session DataFrame or CSV path into the pandas dataframe registry.
+
+        Args:
+            dataframe_name: Name to store the loaded DataFrame under.
+            session_key: Top-level or dotted session key, such as
+                ``analysis_input`` or ``landscape_files.landscape_data_csv``.
+            session_state: Shared session state injected by Agno.
+        """
+        if not dataframe_name:
+            raise ValueError("dataframe_name cannot be empty")
+        if not session_key:
+            raise ValueError("session_key cannot be empty")
+        if session_state is None:
+            raise ValueError("session_state is not available")
+
+        resolved = resolve_loadable_session_data(session_state, session_key)
+        resolved_key = resolved["session_key"]
+        resolved_value = resolved["value"]
+
+        if resolved["kind"] == "dataframe":
+            df = resolved_value.copy()
+        elif resolved["kind"] == "csv_path":
+            path_lower = str(resolved_value).lower().split("?", 1)[0]
+            sep = "\t" if path_lower.endswith((".tsv", ".tab")) else ","
+            with S3.open(resolved_value, "r") as fh:
+                df = pd.read_csv(fh, sep=sep)
+        else:
+            raise TypeError(
+                f"Resolved session key '{resolved_key}' has unsupported kind "
+                f"'{resolved['kind']}'"
+            )
+
+        self.dataframes[dataframe_name] = df
+        return {
+            "dataframe_name": dataframe_name,
+            "session_key": resolved_key,
+            "shape": str(tuple(int(part) for part in df.shape)),
+            "preview": _preview(df),
+        }
+
     def create_pandas_dataframe(
         self,
         dataframe_name: str,
         create_using_function: str,
-        function_parameters: Optional[Dict] = None,
+        function_parameters: Optional[Union[Dict[str, Any], str]] = None,
     ) -> Dict[str, Union[str, pd.DataFrame]]:
         """Create a pandas DataFrame using various methods.
 
@@ -246,7 +349,7 @@ class PointerPandasTools(PandasTools):
         if not create_using_function:
             raise ValueError("create_using_function cannot be empty")
 
-        function_parameters = function_parameters or {}
+        function_parameters = _coerce_parameter_mapping(function_parameters, "function_parameters")
 
         # Normalize CSV params early for common cases
         if create_using_function in {"read_csv", "to_csv"}:
@@ -403,8 +506,9 @@ class PointerPandasTools(PandasTools):
     def run_dataframe_operation(
         self,
         dataframe_name: str,
-        operation: str,
-        operation_parameters: Optional[Dict] = None,
+        operation: Union[str, bool],
+        operation_parameters: Optional[Union[Dict[str, Any], str]] = None,
+        function_parameters: Optional[Union[Dict[str, Any], str]] = None,
     ) -> Union[pd.DataFrame, pd.Series, Dict, str, float, int]:
         """Run operations on existing DataFrames.
 
@@ -412,6 +516,7 @@ class PointerPandasTools(PandasTools):
             dataframe_name: Name of the DataFrame to operate on
             operation: Operation to perform
             operation_parameters: Parameters for the operation
+            function_parameters: Backwards-compatible alias for operation_parameters.
 
         Returns:
             Operation result (DataFrame, Series, scalar, etc.)
@@ -423,12 +528,28 @@ class PointerPandasTools(PandasTools):
         if not dataframe_name:
             raise ValueError("dataframe_name cannot be empty")
 
+        if operation_parameters is None and function_parameters is not None:
+            operation_parameters = function_parameters
+
+        if isinstance(operation, bool):
+            inferred_params = _coerce_parameter_mapping(
+                operation_parameters, "operation_parameters"
+            )
+            if any(key in inferred_params for key in ("by", "sort_by", "order_by")):
+                operation = "sort_values"
+                operation_parameters = inferred_params
+            else:
+                raise ValueError(
+                    "operation must be a pandas operation string, got boolean. "
+                    "Use values like 'sort_values', 'head', 'query', or 'select'."
+                )
+
         if not operation:
             raise ValueError("operation cannot be empty")
 
         operation = _normalize_operation_name(operation)
         operation = _OPERATION_ALIASES.get(operation.lower(), operation)
-        params = (operation_parameters or {}).copy()
+        params = _coerce_parameter_mapping(operation_parameters, "operation_parameters")
 
         # Fix legacy to_csv aliases
         if operation == "to_csv":
@@ -596,7 +717,7 @@ class PointerPandasTools(PandasTools):
                     columns = _coerce_columns(params.pop("column"), param_name="column")
                     value = params.get("value")
                     if not isinstance(value, dict):
-                        params["value"] = {c: value for c in columns}
+                        params["value"] = dict.fromkeys(columns, value)
 
             if operation == "select":
                 columns = params.get("columns", params.get("column"))
@@ -780,6 +901,9 @@ class PointerPandasTools(PandasTools):
         cluster_col: Optional[str] = None,
         smiles_col: Optional[str] = None,
         activity_col: Optional[str] = None,
+        *,
+        agent: Optional[Any] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Union[str, int]]:
         """Normalize a DataFrame to standard analysis format.
 
@@ -792,17 +916,17 @@ class PointerPandasTools(PandasTools):
             df_path: Path to the CSV file (S3 or local) or name of existing DataFrame
             cluster_col: Name of column to use as cluster_id. If None, auto-detects from:
                         ['node_index', 'cluster_id', 'cluster', 'group', 'class', 'label']
-            smiles_col: Name of SMILES column. If None, auto-detects from:
-                       ['smiles', 'SMILES', 'canonical_smiles', 'Smiles']
-            activity_col: Name of activity column. If None, auto-detects from:
-                         ['activity', 'pIC50', 'pKi', 'standard_value', 'value']
+            smiles_col: Name of SMILES column. If None, auto-detects exact common
+                       names first, then column names containing 'smiles'.
+            activity_col: Name of activity column. If None, auto-detects common
+                         raw potency, p-scale potency, and active/inactive label columns.
 
         Returns:
             Dictionary with:
             - dataframe_name: Name of the normalized DataFrame in registry
             - n_rows: Number of rows
             - n_clusters: Number of unique clusters (if cluster column found)
-            - has_activity: Boolean indicating if activity column was found
+            - has_activity: Boolean indicating if an activity column was found
             - columns_mapped: Dict showing original → normalized column mappings
 
         Examples:
@@ -816,7 +940,8 @@ class PointerPandasTools(PandasTools):
             normalize_for_analysis(df_path="molecules.csv")
         """
         # Auto-detect column name patterns
-        SMILES_PATTERNS = ["smiles", "SMILES", "canonical_smiles", "Smiles", "smi"]
+        SMILES_PATTERNS = smiles_column_exact_names("smiles")
+        SMILES_EXPECTATION = format_smiles_column_expectation(SMILES_PATTERNS)
         CLUSTER_PATTERNS = [
             "node_index",
             "cluster_id",
@@ -826,16 +951,6 @@ class PointerPandasTools(PandasTools):
             "label",
             "node",
         ]
-        ACTIVITY_PATTERNS = [
-            "activity",
-            "pIC50",
-            "pKi",
-            "pEC50",
-            "standard_value",
-            "value",
-            "potency",
-        ]
-
         # Load the DataFrame
         df = self._get_or_load_dataframe(df_path)
         df = df.copy()  # Don't modify original
@@ -846,14 +961,11 @@ class PointerPandasTools(PandasTools):
         if smiles_col and smiles_col in df.columns:
             smiles_found = smiles_col
         else:
-            for pattern in SMILES_PATTERNS:
-                if pattern in df.columns:
-                    smiles_found = pattern
-                    break
+            smiles_found = find_smiles_column_name(df.columns, exact_names=SMILES_PATTERNS)
 
         if not smiles_found:
             raise ValueError(
-                f"No SMILES column found. Expected one of {SMILES_PATTERNS}. "
+                f"No SMILES column found. Expected {SMILES_EXPECTATION}. "
                 f"Available columns: {list(df.columns)}"
             )
 
@@ -861,13 +973,6 @@ class PointerPandasTools(PandasTools):
             df = df.rename(columns={smiles_found: "smiles"})
             columns_mapped["smiles"] = smiles_found
             logger.info(f"Mapped '{smiles_found}' → 'smiles'")
-
-        pre_std = len(df)
-        df = standardize_smiles_column(df, "smiles")
-        df = df.dropna(subset=["smiles"]).reset_index(drop=True)
-        dropped = pre_std - len(df)
-        if dropped:
-            logger.info(f"Dropped {dropped} rows with unstandardizable SMILES")
 
         # Normalize cluster column (optional)
         cluster_found = None
@@ -885,25 +990,27 @@ class PointerPandasTools(PandasTools):
                 df = df.rename(columns={cluster_found: "cluster_id"})
                 columns_mapped["cluster_id"] = cluster_found
                 logger.info(f"Mapped '{cluster_found}' → 'cluster_id'")
+
+        prepared = prepare_clean_dataset(
+            df,
+            source_name=df_path,
+            smiles_column="smiles",
+            activity_column=activity_col,
+            raw_dataset_path=_raw_dataset_path_for_input(df_path, self.dataframes),
+            session_state=session_state or getattr(agent, "session_state", None),
+        )
+        df = prepared.clean_df
+        activity_mapping = prepared.activity_mapping
+        final_activity_mapping = prepared.final_activity_mapping
+        has_activity = final_activity_mapping.activity_column is not None
+
+        activity_found = activity_mapping.activity_column
+        if has_activity and activity_found and activity_found != "activity":
+            columns_mapped["activity"] = activity_found
+            logger.info(f"Mapped '{activity_found}' → final 'activity_final'")
+
+        if "cluster_id" in df.columns:
             n_clusters = int(df["cluster_id"].nunique())
-
-        # Normalize activity column (optional)
-        activity_found = None
-        has_activity = False
-        if activity_col and activity_col in df.columns:
-            activity_found = activity_col
-        else:
-            for pattern in ACTIVITY_PATTERNS:
-                if pattern in df.columns:
-                    activity_found = pattern
-                    break
-
-        if activity_found:
-            if activity_found != "activity":
-                df = df.rename(columns={activity_found: "activity"})
-                columns_mapped["activity"] = activity_found
-                logger.info(f"Mapped '{activity_found}' → 'activity'")
-            has_activity = True
 
         # Store in registry with standardized name
         normalized_name = f"analysis_input_{uuid4().hex[:6]}"
@@ -915,11 +1022,68 @@ class PointerPandasTools(PandasTools):
             "n_rows": int(len(df)),
             "has_activity": has_activity,
             "columns_mapped": columns_mapped,
+            "activity_mapping": activity_mapping.to_dict(),
+            "final_activity_mapping": final_activity_mapping.to_dict(),
+            "raw_dataset_path": prepared.raw_dataset_path,
+            "clean_dataset_path": prepared.clean_dataset_path,
+            "descriptor_parquet_path": prepared.descriptor_parquet_path,
+            "standardization_report_path": prepared.standardization_report_path,
+            "standardization_summary": prepared.standardization_summary,
             "preview": _preview(df),
         }
 
         if n_clusters is not None:
             result["n_clusters"] = n_clusters
+
+        for state in update_state_targets(agent, session_state):
+            data_file_paths = state.setdefault("data_file_paths", {})
+            data_file_paths["raw_dataset_path"] = prepared.raw_dataset_path
+            data_file_paths["clean_dataset_path"] = prepared.clean_dataset_path
+            data_file_paths["descriptor_parquet_path"] = prepared.descriptor_parquet_path
+            data_file_paths["standardization_report_path"] = prepared.standardization_report_path
+            data_file_paths["dataset_path"] = prepared.clean_dataset_path
+
+            dataset_id = register_session_object(
+                state,
+                "dataset",
+                {
+                    "dataset_path": prepared.clean_dataset_path,
+                    "raw_dataset_path": prepared.raw_dataset_path,
+                    "clean_dataset_path": prepared.clean_dataset_path,
+                    "descriptor_parquet_path": prepared.descriptor_parquet_path,
+                    "standardization_report_path": prepared.standardization_report_path,
+                    "dataframe_name": normalized_name,
+                    "row_count": int(len(df)),
+                    "raw_row_count": int(prepared.standardization_summary["raw_rows"]),
+                    "columns_mapped": columns_mapped,
+                    "activity_mapping": activity_mapping.to_dict(),
+                    "final_activity_mapping": final_activity_mapping.to_dict(),
+                    "activity_merge_policy": prepared.standardization_summary[
+                        "activity_merge_policy"
+                    ],
+                    "stereochemistry_removed": prepared.standardization_summary[
+                        "stereochemistry_removed"
+                    ],
+                    "standardization_summary": prepared.standardization_summary,
+                    "source_format": activity_mapping.source_format,
+                },
+                label=f"Analysis dataset: {df_path}",
+                source_agent=getattr(agent, "name", None),
+                source_tool="normalize_for_analysis",
+                set_current=True,
+            )
+            for idx, compound in enumerate(
+                build_compound_memory_preview(df, final_activity_mapping), start=1
+            ):
+                register_session_object(
+                    state,
+                    "compound",
+                    {**compound, "related": {"dataset_id": dataset_id}},
+                    label=f"Dataset compound {idx}",
+                    source_agent=getattr(agent, "name", None),
+                    source_tool="normalize_for_analysis",
+                    set_current=False,
+                )
 
         return result
 

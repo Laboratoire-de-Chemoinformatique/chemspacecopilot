@@ -190,7 +190,7 @@ def _check_successful_retrieval(response_text: str) -> bool:
     return ResponseParser.check_success(response_text)
 
 
-CLARIFICATION_PHRASES = ("target", "organism", "assay")
+CLARIFICATION_PHRASES = ("target", "organism", "assay", "mechanism")
 
 
 def _load_dataset(dataset_path: str) -> Optional[pd.DataFrame]:

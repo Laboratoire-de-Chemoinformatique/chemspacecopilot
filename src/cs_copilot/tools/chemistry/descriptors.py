@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 
 from .autoencoder_toolkit import AutoencoderToolkit
-from .base_chemistry import calc_morgan_fp
+from .base_chemistry import calc_morgan_fp_batch
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,9 @@ class MolecularDescriptorEncoder:
     """Factory-style encoder for generating molecular descriptor vectors.
 
     The encoder provides a simple interface that supports multiple descriptor
-    backends (autoencoder embeddings, Morgan fingerprints, ...). Autoencoder
-    embeddings are used by default, but alternative descriptors can be requested
-    via the ``descriptor_type`` argument when calling :meth:`encode`.
+    backends (autoencoder embeddings, Morgan fingerprints, ...). Alternative
+    descriptors can be requested via the ``descriptor_type`` argument when
+    calling :meth:`encode`.
     """
 
     _ALIASES: Dict[str, str] = {
@@ -127,9 +127,11 @@ class MolecularDescriptorEncoder:
         return np.asarray(embeddings, dtype=np.float32)
 
     def _encode_morgan(self, smiles: Sequence[str], *, nbits: int) -> np.ndarray:
+        smiles_values = list(smiles)
+        results = calc_morgan_fp_batch(smiles_values, nbits)
+
         fingerprints: List[np.ndarray] = []
-        for smi in smiles:
-            fp = calc_morgan_fp(smi, nbits)
+        for smi, fp in zip(smiles_values, results, strict=True):
             if fp is None:
                 logger.warning(
                     "Invalid SMILES '%s' encountered during Morgan encoding;"

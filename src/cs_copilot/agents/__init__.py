@@ -29,7 +29,8 @@ Core Agents:
 - "gtm_agent" - Unified GTM operations (build, load, density, activity, project) with smart caching
 - "chemoinformatician" - Comprehensive chemoinformatics (chemotype, clustering, SAR, similarity, QSAR)
 - "report_generator" - Universal presentation layer for all analysis types
-- "autoencoder" - Molecular generation via LSTM autoencoders (standalone + GTM-guided)
+- "molecular_designer" - Small-molecule design via autoencoder and LLM engines
+- "peptide_designer" - Peptide design via WAE and LLM engines plus latent-space GTM workflows
 
 Testing/Evaluation:
 - "robustness_evaluation" - Analyze robustness test results and metrics

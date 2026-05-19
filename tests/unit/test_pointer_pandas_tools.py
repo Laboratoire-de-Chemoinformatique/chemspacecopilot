@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 """Unit tests for PointerPandasTools column parsing fixes."""
 
+import json
+
 import pandas as pd
 import pytest
 
@@ -126,6 +128,120 @@ class TestPointerPandasTools:
         result_df = tools.dataframes[result["dataframe_name"]]
         assert result_df.shape == (3, 2)
         assert list(result_df.columns) == ["molecule_chembl_id", "standard_value"]
+
+    def test_create_pandas_dataframe_accepts_json_string_parameters(
+        self, tools, sample_df, tmp_path
+    ):
+        """Tool runtimes may pass object parameters as JSON strings."""
+        csv_path = tmp_path / "activity.csv"
+        sample_df.to_csv(csv_path, index=False)
+
+        result = tools.create_pandas_dataframe(
+            dataframe_name="loaded_activity",
+            create_using_function="read_csv",
+            function_parameters=json.dumps({"path_or_buf": str(csv_path)}),
+        )
+
+        assert result["dataframe_name"] == "loaded_activity"
+        assert tools.dataframes["loaded_activity"].shape == sample_df.shape
+
+    def test_run_dataframe_operation_accepts_json_string_parameters(self, tools, sample_df):
+        """Operation parameters are parsed when the tool runtime stringifies them."""
+        tools.dataframes["test_df"] = sample_df
+
+        result = tools.run_dataframe_operation(
+            dataframe_name="test_df",
+            operation="select",
+            operation_parameters=json.dumps({"columns": ["molecule_chembl_id", "standard_value"]}),
+        )
+
+        result_df = tools.dataframes[result["dataframe_name"]]
+        assert list(result_df.columns) == ["molecule_chembl_id", "standard_value"]
+
+    def test_run_dataframe_operation_accepts_function_parameters_alias(self, tools, sample_df):
+        """Some model gateways use function_parameters instead of operation_parameters."""
+        tools.dataframes["test_df"] = sample_df
+
+        result = tools.run_dataframe_operation(
+            dataframe_name="test_df",
+            operation="sort_values",
+            function_parameters=json.dumps({"by": "standard_value", "ascending": False}),
+        )
+
+        result_df = tools.dataframes[result["dataframe_name"]]
+        assert result_df["standard_value"].tolist() == [300, 200, 100]
+
+    def test_run_dataframe_operation_infers_sort_for_boolean_operation(self, tools, sample_df):
+        """Recover from OpenRouter tool calls that put True in operation for sort args."""
+        tools.dataframes["test_df"] = sample_df
+
+        result = tools.run_dataframe_operation(
+            dataframe_name="test_df",
+            operation=True,
+            function_parameters={"by": "standard_value", "ascending": False},
+        )
+
+        result_df = tools.dataframes[result["dataframe_name"]]
+        assert result_df["standard_value"].tolist() == [300, 200, 100]
+
+    def test_run_dataframe_operation_prefers_operation_parameters(self, tools, sample_df):
+        """The canonical parameter name wins if both parameter aliases are present."""
+        tools.dataframes["test_df"] = sample_df
+
+        result = tools.run_dataframe_operation(
+            dataframe_name="test_df",
+            operation="select",
+            operation_parameters={"columns": ["molecule_chembl_id"]},
+            function_parameters={"columns": ["standard_value"]},
+        )
+
+        result_df = tools.dataframes[result["dataframe_name"]]
+        assert list(result_df.columns) == ["molecule_chembl_id"]
+
+    def test_load_dataframe_from_session_resolves_top_level_dataframe(self, tools):
+        session_df = pd.DataFrame({"smi": ["CCO"], "activity_final": [7.0]})
+
+        result = tools.load_dataframe_from_session(
+            "loaded",
+            "analysis_input",
+            session_state={"analysis_input": session_df},
+        )
+
+        assert result["session_key"] == "analysis_input"
+        assert tools.dataframes["loaded"].equals(session_df)
+
+    def test_load_dataframe_from_session_resolves_dotted_csv_path(self, tools, tmp_path):
+        csv_path = tmp_path / "landscape.csv"
+        pd.DataFrame({"nodes": [1], "filtered_reg_density": [8.0]}).to_csv(csv_path, index=False)
+
+        result = tools.load_dataframe_from_session(
+            "landscape",
+            "landscape_files.landscape_data_csv",
+            session_state={"landscape_files": {"landscape_data_csv": str(csv_path)}},
+        )
+
+        assert result["session_key"] == "landscape_files.landscape_data_csv"
+        assert tools.dataframes["landscape"]["filtered_reg_density"].tolist() == [8.0]
+
+    def test_load_dataframe_from_session_resolves_container_primary_csv(self, tools, tmp_path):
+        primary_path = tmp_path / "primary.csv"
+        supplementary_path = tmp_path / "supplementary.csv"
+        pd.DataFrame({"kind": ["primary"]}).to_csv(primary_path, index=False)
+        pd.DataFrame({"kind": ["supplementary"]}).to_csv(supplementary_path, index=False)
+
+        result = tools.load_dataframe_from_session(
+            "resolved",
+            "analysis_outputs",
+            session_state={
+                "analysis_outputs": {
+                    "supplementary_data": [str(supplementary_path)],
+                    "primary_data_csv": str(primary_path),
+                }
+            },
+        )
+
+        assert result["session_key"] == "analysis_outputs.primary_data_csv"
+        assert tools.dataframes["resolved"]["kind"].tolist() == ["primary"]
 
     def test_getitem_with_comma_separated_string(self, tools, sample_df):
         """Test __getitem__ with comma-separated string."""
@@ -269,3 +385,76 @@ class TestPointerPandasTools:
         assert isinstance(result, dict)
         assert result["IC50"] == 2
         assert result["Ki"] == 1
+
+    def test_normalize_for_analysis_detects_derived_smiles_column(self, tools):
+        """Test normalize_for_analysis detects SMILES columns by containment."""
+        tools.dataframes["derived_smiles_df"] = pd.DataFrame(
+            {
+                "standardized_smiles": ["CCO", "CCN"],
+                "node_index": [1, 2],
+                "standard_value": [10.0, 20.0],
+                "standard_units": ["nM", "nM"],
+            }
+        )
+
+        result = tools.normalize_for_analysis("derived_smiles_df")
+        normalized = tools.dataframes[result["dataframe_name"]]
+
+        assert result["columns_mapped"]["smiles"] == "standardized_smiles"
+        assert result["columns_mapped"]["cluster_id"] == "node_index"
+        assert result["columns_mapped"]["activity"] == "standard_value"
+        assert result["activity_mapping"]["activity_column"] == "standard_value"
+        assert result["final_activity_mapping"]["activity_column"] == "activity_final"
+        assert normalized["smiles"].tolist() == ["CCO", "CCN"]
+        assert "morgan_fingerprint" not in normalized.columns
+        assert (
+            result["clean_dataset_path"] == result["standardization_summary"]["clean_dataset_path"]
+        )
+        assert result["descriptor_parquet_path"].endswith(".parquet")
+
+    def test_normalize_for_analysis_registers_user_dataset_activity_memory(self, tools):
+        """User datasets get sparse activity memory without ChEMBL-specific fields."""
+        tools.dataframes["user_activity_df"] = pd.DataFrame(
+            {
+                "canonical_smiles": ["CCO", "CCN"],
+                "IC50_nM": [10.0, 100.0],
+            }
+        )
+        session_state = {}
+
+        result = tools.normalize_for_analysis("user_activity_df", session_state=session_state)
+
+        memory = session_state["session_objects"]
+        dataset = next(iter(memory["datasets"].values()))
+        compounds = list(memory["compounds"].values())
+
+        assert result["activity_mapping"]["activity_column"] == "IC50_nM"
+        assert result["activity_mapping"]["activity_semantics"] == "lower_is_better"
+        assert result["final_activity_mapping"]["activity_column"] == "activity_final"
+        assert session_state["data_file_paths"]["dataset_path"] == result["clean_dataset_path"]
+        assert session_state["data_file_paths"]["raw_dataset_path"] == result["raw_dataset_path"]
+        assert (
+            session_state["data_file_paths"]["descriptor_parquet_path"]
+            == result["descriptor_parquet_path"]
+        )
+        assert dataset["activity_mapping"]["activity_column"] == "IC50_nM"
+        assert dataset["clean_dataset_path"] == result["clean_dataset_path"]
+        assert dataset["descriptor_parquet_path"] == result["descriptor_parquet_path"]
+        assert compounds[0]["activity"]["endpoint"] == "IC50"
+        assert compounds[0]["activity"]["score"] == 8.0
+        assert "assay_chembl_id" not in compounds[0]
+
+    def test_normalize_for_analysis_prefers_exact_smiles_column(self, tools):
+        """Test normalize_for_analysis does not remap when exact smiles exists."""
+        tools.dataframes["exact_smiles_df"] = pd.DataFrame(
+            {
+                "canonical_smiles": ["CCN"],
+                "smiles": ["CCO"],
+            }
+        )
+
+        result = tools.normalize_for_analysis("exact_smiles_df")
+        normalized = tools.dataframes[result["dataframe_name"]]
+
+        assert "smiles" not in result["columns_mapped"]
+        assert normalized["smiles"].tolist() == ["CCO"]

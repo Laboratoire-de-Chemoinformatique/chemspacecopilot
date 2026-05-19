@@ -7,6 +7,7 @@ Contains the base factory class and all specialized factory implementations.
 
 import logging
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -18,20 +19,25 @@ from cs_copilot.tools import (
     ChemblToolkit,
     ChemicalSimilarityToolkit,
     GTMToolkit,
-    PeptideWAEToolkit,
+    MolecularDesignerToolkit,
+    PeptideDesignerToolkit,
     PointerPandasTools,
+    SessionMemoryToolkit,
     SynPlannerToolkit,
     # SessionToolkit,
+    save_gtm_landscape_plot,
     save_gtm_plot,
+    save_markdown_report,
+    save_rich_report,
 )
 from cs_copilot.tools.analysis import RobustnessAnalysisToolkit
 
 from .prompts import (
-    AUTOENCODER_INSTRUCTIONS,
     CHEMBL_INSTRUCTIONS,
     CHEMOINFORMATICIAN_INSTRUCTIONS,  # Comprehensive chemoinformatics analysis
     GTM_AGENT_INSTRUCTIONS,  # Unified GTM agent (all GTM operations)
-    PEPTIDE_WAE_INSTRUCTIONS,  # Peptide WAE for amino acid sequence generation
+    MOLECULAR_DESIGNER_INSTRUCTIONS,
+    PEPTIDE_DESIGNER_INSTRUCTIONS,  # Peptide Designer for amino acid sequence generation
     REPORT_GENERATOR_INSTRUCTIONS,  # Universal presentation layer
     ROBUSTNESS_EVALUATION_INSTRUCTIONS,
     SYNPLANNER_INSTRUCTIONS,
@@ -64,6 +70,16 @@ class AgentCreationError(Exception):
     """Exception raised when agent creation fails."""
 
     pass
+
+
+def _merge_session_state_defaults(target: Dict[str, Any], defaults: Dict[str, Any]) -> None:
+    """Merge agent default state into shared state without replacing existing values."""
+    for key, value in (defaults or {}).items():
+        if key not in target:
+            target[key] = deepcopy(value)
+            continue
+        if isinstance(target[key], dict) and isinstance(value, dict):
+            _merge_session_state_defaults(target[key], value)
 
 
 class BaseAgentFactory(ABC):
@@ -100,6 +116,7 @@ class BaseAgentFactory(ABC):
         try:
             config = self.get_agent_config()
             config.validate()
+            provided_session_state = kwargs.pop("session_state", None)
 
             # Log agent creation
             self.logger.info(f"Creating agent: {config.name}")
@@ -119,7 +136,11 @@ class BaseAgentFactory(ABC):
             # Add optional parameters if they exist
             if config.instructions:
                 agent_kwargs["instructions"] = config.instructions
-            if config.session_state:
+            if provided_session_state is not None:
+                if config.session_state:
+                    _merge_session_state_defaults(provided_session_state, config.session_state)
+                agent_kwargs["session_state"] = provided_session_state
+            elif config.session_state:
                 agent_kwargs["session_state"] = config.session_state
 
             # Add any additional kwargs passed in
@@ -307,6 +328,8 @@ class ChEMBLDownloaderFactory(BaseAgentFactory):
             name="chembl_agent",
             description="""
             You are a specialized agent for downloading and processing bioactivity data from the ChEMBL database.
+            You support multiple backends: local SQL databases (SQLite, PostgreSQL, or MySQL — used when configured) and the ChEMBL REST API.
+            The backend is selected automatically — you do not need to worry about which one is active.
             Your role is to query ChEMBL based on user requests (e.g., protein targets, compound types),
             retrieve relevant bioactivity data, validate data quality, and prepare structured datasets
             for downstream cheminformatics analysis.
@@ -319,7 +342,12 @@ class ChEMBLDownloaderFactory(BaseAgentFactory):
             instructions=CHEMBL_INSTRUCTIONS,
             session_state={
                 "data_file_paths": {
-                    "dataset_path": None,
+                    "dataset_path": None,  # Backward-compatible alias for clean_dataset_path.
+                    "raw_dataset_path": None,
+                    "clean_dataset_path": None,
+                    "filtered_dataset_path": None,
+                    "descriptor_parquet_path": None,
+                    "standardization_report_path": None,
                 }
             },
         )
@@ -438,31 +466,36 @@ class ChemoinformaticianFactory(BaseAgentFactory):
         )
 
 
-class AutoencoderFactory(BaseAgentFactory):
-    """Factory for creating autoencoder-based molecular generation agents.
+class MolecularDesignerFactory(BaseAgentFactory):
+    """Factory for creating small-molecule design agents.
 
     Supports two modes:
-    - **Standalone**: Encode/decode SMILES, sample from latent space, interpolate, explore neighborhoods
-    - **GTM-guided**: Combine GTM maps with autoencoders for targeted molecular generation from
-      specific map regions (by density, activity, or coordinates)
+    - **Engine-driven design**: Use autoencoder or LLM engines behind a common facade
+    - **Standalone autoencoder**: Encode/decode SMILES, sample latent space, interpolate, explore neighborhoods
+    - **GTM-guided**: Combine GTM maps with generative engines for targeted molecular design
+      from specific map regions (by density, activity, or coordinates)
 
     Enhanced with GTM cache awareness to avoid redundant GTM loading when working with GTM Agent
     in the same session.
     """
 
-    agent_type = "autoencoder"
-    aliases = ["autoencoder_gtm_sampling"]
+    agent_type = "molecular_designer"
 
     def get_agent_config(self) -> AgentConfig:
+        autoencoder_toolkit = AutoencoderToolkit()
         return AgentConfig(
-            name="autoencoder_agent",
+            name="molecular_designer_agent",
             description="""
-            You are a scientific assistant specialized in molecular generation and analysis using LSTM
-            autoencoders. You operate in two modes:
+            You are a scientific assistant specialized in small-molecule design and analysis.
+            You operate through a molecular design engine facade so new generative engines can
+            be attached without changing agent routing.
 
-            **Standalone mode**: Encode molecules to latent representations, generate novel structures
-            by sampling from latent space, interpolate between molecules, and explore chemical space
-            neighborhoods to understand structure-property relationships.
+            **Autoencoder engine**: Encode molecules to latent representations, generate novel
+            structures by sampling from latent space, interpolate between molecules, and explore
+            chemical-space neighborhoods to understand structure-property relationships.
+
+            **LLM engine**: Propose candidate SMILES from a design objective or constraints, then
+            validate, standardize, deduplicate, and rank candidates before presenting them.
 
             **GTM-guided mode**: Combine Generative Topographic Mapping (GTM) with autoencoders for
             targeted molecular generation. Sample molecules from specific regions of GTM maps
@@ -473,15 +506,21 @@ class AutoencoderFactory(BaseAgentFactory):
             eliminating redundant loading for multi-step workflows (e.g., GTM density → sampling).
             """,
             tools=[
-                AutoencoderToolkit(),
+                MolecularDesignerToolkit(autoencoder_toolkit=autoencoder_toolkit),
+                autoencoder_toolkit,
                 GTMToolkit(),
                 ChemicalSimilarityToolkit(),
                 PointerPandasTools(),
             ],
-            instructions=AUTOENCODER_INSTRUCTIONS,
+            instructions=MOLECULAR_DESIGNER_INSTRUCTIONS,
             session_state={
                 "data_file_paths": {
-                    "dataset_path": None,
+                    "dataset_path": None,  # Backward-compatible alias for clean_dataset_path.
+                    "raw_dataset_path": None,
+                    "clean_dataset_path": None,
+                    "filtered_dataset_path": None,
+                    "descriptor_parquet_path": None,
+                    "standardization_report_path": None,
                 },
             },
         )
@@ -524,6 +563,8 @@ class GTMAgentFactory(BaseAgentFactory):
             tools=[
                 GTMToolkit(),
                 PointerPandasTools(),
+                SessionMemoryToolkit(),
+                save_gtm_landscape_plot,
                 save_gtm_plot,
             ],
             instructions=GTM_AGENT_INSTRUCTIONS,
@@ -531,7 +572,9 @@ class GTMAgentFactory(BaseAgentFactory):
                 "gtm_cache": {
                     "model": None,
                     "dataset": None,
-                    "metadata": {},
+                    "metadata": {
+                        "optimization_strategy": None,
+                    },
                 },
                 "gtm_file_paths": {
                     "gtm_path": None,
@@ -559,7 +602,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
     - Chemotype analysis reports
     - GTM density reports
     - GTM activity/SAR reports
-    - Autoencoder generation reports
+    - Molecular designer generation reports
     - Combined/custom reports
 
     **Separation of Concerns**: Analysis agents produce structured data, Report Generator handles presentation.
@@ -582,7 +625,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
             in a clear, actionable manner.
 
             Capabilities:
-            - **Multi-format reports**: Generate markdown, HTML, or text reports
+            - **Multi-format reports**: Generate image-rich HTML/PDF reports and markdown fallbacks
             - **Visualization creation**: Produce publication-quality plots and charts
             - **Template-based formatting**: Consistent structure across different report types
             - **Flexible input handling**: Works with results from any analysis agent
@@ -591,7 +634,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
             - Chemotype analysis: Scaffold distributions, similarity heatmaps, cluster comparisons
             - GTM density: Density overlays, neighborhood preservation, coverage analysis
             - GTM activity/SAR: Activity landscapes, potency hotspots, structure-activity insights
-            - Autoencoder generation: Generated molecules, diversity metrics, similarity analyses
+            - Analog generation: Generated molecules, map context, diversity metrics, similarity analyses
             - Combined reports: Multi-analysis integration with comparative visualizations
 
             Key Features:
@@ -605,13 +648,17 @@ class ReportGeneratorFactory(BaseAgentFactory):
             """,
             tools=[
                 PointerPandasTools(),
+                save_gtm_landscape_plot,  # For saved GTM landscape tables
                 save_gtm_plot,  # For GTM-specific visualizations
+                save_rich_report,  # Persists image-rich HTML/PDF reports
+                save_markdown_report,  # Persists the final markdown report
                 # Plotting libraries (matplotlib, seaborn) available via Python environment
             ],
             instructions=REPORT_GENERATOR_INSTRUCTIONS,
             session_state={
                 "report_outputs": {
                     "report_path": None,
+                    "report_paths": {},
                     "plots": [],
                     "report_type": None,
                 },
@@ -676,13 +723,14 @@ class SynPlannerFactory(BaseAgentFactory):
         )
 
 
-class PeptideWAEFactory(BaseAgentFactory):
-    """Factory for creating peptide WAE-based sequence generation agents.
+class PeptideDesignerFactory(BaseAgentFactory):
+    """Factory for creating peptide design agents.
 
-    This agent uses a Wasserstein Autoencoder (WAE) trained on peptide data
-    to encode, decode, sample, and interpolate amino acid sequences. The WAE
-    can generate any peptides; activity landscape data comes from DBAASP
-    (antimicrobial peptides specifically).
+    This agent exposes a Peptide Designer facade over multiple peptide design
+    engines. The default WAE engine encodes, decodes, samples, and interpolates
+    amino acid sequences; the LLM engine proposes sequence candidates from
+    natural-language objectives. The WAE model can generate any peptides;
+    activity landscape data comes from DBAASP (antimicrobial peptides specifically).
 
     Key capabilities:
     - **Encoding**: Convert peptide sequences to 100-dimensional latent vectors
@@ -697,17 +745,28 @@ class PeptideWAEFactory(BaseAgentFactory):
     Example: "M L L L L L A L A L L A L L L A L L L"
     """
 
-    agent_type = "peptide_wae"
+    agent_type = "peptide_designer"
 
     def get_agent_config(self) -> AgentConfig:
         return AgentConfig(
-            name="peptide_wae_agent",
+            name="peptide_designer_agent",
             description="""
             You are a scientific assistant specialized in peptide sequence generation and analysis
-            using Wasserstein Autoencoders (WAE). You work with amino acid sequences represented
-            as space-separated single-letter codes (e.g., "M L L L L L A L A L L A L L L").
+            through Peptide Designer. You operate through a peptide design engine facade so new
+            generative engines can be attached without changing agent routing.
+
+            **WAE engine**: Encode peptides to latent representations, generate novel sequences
+            by sampling from latent space, interpolate between peptides, and explore neighborhoods
+            around seed sequences.
+
+            **LLM engine**: Propose peptide sequences from design objectives or constraints, then
+            validate, normalize, deduplicate, and rank candidates before presenting them.
+
+            Amino acid sequences are represented as space-separated single-letter codes
+            (e.g., "M L L L L L A L A L L A L L L").
 
             **Core Capabilities**:
+            - **Design peptides**: Generate peptide candidates through WAE or LLM engines
             - **Encode peptides**: Convert peptide sequences to 100-dimensional latent representations
             - **Decode latent vectors**: Generate peptide sequences from latent space
             - **Sample new peptides**: Generate novel peptides from Gaussian prior
@@ -734,10 +793,11 @@ class PeptideWAEFactory(BaseAgentFactory):
             **Note**: Activity landscapes use DBAASP data and are specific to antimicrobial peptides.
             """,
             tools=[
-                PeptideWAEToolkit(),
+                PeptideDesignerToolkit(),
                 GTMToolkit(),
                 PointerPandasTools(),
+                save_gtm_landscape_plot,
                 save_gtm_plot,
             ],
-            instructions=PEPTIDE_WAE_INSTRUCTIONS,
+            instructions=PEPTIDE_DESIGNER_INSTRUCTIONS,
         )

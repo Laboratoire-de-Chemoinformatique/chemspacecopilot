@@ -494,7 +494,8 @@ class RobustnessAnalysisToolkit(Toolkit):
                 )
             if comp.get("process_consistency", 1) < 0.80:
                 insights.append(
-                    "⚠️  Process inconsistency detected. " "Tool call sequences vary across prompts."
+                    "⚠️  Process inconsistency detected. "
+                    "Tool call sequences vary across prompts."
                 )
 
         # Generic recommendations

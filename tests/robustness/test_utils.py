@@ -195,6 +195,8 @@ class ResponseParser:
     # Regex patterns for file extraction
     FILE_PATTERNS = [
         r"Saved to S3:\s*[`'\"]([^`'\"]+)[`'\"]",  # Pattern 1: "Saved to S3: `filename`"
+        r"Saved locally:\s*[`'\"]([^`'\"]+)[`'\"]",  # Pattern 1b: "Saved locally: `filename`"
+        r"Saved to:\s*[`'\"]([^`'\"]+)[`'\"]",  # Pattern 1c: "Saved to: `filename`"
         r"saved (?:to|as|in)\s*[`'\"]([^`'\"]+\.csv)[`'\"]",  # Pattern 2: "saved to `file.csv`"
         r"[`'\"]?(chembl_[^`'\"<>\s]+\.csv)[`'\"]?",  # Pattern 3: chembl_*.csv
         r"`([^`]+\.csv)`",  # Pattern 4: Any .csv in backticks

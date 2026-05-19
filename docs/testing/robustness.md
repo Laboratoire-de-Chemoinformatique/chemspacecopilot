@@ -67,7 +67,7 @@ Score = 0.4 × Data + 0.3 × Semantic + 0.2 × Process + 0.1 × Visual
 tests/robustness/
 ├── test_chembl_interactivity.py       # ChEMBL clarification flow tests
 ├── test_pipeline_robustness.py        # Full pipeline robustness tests
-├── test_autoencoder_robustness.py     # Autoencoder operation tests
+├── test_autoencoder_robustness.py     # Molecular Designer autoencoder-engine tests
 ├── robustness_minimal_example.py      # Config-driven test runner
 ├── conftest.py                        # Shared pytest fixtures
 ├── test_utils.py                      # Core utilities

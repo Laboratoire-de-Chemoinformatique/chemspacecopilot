@@ -22,6 +22,7 @@ from .base import (
 
 # Import ChemblToolkit - now safe because it uses lazy initialization internally
 from .chembl import ChemblToolkit
+from .chembl_fetcher import ChemblDataFetcher, RestChemblFetcher, SqlChemblFetcher
 from .types import DBConfig, PaginationMode, QueryMetrics, QueryParams, Record, ResultPage
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,10 @@ __all__ = [
     # Toolkit classes
     "BaseDatabaseToolkit",
     "ChemblToolkit",
+    # Fetcher strategies
+    "ChemblDataFetcher",
+    "RestChemblFetcher",
+    "SqlChemblFetcher",
     # Types and configurations
     "DBConfig",
     "QueryParams",

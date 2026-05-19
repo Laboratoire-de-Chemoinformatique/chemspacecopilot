@@ -36,6 +36,23 @@ else
     echo "📄 No .env file (optional). Copy .env.example to .env for file-based config."
 fi
 
+# Detect host architecture and export TARGETARCH so docker-compose.yml can
+# forward it to the Dockerfile build arg. On DGX Spark (aarch64) this
+# triggers the NVIDIA NGC PyTorch base with a CUDA-enabled torch build.
+case "$(uname -m)" in
+    aarch64|arm64)
+        export TARGETARCH=arm64
+        ;;
+    x86_64|amd64)
+        export TARGETARCH=amd64
+        ;;
+    *)
+        export TARGETARCH=amd64
+        echo "⚠️  Unknown host arch $(uname -m); defaulting TARGETARCH=amd64"
+        ;;
+esac
+echo "📌 Build target arch: $TARGETARCH"
+
 # Agno telemetry status
 if [ "${AGNO_TELEMETRY:-false}" = "true" ]; then
     echo "📡 Agno telemetry: ENABLED"
@@ -62,6 +79,23 @@ if [ "$MODEL_PROVIDER" = "ollama" ]; then
     fi
     export OLLAMA_HOST
     echo "📌 Ollama host: $OLLAMA_HOST"
+elif [ "$MODEL_PROVIDER" = "openrouter" ]; then
+    # OpenRouter (cloud gateway) — API key is required
+    if [ -z "$OPENROUTER_API_KEY" ] || [ "$OPENROUTER_API_KEY" = "your-openrouter-api-key-here" ]; then
+        echo ""
+        echo "OPENROUTER_API_KEY is required for OpenRouter provider. Enter it now (not saved to disk):"
+        read -rs OPENROUTER_API_KEY
+        echo ""
+        if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "❌ Error: OPENROUTER_API_KEY is empty"
+            echo "Create .env from .env.example and set OPENROUTER_API_KEY, or run this script and enter the key when prompted."
+            exit 1
+        fi
+        export OPENROUTER_API_KEY
+        echo "✅ Using API key from this session (not stored in .env)"
+    else
+        export OPENROUTER_API_KEY
+    fi
 else
     # DeepSeek (cloud API) — API key is required
     if [ -z "$DEEPSEEK_API_KEY" ] || [ "$DEEPSEEK_API_KEY" = "your-deepseek-api-key-here" ]; then
@@ -160,7 +194,46 @@ export POSTGRES_PORT
 echo "📌 PostgreSQL will use port $POSTGRES_PORT (5432-5441 fallback)"
 echo ""
 
+# ChEMBL SQLite database (optional)
+if [ -z "$CHEMBL_SQLITE_PATH" ]; then
+    echo "Enter path to ChEMBL SQLite file on this machine (or press Enter to skip):"
+    read -r CHEMBL_SQLITE_PATH
+fi
+
+CHEMBL_OVERRIDE=""
+if [ -n "$CHEMBL_SQLITE_PATH" ]; then
+    if [ ! -f "$CHEMBL_SQLITE_PATH" ]; then
+        echo "❌ Error: ChEMBL SQLite file not found: $CHEMBL_SQLITE_PATH"
+        exit 1
+    fi
+    cat > docker-compose.chembl-local.yml <<EOF
+version: '3.8'
+services:
+  chainlit-app:
+    environment:
+      - CHEMBL_SQLITE_PATH=/app/chembl/chembl.db
+    volumes:
+      - ${CHEMBL_SQLITE_PATH}:/app/chembl/chembl.db:ro
+EOF
+    CHEMBL_OVERRIDE="-f docker-compose.chembl-local.yml"
+    echo "📌 ChEMBL SQLite: $CHEMBL_SQLITE_PATH → /app/chembl/chembl.db (read-only)"
+else
+    rm -f docker-compose.chembl-local.yml
+    echo "📌 ChEMBL SQLite: not configured (using REST API fallback)"
+fi
+echo ""
+
 echo "✅ Configuration validated"
+echo ""
+
+# Auto-detect GPU and pick compose override
+GPU_OVERRIDE=""
+if docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi &>/dev/null 2>&1; then
+    echo "🖥️  GPU detected — CUDA acceleration enabled"
+else
+    echo "⚠️  No GPU detected — falling back to CPU mode"
+    GPU_OVERRIDE="-f docker-compose.cpu.yml"
+fi
 echo ""
 
 # Check if running in development or production mode
@@ -172,21 +245,21 @@ read -p "Enter choice [1-2]: " mode_choice
 # Avoid Compose v1 "recreate" path that can raise KeyError: 'ContainerConfig' with newer Docker Engine
 # (see docker/compose#11693). Down then up uses "create" instead of "recreate".
 if [ "$mode_choice" = "2" ]; then
-    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans 2>/dev/null || true
+    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml $CHEMBL_OVERRIDE $GPU_OVERRIDE down --remove-orphans 2>/dev/null || true
 else
-    $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
+    $COMPOSE_CMD -f docker-compose.yml $CHEMBL_OVERRIDE $GPU_OVERRIDE down --remove-orphans 2>/dev/null || true
 fi
 
 if [ "$mode_choice" = "2" ]; then
     echo ""
     echo "🔧 Starting in DEVELOPMENT mode..."
     echo ""
-    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml up -d
+    $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml $CHEMBL_OVERRIDE $GPU_OVERRIDE up -d
 else
     echo ""
     echo "🚀 Starting in PRODUCTION mode..."
     echo ""
-    $COMPOSE_CMD up -d
+    $COMPOSE_CMD -f docker-compose.yml $CHEMBL_OVERRIDE $GPU_OVERRIDE up -d
 fi
 
 echo ""
