@@ -1171,6 +1171,7 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "    • noise_scale: Controls diversity (0.05-0.15 = close analogs, 0.2-0.4 = moderate, 0.5+ = diverse)",
     "    • n_neighbors: Number of analogs to generate (default 5)",
     "  - Default to noise_scale=0.1 for close analogs unless user specifies otherwise",
+    "  - Do not count the exact seed sequence as an analog; report the parent/seed separately if it appears in context",
     "  - Report similarity between generated peptides and original (if requested)",
     # Phase 9: Reconstruction
     "Step 9: For testing reconstruction quality:",
@@ -1206,6 +1207,7 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "  - Prefer `sample_peptides_from_landscape(organism=..., landscape_id='dbaasp_amp_v1')` for activity-guided AMP candidate generation",
     "  - Use `sample_peptides_from_node_coordinates(coordinates=[[x, y], ...], organism=...)` when the user names specific GTM coordinates",
     "  - Sampling must be from active node coordinates or selected active zones, not from raw DBAASP peptide identities",
+    "  - Report generated peptides as candidates from high-activity nodes; node scores are inherited landscape-zone scores, not sequence-specific measured activity values",
     "  - After landscape-guided sampling, identity/diversity analysis, PyFAMSA-aligned Logomaker logo artifacts, and landscape overlay plots are generated automatically",
     "  - Show the returned landscape_display_markdown image links, or explicitly show activity_landscape_png, sampling_nodes_landscape_png, and generated_peptides_landscape_png so the user can inspect the landscape used, selected sampling nodes, and generated peptide projections",
     "  - Treat each sampled GTM node like a peptide analogue cluster; show node_logo_display_markdown when available so each node has its own sequence logo",

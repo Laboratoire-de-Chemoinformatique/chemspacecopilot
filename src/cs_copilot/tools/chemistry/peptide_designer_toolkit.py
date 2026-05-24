@@ -97,6 +97,7 @@ class PeptideDesignRequest:
     decode_mode: str = "categorical"
     noise_scale: float = 0.1
     latent_std: float = 1.0
+    exclude_seed_sequence: bool = True
 
 
 @dataclass
@@ -274,6 +275,26 @@ def _dedupe_peptide_candidates(
             seen.add(candidate.sequence)
         out.append(candidate)
     return out
+
+
+def _filter_seed_sequence_candidates(
+    candidates: Sequence[PeptideCandidate],
+    seed_sequence: Optional[str],
+) -> List[PeptideCandidate]:
+    """Remove exact seed-sequence reconstructions from analog candidates."""
+    seed_normalized = _normalize_peptide_sequence(seed_sequence)
+    if seed_normalized is None:
+        return list(candidates)
+
+    filtered: List[PeptideCandidate] = []
+    for candidate in candidates:
+        candidate_normalized = _normalize_peptide_sequence(
+            candidate.sequence or candidate.original_sequence
+        )
+        if candidate_normalized == seed_normalized:
+            continue
+        filtered.append(candidate)
+    return filtered
 
 
 def _sequence_similarity(sequence: str, seed_sequence: Optional[str]) -> Optional[float]:
@@ -1460,10 +1481,13 @@ class WAEPeptideDesignEngine:
         elif mode in {"analog", "neighborhood"} or request.seed_sequence:
             if not request.seed_sequence:
                 raise PeptideDesignerError("seed_sequence is required for analog generation.")
+            n_neighbors = request.n_candidates
+            if request.exclude_seed_sequence:
+                n_neighbors = max(request.n_candidates * 2, request.n_candidates + 1)
             raw = self.toolkit.explore_latent_neighborhood(
                 base_sequence=request.seed_sequence,
                 noise_scale=request.noise_scale,
-                n_neighbors=request.n_candidates,
+                n_neighbors=n_neighbors,
                 temperature=request.temperature,
                 decode_mode=request.decode_mode,
             )
@@ -1487,7 +1511,9 @@ class WAEPeptideDesignEngine:
             metadata={
                 "generation_mode": mode,
                 "n_requested": request.n_candidates,
+                "n_raw_decoded": len(raw),
                 "seed_sequence": request.seed_sequence,
+                "exclude_seed_sequence": request.exclude_seed_sequence,
             },
         )
 
@@ -1547,6 +1573,7 @@ class LLMPeptideDesignEngine:
                 "generation_mode": request.generation_mode,
                 "n_requested": request.n_candidates,
                 "seed_sequence": request.seed_sequence,
+                "exclude_seed_sequence": request.exclude_seed_sequence,
                 "constraints": request.constraints,
             },
         )
@@ -1559,6 +1586,8 @@ class LLMPeptideDesignEngine:
             f"Requested candidates: {request.n_candidates}\n"
             f"Seed peptide sequence: {request.seed_sequence or 'none'}\n"
             f"Constraints: {json.dumps(request.constraints or {}, sort_keys=True)}\n"
+            "For analog/neighborhood generation, do not return the exact seed sequence "
+            "as a candidate.\n"
             "Return candidates as structured data with sequence, rationale, and optional score."
         )
 
@@ -1690,6 +1719,7 @@ class PeptideDesignerToolkit(Toolkit):
         decode_mode: str = "categorical",
         noise_scale: float = 0.1,
         latent_std: float = 1.0,
+        exclude_seed_sequence: bool = True,
         include_invalid: bool = False,
         return_format: SampleReturnFormat = "summary",
         session_key: str = "designed_peptides",
@@ -1711,6 +1741,8 @@ class PeptideDesignerToolkit(Toolkit):
             decode_mode: Decode mode for compatible engines.
             noise_scale: Latent perturbation scale for WAE analog generation.
             latent_std: Standard deviation for WAE prior sampling.
+            exclude_seed_sequence: Whether exact seed reconstructions are removed from
+                analog/neighborhood outputs.
             include_invalid: Whether to keep invalid candidates in returned/stored results.
             return_format: "summary" saves full results as an artifact and stores a compact
                 session-state pointer; "list" returns all inline.
@@ -1734,11 +1766,23 @@ class PeptideDesignerToolkit(Toolkit):
             decode_mode=decode_mode,
             noise_scale=noise_scale,
             latent_std=latent_std,
+            exclude_seed_sequence=exclude_seed_sequence,
         )
 
         result = self._get_engine(engine, agent).design(request)
         candidates = result.candidates if include_invalid else result.valid_candidates()
+        exact_seed_removed = 0
+        if (
+            exclude_seed_sequence
+            and seed_sequence
+            and generation_mode in {"analog", "neighborhood"}
+        ):
+            before_seed_filter = len(candidates)
+            candidates = _filter_seed_sequence_candidates(candidates, seed_sequence)
+            exact_seed_removed = before_seed_filter - len(candidates)
         candidates = self._rank_candidate_objects(candidates, seed_sequence=seed_sequence)
+        if generation_mode in {"analog", "neighborhood"}:
+            candidates = candidates[:n_candidates]
         candidate_dicts = [candidate.to_dict() for candidate in candidates]
 
         state_targets = update_state_targets(agent, session_state)
@@ -1756,6 +1800,8 @@ class PeptideDesignerToolkit(Toolkit):
                 "session_key": session_key,
                 "goal": goal,
                 "seed_sequence": seed_sequence,
+                "exclude_seed_sequence": exclude_seed_sequence,
+                "exact_seed_sequence_removed": exact_seed_removed,
                 "count_attempted": len(result.candidates),
                 "count_returned": len(candidate_dicts),
                 "engine_metadata": result.metadata,
@@ -1773,6 +1819,8 @@ class PeptideDesignerToolkit(Toolkit):
                 "generation_mode": generation_mode,
                 "count_attempted": len(result.candidates),
                 "count_returned": len(candidate_dicts),
+                "exclude_seed_sequence": exclude_seed_sequence,
+                "exact_seed_sequence_removed": exact_seed_removed,
                 "preview": _compact_peptide_preview(candidate_dicts),
             }
             analysis_id = register_session_object(
@@ -1784,6 +1832,8 @@ class PeptideDesignerToolkit(Toolkit):
                     "generation_mode": generation_mode,
                     "goal": goal,
                     "session_key": session_key,
+                    "exclude_seed_sequence": exclude_seed_sequence,
+                    "exact_seed_sequence_removed": exact_seed_removed,
                     "count_attempted": len(result.candidates),
                     "count_returned": len(candidate_dicts),
                     "artifact_path": artifact["artifact_path"],
@@ -1814,6 +1864,8 @@ class PeptideDesignerToolkit(Toolkit):
             "count_attempted": len(result.candidates),
             "count_returned": len(candidate_dicts),
             "include_invalid": include_invalid,
+            "exclude_seed_sequence": exclude_seed_sequence,
+            "exact_seed_sequence_removed": exact_seed_removed,
             "preview": _compact_peptide_preview(candidate_dicts),
             "session_key": session_key,
             "registered_analysis_id": selected_analysis_id,
@@ -1836,6 +1888,7 @@ class PeptideDesignerToolkit(Toolkit):
         n_analogs: int = 10,
         noise_scale: float = 0.1,
         temperature: float = 1.0,
+        exclude_seed_sequence: bool = True,
         include_invalid: bool = False,
         return_format: SampleReturnFormat = "summary",
         session_key: str = "designed_peptide_analogs",
@@ -1852,6 +1905,8 @@ class PeptideDesignerToolkit(Toolkit):
             n_analogs: Number of analogs to generate.
             noise_scale: Latent perturbation scale for the WAE engine.
             temperature: Sampling temperature.
+            exclude_seed_sequence: Whether exact seed reconstructions are removed from
+                the analog list.
             include_invalid: Whether to keep invalid candidates.
             return_format: "summary" or "list".
             session_key: Session-state key for summary mode.
@@ -1869,6 +1924,7 @@ class PeptideDesignerToolkit(Toolkit):
             generation_mode="analog",
             temperature=temperature,
             noise_scale=noise_scale,
+            exclude_seed_sequence=exclude_seed_sequence,
             include_invalid=include_invalid,
             return_format=return_format,
             session_key=session_key,

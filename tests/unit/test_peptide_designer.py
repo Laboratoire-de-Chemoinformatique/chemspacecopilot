@@ -206,7 +206,7 @@ def test_wae_analog_and_interpolation_wrappers_dispatch(monkeypatch, tmp_path):
 
     def fake_neighborhood(**kwargs):
         calls.append(("neighborhood", kwargs))
-        return ["A C E"]
+        return ["A C D", "A C E"]
 
     def fake_interpolate(**kwargs):
         calls.append(("interpolate", kwargs))
@@ -220,6 +220,12 @@ def test_wae_analog_and_interpolation_wrappers_dispatch(monkeypatch, tmp_path):
         n_analogs=1,
         return_format="list",
     )
+    analogs_with_seed = toolkit.generate_peptide_analogs(
+        seed_sequence="A C D",
+        n_analogs=1,
+        exclude_seed_sequence=False,
+        return_format="list",
+    )
     interpolation = toolkit.design_peptide_interpolation(
         sequence1="A C D",
         sequence2="A C E",
@@ -228,11 +234,15 @@ def test_wae_analog_and_interpolation_wrappers_dispatch(monkeypatch, tmp_path):
     )
 
     assert analogs[0]["sequence"] == "A C E"
+    assert analogs_with_seed[0]["sequence"] == "A C D"
     assert interpolation[0]["sequence"] == "A C D"
     assert calls[0][0] == "neighborhood"
     assert calls[0][1]["base_sequence"] == "A C D"
-    assert calls[1][0] == "interpolate"
-    assert calls[1][1]["seq2"] == "A C E"
+    assert calls[0][1]["n_neighbors"] == 2
+    assert calls[1][0] == "neighborhood"
+    assert calls[1][1]["n_neighbors"] == 1
+    assert calls[2][0] == "interpolate"
+    assert calls[2][1]["seq2"] == "A C E"
 
 
 def test_llm_engine_parses_structured_peptide_proposals(monkeypatch, tmp_path):
