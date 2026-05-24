@@ -393,6 +393,16 @@ def test_sample_peptides_from_landscape_persists_analysis_artifacts(monkeypatch,
     assert pointer["generated_peptides_landscape_png"].endswith(".png")
     assert len(pointer["landscape_visualizations"]) == 3
     assert len(pointer["landscape_figure_ids"]) == 3
+    assert "![Peptide activity landscape]" in pointer["landscape_display_markdown"]
+    assert shared_state["analysis_results"]["plots"] == [
+        pointer["activity_landscape_png"],
+        pointer["sampling_nodes_landscape_png"],
+        pointer["generated_peptides_landscape_png"],
+    ]
+    assert (
+        shared_state["landscape_files"]["peptide_generated_peptides_landscape_png"]
+        == pointer["generated_peptides_landscape_png"]
+    )
     assert pointer["seq2logo_png"].endswith(".png")
     assert shared_state["session_objects"]["current"]["analysis"] == "ana_001"
 

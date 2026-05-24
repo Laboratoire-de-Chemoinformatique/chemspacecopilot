@@ -1207,7 +1207,7 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "  - Use `sample_peptides_from_node_coordinates(coordinates=[[x, y], ...], organism=...)` when the user names specific GTM coordinates",
     "  - Sampling must be from active node coordinates or selected active zones, not from raw DBAASP peptide identities",
     "  - After landscape-guided sampling, identity/diversity analysis, PyFAMSA-aligned Logomaker logo artifacts, and landscape overlay plots are generated automatically",
-    "  - Show the activity_landscape_png, sampling_nodes_landscape_png, and generated_peptides_landscape_png paths so the user can inspect the landscape used, selected sampling nodes, and generated peptide projections",
+    "  - Show the returned landscape_display_markdown image links, or explicitly show activity_landscape_png, sampling_nodes_landscape_png, and generated_peptides_landscape_png so the user can inspect the landscape used, selected sampling nodes, and generated peptide projections",
     "  - Use `analyze_peptide_candidates` for externally supplied, manually edited, or previously generated peptide sets",
     "  - Continue using `train_gtm_on_latent_space`, `sample_dense_nodes`, or `sample_by_coordinates` only for custom user datasets where the user supplied the sequences",
     # Phase 14: Error Handling

@@ -1067,6 +1067,77 @@ def _register_peptide_landscape_visualization_figures(
     return figure_ids
 
 
+def _peptide_landscape_display_markdown(artifacts: Dict[str, Any]) -> str:
+    lines = []
+    for label, key in (
+        ("Peptide activity landscape", "activity_landscape_png"),
+        ("Selected peptide sampling nodes", "sampling_nodes_landscape_png"),
+        ("Generated peptides projected on landscape", "generated_peptides_landscape_png"),
+    ):
+        path = artifacts.get(key)
+        if path:
+            lines.append(f"![{label}]({path})")
+    return "\n".join(lines)
+
+
+def _append_unique_paths(paths: List[Any], values: Sequence[Any]) -> None:
+    existing = {str(value) for value in paths if value}
+    for value in values:
+        if not value:
+            continue
+        text = str(value)
+        if text in existing:
+            continue
+        paths.append(text)
+        existing.add(text)
+
+
+def _publish_peptide_landscape_visualizations_to_session(
+    session_state: Dict[str, Any],
+    artifacts: Dict[str, Any],
+) -> None:
+    plot_paths = [
+        artifacts.get("activity_landscape_png"),
+        artifacts.get("sampling_nodes_landscape_png"),
+        artifacts.get("generated_peptides_landscape_png"),
+    ]
+
+    analysis_results = session_state.setdefault("analysis_results", {})
+    if not isinstance(analysis_results, dict):
+        analysis_results = {}
+        session_state["analysis_results"] = analysis_results
+    plots = analysis_results.setdefault("plots", [])
+    if not isinstance(plots, list):
+        plots = []
+        analysis_results["plots"] = plots
+    _append_unique_paths(plots, plot_paths)
+    analysis_results["peptide_activity_landscape_png"] = artifacts.get("activity_landscape_png")
+    analysis_results["peptide_sampling_nodes_landscape_png"] = artifacts.get(
+        "sampling_nodes_landscape_png"
+    )
+    analysis_results["peptide_generated_peptides_landscape_png"] = artifacts.get(
+        "generated_peptides_landscape_png"
+    )
+    analysis_results["peptide_generated_projection_csv"] = artifacts.get(
+        "generated_peptide_projection_csv"
+    )
+
+    landscape_files = session_state.setdefault("landscape_files", {})
+    if not isinstance(landscape_files, dict):
+        landscape_files = {}
+        session_state["landscape_files"] = landscape_files
+    landscape_files["peptide_activity_landscape_png"] = artifacts.get("activity_landscape_png")
+    landscape_files["peptide_sampling_nodes_landscape_png"] = artifacts.get(
+        "sampling_nodes_landscape_png"
+    )
+    landscape_files["peptide_generated_peptides_landscape_png"] = artifacts.get(
+        "generated_peptides_landscape_png"
+    )
+    landscape_files["peptide_generated_projection_csv"] = artifacts.get(
+        "generated_peptide_projection_csv"
+    )
+
+
 def _save_peptide_landscape_artifacts(
     session_state: Dict[str, Any],
     *,
@@ -2306,7 +2377,13 @@ class PeptideDesignerToolkit(Toolkit):
                 source_agent=getattr(agent, "name", None),
                 source_tool=source_tool,
             )
-            artifacts_with_figures = {**artifacts, "landscape_figure_ids": figure_ids}
+            _publish_peptide_landscape_visualizations_to_session(state, artifacts)
+            display_markdown = _peptide_landscape_display_markdown(artifacts)
+            artifacts_with_figures = {
+                **artifacts,
+                "landscape_figure_ids": figure_ids,
+                "landscape_display_markdown": display_markdown,
+            }
             state[session_key] = {
                 **artifacts_with_figures,
                 "origin_agent": "peptide_designer",
