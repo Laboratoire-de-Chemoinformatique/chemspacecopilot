@@ -694,7 +694,12 @@ def _build_peptide_candidate_analysis(
     }
 
 
-def _write_seq2logo_plot(freq_df: pd.DataFrame, rel_path: str) -> Optional[str]:
+def _write_seq2logo_plot(
+    freq_df: pd.DataFrame,
+    rel_path: str,
+    *,
+    title: str = "Peptide Sequence Logo",
+) -> Optional[str]:
     if freq_df.empty:
         return None
 
@@ -724,7 +729,7 @@ def _write_seq2logo_plot(freq_df: pd.DataFrame, rel_path: str) -> Optional[str]:
     ax.set_xlabel("Position")
     ax.set_ylabel("Frequency")
     ax.set_ylim(0, 1)
-    ax.set_title("Peptide Sequence Logo")
+    ax.set_title(title)
     ax.set_xticks(logo_df.index)
     ax.set_xticklabels([str(value) for value in logo_df.index], fontsize=8)
     ax.spines["top"].set_visible(False)
@@ -734,6 +739,103 @@ def _write_seq2logo_plot(freq_df: pd.DataFrame, rel_path: str) -> Optional[str]:
         fig.savefig(handle, format="png", dpi=160)
     plt.close(fig)
     return S3.path(rel_path)
+
+
+def _candidate_node_id(candidate: Dict[str, Any]) -> Optional[int]:
+    properties = candidate.get("properties") or {}
+    if not isinstance(properties, dict):
+        return None
+    node_id = properties.get("node_id")
+    if node_id is None or pd.isna(node_id):
+        return None
+    return int(node_id)
+
+
+def _save_node_sequence_logo_artifacts(
+    candidates: Sequence[Dict[str, Any]],
+    *,
+    alphabet: Optional[Sequence[str]],
+    include_seq2logo: bool,
+    rel,
+) -> Dict[str, Any]:
+    if not include_seq2logo:
+        return {
+            "node_sequence_logos": [],
+            "node_seqlogo_pngs": [],
+            "node_logo_manifest_csv": None,
+            "node_logo_manifest_csv_rel_path": None,
+        }
+
+    grouped: Dict[int, List[Dict[str, Any]]] = {}
+    for candidate in candidates:
+        if not isinstance(candidate, dict) or not candidate.get("sequence"):
+            continue
+        node_id = _candidate_node_id(candidate)
+        if node_id is None:
+            continue
+        grouped.setdefault(node_id, []).append(candidate)
+
+    records: List[Dict[str, Any]] = []
+    for node_id in sorted(grouped):
+        node_candidates = grouped[node_id]
+        node_analysis = _build_peptide_candidate_analysis(node_candidates, alphabet=alphabet)
+        freq_df = node_analysis["position_frequency_matrix"]
+        if freq_df.empty:
+            continue
+
+        freq_rel = rel(f"node_{node_id}_position_frequency_matrix.csv")
+        aligned_rel = rel(f"node_{node_id}_aligned_peptides.csv")
+        logo_rel = rel(f"node_{node_id}_seq2logo.png")
+        with S3.open(freq_rel, "w") as handle:
+            freq_df.to_csv(handle, index=False)
+        aligned_records = node_analysis["aligned_sequences"]
+        if aligned_records:
+            with S3.open(aligned_rel, "w") as handle:
+                pd.DataFrame(aligned_records).to_csv(handle, index=False)
+            aligned_path = S3.path(aligned_rel)
+            aligned_rel_path: Optional[str] = aligned_rel
+        else:
+            aligned_path = None
+            aligned_rel_path = None
+        logo_path = _write_seq2logo_plot(
+            freq_df,
+            logo_rel,
+            title=f"Peptide Sequence Logo for GTM Node {node_id}",
+        )
+        if not logo_path:
+            continue
+        identity = node_analysis["identity_summary"]
+        alignment = node_analysis["alignment_summary"]
+        records.append(
+            {
+                "node_id": node_id,
+                "n_sequences": identity.get("n_sequences"),
+                "n_unique_sequences": identity.get("n_unique_sequences"),
+                "alignment_method": alignment.get("method"),
+                "alignment_length": alignment.get("alignment_length"),
+                "position_frequency_matrix_csv": S3.path(freq_rel),
+                "position_frequency_matrix_csv_rel_path": freq_rel,
+                "aligned_peptides_csv": aligned_path,
+                "aligned_peptides_csv_rel_path": aligned_rel_path,
+                "seq2logo_png": logo_path,
+                "seq2logo_png_rel_path": logo_rel,
+            }
+        )
+
+    manifest_path = None
+    manifest_rel_path = None
+    if records:
+        manifest_rel_path = rel("node_sequence_logos.csv")
+        with S3.open(manifest_rel_path, "w") as handle:
+            pd.DataFrame(records).to_csv(handle, index=False)
+        manifest_path = S3.path(manifest_rel_path)
+
+    return {
+        "node_sequence_logos": records,
+        "node_seqlogo_pngs": [record["seq2logo_png"] for record in records],
+        "node_logo_manifest_csv": manifest_path,
+        "node_logo_manifest_csv_rel_path": manifest_rel_path,
+    }
 
 
 def _visualization_nodes_for_landscape(
@@ -1080,6 +1182,16 @@ def _peptide_landscape_display_markdown(artifacts: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _node_logo_display_markdown(artifacts: Dict[str, Any]) -> str:
+    lines = []
+    for record in artifacts.get("node_sequence_logos") or []:
+        path = record.get("seq2logo_png")
+        node_id = record.get("node_id")
+        if path and node_id is not None:
+            lines.append(f"![Peptide logo for GTM node {node_id}]({path})")
+    return "\n".join(lines)
+
+
 def _append_unique_paths(paths: List[Any], values: Sequence[Any]) -> None:
     existing = {str(value) for value in paths if value}
     for value in values:
@@ -1100,6 +1212,7 @@ def _publish_peptide_landscape_visualizations_to_session(
         artifacts.get("activity_landscape_png"),
         artifacts.get("sampling_nodes_landscape_png"),
         artifacts.get("generated_peptides_landscape_png"),
+        *(artifacts.get("node_seqlogo_pngs") or []),
     ]
 
     analysis_results = session_state.setdefault("analysis_results", {})
@@ -1121,6 +1234,10 @@ def _publish_peptide_landscape_visualizations_to_session(
     analysis_results["peptide_generated_projection_csv"] = artifacts.get(
         "generated_peptide_projection_csv"
     )
+    analysis_results["peptide_node_seqlogo_pngs"] = artifacts.get("node_seqlogo_pngs") or []
+    analysis_results["peptide_node_logo_manifest_csv"] = artifacts.get(
+        "node_logo_manifest_csv"
+    )
 
     landscape_files = session_state.setdefault("landscape_files", {})
     if not isinstance(landscape_files, dict):
@@ -1135,6 +1252,10 @@ def _publish_peptide_landscape_visualizations_to_session(
     )
     landscape_files["peptide_generated_projection_csv"] = artifacts.get(
         "generated_peptide_projection_csv"
+    )
+    landscape_files["peptide_node_seqlogo_pngs"] = artifacts.get("node_seqlogo_pngs") or []
+    landscape_files["peptide_node_logo_manifest_csv"] = artifacts.get(
+        "node_logo_manifest_csv"
     )
 
 
@@ -1222,6 +1343,12 @@ def _save_peptide_landscape_artifacts(
         freq_path = None
 
     seq2logo_path = _write_seq2logo_plot(freq_df, seq2logo_rel) if include_seq2logo else None
+    node_logo_artifacts = _save_node_sequence_logo_artifacts(
+        candidates,
+        alphabet=metadata.get("peptide_alphabet"),
+        include_seq2logo=include_seq2logo,
+        rel=rel,
+    )
     visualization_artifacts = _save_peptide_landscape_visualizations(
         bundle,
         selected_nodes,
@@ -1246,6 +1373,7 @@ def _save_peptide_landscape_artifacts(
             "generated_peptide_projection_csv": projection_path,
             "position_frequency_matrix_csv": freq_path,
             "seq2logo_png": seq2logo_path,
+            "node_logo_manifest_csv": node_logo_artifacts.get("node_logo_manifest_csv"),
             **{
                 key: visualization_artifacts.get(key)
                 for key in (
@@ -1255,6 +1383,7 @@ def _save_peptide_landscape_artifacts(
                 )
             },
         },
+        "node_sequence_logos": node_logo_artifacts.get("node_sequence_logos", []),
         "landscape_visualizations": visualization_artifacts.get("landscape_visualizations", []),
     }
     with S3.open(metadata_rel, "w") as handle:
@@ -1273,6 +1402,9 @@ def _save_peptide_landscape_artifacts(
         ),
         "position_frequency_matrix_csv_rel_path": freq_rel if freq_path else None,
         "seq2logo_png_rel_path": seq2logo_rel if seq2logo_path else None,
+        "node_logo_manifest_csv_rel_path": node_logo_artifacts.get(
+            "node_logo_manifest_csv_rel_path"
+        ),
         "activity_landscape_png_rel_path": visualization_artifacts.get(
             "activity_landscape_png_rel_path"
         ),
@@ -1289,6 +1421,7 @@ def _save_peptide_landscape_artifacts(
         "diversity_summary": analysis["diversity_summary"],
         "alignment_summary": analysis["alignment_summary"],
         "generated_peptide_projection_csv": projection_path,
+        **node_logo_artifacts,
         **visualization_artifacts,
     }
 
@@ -2020,7 +2153,8 @@ class PeptideDesignerToolkit(Toolkit):
 
         Sampling uses node coordinates and GTM/WAE tensors from the landscape bundle.
         It does not sample or redistribute raw DBAASP peptide rows. Summary mode also
-        stores activity landscape, selected-node, and generated-peptide projection PNGs.
+        stores activity landscape, selected-node, generated-peptide projection PNGs, and
+        one sequence logo per node with accepted generated peptides.
         """
         bundle = self._load_peptide_landscape_bundle(
             landscape_id=landscape_id,
@@ -2078,8 +2212,8 @@ class PeptideDesignerToolkit(Toolkit):
 
         Coordinates are resolved to aggregate node centers. If organism is supplied,
         the returned node metadata includes organism-specific activity values. Summary
-        mode also stores activity landscape, selected-node, and generated-peptide
-        projection PNGs.
+        mode also stores activity landscape, selected-node, generated-peptide projection
+        PNGs, and one sequence logo per node with accepted generated peptides.
         """
         bundle = self._load_peptide_landscape_bundle(
             landscape_id=landscape_id,
@@ -2118,7 +2252,7 @@ class PeptideDesignerToolkit(Toolkit):
         session_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Run identity, diversity, PyFAMSA alignment, and Logomaker logo analysis.
+        Run identity, diversity, PyFAMSA alignment, and global/per-node Logomaker logos.
 
         Args:
             reference: Session key, candidate artifact path, CSV path, or inline list.
@@ -2157,8 +2291,14 @@ class PeptideDesignerToolkit(Toolkit):
                 metadata=metadata,
                 include_seq2logo=include_seq2logo,
             )
-            state[session_key] = {
+            _publish_peptide_landscape_visualizations_to_session(state, artifacts)
+            node_logo_markdown = _node_logo_display_markdown(artifacts)
+            artifacts_with_logos = {
                 **artifacts,
+                "node_logo_display_markdown": node_logo_markdown,
+            }
+            state[session_key] = {
+                **artifacts_with_logos,
                 "origin_agent": "peptide_designer",
                 "analysis_type": "peptide_candidate_analysis",
                 "count_returned": len(candidates),
@@ -2174,6 +2314,8 @@ class PeptideDesignerToolkit(Toolkit):
                     "metadata_json_rel_path": artifacts["metadata_json_rel_path"],
                     "generated_peptides_csv": artifacts["generated_peptides_csv"],
                     "generated_peptides_csv_rel_path": artifacts["generated_peptides_csv_rel_path"],
+                    "node_logo_manifest_csv": artifacts.get("node_logo_manifest_csv"),
+                    "node_seqlogo_pngs": artifacts.get("node_seqlogo_pngs"),
                     "seq2logo_png": artifacts.get("seq2logo_png"),
                 },
                 label="Peptide candidate analysis",
@@ -2183,7 +2325,7 @@ class PeptideDesignerToolkit(Toolkit):
                 current_role="analysis",
             )
             if not selected_artifacts or state is session_state:
-                selected_artifacts = artifacts
+                selected_artifacts = artifacts_with_logos
                 selected_analysis_id = analysis_id
 
         return {
@@ -2379,10 +2521,12 @@ class PeptideDesignerToolkit(Toolkit):
             )
             _publish_peptide_landscape_visualizations_to_session(state, artifacts)
             display_markdown = _peptide_landscape_display_markdown(artifacts)
+            node_logo_markdown = _node_logo_display_markdown(artifacts)
             artifacts_with_figures = {
                 **artifacts,
                 "landscape_figure_ids": figure_ids,
                 "landscape_display_markdown": display_markdown,
+                "node_logo_display_markdown": node_logo_markdown,
             }
             state[session_key] = {
                 **artifacts_with_figures,

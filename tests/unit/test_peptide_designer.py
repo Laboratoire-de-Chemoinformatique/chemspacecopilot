@@ -394,15 +394,29 @@ def test_sample_peptides_from_landscape_persists_analysis_artifacts(monkeypatch,
     assert len(pointer["landscape_visualizations"]) == 3
     assert len(pointer["landscape_figure_ids"]) == 3
     assert "![Peptide activity landscape]" in pointer["landscape_display_markdown"]
-    assert shared_state["analysis_results"]["plots"] == [
+    assert pointer["node_logo_manifest_csv"].endswith(".csv")
+    assert pointer["node_sequence_logos"]
+    assert pointer["node_seqlogo_pngs"]
+    assert "![Peptide logo for GTM node" in pointer["node_logo_display_markdown"]
+    assert {record["node_id"] for record in pointer["node_sequence_logos"]}.issubset({1, 2})
+    assert all(record["seq2logo_png"].endswith(".png") for record in pointer["node_sequence_logos"])
+    assert shared_state["analysis_results"]["plots"][:3] == [
         pointer["activity_landscape_png"],
         pointer["sampling_nodes_landscape_png"],
         pointer["generated_peptides_landscape_png"],
     ]
+    assert set(pointer["node_seqlogo_pngs"]).issubset(shared_state["analysis_results"]["plots"])
+    assert (
+        shared_state["analysis_results"]["peptide_node_logo_manifest_csv"]
+        == pointer["node_logo_manifest_csv"]
+    )
     assert (
         shared_state["landscape_files"]["peptide_generated_peptides_landscape_png"]
         == pointer["generated_peptides_landscape_png"]
     )
+    assert shared_state["landscape_files"]["peptide_node_seqlogo_pngs"] == pointer[
+        "node_seqlogo_pngs"
+    ]
     assert pointer["seq2logo_png"].endswith(".png")
     assert shared_state["session_objects"]["current"]["analysis"] == "ana_001"
 
@@ -419,6 +433,11 @@ def test_sample_peptides_from_landscape_persists_analysis_artifacts(monkeypatch,
         projected = pd.read_csv(handle)
     assert set(projected["node_id"]).issubset({1, 2})
     assert {"sequence", "x", "y", "activity_mean"}.issubset(projected.columns)
+
+    with S3.open(pointer["node_logo_manifest_csv_rel_path"], "r") as handle:
+        node_logo_manifest = pd.read_csv(handle)
+    assert set(node_logo_manifest["node_id"]).issubset({1, 2})
+    assert {"node_id", "n_sequences", "seq2logo_png"}.issubset(node_logo_manifest.columns)
 
 
 def test_peptide_candidate_analysis_aligns_before_logo_matrix():
