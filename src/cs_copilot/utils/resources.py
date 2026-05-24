@@ -17,9 +17,12 @@ from cs_copilot.tools.constants import (
     DEFAULT_AUTOENCODER_MODEL_PATH,
     DEFAULT_DBAASP_DATA_PATH,
     DEFAULT_GTM_MODEL_PATH,
+    DEFAULT_PEPTIDE_DESIGNER_DATA_PATH,
     DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH,
+    DEFAULT_PEPTIDE_LANDSCAPE_ID,
     HUGGINGFACE_AUTOENCODER_REPO,
     HUGGINGFACE_GTM_REPO,
+    HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO,
     HUGGINGFACE_PEPTIDE_WAE_REPO,
 )
 
@@ -173,6 +176,12 @@ def _detect_cached_models() -> Dict[str, bool]:
     return {
         "autoencoder": _dir_has_files(DEFAULT_AUTOENCODER_MODEL_PATH),
         "peptide_designer": _dir_has_files(DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH),
+        "peptide_landscape": (
+            Path(DEFAULT_PEPTIDE_DESIGNER_DATA_PATH)
+            / "landscapes"
+            / DEFAULT_PEPTIDE_LANDSCAPE_ID
+            / "landscape.json"
+        ).is_file(),
         "gtm": _dir_has_files(DEFAULT_GTM_MODEL_PATH),
         "dbaasp_data": Path(DEFAULT_DBAASP_DATA_PATH).is_file(),
     }
@@ -232,6 +241,10 @@ def _build_recommendations(profile: Dict[str, Any]) -> List[str]:
         not_cached.append(f"autoencoder ({HUGGINGFACE_AUTOENCODER_REPO})")
     if not models["peptide_designer"]:
         not_cached.append(f"Peptide Designer ({HUGGINGFACE_PEPTIDE_WAE_REPO})")
+    if not models.get("peptide_landscape", True):
+        not_cached.append(
+            f"Peptide Designer aggregate landscapes ({HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO})"
+        )
     if not models["gtm"]:
         not_cached.append(f"GTM ({HUGGINGFACE_GTM_REPO})")
 

@@ -729,8 +729,9 @@ class PeptideDesignerFactory(BaseAgentFactory):
     This agent exposes a Peptide Designer facade over multiple peptide design
     engines. The default WAE engine encodes, decodes, samples, and interpolates
     amino acid sequences; the LLM engine proposes sequence candidates from
-    natural-language objectives. The WAE model can generate any peptides;
-    activity landscape data comes from DBAASP (antimicrobial peptides specifically).
+    natural-language objectives. The WAE model can generate any peptides.
+    Antimicrobial activity guidance uses HuggingFace aggregate peptide landscape
+    bundles, not raw DBAASP redistribution.
 
     Key capabilities:
     - **Encoding**: Convert peptide sequences to 100-dimensional latent vectors
@@ -738,8 +739,8 @@ class PeptideDesignerFactory(BaseAgentFactory):
     - **Sampling**: Generate novel peptides from Gaussian prior
     - **Interpolation**: Smooth transitions between peptides in latent space
     - **Neighborhood exploration**: Generate peptide analogs
-    - **GTM integration**: Train GTMs on latent space, create activity landscapes
-    - **Activity landscapes**: Use DBAASP data (specific to antimicrobial peptides)
+    - **GTM integration**: Train GTMs on latent space or use aggregate HF landscapes
+    - **Activity landscapes**: Sample from active node coordinates in aggregate AMP landscapes
 
     Input format: Space-separated single-letter amino acid codes
     Example: "M L L L L L A L A L L A L L L A L L L"
@@ -773,7 +774,8 @@ class PeptideDesignerFactory(BaseAgentFactory):
             - **Interpolate**: Create smooth transitions between peptides in latent space
             - **Explore neighborhoods**: Generate peptide analogs with controlled diversity
             - **GTM on latent space**: Train Generative Topographic Maps on WAE latent vectors
-            - **Activity landscapes**: Create per-organism antimicrobial activity landscapes from DBAASP data
+            - **Activity landscapes**: Use aggregate HF peptide landscape bundles for active-zone sampling
+            - **Landscape analysis**: Automatically run identity/diversity and Seq2Logo-style analysis
 
             **Key Parameters**:
             - Max sequence length: 25 amino acids
@@ -787,10 +789,11 @@ class PeptideDesignerFactory(BaseAgentFactory):
             - Interpolate between peptides to understand structure-activity relationships
             - Test sequence reconstruction for model quality assessment
             - Build GTM maps of peptide latent space for visualization
-            - Analyze antimicrobial activity patterns using DBAASP data on GTM landscapes
-            - Sample peptides from specific GTM regions and decode to sequences
+            - Generate antimicrobial candidates from aggregate active landscape zones
+            - Sample peptides from specific GTM node coordinates and decode to sequences
 
-            **Note**: Activity landscapes use DBAASP data and are specific to antimicrobial peptides.
+            **Note**: Activity-guided sampling uses node-level aggregate landscapes and does not
+            sample or redistribute raw DBAASP peptide rows.
             """,
             tools=[
                 PeptideDesignerToolkit(),

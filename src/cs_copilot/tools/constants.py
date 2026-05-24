@@ -81,6 +81,11 @@ DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH = os.path.expanduser(
     "~/.cache/cs_copilot/models/peptide_designer"
 )
 HUGGINGFACE_PEPTIDE_WAE_REPO = "axelrolov/wae_peptides"
+DEFAULT_PEPTIDE_DESIGNER_DATA_PATH = os.path.expanduser(
+    "~/.cache/cs_copilot/data/peptide_designer_data"
+)
+HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO = "axelrolov/peptide_designer_data"
+DEFAULT_PEPTIDE_LANDSCAPE_ID = "dbaasp_amp_v1"
 
 # GTM model defaults
 DEFAULT_GTM_MODEL_PATH = os.path.expanduser("~/.cache/cs_copilot/models/gtm")

@@ -11,12 +11,15 @@ artifact-backed output contract.
 
 import json
 import logging
+import math
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Protocol, Sequence, Union
 
 import numpy as np
+import pandas as pd
 import torch
 from agno.agent import Agent
 from agno.models.base import Model
@@ -24,8 +27,19 @@ from agno.tools.toolkit import Toolkit
 from pydantic import BaseModel, Field
 
 from cs_copilot.storage import S3, OutputOperation, operation_rel_path
+from cs_copilot.tools.chemistry.peptide_landscape_store import (
+    PeptideLandscapeBundle,
+    PeptideLandscapeError,
+    list_cached_peptide_landscapes,
+    load_peptide_landscape_bundle,
+    sample_latents_from_nodes,
+    select_active_landscape_nodes,
+    select_landscape_nodes_by_coordinates,
+)
 from cs_copilot.tools.constants import (
     DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH,
+    DEFAULT_PEPTIDE_LANDSCAPE_ID,
+    HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO,
     HUGGINGFACE_PEPTIDE_WAE_REPO,
 )
 from cs_copilot.tools.io.session_memory import register_session_object, update_state_targets
@@ -37,6 +51,9 @@ SUPPORTED_AMINO_ACIDS = frozenset("ACDEFGHIKLMNPQRSTUVYWZ")
 DEFAULT_MAX_SEQUENCE_LENGTH = 25
 PEPTIDE_DESIGN_ARTIFACT_DIR = "peptide_candidate_sets"
 PEPTIDE_DESIGN_ARTIFACT_FORMAT = "json"
+PEPTIDE_LANDSCAPE_ARTIFACT_DIR = "peptide_landscape_runs"
+PEPTIDE_LANDSCAPE_ENGINE = "wae_landscape"
+MAX_INLINE_PAIRWISE_IDENTITIES = 200
 
 
 def _filter_valid_unique_peptides(raw: List[Any]) -> List[str]:
@@ -347,6 +364,324 @@ def _save_peptide_design_artifact(
     }
 
 
+def _peptide_landscape_run_rel_path(
+    session_key: str,
+    run_id: str,
+    filename: str,
+    *,
+    session_state: Optional[Dict[str, Any]] = None,
+) -> str:
+    safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(session_key or "peptide_landscape"))
+    return operation_rel_path(
+        OutputOperation.ANALOG_GENERATION,
+        PEPTIDE_LANDSCAPE_ARTIFACT_DIR,
+        safe_key,
+        run_id,
+        filename,
+        session_state=session_state,
+        workflow_slug="peptide_design",
+    )
+
+
+def _sequence_tokens(sequence: Any) -> List[str]:
+    normalized = _normalize_peptide_sequence(sequence)
+    return normalized.split() if normalized else []
+
+
+def _sequence_uses_alphabet(sequence: str, alphabet: Sequence[str]) -> bool:
+    allowed = set(alphabet)
+    if not allowed:
+        return True
+    tokens = _sequence_tokens(sequence)
+    return bool(tokens) and all(token in allowed for token in tokens)
+
+
+def _global_sequence_identity(left: str, right: str) -> float:
+    left_tokens = _sequence_tokens(left)
+    right_tokens = _sequence_tokens(right)
+    denom = max(len(left_tokens), len(right_tokens))
+    if denom == 0:
+        return 0.0
+    matches = sum(1 for a, b in zip(left_tokens, right_tokens, strict=False) if a == b)
+    return round(matches / denom, 6)
+
+
+def _pairwise_identity_records(
+    sequences: Sequence[str],
+    *,
+    max_sequences: int = MAX_INLINE_PAIRWISE_IDENTITIES,
+) -> List[Dict[str, Any]]:
+    subset = list(sequences[:max_sequences])
+    records: List[Dict[str, Any]] = []
+    for i, left in enumerate(subset):
+        for j in range(i + 1, len(subset)):
+            records.append(
+                {
+                    "sequence_i": i,
+                    "sequence_j": j,
+                    "identity": _global_sequence_identity(left, subset[j]),
+                }
+            )
+    return records
+
+
+def _entropy_from_counts(counts: Dict[str, int]) -> float:
+    total = sum(counts.values())
+    if total <= 0:
+        return 0.0
+    entropy = 0.0
+    for count in counts.values():
+        if count <= 0:
+            continue
+        probability = count / total
+        entropy -= probability * math.log2(probability)
+    return round(entropy, 6)
+
+
+def _position_frequency_matrix(
+    sequences: Sequence[str],
+    *,
+    alphabet: Optional[Sequence[str]] = None,
+) -> pd.DataFrame:
+    tokenized = [_sequence_tokens(sequence) for sequence in sequences]
+    max_len = max((len(tokens) for tokens in tokenized), default=0)
+    observed = sorted({token for tokens in tokenized for token in tokens})
+    columns = list(alphabet or observed)
+    if not columns:
+        return pd.DataFrame()
+
+    rows: List[Dict[str, Any]] = []
+    for pos in range(max_len):
+        counts = dict.fromkeys(columns, 0)
+        total = 0
+        for tokens in tokenized:
+            if pos >= len(tokens):
+                continue
+            token = tokens[pos]
+            if token not in counts:
+                counts[token] = 0
+            counts[token] += 1
+            total += 1
+        row: Dict[str, Any] = {"position": pos + 1, "n_observed": total}
+        for token, count in counts.items():
+            row[token] = count / total if total else 0.0
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _build_peptide_candidate_analysis(
+    candidates: Sequence[Dict[str, Any]],
+    *,
+    alphabet: Optional[Sequence[str]] = None,
+) -> Dict[str, Any]:
+    sequences = [
+        str(candidate.get("sequence"))
+        for candidate in candidates
+        if isinstance(candidate, dict) and candidate.get("sequence")
+    ]
+    unique_sequences = list(dict.fromkeys(sequences))
+    pairwise_records = _pairwise_identity_records(sequences)
+    pairwise_values = [float(record["identity"]) for record in pairwise_records]
+    lengths = [len(_sequence_tokens(sequence)) for sequence in sequences]
+
+    aa_counts: Dict[str, int] = {}
+    for sequence in sequences:
+        for token in _sequence_tokens(sequence):
+            aa_counts[token] = aa_counts.get(token, 0) + 1
+
+    node_ids = []
+    for candidate in candidates:
+        properties = candidate.get("properties") or {}
+        if isinstance(properties, dict) and properties.get("node_id") is not None:
+            node_ids.append(properties["node_id"])
+
+    identity_summary = {
+        "n_sequences": len(sequences),
+        "n_unique_sequences": len(unique_sequences),
+        "duplicate_count": len(sequences) - len(unique_sequences),
+        "unique_fraction": round(len(unique_sequences) / len(sequences), 6) if sequences else 0.0,
+        "pairwise_identity_count": len(pairwise_values),
+        "mean_pairwise_identity": (
+            round(float(np.mean(pairwise_values)), 6) if pairwise_values else None
+        ),
+        "median_pairwise_identity": (
+            round(float(np.median(pairwise_values)), 6) if pairwise_values else None
+        ),
+        "min_pairwise_identity": (
+            round(float(np.min(pairwise_values)), 6) if pairwise_values else None
+        ),
+        "max_pairwise_identity": (
+            round(float(np.max(pairwise_values)), 6) if pairwise_values else None
+        ),
+        "near_duplicate_pairs_identity_ge_0_9": sum(1 for value in pairwise_values if value >= 0.9),
+        "similar_pairs_identity_ge_0_8": sum(1 for value in pairwise_values if value >= 0.8),
+    }
+
+    length_distribution: Dict[str, int] = {}
+    for length in lengths:
+        length_distribution[str(length)] = length_distribution.get(str(length), 0) + 1
+
+    diversity_summary = {
+        "n_sequences": len(sequences),
+        "mean_pairwise_distance": (
+            round(1 - float(np.mean(pairwise_values)), 6) if pairwise_values else None
+        ),
+        "length_min": min(lengths) if lengths else None,
+        "length_max": max(lengths) if lengths else None,
+        "length_mean": round(float(np.mean(lengths)), 6) if lengths else None,
+        "length_distribution": length_distribution,
+        "amino_acid_entropy_bits": _entropy_from_counts(aa_counts),
+        "amino_acid_composition": aa_counts,
+        "unique_node_count": len(set(node_ids)),
+        "node_ids": sorted({int(node) for node in node_ids if pd.notna(node)}),
+    }
+
+    return {
+        "identity_summary": identity_summary,
+        "diversity_summary": diversity_summary,
+        "pairwise_identity": pairwise_records,
+        "position_frequency_matrix": _position_frequency_matrix(
+            sequences,
+            alphabet=alphabet,
+        ),
+    }
+
+
+def _write_seq2logo_plot(freq_df: pd.DataFrame, rel_path: str) -> Optional[str]:
+    if freq_df.empty:
+        return None
+
+    amino_acids = [col for col in freq_df.columns if col not in {"position", "n_observed"}]
+    if not amino_acids:
+        return None
+
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    fig_width = max(8, min(18, len(freq_df) * 0.45))
+    fig, ax = plt.subplots(figsize=(fig_width, 4.8))
+    bottom = np.zeros(len(freq_df))
+    x = freq_df["position"].to_numpy()
+    cmap = plt.get_cmap("tab20")
+    for idx, aa in enumerate(amino_acids):
+        values = freq_df[aa].to_numpy(dtype=float)
+        if np.allclose(values, 0):
+            continue
+        ax.bar(x, values, bottom=bottom, label=aa, width=0.85, color=cmap(idx % 20))
+        bottom = bottom + values
+    ax.set_xlabel("Position")
+    ax.set_ylabel("Frequency")
+    ax.set_ylim(0, 1)
+    ax.set_title("Peptide Sequence Position Frequencies")
+    ax.legend(ncol=5, fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.18))
+    fig.tight_layout()
+    with S3.open(rel_path, "wb") as handle:
+        fig.savefig(handle, format="png", dpi=160)
+    plt.close(fig)
+    return S3.path(rel_path)
+
+
+def _save_peptide_landscape_artifacts(
+    session_state: Dict[str, Any],
+    *,
+    session_key: str,
+    candidates: Sequence[Dict[str, Any]],
+    selected_nodes: pd.DataFrame,
+    metadata: Dict[str, Any],
+    include_seq2logo: bool,
+) -> Dict[str, Any]:
+    counter = int(session_state.get("_peptide_landscape_run_counter", 0)) + 1
+    session_state["_peptide_landscape_run_counter"] = counter
+    run_id = f"pep_landscape_{counter:03d}"
+
+    def rel(filename: str) -> str:
+        return _peptide_landscape_run_rel_path(
+            session_key,
+            run_id,
+            filename,
+            session_state=session_state,
+        )
+
+    selected_nodes_rel = rel("selected_nodes.csv")
+    generated_rel = rel("generated_peptides.csv")
+    identity_rel = rel("identity_summary.json")
+    diversity_rel = rel("diversity_summary.json")
+    pairwise_rel = rel("pairwise_identity.csv")
+    freq_rel = rel("position_frequency_matrix.csv")
+    seq2logo_rel = rel("seq2logo.png")
+    metadata_rel = rel("metadata.json")
+
+    with S3.open(selected_nodes_rel, "w") as handle:
+        selected_nodes.to_csv(handle, index=False)
+
+    generated_df = pd.json_normalize(list(candidates), sep="_")
+    with S3.open(generated_rel, "w") as handle:
+        generated_df.to_csv(handle, index=False)
+
+    analysis = _build_peptide_candidate_analysis(
+        candidates,
+        alphabet=metadata.get("peptide_alphabet"),
+    )
+    with S3.open(identity_rel, "w") as handle:
+        json.dump(analysis["identity_summary"], handle, indent=2)
+    with S3.open(diversity_rel, "w") as handle:
+        json.dump(analysis["diversity_summary"], handle, indent=2)
+
+    pairwise_records = analysis["pairwise_identity"]
+    if pairwise_records:
+        with S3.open(pairwise_rel, "w") as handle:
+            pd.DataFrame(pairwise_records).to_csv(handle, index=False)
+        pairwise_path = S3.path(pairwise_rel)
+    else:
+        pairwise_path = None
+
+    freq_df = analysis["position_frequency_matrix"]
+    if not freq_df.empty:
+        with S3.open(freq_rel, "w") as handle:
+            freq_df.to_csv(handle, index=False)
+        freq_path = S3.path(freq_rel)
+    else:
+        freq_path = None
+
+    seq2logo_path = _write_seq2logo_plot(freq_df, seq2logo_rel) if include_seq2logo else None
+
+    metadata_payload = {
+        "peptide_landscape_run_id": run_id,
+        "metadata": metadata,
+        "identity_summary": analysis["identity_summary"],
+        "diversity_summary": analysis["diversity_summary"],
+        "artifacts": {
+            "selected_nodes_csv": S3.path(selected_nodes_rel),
+            "generated_peptides_csv": S3.path(generated_rel),
+            "identity_summary_json": S3.path(identity_rel),
+            "diversity_summary_json": S3.path(diversity_rel),
+            "pairwise_identity_csv": pairwise_path,
+            "position_frequency_matrix_csv": freq_path,
+            "seq2logo_png": seq2logo_path,
+        },
+    }
+    with S3.open(metadata_rel, "w") as handle:
+        json.dump(metadata_payload, handle, indent=2)
+
+    return {
+        **metadata_payload["artifacts"],
+        "selected_nodes_csv_rel_path": selected_nodes_rel,
+        "generated_peptides_csv_rel_path": generated_rel,
+        "identity_summary_json_rel_path": identity_rel,
+        "diversity_summary_json_rel_path": diversity_rel,
+        "pairwise_identity_csv_rel_path": pairwise_rel if pairwise_path else None,
+        "position_frequency_matrix_csv_rel_path": freq_rel if freq_path else None,
+        "seq2logo_png_rel_path": seq2logo_rel if seq2logo_path else None,
+        "peptide_landscape_run_id": run_id,
+        "metadata_json": S3.path(metadata_rel),
+        "metadata_json_rel_path": metadata_rel,
+        "identity_summary": analysis["identity_summary"],
+        "diversity_summary": analysis["diversity_summary"],
+    }
+
+
 class WAEPeptideDesignEngine:
     """Peptide design engine backed by the existing Peptide WAE model."""
 
@@ -558,6 +893,12 @@ class PeptideDesignerToolkit(Toolkit):
         self.register(self.validate_design_candidates)
         self.register(self.rank_design_candidates)
         self.register(self.load_peptide_design_candidates)
+        self.register(self.list_peptide_landscapes)
+        self.register(self.list_peptide_landscape_organisms)
+        self.register(self.load_peptide_landscape)
+        self.register(self.sample_peptides_from_landscape)
+        self.register(self.sample_peptides_from_node_coordinates)
+        self.register(self.analyze_peptide_candidates)
 
         # Register low-level peptide design tools
         self.register(self.encode_peptides)
@@ -946,6 +1287,614 @@ class PeptideDesignerToolkit(Toolkit):
         if include_candidates:
             result["candidates"] = candidates
         return result
+
+    def list_peptide_landscapes(self, local_dir: Optional[str] = None) -> Dict[str, Any]:
+        """
+        List available cached peptide landscape bundles.
+
+        Args:
+            local_dir: Optional local cache root. Defaults to PEPTIDE_DESIGNER_DATA_PATH
+                or the standard cs_copilot peptide data cache.
+
+        Returns:
+            Dictionary with the default HuggingFace dataset repo and cached landscapes.
+        """
+        return {
+            "repo_id": HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO,
+            "default_landscape_id": DEFAULT_PEPTIDE_LANDSCAPE_ID,
+            "landscapes": list_cached_peptide_landscapes(local_dir=local_dir),
+            "note": (
+                "Peptide landscapes are aggregate node-level bundles. Raw DBAASP records "
+                "are not redistributed or required for sampling."
+            ),
+        }
+
+    def list_peptide_landscape_organisms(
+        self,
+        landscape_id: str = DEFAULT_PEPTIDE_LANDSCAPE_ID,
+        include_plots: bool = False,
+        local_dir: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        List organisms available in an aggregate peptide activity landscape.
+
+        Args:
+            landscape_id: Landscape bundle identifier.
+            include_plots: If True, also download plot files when the bundle is missing.
+            local_dir: Optional local cache root.
+
+        Returns:
+            Organism list and plot coverage metadata.
+        """
+        bundle = self._load_peptide_landscape_bundle(
+            landscape_id=landscape_id,
+            include_plots=include_plots,
+            local_dir=local_dir,
+        )
+        return {
+            "landscape_id": bundle.landscape_id,
+            "organisms": bundle.organisms,
+            "organism_count": len(bundle.organisms),
+            "plotted_organisms": bundle.plotted_organisms,
+            "plotted_organism_count": len(bundle.plotted_organisms),
+            "raw_source_data_redistributed": bundle.manifest.get("raw_source_data_redistributed"),
+        }
+
+    def load_peptide_landscape(
+        self,
+        landscape_id: str = DEFAULT_PEPTIDE_LANDSCAPE_ID,
+        include_plots: bool = False,
+        local_dir: Optional[str] = None,
+        session_key: str = "active_peptide_landscape",
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Download/cache and load an aggregate peptide landscape bundle.
+
+        The loaded bundle contains node-level aggregate landscapes and GTM tensors,
+        not raw DBAASP peptide records.
+        """
+        bundle = self._load_peptide_landscape_bundle(
+            landscape_id=landscape_id,
+            include_plots=include_plots,
+            local_dir=local_dir,
+        )
+        summary = self._peptide_landscape_summary(bundle)
+        for state in update_state_targets(agent, session_state):
+            state[session_key] = summary
+            register_session_object(
+                state,
+                "map",
+                {
+                    "map_type": "peptide_gtm_landscape",
+                    "landscape_id": bundle.landscape_id,
+                    "path": str(bundle.root_path),
+                    "repo_id": HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO,
+                    "organism_count": len(bundle.organisms),
+                    "raw_source_data_redistributed": bundle.manifest.get(
+                        "raw_source_data_redistributed"
+                    ),
+                },
+                label=f"Peptide landscape: {bundle.landscape_id}",
+                source_agent=getattr(agent, "name", None),
+                source_tool="load_peptide_landscape",
+                set_current=True,
+            )
+        return summary
+
+    def sample_peptides_from_landscape(
+        self,
+        organism: str,
+        landscape_id: str = DEFAULT_PEPTIDE_LANDSCAPE_ID,
+        n_candidates: int = 20,
+        top_n_nodes: int = 5,
+        min_activity: Optional[float] = None,
+        min_observations: Optional[float] = 1.0,
+        max_uncertainty: Optional[float] = None,
+        local_noise_scale: float = 0.25,
+        oversample_factor: int = 4,
+        temperature: float = 1.0,
+        decode_mode: str = "categorical",
+        include_plots: bool = False,
+        include_seq2logo: bool = True,
+        random_state: Optional[int] = None,
+        return_format: SampleReturnFormat = "summary",
+        session_key: str = "landscape_sampled_peptides",
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        """
+        Sample peptides from active zones of an aggregate HF peptide landscape.
+
+        Sampling uses node coordinates and GTM/WAE tensors from the landscape bundle.
+        It does not sample or redistribute raw DBAASP peptide rows.
+        """
+        bundle = self._load_peptide_landscape_bundle(
+            landscape_id=landscape_id,
+            include_plots=include_plots,
+        )
+        selected_nodes = select_active_landscape_nodes(
+            bundle,
+            organism,
+            top_n=top_n_nodes,
+            min_activity=min_activity,
+            min_observations=min_observations,
+            max_uncertainty=max_uncertainty,
+            require_active_class=True,
+            spatial_diversity=True,
+        )
+        return self._sample_peptides_from_selected_landscape_nodes(
+            bundle=bundle,
+            selected_nodes=selected_nodes,
+            n_candidates=n_candidates,
+            local_noise_scale=local_noise_scale,
+            oversample_factor=oversample_factor,
+            temperature=temperature,
+            decode_mode=decode_mode,
+            include_seq2logo=include_seq2logo,
+            random_state=random_state,
+            return_format=return_format,
+            session_key=session_key,
+            agent=agent,
+            session_state=session_state,
+            source_tool="sample_peptides_from_landscape",
+            sampling_mode="active_zone",
+        )
+
+    def sample_peptides_from_node_coordinates(
+        self,
+        coordinates: List[List[float]],
+        landscape_id: str = DEFAULT_PEPTIDE_LANDSCAPE_ID,
+        organism: Optional[str] = None,
+        n_candidates: int = 20,
+        local_noise_scale: float = 0.25,
+        oversample_factor: int = 4,
+        temperature: float = 1.0,
+        decode_mode: str = "categorical",
+        allow_missing: bool = False,
+        include_plots: bool = False,
+        include_seq2logo: bool = True,
+        random_state: Optional[int] = None,
+        return_format: SampleReturnFormat = "summary",
+        session_key: str = "coordinate_sampled_peptides",
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        """
+        Sample peptides from user-specified GTM node coordinates.
+
+        Coordinates are resolved to aggregate node centers. If organism is supplied,
+        the returned node metadata includes organism-specific activity values.
+        """
+        bundle = self._load_peptide_landscape_bundle(
+            landscape_id=landscape_id,
+            include_plots=include_plots,
+        )
+        selected_nodes = select_landscape_nodes_by_coordinates(
+            bundle,
+            coordinates,
+            organism=organism,
+            allow_missing=allow_missing,
+        )
+        return self._sample_peptides_from_selected_landscape_nodes(
+            bundle=bundle,
+            selected_nodes=selected_nodes,
+            n_candidates=n_candidates,
+            local_noise_scale=local_noise_scale,
+            oversample_factor=oversample_factor,
+            temperature=temperature,
+            decode_mode=decode_mode,
+            include_seq2logo=include_seq2logo,
+            random_state=random_state,
+            return_format=return_format,
+            session_key=session_key,
+            agent=agent,
+            session_state=session_state,
+            source_tool="sample_peptides_from_node_coordinates",
+            sampling_mode="coordinates",
+        )
+
+    def analyze_peptide_candidates(
+        self,
+        reference: Union[str, List[str], List[Dict[str, Any]]] = "landscape_sampled_peptides",
+        include_seq2logo: bool = True,
+        session_key: str = "peptide_candidate_analysis",
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Run identity, diversity, and Seq2Logo-style analysis on peptide candidates.
+
+        Args:
+            reference: Session key, candidate artifact path, CSV path, or inline list.
+            include_seq2logo: Whether to render a sequence-logo-style PNG artifact.
+            session_key: Session key under which the analysis pointer is stored.
+            agent: Optional agent with session state.
+            session_state: Optional explicit shared session state.
+
+        Returns:
+            Analysis summaries and artifact paths.
+        """
+        candidates = self._resolve_peptide_candidate_reference(reference, session_state)
+        if not candidates:
+            raise PeptideDesignerError("No peptide candidates found for analysis.")
+
+        state_targets = update_state_targets(agent, session_state)
+        if not state_targets:
+            state_targets = [{}]
+
+        selected_artifacts: Dict[str, Any] = {}
+        selected_analysis_id: Optional[str] = None
+        empty_nodes = pd.DataFrame()
+        metadata = {
+            "origin_agent": "peptide_designer",
+            "source_tool": "analyze_peptide_candidates",
+            "session_key": session_key,
+            "count_returned": len(candidates),
+            "reference": str(reference),
+        }
+        for state in state_targets:
+            artifacts = _save_peptide_landscape_artifacts(
+                state,
+                session_key=session_key,
+                candidates=candidates,
+                selected_nodes=empty_nodes,
+                metadata=metadata,
+                include_seq2logo=include_seq2logo,
+            )
+            state[session_key] = {
+                **artifacts,
+                "origin_agent": "peptide_designer",
+                "analysis_type": "peptide_candidate_analysis",
+                "count_returned": len(candidates),
+                "preview": _compact_peptide_preview(candidates),
+            }
+            analysis_id = register_session_object(
+                state,
+                "analysis",
+                {
+                    "analysis_type": "peptide_candidate_analysis",
+                    "count_returned": len(candidates),
+                    "metadata_json": artifacts["metadata_json"],
+                    "metadata_json_rel_path": artifacts["metadata_json_rel_path"],
+                    "generated_peptides_csv": artifacts["generated_peptides_csv"],
+                    "generated_peptides_csv_rel_path": artifacts["generated_peptides_csv_rel_path"],
+                    "seq2logo_png": artifacts.get("seq2logo_png"),
+                },
+                label="Peptide candidate analysis",
+                source_agent=getattr(agent, "name", None),
+                source_tool="analyze_peptide_candidates",
+                set_current=True,
+                current_role="analysis",
+            )
+            if not selected_artifacts or state is session_state:
+                selected_artifacts = artifacts
+                selected_analysis_id = analysis_id
+
+        return {
+            "status": "analyzed",
+            "count_returned": len(candidates),
+            "preview": _compact_peptide_preview(candidates),
+            "registered_analysis_id": selected_analysis_id,
+            **selected_artifacts,
+        }
+
+    def _load_peptide_landscape_bundle(
+        self,
+        *,
+        landscape_id: str,
+        include_plots: bool = False,
+        local_dir: Optional[str] = None,
+    ) -> PeptideLandscapeBundle:
+        try:
+            return load_peptide_landscape_bundle(
+                landscape_id=landscape_id,
+                include_plots=include_plots,
+                local_dir=local_dir,
+                repo_id=HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO,
+            )
+        except PeptideLandscapeError as exc:
+            raise PeptideDesignerError(str(exc)) from exc
+
+    def _peptide_landscape_summary(self, bundle: PeptideLandscapeBundle) -> Dict[str, Any]:
+        endpoint = bundle.manifest.get("activity_endpoint") or {}
+        return {
+            "landscape_id": bundle.landscape_id,
+            "path": str(bundle.root_path),
+            "repo_id": HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO,
+            "compatible_decoder_repo": bundle.manifest.get("compatible_decoder_repo"),
+            "latent_dim": bundle.latent_dim,
+            "condition_dim": bundle.manifest.get("condition_dim"),
+            "max_sequence_length": bundle.manifest.get("max_sequence_length"),
+            "peptide_alphabet": bundle.alphabet,
+            "organism_count": len(bundle.organisms),
+            "plotted_organism_count": len(bundle.plotted_organisms),
+            "organisms": bundle.organisms,
+            "plotted_organisms": bundle.plotted_organisms,
+            "activity_endpoint": {
+                "type": endpoint.get("type"),
+                "units": endpoint.get("units"),
+                "activity_threshold": bundle.sampler.get("activity_threshold"),
+            },
+            "raw_source_data_redistributed": bundle.manifest.get("raw_source_data_redistributed"),
+            "note": (
+                "Loaded aggregate node-level peptide landscape. Raw DBAASP rows are not "
+                "present and are not needed for coordinate-based WAE sampling."
+            ),
+        }
+
+    def _sample_peptides_from_selected_landscape_nodes(
+        self,
+        *,
+        bundle: PeptideLandscapeBundle,
+        selected_nodes: pd.DataFrame,
+        n_candidates: int,
+        local_noise_scale: float,
+        oversample_factor: int,
+        temperature: float,
+        decode_mode: str,
+        include_seq2logo: bool,
+        random_state: Optional[int],
+        return_format: SampleReturnFormat,
+        session_key: str,
+        agent: Optional[Agent],
+        session_state: Optional[Dict[str, Any]],
+        source_tool: str,
+        sampling_mode: str,
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        if n_candidates <= 0:
+            raise PeptideDesignerError("n_candidates must be positive.")
+        if oversample_factor <= 0:
+            raise PeptideDesignerError("oversample_factor must be positive.")
+        if local_noise_scale < 0:
+            raise PeptideDesignerError("local_noise_scale must be non-negative.")
+
+        candidates: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        attempted = 0
+        alphabet = bundle.alphabet
+        max_rounds = 4
+
+        for round_idx in range(max_rounds):
+            if len(candidates) >= n_candidates:
+                break
+            sample_count = max(
+                (n_candidates - len(candidates)) * oversample_factor,
+                n_candidates - len(candidates),
+            )
+            seed = random_state + round_idx if random_state is not None else None
+            latents, assignments = sample_latents_from_nodes(
+                bundle,
+                selected_nodes,
+                n_samples=sample_count,
+                local_noise_scale=local_noise_scale,
+                random_state=seed,
+            )
+            decoded = self.decode_latent(
+                latents.tolist(),
+                temperature=temperature,
+                decode_mode=decode_mode,
+            )
+            attempted += len(decoded)
+            for raw_sequence, assignment in zip(
+                decoded,
+                assignments.to_dict(orient="records"),
+                strict=False,
+            ):
+                candidate = _validate_peptide_candidate(
+                    raw_sequence,
+                    engine=PEPTIDE_LANDSCAPE_ENGINE,
+                    rationale=f"Sampled from {bundle.landscape_id} GTM node coordinates.",
+                )
+                if not candidate.valid or not candidate.sequence:
+                    continue
+                if not _sequence_uses_alphabet(candidate.sequence, alphabet):
+                    continue
+                if candidate.sequence in seen:
+                    continue
+                seen.add(candidate.sequence)
+                candidate.score = self._landscape_candidate_score(assignment)
+                candidate.properties.update(self._landscape_candidate_properties(assignment))
+                candidate.properties["landscape_id"] = bundle.landscape_id
+                candidate.properties["sampling_mode"] = sampling_mode
+                candidates.append(candidate.to_dict())
+                if len(candidates) >= n_candidates:
+                    break
+
+        if not candidates:
+            raise PeptideDesignerError(
+                "Landscape-guided WAE decoding did not produce valid unique peptides. "
+                "Try increasing oversample_factor, increasing local_noise_scale, or using "
+                "different node coordinates."
+            )
+
+        metadata = {
+            "origin_agent": "peptide_designer",
+            "generation_engine": PEPTIDE_LANDSCAPE_ENGINE,
+            "generation_mode": "landscape_guided",
+            "source_tool": source_tool,
+            "session_key": session_key,
+            "landscape_id": bundle.landscape_id,
+            "repo_id": HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO,
+            "sampling_mode": sampling_mode,
+            "count_attempted": attempted,
+            "count_returned": len(candidates),
+            "n_requested": n_candidates,
+            "top_node_count": len(selected_nodes),
+            "selected_node_ids": selected_nodes["node_id"].astype(int).tolist(),
+            "local_noise_scale": local_noise_scale,
+            "oversample_factor": oversample_factor,
+            "temperature": temperature,
+            "decode_mode": decode_mode,
+            "peptide_alphabet": alphabet,
+            "raw_source_data_redistributed": bundle.manifest.get("raw_source_data_redistributed"),
+        }
+        if "organism" in selected_nodes.columns and selected_nodes["organism"].notna().any():
+            metadata["organisms"] = sorted(
+                str(value) for value in selected_nodes["organism"].dropna().unique()
+            )
+
+        state_targets = update_state_targets(agent, session_state)
+        if return_format == "list" or not state_targets:
+            if return_format == "summary" and not state_targets:
+                logger.info(
+                    "sample_peptides_from_landscape called with return_format='summary' "
+                    "but no session state was available; falling back to list."
+                )
+            return candidates
+
+        selected_artifacts: Dict[str, Any] = {}
+        selected_analysis_id: Optional[str] = None
+        for state in state_targets:
+            artifacts = _save_peptide_landscape_artifacts(
+                state,
+                session_key=session_key,
+                candidates=candidates,
+                selected_nodes=selected_nodes,
+                metadata=metadata,
+                include_seq2logo=include_seq2logo,
+            )
+            state[session_key] = {
+                **artifacts,
+                "origin_agent": "peptide_designer",
+                "generation_engine": PEPTIDE_LANDSCAPE_ENGINE,
+                "generation_mode": "landscape_guided",
+                "landscape_id": bundle.landscape_id,
+                "sampling_mode": sampling_mode,
+                "count_attempted": attempted,
+                "count_returned": len(candidates),
+                "selected_node_ids": metadata["selected_node_ids"],
+                "preview": _compact_peptide_preview(candidates),
+                "raw_source_data_redistributed": bundle.manifest.get(
+                    "raw_source_data_redistributed"
+                ),
+            }
+            analysis_id = register_session_object(
+                state,
+                "analysis",
+                {
+                    "analysis_type": "peptide_landscape_sampling",
+                    "engine": PEPTIDE_LANDSCAPE_ENGINE,
+                    "generation_mode": "landscape_guided",
+                    "landscape_id": bundle.landscape_id,
+                    "sampling_mode": sampling_mode,
+                    "count_attempted": attempted,
+                    "count_returned": len(candidates),
+                    "selected_node_ids": metadata["selected_node_ids"],
+                    "metadata_json": artifacts["metadata_json"],
+                    "metadata_json_rel_path": artifacts["metadata_json_rel_path"],
+                    "generated_peptides_csv": artifacts["generated_peptides_csv"],
+                    "generated_peptides_csv_rel_path": artifacts["generated_peptides_csv_rel_path"],
+                    "seq2logo_png": artifacts.get("seq2logo_png"),
+                },
+                label=f"Peptide landscape sampling ({bundle.landscape_id})",
+                source_agent=getattr(agent, "name", None),
+                source_tool=source_tool,
+                set_current=True,
+                current_role="analysis",
+            )
+            if not selected_artifacts or state is session_state:
+                selected_artifacts = artifacts
+                selected_analysis_id = analysis_id
+
+        return {
+            "engine": PEPTIDE_LANDSCAPE_ENGINE,
+            "generation_mode": "landscape_guided",
+            "landscape_id": bundle.landscape_id,
+            "sampling_mode": sampling_mode,
+            "count_attempted": attempted,
+            "count_returned": len(candidates),
+            "selected_node_ids": metadata["selected_node_ids"],
+            "preview": _compact_peptide_preview(candidates),
+            "session_key": session_key,
+            "registered_analysis_id": selected_analysis_id,
+            **selected_artifacts,
+            "note": (
+                "Generated peptides were decoded from aggregate active-zone node "
+                "coordinates. Raw DBAASP peptide rows were not sampled or redistributed."
+            ),
+        }
+
+    def _landscape_candidate_score(self, assignment: Dict[str, Any]) -> Optional[float]:
+        value = assignment.get("selection_score")
+        if value is None or pd.isna(value):
+            value = assignment.get("activity_mean")
+        if value is None or pd.isna(value):
+            return None
+        return round(float(value), 6)
+
+    def _landscape_candidate_properties(self, assignment: Dict[str, Any]) -> Dict[str, Any]:
+        properties: Dict[str, Any] = {}
+        for key in (
+            "sample_index",
+            "node_id",
+            "x",
+            "y",
+            "organism",
+            "density",
+            "activity_mean",
+            "activity_class",
+            "uncertainty",
+            "n_observations",
+            "selection_score",
+        ):
+            if key not in assignment or pd.isna(assignment[key]):
+                continue
+            value = assignment[key]
+            if hasattr(value, "item"):
+                value = value.item()
+            properties[key] = value
+        return properties
+
+    def _resolve_peptide_candidate_reference(
+        self,
+        reference: Union[str, List[str], List[Dict[str, Any]]],
+        session_state: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        if isinstance(reference, list):
+            if all(isinstance(item, str) for item in reference):
+                validated = [
+                    _validate_peptide_candidate(item, engine="manual").to_dict()
+                    for item in reference
+                ]
+                return [item for item in validated if item.get("valid")]
+            return [dict(item) for item in reference if isinstance(item, dict)]
+
+        artifact_ref = str(reference)
+        pointer = None
+        if isinstance(session_state, dict) and isinstance(session_state.get(artifact_ref), dict):
+            pointer = session_state[artifact_ref]
+            artifact_ref = (
+                pointer.get("generated_peptides_csv_rel_path")
+                or pointer.get("artifact_rel_path")
+                or pointer.get("metadata_json_rel_path")
+                or artifact_ref
+            )
+
+        suffix = Path(str(artifact_ref)).suffix.lower()
+        if suffix == ".csv":
+            with S3.open(artifact_ref, "r") as handle:
+                df = pd.read_csv(handle)
+            if "sequence" not in df.columns:
+                raise PeptideDesignerError(
+                    f"Candidate CSV '{artifact_ref}' must contain a sequence column."
+                )
+            return df.to_dict(orient="records")
+
+        with S3.open(artifact_ref, "r") as handle:
+            payload = json.load(handle)
+        if isinstance(payload, dict) and isinstance(payload.get("candidates"), list):
+            return list(payload["candidates"])
+        if (
+            isinstance(payload, dict)
+            and isinstance(payload.get("metadata"), dict)
+            and pointer
+            and pointer.get("generated_peptides_csv_rel_path")
+        ):
+            with S3.open(pointer["generated_peptides_csv_rel_path"], "r") as handle:
+                return pd.read_csv(handle).to_dict(orient="records")
+        raise PeptideDesignerError(f"Could not resolve peptide candidates from {reference!r}.")
 
     def _get_hf_token_safe(self):
         """Get HuggingFace token safely from environment or local login."""
