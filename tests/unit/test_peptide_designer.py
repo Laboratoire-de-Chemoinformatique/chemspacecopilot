@@ -387,6 +387,12 @@ def test_sample_peptides_from_landscape_persists_analysis_artifacts(monkeypatch,
     assert pointer["diversity_summary"]["unique_node_count"] >= 1
     assert pointer["alignment_summary"]["method"] == "pyfamsa"
     assert pointer["aligned_peptides_csv"].endswith(".csv")
+    assert pointer["generated_peptide_projection_csv"].endswith(".csv")
+    assert pointer["activity_landscape_png"].endswith(".png")
+    assert pointer["sampling_nodes_landscape_png"].endswith(".png")
+    assert pointer["generated_peptides_landscape_png"].endswith(".png")
+    assert len(pointer["landscape_visualizations"]) == 3
+    assert len(pointer["landscape_figure_ids"]) == 3
     assert pointer["seq2logo_png"].endswith(".png")
     assert shared_state["session_objects"]["current"]["analysis"] == "ana_001"
 
@@ -398,6 +404,11 @@ def test_sample_peptides_from_landscape_persists_analysis_artifacts(monkeypatch,
     with S3.open(pointer["aligned_peptides_csv_rel_path"], "r") as handle:
         aligned = pd.read_csv(handle)
     assert len(set(aligned["alignment_length"])) == 1
+
+    with S3.open(pointer["generated_peptide_projection_csv_rel_path"], "r") as handle:
+        projected = pd.read_csv(handle)
+    assert set(projected["node_id"]).issubset({1, 2})
+    assert {"sequence", "x", "y", "activity_mean"}.issubset(projected.columns)
 
 
 def test_peptide_candidate_analysis_aligns_before_logo_matrix():

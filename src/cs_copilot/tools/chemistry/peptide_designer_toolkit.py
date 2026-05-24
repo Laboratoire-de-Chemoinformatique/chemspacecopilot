@@ -42,6 +42,7 @@ from cs_copilot.tools.constants import (
     HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO,
     HUGGINGFACE_PEPTIDE_WAE_REPO,
 )
+from cs_copilot.tools.io.figure_metadata import REPORT_ROLE_INLINE_STATIC, build_figure_metadata
 from cs_copilot.tools.io.session_memory import register_session_object, update_state_targets
 
 logger = logging.getLogger(__name__)
@@ -735,6 +736,337 @@ def _write_seq2logo_plot(freq_df: pd.DataFrame, rel_path: str) -> Optional[str]:
     return S3.path(rel_path)
 
 
+def _visualization_nodes_for_landscape(
+    bundle: PeptideLandscapeBundle,
+    selected_nodes: pd.DataFrame,
+    metadata: Dict[str, Any],
+) -> tuple[pd.DataFrame, str]:
+    nodes = bundle.nodes.copy()
+    title_context = "aggregate activity"
+    organisms = [str(value) for value in metadata.get("organisms") or [] if value]
+
+    if len(organisms) == 1 and "organism" in nodes.columns:
+        organism = organisms[0]
+        organism_nodes = nodes[nodes["organism"].astype(str) == organism].copy()
+        if not organism_nodes.empty:
+            return organism_nodes, organism
+
+    if "organism" in selected_nodes.columns and selected_nodes["organism"].notna().any():
+        selected_organisms = sorted(
+            str(value) for value in selected_nodes["organism"].dropna().unique()
+        )
+        if len(selected_organisms) == 1 and "organism" in nodes.columns:
+            organism = selected_organisms[0]
+            organism_nodes = nodes[nodes["organism"].astype(str) == organism].copy()
+            if not organism_nodes.empty:
+                return organism_nodes, organism
+
+    aggregate = _aggregate_landscape_nodes(nodes)
+    return aggregate, title_context
+
+
+def _aggregate_landscape_nodes(nodes: pd.DataFrame) -> pd.DataFrame:
+    required = {"node_id", "x", "y"}
+    if nodes.empty or not required.issubset(nodes.columns):
+        return pd.DataFrame()
+
+    aggregations: Dict[str, str] = {}
+    for column in ("activity_mean", "density", "uncertainty"):
+        if column in nodes.columns:
+            aggregations[column] = "mean"
+    if "n_observations" in nodes.columns:
+        aggregations["n_observations"] = "sum"
+    if not aggregations:
+        return nodes.drop_duplicates(subset=["node_id", "x", "y"]).copy()
+    return nodes.groupby(["node_id", "x", "y"], as_index=False).agg(aggregations)
+
+
+def _candidate_projection_records(candidates: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    for index, candidate in enumerate(candidates):
+        if not isinstance(candidate, dict):
+            continue
+        properties = candidate.get("properties") or {}
+        if not isinstance(properties, dict):
+            continue
+        x_value = properties.get("x")
+        y_value = properties.get("y")
+        if x_value is None or y_value is None or pd.isna(x_value) or pd.isna(y_value):
+            continue
+        record = {
+            "sequence_index": index,
+            "sequence": candidate.get("sequence"),
+            "score": candidate.get("score"),
+            "x": float(x_value),
+            "y": float(y_value),
+        }
+        for key in (
+            "sample_index",
+            "node_id",
+            "organism",
+            "density",
+            "activity_mean",
+            "activity_class",
+            "uncertainty",
+            "n_observations",
+            "selection_score",
+            "landscape_id",
+            "sampling_mode",
+        ):
+            if key not in properties or pd.isna(properties[key]):
+                continue
+            value = properties[key]
+            if hasattr(value, "item"):
+                value = value.item()
+            record[key] = value
+        records.append(record)
+    return records
+
+
+def _write_peptide_landscape_visualization(
+    nodes: pd.DataFrame,
+    rel_path: str,
+    *,
+    title: str,
+    selected_nodes: Optional[pd.DataFrame] = None,
+    projected_peptides: Optional[pd.DataFrame] = None,
+) -> Optional[str]:
+    required = {"x", "y", "activity_mean"}
+    if nodes.empty or not required.issubset(nodes.columns):
+        return None
+
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    plot_nodes = nodes.copy()
+    plot_nodes["activity_mean"] = pd.to_numeric(
+        plot_nodes["activity_mean"], errors="coerce"
+    )
+    plot_nodes = plot_nodes.dropna(subset=["x", "y", "activity_mean"])
+    if plot_nodes.empty:
+        return None
+
+    fig, ax = plt.subplots(figsize=(7.2, 6.2))
+    marker_size = max(18, min(95, 4200 / max(len(plot_nodes), 1)))
+    scatter = ax.scatter(
+        plot_nodes["x"].astype(float),
+        plot_nodes["y"].astype(float),
+        c=plot_nodes["activity_mean"].astype(float),
+        cmap="viridis",
+        marker="s",
+        s=marker_size,
+        linewidths=0,
+        alpha=0.92,
+    )
+    cbar = fig.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label("Activity mean")
+
+    if selected_nodes is not None and not selected_nodes.empty:
+        selected = selected_nodes.dropna(subset=["x", "y"]).copy()
+        if not selected.empty:
+            ax.scatter(
+                selected["x"].astype(float),
+                selected["y"].astype(float),
+                s=170,
+                facecolors="none",
+                edgecolors="#d62728",
+                linewidths=1.8,
+                label="Sampling nodes",
+            )
+            for _, row in selected.iterrows():
+                if pd.isna(row.get("node_id")):
+                    continue
+                ax.text(
+                    float(row["x"]) + 0.18,
+                    float(row["y"]) + 0.18,
+                    str(int(row["node_id"])),
+                    color="#d62728",
+                    fontsize=8,
+                    weight="bold",
+                )
+
+    if projected_peptides is not None and not projected_peptides.empty:
+        projected = projected_peptides.dropna(subset=["x", "y"]).copy()
+        if not projected.empty:
+            rng = np.random.default_rng(0)
+            jitter = rng.normal(0.0, 0.12, size=(len(projected), 2))
+            ax.scatter(
+                projected["x"].astype(float).to_numpy() + jitter[:, 0],
+                projected["y"].astype(float).to_numpy() + jitter[:, 1],
+                s=56,
+                c="#111111",
+                marker="o",
+                edgecolors="white",
+                linewidths=0.8,
+                alpha=0.88,
+                label="Generated peptides",
+            )
+
+    ax.set_title(title)
+    ax.set_xlabel("GTM x")
+    ax.set_ylabel("GTM y")
+    ax.set_aspect("equal", adjustable="box")
+    ax.grid(False)
+    if ax.get_legend_handles_labels()[0]:
+        ax.legend(loc="best", frameon=True, fontsize=8)
+    fig.tight_layout()
+    with S3.open(rel_path, "wb") as handle:
+        fig.savefig(handle, format="png", dpi=170)
+    plt.close(fig)
+    return S3.path(rel_path)
+
+
+def _save_peptide_landscape_visualizations(
+    bundle: Optional[PeptideLandscapeBundle],
+    selected_nodes: pd.DataFrame,
+    projection_df: pd.DataFrame,
+    metadata: Dict[str, Any],
+    rel,
+) -> Dict[str, Any]:
+    if bundle is None:
+        return {
+            "activity_landscape_png": None,
+            "sampling_nodes_landscape_png": None,
+            "generated_peptides_landscape_png": None,
+            "landscape_visualizations": [],
+        }
+
+    nodes, title_context = _visualization_nodes_for_landscape(bundle, selected_nodes, metadata)
+    base_title = f"{bundle.landscape_id} activity landscape ({title_context})"
+    activity_rel = rel("activity_landscape.png")
+    sampling_rel = rel("sampling_nodes_landscape.png")
+    generated_rel = rel("generated_peptides_projected_landscape.png")
+
+    activity_path = _write_peptide_landscape_visualization(
+        nodes,
+        activity_rel,
+        title=base_title,
+    )
+    sampling_path = _write_peptide_landscape_visualization(
+        nodes,
+        sampling_rel,
+        title=f"{base_title}: selected sampling nodes",
+        selected_nodes=selected_nodes,
+    )
+    generated_path = _write_peptide_landscape_visualization(
+        nodes,
+        generated_rel,
+        title=f"{base_title}: generated peptides projected back",
+        selected_nodes=selected_nodes,
+        projected_peptides=projection_df,
+    )
+
+    visualizations = []
+    for key, path, rel_path, title in (
+        ("activity_landscape_png", activity_path, activity_rel, base_title),
+        (
+            "sampling_nodes_landscape_png",
+            sampling_path,
+            sampling_rel,
+            f"{base_title}: selected sampling nodes",
+        ),
+        (
+            "generated_peptides_landscape_png",
+            generated_path,
+            generated_rel,
+            f"{base_title}: generated peptides projected back",
+        ),
+    ):
+        if path:
+            visualizations.append(
+                {
+                    "kind": key,
+                    "title": title,
+                    "path": path,
+                    "rel_path": rel_path,
+                }
+            )
+
+    return {
+        "activity_landscape_png": activity_path,
+        "activity_landscape_png_rel_path": activity_rel if activity_path else None,
+        "sampling_nodes_landscape_png": sampling_path,
+        "sampling_nodes_landscape_png_rel_path": sampling_rel if sampling_path else None,
+        "generated_peptides_landscape_png": generated_path,
+        "generated_peptides_landscape_png_rel_path": generated_rel if generated_path else None,
+        "landscape_visualizations": visualizations,
+    }
+
+
+def _register_peptide_landscape_visualization_figures(
+    session_state: Dict[str, Any],
+    artifacts: Dict[str, Any],
+    metadata: Dict[str, Any],
+    *,
+    source_agent: Optional[str],
+    source_tool: str,
+) -> List[str]:
+    figure_ids: List[str] = []
+    selected_node_ids = [str(value) for value in metadata.get("selected_node_ids") or []]
+    for item in artifacts.get("landscape_visualizations") or []:
+        path = item.get("path")
+        if not path:
+            continue
+        overlays = []
+        if item.get("kind") in {
+            "sampling_nodes_landscape_png",
+            "generated_peptides_landscape_png",
+        }:
+            overlays.append(
+                {
+                    "role": "sampling_nodes",
+                    "color": "red",
+                    "symbol": "labeled rings",
+                    "meaning": "GTM nodes selected for WAE latent sampling",
+                }
+            )
+        if item.get("kind") == "generated_peptides_landscape_png":
+            overlays.append(
+                {
+                    "role": "generated_peptides",
+                    "color": "black",
+                    "symbol": "circles",
+                    "meaning": "generated peptides projected at their sampled node coordinates",
+                }
+            )
+        figure_metadata = build_figure_metadata(
+            figure_kind="peptide_activity_landscape",
+            renderer="matplotlib",
+            report_role=REPORT_ROLE_INLINE_STATIC,
+            title_subject=item.get("title") or "Peptide activity landscape",
+            paths={"png_path": path, "image_path": path},
+            color_encoding={
+                "role": "node_color",
+                "field": "activity_mean",
+                "encoded_variable": "aggregate node activity mean",
+                "palette": "viridis",
+                "low_value_meaning": "lower aggregate activity",
+                "high_value_meaning": "higher aggregate activity",
+            },
+            overlays=overlays,
+            node_labels=selected_node_ids
+            if overlays and item.get("kind") != "activity_landscape_png"
+            else [],
+            caption_facts=[
+                "The landscape is built from aggregate node-level activity values.",
+                "Raw DBAASP peptide records are not redistributed or sampled.",
+            ],
+        )
+        figure_id = register_session_object(
+            session_state,
+            "figure",
+            figure_metadata,
+            label=figure_metadata.get("title_subject"),
+            source_agent=source_agent,
+            source_tool=source_tool,
+            set_current=False,
+        )
+        figure_ids.append(figure_id)
+    return figure_ids
+
+
 def _save_peptide_landscape_artifacts(
     session_state: Dict[str, Any],
     *,
@@ -743,6 +1075,7 @@ def _save_peptide_landscape_artifacts(
     selected_nodes: pd.DataFrame,
     metadata: Dict[str, Any],
     include_seq2logo: bool,
+    bundle: Optional[PeptideLandscapeBundle] = None,
 ) -> Dict[str, Any]:
     counter = int(session_state.get("_peptide_landscape_run_counter", 0)) + 1
     session_state["_peptide_landscape_run_counter"] = counter
@@ -762,6 +1095,7 @@ def _save_peptide_landscape_artifacts(
     diversity_rel = rel("diversity_summary.json")
     pairwise_rel = rel("pairwise_identity.csv")
     aligned_rel = rel("aligned_peptides.csv")
+    projection_rel = rel("generated_peptide_projection.csv")
     freq_rel = rel("position_frequency_matrix.csv")
     seq2logo_rel = rel("seq2logo.png")
     metadata_rel = rel("metadata.json")
@@ -798,6 +1132,16 @@ def _save_peptide_landscape_artifacts(
     else:
         aligned_path = None
 
+    projection_records = _candidate_projection_records(candidates)
+    if projection_records:
+        projection_df = pd.DataFrame(projection_records)
+        with S3.open(projection_rel, "w") as handle:
+            projection_df.to_csv(handle, index=False)
+        projection_path = S3.path(projection_rel)
+    else:
+        projection_df = pd.DataFrame()
+        projection_path = None
+
     freq_df = analysis["position_frequency_matrix"]
     if not freq_df.empty:
         with S3.open(freq_rel, "w") as handle:
@@ -807,6 +1151,13 @@ def _save_peptide_landscape_artifacts(
         freq_path = None
 
     seq2logo_path = _write_seq2logo_plot(freq_df, seq2logo_rel) if include_seq2logo else None
+    visualization_artifacts = _save_peptide_landscape_visualizations(
+        bundle,
+        selected_nodes,
+        projection_df,
+        metadata,
+        rel,
+    )
 
     metadata_payload = {
         "peptide_landscape_run_id": run_id,
@@ -821,9 +1172,19 @@ def _save_peptide_landscape_artifacts(
             "diversity_summary_json": S3.path(diversity_rel),
             "pairwise_identity_csv": pairwise_path,
             "aligned_peptides_csv": aligned_path,
+            "generated_peptide_projection_csv": projection_path,
             "position_frequency_matrix_csv": freq_path,
             "seq2logo_png": seq2logo_path,
+            **{
+                key: visualization_artifacts.get(key)
+                for key in (
+                    "activity_landscape_png",
+                    "sampling_nodes_landscape_png",
+                    "generated_peptides_landscape_png",
+                )
+            },
         },
+        "landscape_visualizations": visualization_artifacts.get("landscape_visualizations", []),
     }
     with S3.open(metadata_rel, "w") as handle:
         json.dump(metadata_payload, handle, indent=2)
@@ -836,14 +1197,28 @@ def _save_peptide_landscape_artifacts(
         "diversity_summary_json_rel_path": diversity_rel,
         "pairwise_identity_csv_rel_path": pairwise_rel if pairwise_path else None,
         "aligned_peptides_csv_rel_path": aligned_rel if aligned_path else None,
+        "generated_peptide_projection_csv_rel_path": (
+            projection_rel if projection_path else None
+        ),
         "position_frequency_matrix_csv_rel_path": freq_rel if freq_path else None,
         "seq2logo_png_rel_path": seq2logo_rel if seq2logo_path else None,
+        "activity_landscape_png_rel_path": visualization_artifacts.get(
+            "activity_landscape_png_rel_path"
+        ),
+        "sampling_nodes_landscape_png_rel_path": visualization_artifacts.get(
+            "sampling_nodes_landscape_png_rel_path"
+        ),
+        "generated_peptides_landscape_png_rel_path": visualization_artifacts.get(
+            "generated_peptides_landscape_png_rel_path"
+        ),
         "peptide_landscape_run_id": run_id,
         "metadata_json": S3.path(metadata_rel),
         "metadata_json_rel_path": metadata_rel,
         "identity_summary": analysis["identity_summary"],
         "diversity_summary": analysis["diversity_summary"],
         "alignment_summary": analysis["alignment_summary"],
+        "generated_peptide_projection_csv": projection_path,
+        **visualization_artifacts,
     }
 
 
@@ -1573,7 +1948,8 @@ class PeptideDesignerToolkit(Toolkit):
         Sample peptides from active zones of an aggregate HF peptide landscape.
 
         Sampling uses node coordinates and GTM/WAE tensors from the landscape bundle.
-        It does not sample or redistribute raw DBAASP peptide rows.
+        It does not sample or redistribute raw DBAASP peptide rows. Summary mode also
+        stores activity landscape, selected-node, and generated-peptide projection PNGs.
         """
         bundle = self._load_peptide_landscape_bundle(
             landscape_id=landscape_id,
@@ -1630,7 +2006,9 @@ class PeptideDesignerToolkit(Toolkit):
         Sample peptides from user-specified GTM node coordinates.
 
         Coordinates are resolved to aggregate node centers. If organism is supplied,
-        the returned node metadata includes organism-specific activity values.
+        the returned node metadata includes organism-specific activity values. Summary
+        mode also stores activity landscape, selected-node, and generated-peptide
+        projection PNGs.
         """
         bundle = self._load_peptide_landscape_bundle(
             landscape_id=landscape_id,
@@ -1919,9 +2297,18 @@ class PeptideDesignerToolkit(Toolkit):
                 selected_nodes=selected_nodes,
                 metadata=metadata,
                 include_seq2logo=include_seq2logo,
+                bundle=bundle,
             )
+            figure_ids = _register_peptide_landscape_visualization_figures(
+                state,
+                artifacts,
+                metadata,
+                source_agent=getattr(agent, "name", None),
+                source_tool=source_tool,
+            )
+            artifacts_with_figures = {**artifacts, "landscape_figure_ids": figure_ids}
             state[session_key] = {
-                **artifacts,
+                **artifacts_with_figures,
                 "origin_agent": "peptide_designer",
                 "generation_engine": PEPTIDE_LANDSCAPE_ENGINE,
                 "generation_mode": "landscape_guided",
@@ -1930,6 +2317,7 @@ class PeptideDesignerToolkit(Toolkit):
                 "count_attempted": attempted,
                 "count_returned": len(candidates),
                 "selected_node_ids": metadata["selected_node_ids"],
+                "landscape_figure_ids": figure_ids,
                 "preview": _compact_peptide_preview(candidates),
                 "raw_source_data_redistributed": bundle.manifest.get(
                     "raw_source_data_redistributed"
@@ -1951,6 +2339,17 @@ class PeptideDesignerToolkit(Toolkit):
                     "metadata_json_rel_path": artifacts["metadata_json_rel_path"],
                     "generated_peptides_csv": artifacts["generated_peptides_csv"],
                     "generated_peptides_csv_rel_path": artifacts["generated_peptides_csv_rel_path"],
+                    "generated_peptide_projection_csv": artifacts.get(
+                        "generated_peptide_projection_csv"
+                    ),
+                    "activity_landscape_png": artifacts.get("activity_landscape_png"),
+                    "sampling_nodes_landscape_png": artifacts.get(
+                        "sampling_nodes_landscape_png"
+                    ),
+                    "generated_peptides_landscape_png": artifacts.get(
+                        "generated_peptides_landscape_png"
+                    ),
+                    "landscape_figure_ids": figure_ids,
                     "seq2logo_png": artifacts.get("seq2logo_png"),
                 },
                 label=f"Peptide landscape sampling ({bundle.landscape_id})",
@@ -1960,7 +2359,7 @@ class PeptideDesignerToolkit(Toolkit):
                 current_role="analysis",
             )
             if not selected_artifacts or state is session_state:
-                selected_artifacts = artifacts
+                selected_artifacts = artifacts_with_figures
                 selected_analysis_id = analysis_id
 
         return {
@@ -1977,7 +2376,9 @@ class PeptideDesignerToolkit(Toolkit):
             **selected_artifacts,
             "note": (
                 "Generated peptides were decoded from aggregate active-zone node "
-                "coordinates. Raw DBAASP peptide rows were not sampled or redistributed."
+                "coordinates. Raw DBAASP peptide rows were not sampled or redistributed. "
+                "Landscape PNGs show the activity map used, selected sampling nodes, and "
+                "generated peptides projected back to their sampled GTM nodes."
             ),
         }
 
