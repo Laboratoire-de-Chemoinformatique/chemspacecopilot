@@ -54,6 +54,7 @@ PEPTIDE_DESIGN_ARTIFACT_FORMAT = "json"
 PEPTIDE_LANDSCAPE_ARTIFACT_DIR = "peptide_landscape_runs"
 PEPTIDE_LANDSCAPE_ENGINE = "wae_landscape"
 MAX_INLINE_PAIRWISE_IDENTITIES = 200
+PEPTIDE_ALIGNMENT_GAP = "-"
 
 
 def _filter_valid_unique_peptides(raw: List[Any]) -> List[str]:
@@ -388,6 +389,130 @@ def _sequence_tokens(sequence: Any) -> List[str]:
     return normalized.split() if normalized else []
 
 
+def _compact_peptide_tokens(tokens: Sequence[str]) -> str:
+    return "".join(tokens)
+
+
+def _ungapped_aligned_tokens(aligned_sequence: str) -> List[str]:
+    return [token for token in aligned_sequence if token != PEPTIDE_ALIGNMENT_GAP]
+
+
+def _fallback_alignment_records(
+    sequences: Sequence[str],
+    *,
+    reason: Optional[str] = None,
+) -> Dict[str, Any]:
+    records: List[Dict[str, Any]] = []
+    total_positions = 0
+    for index, sequence in enumerate(sequences):
+        tokens = _sequence_tokens(sequence)
+        compact = _compact_peptide_tokens(tokens)
+        total_positions += len(tokens)
+        records.append(
+            {
+                "sequence_index": index,
+                "sequence": sequence,
+                "aligned_sequence": " ".join(tokens),
+                "aligned_compact": compact,
+                "alignment_length": len(tokens),
+            }
+        )
+
+    return {
+        "records": records,
+        "summary": {
+            "aligned": False,
+            "method": "none",
+            "reason": reason or "Fewer than two non-empty peptide sequences.",
+            "n_sequences": len(records),
+            "alignment_length": max((record["alignment_length"] for record in records), default=0),
+            "gap_count": 0,
+            "gap_fraction": 0.0,
+            "residue_count": total_positions,
+        },
+    }
+
+
+def _align_peptide_sequences(sequences: Sequence[str]) -> Dict[str, Any]:
+    sequence_rows = []
+    for index, sequence in enumerate(sequences):
+        tokens = _sequence_tokens(sequence)
+        if tokens:
+            sequence_rows.append((index, sequence, tokens))
+    if len(sequence_rows) < 2:
+        return _fallback_alignment_records(sequences)
+
+    if any(len(token) != 1 for _, _, tokens in sequence_rows for token in tokens):
+        return _fallback_alignment_records(
+            sequences,
+            reason="PyFAMSA alignment requires single-letter amino acid tokens.",
+        )
+
+    try:
+        import pyfamsa
+    except ImportError as exc:
+        return _fallback_alignment_records(
+            sequences,
+            reason=f"PyFAMSA is unavailable: {exc}.",
+        )
+
+    try:
+        famsa_sequences = [
+            pyfamsa.Sequence(
+                f"seq_{index}".encode("ascii"),
+                _compact_peptide_tokens(tokens).encode("ascii"),
+            )
+            for index, _, tokens in sequence_rows
+        ]
+        alignment = pyfamsa.Aligner(guide_tree="upgma").align(famsa_sequences)
+    except Exception as exc:
+        logger.warning("PyFAMSA peptide alignment failed; falling back to raw positions: %s", exc)
+        return _fallback_alignment_records(
+            sequences,
+            reason=f"PyFAMSA alignment failed: {exc}.",
+        )
+
+    aligned_by_index: Dict[int, str] = {}
+    for aligned in alignment:
+        raw_id = aligned.id.decode("ascii")
+        sequence_index = int(raw_id.removeprefix("seq_"))
+        aligned_by_index[sequence_index] = aligned.sequence.decode("ascii")
+
+    records = []
+    gap_count = 0
+    residue_count = 0
+    for index, sequence, tokens in sequence_rows:
+        aligned_compact = aligned_by_index.get(index, _compact_peptide_tokens(tokens))
+        aligned_tokens = list(aligned_compact)
+        gap_count += aligned_tokens.count(PEPTIDE_ALIGNMENT_GAP)
+        residue_count += len(_ungapped_aligned_tokens(aligned_compact))
+        records.append(
+            {
+                "sequence_index": index,
+                "sequence": sequence,
+                "aligned_sequence": " ".join(aligned_tokens),
+                "aligned_compact": aligned_compact,
+                "alignment_length": len(aligned_tokens),
+            }
+        )
+
+    alignment_length = max((record["alignment_length"] for record in records), default=0)
+    total_cells = alignment_length * len(records)
+    return {
+        "records": records,
+        "summary": {
+            "aligned": True,
+            "method": "pyfamsa",
+            "guide_tree": "upgma",
+            "n_sequences": len(records),
+            "alignment_length": alignment_length,
+            "gap_count": gap_count,
+            "gap_fraction": round(gap_count / total_cells, 6) if total_cells else 0.0,
+            "residue_count": residue_count,
+        },
+    }
+
+
 def _sequence_uses_alphabet(sequence: str, alphabet: Sequence[str]) -> bool:
     allowed = set(alphabet)
     if not allowed:
@@ -442,10 +567,18 @@ def _position_frequency_matrix(
     sequences: Sequence[str],
     *,
     alphabet: Optional[Sequence[str]] = None,
+    tokenized_sequences: Optional[Sequence[Sequence[str]]] = None,
+    include_gaps_in_denominator: bool = False,
 ) -> pd.DataFrame:
-    tokenized = [_sequence_tokens(sequence) for sequence in sequences]
+    tokenized = (
+        [list(tokens) for tokens in tokenized_sequences]
+        if tokenized_sequences is not None
+        else [_sequence_tokens(sequence) for sequence in sequences]
+    )
     max_len = max((len(tokens) for tokens in tokenized), default=0)
-    observed = sorted({token for tokens in tokenized for token in tokens})
+    observed = sorted(
+        {token for tokens in tokenized for token in tokens if token != PEPTIDE_ALIGNMENT_GAP}
+    )
     columns = list(alphabet or observed)
     if not columns:
         return pd.DataFrame()
@@ -458,6 +591,10 @@ def _position_frequency_matrix(
             if pos >= len(tokens):
                 continue
             token = tokens[pos]
+            if token == PEPTIDE_ALIGNMENT_GAP:
+                if include_gaps_in_denominator:
+                    total += 1
+                continue
             if token not in counts:
                 counts[token] = 0
             counts[token] += 1
@@ -483,6 +620,11 @@ def _build_peptide_candidate_analysis(
     pairwise_records = _pairwise_identity_records(sequences)
     pairwise_values = [float(record["identity"]) for record in pairwise_records]
     lengths = [len(_sequence_tokens(sequence)) for sequence in sequences]
+    alignment = _align_peptide_sequences(sequences)
+    aligned_records = alignment["records"]
+    aligned_tokenized = [
+        list(str(record["aligned_compact"])) for record in aligned_records if record["aligned_compact"]
+    ]
 
     aa_counts: Dict[str, int] = {}
     for sequence in sequences:
@@ -540,9 +682,13 @@ def _build_peptide_candidate_analysis(
         "identity_summary": identity_summary,
         "diversity_summary": diversity_summary,
         "pairwise_identity": pairwise_records,
+        "alignment_summary": alignment["summary"],
+        "aligned_sequences": aligned_records,
         "position_frequency_matrix": _position_frequency_matrix(
             sequences,
             alphabet=alphabet,
+            tokenized_sequences=aligned_tokenized,
+            include_gaps_in_denominator=True,
         ),
     }
 
@@ -615,6 +761,7 @@ def _save_peptide_landscape_artifacts(
     identity_rel = rel("identity_summary.json")
     diversity_rel = rel("diversity_summary.json")
     pairwise_rel = rel("pairwise_identity.csv")
+    aligned_rel = rel("aligned_peptides.csv")
     freq_rel = rel("position_frequency_matrix.csv")
     seq2logo_rel = rel("seq2logo.png")
     metadata_rel = rel("metadata.json")
@@ -643,6 +790,14 @@ def _save_peptide_landscape_artifacts(
     else:
         pairwise_path = None
 
+    aligned_records = analysis["aligned_sequences"]
+    if aligned_records:
+        with S3.open(aligned_rel, "w") as handle:
+            pd.DataFrame(aligned_records).to_csv(handle, index=False)
+        aligned_path = S3.path(aligned_rel)
+    else:
+        aligned_path = None
+
     freq_df = analysis["position_frequency_matrix"]
     if not freq_df.empty:
         with S3.open(freq_rel, "w") as handle:
@@ -658,12 +813,14 @@ def _save_peptide_landscape_artifacts(
         "metadata": metadata,
         "identity_summary": analysis["identity_summary"],
         "diversity_summary": analysis["diversity_summary"],
+        "alignment_summary": analysis["alignment_summary"],
         "artifacts": {
             "selected_nodes_csv": S3.path(selected_nodes_rel),
             "generated_peptides_csv": S3.path(generated_rel),
             "identity_summary_json": S3.path(identity_rel),
             "diversity_summary_json": S3.path(diversity_rel),
             "pairwise_identity_csv": pairwise_path,
+            "aligned_peptides_csv": aligned_path,
             "position_frequency_matrix_csv": freq_path,
             "seq2logo_png": seq2logo_path,
         },
@@ -678,6 +835,7 @@ def _save_peptide_landscape_artifacts(
         "identity_summary_json_rel_path": identity_rel,
         "diversity_summary_json_rel_path": diversity_rel,
         "pairwise_identity_csv_rel_path": pairwise_rel if pairwise_path else None,
+        "aligned_peptides_csv_rel_path": aligned_rel if aligned_path else None,
         "position_frequency_matrix_csv_rel_path": freq_rel if freq_path else None,
         "seq2logo_png_rel_path": seq2logo_rel if seq2logo_path else None,
         "peptide_landscape_run_id": run_id,
@@ -685,6 +843,7 @@ def _save_peptide_landscape_artifacts(
         "metadata_json_rel_path": metadata_rel,
         "identity_summary": analysis["identity_summary"],
         "diversity_summary": analysis["diversity_summary"],
+        "alignment_summary": analysis["alignment_summary"],
     }
 
 
@@ -1510,11 +1669,11 @@ class PeptideDesignerToolkit(Toolkit):
         session_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Run identity, diversity, and Logomaker sequence-logo analysis on peptide candidates.
+        Run identity, diversity, PyFAMSA alignment, and Logomaker logo analysis.
 
         Args:
             reference: Session key, candidate artifact path, CSV path, or inline list.
-            include_seq2logo: Whether to render a Logomaker sequence-logo PNG artifact.
+            include_seq2logo: Whether to render a PyFAMSA-aligned Logomaker logo PNG.
             session_key: Session key under which the analysis pointer is stored.
             agent: Optional agent with session state.
             session_state: Optional explicit shared session state.

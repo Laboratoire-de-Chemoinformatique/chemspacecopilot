@@ -44,6 +44,7 @@ dependencies = [
     "numba>=0.62.1",
     "huggingface-hub<1.0",
     "logomaker>=0.8.7",
+    "pyfamsa>=0.7.0",
     "deepchemography @ git+https://github.com/AxelRolov/deepchemography.git@main",
     "marimo>=0.18.4",
     "transformers>=4.57.3",

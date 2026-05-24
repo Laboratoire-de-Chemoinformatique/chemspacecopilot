@@ -385,6 +385,8 @@ def test_sample_peptides_from_landscape_persists_analysis_artifacts(monkeypatch,
     assert pointer["raw_source_data_redistributed"] is False
     assert pointer["identity_summary"]["n_unique_sequences"] == 3
     assert pointer["diversity_summary"]["unique_node_count"] >= 1
+    assert pointer["alignment_summary"]["method"] == "pyfamsa"
+    assert pointer["aligned_peptides_csv"].endswith(".csv")
     assert pointer["seq2logo_png"].endswith(".png")
     assert shared_state["session_objects"]["current"]["analysis"] == "ana_001"
 
@@ -392,6 +394,29 @@ def test_sample_peptides_from_landscape_persists_analysis_artifacts(monkeypatch,
         generated = pd.read_csv(handle)
     assert set(generated["sequence"]) == {"A C D", "A C E", "A C F"}
     assert set(generated["properties_node_id"]).issubset({1, 2})
+
+    with S3.open(pointer["aligned_peptides_csv_rel_path"], "r") as handle:
+        aligned = pd.read_csv(handle)
+    assert len(set(aligned["alignment_length"])) == 1
+
+
+def test_peptide_candidate_analysis_aligns_before_logo_matrix():
+    candidates = [
+        {"sequence": "A C D"},
+        {"sequence": "A D"},
+        {"sequence": "A C D E"},
+    ]
+
+    analysis = peptide_designer_module._build_peptide_candidate_analysis(
+        candidates,
+        alphabet=["A", "C", "D", "E"],
+    )
+
+    assert analysis["alignment_summary"]["method"] == "pyfamsa"
+    aligned = analysis["aligned_sequences"]
+    assert len({record["alignment_length"] for record in aligned}) == 1
+    assert any("-" in record["aligned_compact"] for record in aligned)
+    assert len(analysis["position_frequency_matrix"]) == aligned[0]["alignment_length"]
 
 
 def test_sample_peptides_from_node_coordinates_returns_inline_candidates(monkeypatch, tmp_path):
@@ -425,4 +450,4 @@ def test_peptide_designer_prompt_prefers_hf_aggregate_landscapes():
     joined = "\n".join(PEPTIDE_DESIGNER_INSTRUCTIONS)
     assert "Do NOT request raw DBAASP records" in joined
     assert "sample_peptides_from_landscape" in joined
-    assert "Logomaker sequence-logo" in joined
+    assert "PyFAMSA-aligned Logomaker" in joined
