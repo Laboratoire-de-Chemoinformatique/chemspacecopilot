@@ -558,24 +558,30 @@ def _write_seq2logo_plot(freq_df: pd.DataFrame, rel_path: str) -> Optional[str]:
     import matplotlib
 
     matplotlib.use("Agg", force=True)
+    import logomaker
     import matplotlib.pyplot as plt
 
     fig_width = max(8, min(18, len(freq_df) * 0.45))
-    fig, ax = plt.subplots(figsize=(fig_width, 4.8))
-    bottom = np.zeros(len(freq_df))
-    x = freq_df["position"].to_numpy()
-    cmap = plt.get_cmap("tab20")
-    for idx, aa in enumerate(amino_acids):
-        values = freq_df[aa].to_numpy(dtype=float)
-        if np.allclose(values, 0):
-            continue
-        ax.bar(x, values, bottom=bottom, label=aa, width=0.85, color=cmap(idx % 20))
-        bottom = bottom + values
+    fig, ax = plt.subplots(figsize=(fig_width, 3.2))
+    logo_df = freq_df[amino_acids].copy()
+    logo_df.index = freq_df["position"].astype(int).to_numpy()
+    logomaker.Logo(
+        logo_df,
+        color_scheme="chemistry",
+        stack_order="big_on_top",
+        fade_probabilities=True,
+        ax=ax,
+        vpad=0.02,
+        width=0.9,
+    )
     ax.set_xlabel("Position")
     ax.set_ylabel("Frequency")
     ax.set_ylim(0, 1)
-    ax.set_title("Peptide Sequence Position Frequencies")
-    ax.legend(ncol=5, fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.18))
+    ax.set_title("Peptide Sequence Logo")
+    ax.set_xticks(logo_df.index)
+    ax.set_xticklabels([str(value) for value in logo_df.index], fontsize=8)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
     fig.tight_layout()
     with S3.open(rel_path, "wb") as handle:
         fig.savefig(handle, format="png", dpi=160)
@@ -1504,11 +1510,11 @@ class PeptideDesignerToolkit(Toolkit):
         session_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Run identity, diversity, and Seq2Logo-style analysis on peptide candidates.
+        Run identity, diversity, and Logomaker sequence-logo analysis on peptide candidates.
 
         Args:
             reference: Session key, candidate artifact path, CSV path, or inline list.
-            include_seq2logo: Whether to render a sequence-logo-style PNG artifact.
+            include_seq2logo: Whether to render a Logomaker sequence-logo PNG artifact.
             session_key: Session key under which the analysis pointer is stored.
             agent: Optional agent with session state.
             session_state: Optional explicit shared session state.

@@ -775,7 +775,7 @@ class PeptideDesignerFactory(BaseAgentFactory):
             - **Explore neighborhoods**: Generate peptide analogs with controlled diversity
             - **GTM on latent space**: Train Generative Topographic Maps on WAE latent vectors
             - **Activity landscapes**: Use aggregate HF peptide landscape bundles for active-zone sampling
-            - **Landscape analysis**: Automatically run identity/diversity and Seq2Logo-style analysis
+            - **Landscape analysis**: Automatically run identity/diversity and Logomaker sequence-logo analysis
 
             **Key Parameters**:
             - Max sequence length: 25 amino acids

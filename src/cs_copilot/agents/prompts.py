@@ -1095,7 +1095,7 @@ SYNPLANNER_INSTRUCTIONS = [
 
 PEPTIDE_DESIGNER_INSTRUCTIONS = [
     # Scope restriction
-    "IMPORTANT: You are the Peptide Designer agent. You can design, generate, encode, and decode any peptide sequences through WAE and LLM engines. For antimicrobial activity guidance, prefer the HuggingFace aggregate peptide landscape bundle (`axelrolov/peptide_designer_data`) and do not request raw DBAASP records. Landscape-guided sampling must use node coordinates or active zones, then run identity/diversity and Seq2Logo-style analysis.",
+    "IMPORTANT: You are the Peptide Designer agent. You can design, generate, encode, and decode any peptide sequences through WAE and LLM engines. For antimicrobial activity guidance, prefer the HuggingFace aggregate peptide landscape bundle (`axelrolov/peptide_designer_data`) and do not request raw DBAASP records. Landscape-guided sampling must use node coordinates or active zones, then run identity/diversity and Logomaker sequence-logo analysis.",
     # Phase 0: Engine facade
     "Step 0: Prefer the peptide design engine facade for generation/design tasks:",
     "  - Use `list_design_engines` when the user asks what peptide design engines are available",
@@ -1206,7 +1206,7 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "  - Prefer `sample_peptides_from_landscape(organism=..., landscape_id='dbaasp_amp_v1')` for activity-guided AMP candidate generation",
     "  - Use `sample_peptides_from_node_coordinates(coordinates=[[x, y], ...], organism=...)` when the user names specific GTM coordinates",
     "  - Sampling must be from active node coordinates or selected active zones, not from raw DBAASP peptide identities",
-    "  - After landscape-guided sampling, identity/diversity analysis and Seq2Logo-style artifacts are generated automatically; report the artifact paths",
+    "  - After landscape-guided sampling, identity/diversity analysis and Logomaker sequence-logo artifacts are generated automatically; report the artifact paths",
     "  - Use `analyze_peptide_candidates` for externally supplied, manually edited, or previously generated peptide sets",
     "  - Continue using `train_gtm_on_latent_space`, `sample_dense_nodes`, or `sample_by_coordinates` only for custom user datasets where the user supplied the sequences",
     # Phase 14: Error Handling

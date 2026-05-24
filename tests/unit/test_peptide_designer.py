@@ -425,4 +425,4 @@ def test_peptide_designer_prompt_prefers_hf_aggregate_landscapes():
     joined = "\n".join(PEPTIDE_DESIGNER_INSTRUCTIONS)
     assert "Do NOT request raw DBAASP records" in joined
     assert "sample_peptides_from_landscape" in joined
-    assert "Seq2Logo-style" in joined
+    assert "Logomaker sequence-logo" in joined
