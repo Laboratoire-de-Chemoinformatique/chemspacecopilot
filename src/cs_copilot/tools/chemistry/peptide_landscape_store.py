@@ -141,9 +141,6 @@ def list_cached_peptide_landscapes(*, local_dir: Optional[str] = None) -> list[d
                         "latent_dim": manifest.get("latent_dim"),
                         "organism_count": len(endpoint.get("organisms") or []),
                         "plotted_organism_count": len(endpoint.get("plotted_organisms") or []),
-                        "raw_source_data_redistributed": manifest.get(
-                            "raw_source_data_redistributed"
-                        ),
                     }
                 )
             except Exception as exc:

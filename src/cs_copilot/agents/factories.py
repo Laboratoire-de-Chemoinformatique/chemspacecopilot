@@ -731,7 +731,7 @@ class PeptideDesignerFactory(BaseAgentFactory):
     amino acid sequences; the LLM engine proposes sequence candidates from
     natural-language objectives. The WAE model can generate any peptides.
     Antimicrobial activity guidance uses HuggingFace aggregate peptide landscape
-    bundles, not raw DBAASP redistribution.
+    bundles.
 
     Key capabilities:
     - **Encoding**: Convert peptide sequences to 100-dimensional latent vectors
@@ -792,8 +792,7 @@ class PeptideDesignerFactory(BaseAgentFactory):
             - Generate antimicrobial candidates from aggregate active landscape zones
             - Sample peptides from specific GTM node coordinates and decode to sequences
 
-            **Note**: Activity-guided sampling uses node-level aggregate landscapes and does not
-            sample or redistribute raw DBAASP peptide rows.
+            **Note**: Activity-guided sampling uses node-level aggregate landscapes.
             """,
             tools=[
                 PeptideDesignerToolkit(),

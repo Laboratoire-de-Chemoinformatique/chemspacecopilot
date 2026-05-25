@@ -16,6 +16,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List, Literal, Optional, Protocol, Sequence, Union
 
 import numpy as np
@@ -36,13 +37,13 @@ from cs_copilot.tools.chemistry.peptide_landscape_store import (
     select_active_landscape_nodes,
     select_landscape_nodes_by_coordinates,
 )
+from cs_copilot.tools.chemography import gtm_operations
 from cs_copilot.tools.constants import (
     DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH,
     DEFAULT_PEPTIDE_LANDSCAPE_ID,
     HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO,
     HUGGINGFACE_PEPTIDE_WAE_REPO,
 )
-from cs_copilot.tools.io.figure_metadata import REPORT_ROLE_INLINE_STATIC, build_figure_metadata
 from cs_copilot.tools.io.session_memory import register_session_object, update_state_targets
 
 logger = logging.getLogger(__name__)
@@ -419,10 +420,25 @@ def _ungapped_aligned_tokens(aligned_sequence: str) -> List[str]:
     return [token for token in aligned_sequence if token != PEPTIDE_ALIGNMENT_GAP]
 
 
+def _leading_gap_count(aligned_sequence: str) -> int:
+    return len(aligned_sequence) - len(aligned_sequence.lstrip(PEPTIDE_ALIGNMENT_GAP))
+
+
+def _penalize_n_terminal_gaps(aligned_sequence: str) -> tuple[str, int]:
+    leading_gaps = _leading_gap_count(aligned_sequence)
+    if leading_gaps <= 0:
+        return aligned_sequence, 0
+    return (
+        aligned_sequence[leading_gaps:] + (PEPTIDE_ALIGNMENT_GAP * leading_gaps),
+        leading_gaps,
+    )
+
+
 def _fallback_alignment_records(
     sequences: Sequence[str],
     *,
     reason: Optional[str] = None,
+    penalize_n_terminal_gaps: bool = False,
 ) -> Dict[str, Any]:
     records: List[Dict[str, Any]] = []
     total_positions = 0
@@ -451,23 +467,35 @@ def _fallback_alignment_records(
             "gap_count": 0,
             "gap_fraction": 0.0,
             "residue_count": total_positions,
+            "penalize_n_terminal_gaps": penalize_n_terminal_gaps,
+            "n_terminal_gap_count_before": 0,
+            "n_terminal_gap_count_after": 0,
+            "n_terminal_gap_shifts": 0,
         },
     }
 
 
-def _align_peptide_sequences(sequences: Sequence[str]) -> Dict[str, Any]:
+def _align_peptide_sequences(
+    sequences: Sequence[str],
+    *,
+    penalize_n_terminal_gaps: bool = True,
+) -> Dict[str, Any]:
     sequence_rows = []
     for index, sequence in enumerate(sequences):
         tokens = _sequence_tokens(sequence)
         if tokens:
             sequence_rows.append((index, sequence, tokens))
     if len(sequence_rows) < 2:
-        return _fallback_alignment_records(sequences)
+        return _fallback_alignment_records(
+            sequences,
+            penalize_n_terminal_gaps=penalize_n_terminal_gaps,
+        )
 
     if any(len(token) != 1 for _, _, tokens in sequence_rows for token in tokens):
         return _fallback_alignment_records(
             sequences,
             reason="PyFAMSA alignment requires single-letter amino acid tokens.",
+            penalize_n_terminal_gaps=penalize_n_terminal_gaps,
         )
 
     try:
@@ -476,6 +504,7 @@ def _align_peptide_sequences(sequences: Sequence[str]) -> Dict[str, Any]:
         return _fallback_alignment_records(
             sequences,
             reason=f"PyFAMSA is unavailable: {exc}.",
+            penalize_n_terminal_gaps=penalize_n_terminal_gaps,
         )
 
     try:
@@ -492,6 +521,7 @@ def _align_peptide_sequences(sequences: Sequence[str]) -> Dict[str, Any]:
         return _fallback_alignment_records(
             sequences,
             reason=f"PyFAMSA alignment failed: {exc}.",
+            penalize_n_terminal_gaps=penalize_n_terminal_gaps,
         )
 
     aligned_by_index: Dict[int, str] = {}
@@ -503,8 +533,16 @@ def _align_peptide_sequences(sequences: Sequence[str]) -> Dict[str, Any]:
     records = []
     gap_count = 0
     residue_count = 0
+    n_terminal_gap_count_before = 0
+    n_terminal_gap_count_after = 0
+    n_terminal_gap_shifts = 0
     for index, sequence, tokens in sequence_rows:
         aligned_compact = aligned_by_index.get(index, _compact_peptide_tokens(tokens))
+        n_terminal_gap_count_before += _leading_gap_count(aligned_compact)
+        if penalize_n_terminal_gaps:
+            aligned_compact, shifted_gaps = _penalize_n_terminal_gaps(aligned_compact)
+            n_terminal_gap_shifts += shifted_gaps
+        n_terminal_gap_count_after += _leading_gap_count(aligned_compact)
         aligned_tokens = list(aligned_compact)
         gap_count += aligned_tokens.count(PEPTIDE_ALIGNMENT_GAP)
         residue_count += len(_ungapped_aligned_tokens(aligned_compact))
@@ -531,6 +569,10 @@ def _align_peptide_sequences(sequences: Sequence[str]) -> Dict[str, Any]:
             "gap_count": gap_count,
             "gap_fraction": round(gap_count / total_cells, 6) if total_cells else 0.0,
             "residue_count": residue_count,
+            "penalize_n_terminal_gaps": penalize_n_terminal_gaps,
+            "n_terminal_gap_count_before": n_terminal_gap_count_before,
+            "n_terminal_gap_count_after": n_terminal_gap_count_after,
+            "n_terminal_gap_shifts": n_terminal_gap_shifts,
         },
     }
 
@@ -632,6 +674,7 @@ def _build_peptide_candidate_analysis(
     candidates: Sequence[Dict[str, Any]],
     *,
     alphabet: Optional[Sequence[str]] = None,
+    penalize_n_terminal_gaps: bool = True,
 ) -> Dict[str, Any]:
     sequences = [
         str(candidate.get("sequence"))
@@ -642,10 +685,15 @@ def _build_peptide_candidate_analysis(
     pairwise_records = _pairwise_identity_records(sequences)
     pairwise_values = [float(record["identity"]) for record in pairwise_records]
     lengths = [len(_sequence_tokens(sequence)) for sequence in sequences]
-    alignment = _align_peptide_sequences(sequences)
+    alignment = _align_peptide_sequences(
+        sequences,
+        penalize_n_terminal_gaps=penalize_n_terminal_gaps,
+    )
     aligned_records = alignment["records"]
     aligned_tokenized = [
-        list(str(record["aligned_compact"])) for record in aligned_records if record["aligned_compact"]
+        list(str(record["aligned_compact"]))
+        for record in aligned_records
+        if record["aligned_compact"]
     ]
 
     aa_counts: Dict[str, int] = {}
@@ -777,6 +825,7 @@ def _save_node_sequence_logo_artifacts(
     *,
     alphabet: Optional[Sequence[str]],
     include_seq2logo: bool,
+    penalize_n_terminal_gaps: bool,
     rel,
 ) -> Dict[str, Any]:
     if not include_seq2logo:
@@ -799,7 +848,11 @@ def _save_node_sequence_logo_artifacts(
     records: List[Dict[str, Any]] = []
     for node_id in sorted(grouped):
         node_candidates = grouped[node_id]
-        node_analysis = _build_peptide_candidate_analysis(node_candidates, alphabet=alphabet)
+        node_analysis = _build_peptide_candidate_analysis(
+            node_candidates,
+            alphabet=alphabet,
+            penalize_n_terminal_gaps=penalize_n_terminal_gaps,
+        )
         freq_df = node_analysis["position_frequency_matrix"]
         if freq_df.empty:
             continue
@@ -834,6 +887,8 @@ def _save_node_sequence_logo_artifacts(
                 "n_unique_sequences": identity.get("n_unique_sequences"),
                 "alignment_method": alignment.get("method"),
                 "alignment_length": alignment.get("alignment_length"),
+                "penalize_n_terminal_gaps": alignment.get("penalize_n_terminal_gaps"),
+                "n_terminal_gap_shifts": alignment.get("n_terminal_gap_shifts"),
                 "position_frequency_matrix_csv": S3.path(freq_rel),
                 "position_frequency_matrix_csv_rel_path": freq_rel,
                 "aligned_peptides_csv": aligned_path,
@@ -859,7 +914,7 @@ def _save_node_sequence_logo_artifacts(
     }
 
 
-def _visualization_nodes_for_landscape(
+def _gtm_plot_nodes_for_landscape(
     bundle: PeptideLandscapeBundle,
     selected_nodes: pd.DataFrame,
     metadata: Dict[str, Any],
@@ -904,6 +959,50 @@ def _aggregate_landscape_nodes(nodes: pd.DataFrame) -> pd.DataFrame:
     return nodes.groupby(["node_id", "x", "y"], as_index=False).agg(aggregations)
 
 
+def _peptide_activity_classification_table(nodes: pd.DataFrame) -> pd.DataFrame:
+    """Convert aggregate peptide activity nodes to a ChemographyKit classification table."""
+    required = {"node_id", "x", "y", "density", "activity_mean"}
+    if nodes.empty or not required.issubset(nodes.columns):
+        return pd.DataFrame()
+
+    working = nodes.copy()
+    for column in ("node_id", "x", "y", "density", "activity_mean"):
+        working[column] = pd.to_numeric(working[column], errors="coerce")
+    working = working.dropna(subset=["node_id", "x", "y", "density", "activity_mean"])
+    if working.empty:
+        return pd.DataFrame()
+
+    active_prob = working["activity_mean"].clip(lower=0.0, upper=1.0).astype(float)
+    inactive_prob = 1.0 - active_prob
+    density = working["density"].clip(lower=0.0).astype(float)
+
+    table = pd.DataFrame(
+        {
+            "x": working["x"].astype(int),
+            "y": working["y"].astype(int),
+            "nodes": working["node_id"].astype(int),
+            "density": density,
+            "first_class_prob": inactive_prob,
+            "second_class_prob": active_prob,
+            "first_class_density": density * inactive_prob,
+            "second_class_density": density * active_prob,
+            "activity_mean": active_prob,
+        }
+    )
+    optional_columns = (
+        "node_id",
+        "organism",
+        "activity_class",
+        "uncertainty",
+        "n_observations",
+        "selection_score",
+    )
+    for column in optional_columns:
+        if column in working.columns and column not in table.columns:
+            table[column] = working[column].to_numpy()
+    return table.sort_values(["x", "y", "nodes"]).reset_index(drop=True)
+
+
 def _candidate_projection_records(candidates: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     for index, candidate in enumerate(candidates):
@@ -946,248 +1045,267 @@ def _candidate_projection_records(candidates: Sequence[Dict[str, Any]]) -> List[
     return records
 
 
-def _write_peptide_landscape_visualization(
-    nodes: pd.DataFrame,
-    rel_path: str,
-    *,
-    title: str,
-    selected_nodes: Optional[pd.DataFrame] = None,
-    projected_peptides: Optional[pd.DataFrame] = None,
-) -> Optional[str]:
-    required = {"x", "y", "activity_mean"}
-    if nodes.empty or not required.issubset(nodes.columns):
-        return None
+def _altair_projection_overlay_table(projection_df: pd.DataFrame) -> pd.DataFrame:
+    """Return GTMToolkit/Altair-corrected overlay coordinates for node-assigned peptides."""
+    if projection_df.empty or not {"x", "y"}.issubset(projection_df.columns):
+        return pd.DataFrame()
 
-    import matplotlib
+    overlay = projection_df.copy()
+    overlay["x"] = pd.to_numeric(overlay["x"], errors="coerce") + 0.5
+    overlay["y"] = pd.to_numeric(overlay["y"], errors="coerce") + 0.5
+    overlay = overlay.dropna(subset=["x", "y"]).reset_index(drop=True)
+    return overlay
 
-    matplotlib.use("Agg", force=True)
-    import matplotlib.pyplot as plt
 
-    plot_nodes = nodes.copy()
-    plot_nodes["activity_mean"] = pd.to_numeric(
-        plot_nodes["activity_mean"], errors="coerce"
-    )
-    plot_nodes = plot_nodes.dropna(subset=["x", "y", "activity_mean"])
-    if plot_nodes.empty:
-        return None
-
-    fig, ax = plt.subplots(figsize=(7.2, 6.2))
-    marker_size = max(18, min(95, 4200 / max(len(plot_nodes), 1)))
-    scatter = ax.scatter(
-        plot_nodes["x"].astype(float),
-        plot_nodes["y"].astype(float),
-        c=plot_nodes["activity_mean"].astype(float),
-        cmap="viridis",
-        marker="s",
-        s=marker_size,
-        linewidths=0,
-        alpha=0.92,
-    )
-    cbar = fig.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label("Activity mean")
-
-    if selected_nodes is not None and not selected_nodes.empty:
-        selected = selected_nodes.dropna(subset=["x", "y"]).copy()
-        if not selected.empty:
-            ax.scatter(
-                selected["x"].astype(float),
-                selected["y"].astype(float),
-                s=170,
-                facecolors="none",
-                edgecolors="#d62728",
-                linewidths=1.8,
-                label="Sampling nodes",
-            )
-            for _, row in selected.iterrows():
-                if pd.isna(row.get("node_id")):
-                    continue
-                ax.text(
-                    float(row["x"]) + 0.18,
-                    float(row["y"]) + 0.18,
-                    str(int(row["node_id"])),
-                    color="#d62728",
-                    fontsize=8,
-                    weight="bold",
-                )
-
-    if projected_peptides is not None and not projected_peptides.empty:
-        projected = projected_peptides.dropna(subset=["x", "y"]).copy()
-        if not projected.empty:
-            rng = np.random.default_rng(0)
-            jitter = rng.normal(0.0, 0.12, size=(len(projected), 2))
-            ax.scatter(
-                projected["x"].astype(float).to_numpy() + jitter[:, 0],
-                projected["y"].astype(float).to_numpy() + jitter[:, 1],
-                s=56,
-                c="#111111",
-                marker="o",
-                edgecolors="white",
-                linewidths=0.8,
-                alpha=0.88,
-                label="Generated peptides",
-            )
-
-    ax.set_title(title)
-    ax.set_xlabel("GTM x")
-    ax.set_ylabel("GTM y")
-    ax.set_aspect("equal", adjustable="box")
-    ax.grid(False)
-    if ax.get_legend_handles_labels()[0]:
-        ax.legend(loc="best", frameon=True, fontsize=8)
-    fig.tight_layout()
-    with S3.open(rel_path, "wb") as handle:
-        fig.savefig(handle, format="png", dpi=170)
-    plt.close(fig)
+def _write_standard_landscape_table(table: pd.DataFrame, rel_path: str) -> str:
+    with S3.open(rel_path, "w") as handle:
+        table.to_csv(handle, index=False)
     return S3.path(rel_path)
+
+
+def _session_figure_ids(session_state: Dict[str, Any]) -> List[str]:
+    memory = session_state.get("session_objects")
+    if not isinstance(memory, dict):
+        return []
+    figures = memory.get("figures")
+    if not isinstance(figures, dict):
+        return []
+    return list(figures)
+
+
+def _registered_figure_metadata(session_state: Dict[str, Any], figure_id: str) -> Dict[str, Any]:
+    memory = session_state.get("session_objects")
+    if not isinstance(memory, dict):
+        return {}
+    figures = memory.get("figures")
+    if not isinstance(figures, dict):
+        return {}
+    figure = figures.get(figure_id)
+    return figure if isinstance(figure, dict) else {}
+
+
+def _standard_gtm_landscape_plot_rel_path(
+    landscape_rel_path: str,
+    suffix: str,
+    *,
+    session_state: Dict[str, Any],
+) -> str:
+    base_name = f"{Path(landscape_rel_path).stem}_altair_classification_landscape"
+    return operation_rel_path(
+        OutputOperation.CHEMICAL_SPACE,
+        "gtm",
+        "plots",
+        "activity",
+        f"{base_name}{suffix}",
+        session_state=session_state,
+        workflow_slug="chemical_space",
+    )
+
+
+def _save_standard_gtm_landscape_plot(
+    session_state: Dict[str, Any],
+    *,
+    landscape_rel_path: str,
+    kind: str,
+    mark_nodes: Optional[List[int]],
+    overlay_dataset_rel_path: Optional[str],
+    source_agent: Optional[str],
+) -> Dict[str, Any]:
+    before = set(_session_figure_ids(session_state))
+    plot_agent = SimpleNamespace(session_state=session_state, name=source_agent)
+    gtm_operations.save_gtm_landscape_plot(
+        landscape_file=landscape_rel_path,
+        landscape_type="classification",
+        renderer="altair",
+        mark_nodes=mark_nodes,
+        overlay_dataset_file=overlay_dataset_rel_path,
+        agent=plot_agent,
+    )
+    figure_ids = [
+        figure_id for figure_id in _session_figure_ids(session_state) if figure_id not in before
+    ]
+    figure_metadata = (
+        _registered_figure_metadata(session_state, figure_ids[-1]) if figure_ids else {}
+    )
+    paths = figure_metadata.get("paths") if isinstance(figure_metadata, dict) else {}
+    paths = paths if isinstance(paths, dict) else {}
+    png_rel_path = _standard_gtm_landscape_plot_rel_path(
+        landscape_rel_path,
+        ".png",
+        session_state=session_state,
+    )
+    html_rel_path = _standard_gtm_landscape_plot_rel_path(
+        landscape_rel_path,
+        ".html",
+        session_state=session_state,
+    )
+    return {
+        "kind": kind,
+        "title": figure_metadata.get("title_subject") or "GTM peptide activity landscape",
+        "path": paths.get("png_path") or S3.path(png_rel_path),
+        "html_path": paths.get("html_path") or S3.path(html_rel_path),
+        "rel_path": png_rel_path,
+        "html_rel_path": html_rel_path,
+        "source_table_path": paths.get("source_table_path") or S3.path(landscape_rel_path),
+        "source_table_rel_path": landscape_rel_path,
+        "figure_ids": figure_ids,
+        "renderer": figure_metadata.get("renderer") or "altair",
+        "figure_kind": figure_metadata.get("figure_kind") or "gtm_activity_classification",
+    }
 
 
 def _save_peptide_landscape_visualizations(
     bundle: Optional[PeptideLandscapeBundle],
     selected_nodes: pd.DataFrame,
     projection_df: pd.DataFrame,
+    projection_rel_path: Optional[str],
     metadata: Dict[str, Any],
     rel,
+    *,
+    session_state: Dict[str, Any],
+    source_agent: Optional[str],
 ) -> Dict[str, Any]:
     if bundle is None:
         return {
             "activity_landscape_png": None,
+            "activity_landscape_html": None,
             "sampling_nodes_landscape_png": None,
+            "sampling_nodes_landscape_html": None,
             "generated_peptides_landscape_png": None,
+            "generated_peptides_landscape_html": None,
+            "activity_landscape_table_csv": None,
+            "activity_landscape_table_csv_rel_path": None,
             "landscape_visualizations": [],
+            "landscape_figure_ids": [],
         }
 
-    nodes, title_context = _visualization_nodes_for_landscape(bundle, selected_nodes, metadata)
-    base_title = f"{bundle.landscape_id} activity landscape ({title_context})"
-    activity_rel = rel("activity_landscape.png")
-    sampling_rel = rel("sampling_nodes_landscape.png")
-    generated_rel = rel("generated_peptides_projected_landscape.png")
+    nodes, _title_context = _gtm_plot_nodes_for_landscape(bundle, selected_nodes, metadata)
+    landscape_table = _peptide_activity_classification_table(nodes)
+    if landscape_table.empty:
+        return {
+            "activity_landscape_png": None,
+            "activity_landscape_html": None,
+            "sampling_nodes_landscape_png": None,
+            "sampling_nodes_landscape_html": None,
+            "generated_peptides_landscape_png": None,
+            "generated_peptides_landscape_html": None,
+            "activity_landscape_table_csv": None,
+            "activity_landscape_table_csv_rel_path": None,
+            "landscape_visualizations": [],
+            "landscape_figure_ids": [],
+        }
 
-    activity_path = _write_peptide_landscape_visualization(
-        nodes,
-        activity_rel,
-        title=base_title,
-    )
-    sampling_path = _write_peptide_landscape_visualization(
-        nodes,
-        sampling_rel,
-        title=f"{base_title}: selected sampling nodes",
-        selected_nodes=selected_nodes,
-    )
-    generated_path = _write_peptide_landscape_visualization(
-        nodes,
-        generated_rel,
-        title=f"{base_title}: generated peptides projected back",
-        selected_nodes=selected_nodes,
-        projected_peptides=projection_df,
+    selected_node_ids = [
+        int(value)
+        for value in metadata.get("selected_node_ids") or []
+        if value is not None and not pd.isna(value)
+    ]
+
+    table_rels = {
+        "activity_landscape_png": rel("activity_landscape_classification.csv"),
+        "sampling_nodes_landscape_png": rel("sampling_nodes_landscape_classification.csv"),
+        "generated_peptides_landscape_png": rel("generated_peptides_landscape_classification.csv"),
+    }
+    table_paths = {
+        key: _write_standard_landscape_table(landscape_table, table_rel)
+        for key, table_rel in table_rels.items()
+    }
+    plot_specs = (
+        ("activity_landscape_png", None, None),
+        ("sampling_nodes_landscape_png", selected_node_ids, None),
+        (
+            "generated_peptides_landscape_png",
+            selected_node_ids,
+            projection_rel_path if not projection_df.empty else None,
+        ),
     )
 
     visualizations = []
-    for key, path, rel_path, title in (
-        ("activity_landscape_png", activity_path, activity_rel, base_title),
-        (
-            "sampling_nodes_landscape_png",
-            sampling_path,
-            sampling_rel,
-            f"{base_title}: selected sampling nodes",
-        ),
-        (
-            "generated_peptides_landscape_png",
-            generated_path,
-            generated_rel,
-            f"{base_title}: generated peptides projected back",
-        ),
-    ):
-        if path:
-            visualizations.append(
-                {
-                    "kind": key,
-                    "title": title,
-                    "path": path,
-                    "rel_path": rel_path,
-                }
-            )
+    figure_ids: List[str] = []
+    for key, mark_nodes, overlay_rel_path in plot_specs:
+        item = _save_standard_gtm_landscape_plot(
+            session_state,
+            landscape_rel_path=table_rels[key],
+            kind=key,
+            mark_nodes=mark_nodes,
+            overlay_dataset_rel_path=overlay_rel_path,
+            source_agent=source_agent,
+        )
+        if item.get("path"):
+            visualizations.append(item)
+            figure_ids.extend(item.get("figure_ids") or [])
 
     return {
-        "activity_landscape_png": activity_path,
-        "activity_landscape_png_rel_path": activity_rel if activity_path else None,
-        "sampling_nodes_landscape_png": sampling_path,
-        "sampling_nodes_landscape_png_rel_path": sampling_rel if sampling_path else None,
-        "generated_peptides_landscape_png": generated_path,
-        "generated_peptides_landscape_png_rel_path": generated_rel if generated_path else None,
+        "activity_landscape_png": _visualization_path(visualizations, "activity_landscape_png"),
+        "activity_landscape_png_rel_path": _visualization_rel_path(
+            visualizations, "activity_landscape_png"
+        ),
+        "activity_landscape_html": _visualization_html_path(
+            visualizations, "activity_landscape_png"
+        ),
+        "activity_landscape_html_rel_path": _visualization_html_rel_path(
+            visualizations, "activity_landscape_png"
+        ),
+        "sampling_nodes_landscape_png": _visualization_path(
+            visualizations, "sampling_nodes_landscape_png"
+        ),
+        "sampling_nodes_landscape_png_rel_path": _visualization_rel_path(
+            visualizations, "sampling_nodes_landscape_png"
+        ),
+        "sampling_nodes_landscape_html": _visualization_html_path(
+            visualizations, "sampling_nodes_landscape_png"
+        ),
+        "sampling_nodes_landscape_html_rel_path": _visualization_html_rel_path(
+            visualizations, "sampling_nodes_landscape_png"
+        ),
+        "generated_peptides_landscape_png": _visualization_path(
+            visualizations, "generated_peptides_landscape_png"
+        ),
+        "generated_peptides_landscape_png_rel_path": _visualization_rel_path(
+            visualizations, "generated_peptides_landscape_png"
+        ),
+        "generated_peptides_landscape_html": _visualization_html_path(
+            visualizations, "generated_peptides_landscape_png"
+        ),
+        "generated_peptides_landscape_html_rel_path": _visualization_html_rel_path(
+            visualizations, "generated_peptides_landscape_png"
+        ),
+        "activity_landscape_table_csv": table_paths["activity_landscape_png"],
+        "activity_landscape_table_csv_rel_path": table_rels["activity_landscape_png"],
         "landscape_visualizations": visualizations,
+        "landscape_figure_ids": figure_ids,
     }
 
 
-def _register_peptide_landscape_visualization_figures(
-    session_state: Dict[str, Any],
-    artifacts: Dict[str, Any],
-    metadata: Dict[str, Any],
-    *,
-    source_agent: Optional[str],
-    source_tool: str,
-) -> List[str]:
-    figure_ids: List[str] = []
-    selected_node_ids = [str(value) for value in metadata.get("selected_node_ids") or []]
-    for item in artifacts.get("landscape_visualizations") or []:
-        path = item.get("path")
-        if not path:
-            continue
-        overlays = []
-        if item.get("kind") in {
-            "sampling_nodes_landscape_png",
-            "generated_peptides_landscape_png",
-        }:
-            overlays.append(
-                {
-                    "role": "sampling_nodes",
-                    "color": "red",
-                    "symbol": "labeled rings",
-                    "meaning": "GTM nodes selected for WAE latent sampling",
-                }
-            )
-        if item.get("kind") == "generated_peptides_landscape_png":
-            overlays.append(
-                {
-                    "role": "generated_peptides",
-                    "color": "black",
-                    "symbol": "circles",
-                    "meaning": "generated peptides projected at their sampled node coordinates",
-                }
-            )
-        figure_metadata = build_figure_metadata(
-            figure_kind="peptide_activity_landscape",
-            renderer="matplotlib",
-            report_role=REPORT_ROLE_INLINE_STATIC,
-            title_subject=item.get("title") or "Peptide activity landscape",
-            paths={"png_path": path, "image_path": path},
-            color_encoding={
-                "role": "node_color",
-                "field": "activity_mean",
-                "encoded_variable": "aggregate node activity mean",
-                "palette": "viridis",
-                "low_value_meaning": "lower aggregate activity",
-                "high_value_meaning": "higher aggregate activity",
-            },
-            overlays=overlays,
-            node_labels=selected_node_ids
-            if overlays and item.get("kind") != "activity_landscape_png"
-            else [],
-            caption_facts=[
-                "The landscape is built from aggregate node-level activity values.",
-                "Raw DBAASP peptide records are not redistributed or sampled.",
-            ],
-        )
-        figure_id = register_session_object(
-            session_state,
-            "figure",
-            figure_metadata,
-            label=figure_metadata.get("title_subject"),
-            source_agent=source_agent,
-            source_tool=source_tool,
-            set_current=False,
-        )
-        figure_ids.append(figure_id)
-    return figure_ids
+def _visualization_path(visualizations: Sequence[Dict[str, Any]], kind: str) -> Optional[str]:
+    item = _visualization_item(visualizations, kind)
+    return item.get("path") if item else None
+
+
+def _visualization_rel_path(visualizations: Sequence[Dict[str, Any]], kind: str) -> Optional[str]:
+    item = _visualization_item(visualizations, kind)
+    return item.get("rel_path") if item else None
+
+
+def _visualization_html_path(visualizations: Sequence[Dict[str, Any]], kind: str) -> Optional[str]:
+    item = _visualization_item(visualizations, kind)
+    return item.get("html_path") if item else None
+
+
+def _visualization_html_rel_path(
+    visualizations: Sequence[Dict[str, Any]], kind: str
+) -> Optional[str]:
+    item = _visualization_item(visualizations, kind)
+    return item.get("html_rel_path") if item else None
+
+
+def _visualization_item(
+    visualizations: Sequence[Dict[str, Any]], kind: str
+) -> Optional[Dict[str, Any]]:
+    for item in visualizations:
+        if item.get("kind") == kind:
+            return item
+    return None
 
 
 def _peptide_landscape_display_markdown(artifacts: Dict[str, Any]) -> str:
@@ -1211,6 +1329,13 @@ def _node_logo_display_markdown(artifacts: Dict[str, Any]) -> str:
         if path and node_id is not None:
             lines.append(f"![Peptide logo for GTM node {node_id}]({path})")
     return "\n".join(lines)
+
+
+def _peptide_artifact_display_markdown(
+    landscape_markdown: str,
+    node_logo_markdown: str,
+) -> str:
+    return "\n\n".join(part for part in (landscape_markdown, node_logo_markdown) if part)
 
 
 def _append_unique_paths(paths: List[Any], values: Sequence[Any]) -> None:
@@ -1246,38 +1371,62 @@ def _publish_peptide_landscape_visualizations_to_session(
         analysis_results["plots"] = plots
     _append_unique_paths(plots, plot_paths)
     analysis_results["peptide_activity_landscape_png"] = artifacts.get("activity_landscape_png")
+    analysis_results["peptide_activity_landscape_html"] = artifacts.get("activity_landscape_html")
     analysis_results["peptide_sampling_nodes_landscape_png"] = artifacts.get(
         "sampling_nodes_landscape_png"
+    )
+    analysis_results["peptide_sampling_nodes_landscape_html"] = artifacts.get(
+        "sampling_nodes_landscape_html"
     )
     analysis_results["peptide_generated_peptides_landscape_png"] = artifacts.get(
         "generated_peptides_landscape_png"
     )
+    analysis_results["peptide_generated_peptides_landscape_html"] = artifacts.get(
+        "generated_peptides_landscape_html"
+    )
+    analysis_results["peptide_activity_landscape_table_csv"] = artifacts.get(
+        "activity_landscape_table_csv"
+    )
+    analysis_results["peptide_landscape_figure_ids"] = artifacts.get("landscape_figure_ids") or []
     analysis_results["peptide_generated_projection_csv"] = artifacts.get(
         "generated_peptide_projection_csv"
     )
-    analysis_results["peptide_node_seqlogo_pngs"] = artifacts.get("node_seqlogo_pngs") or []
-    analysis_results["peptide_node_logo_manifest_csv"] = artifacts.get(
-        "node_logo_manifest_csv"
+    analysis_results["peptide_generated_projection_overlay_csv"] = artifacts.get(
+        "generated_peptide_projection_overlay_csv"
     )
+    analysis_results["peptide_node_seqlogo_pngs"] = artifacts.get("node_seqlogo_pngs") or []
+    analysis_results["peptide_node_logo_manifest_csv"] = artifacts.get("node_logo_manifest_csv")
 
     landscape_files = session_state.setdefault("landscape_files", {})
     if not isinstance(landscape_files, dict):
         landscape_files = {}
         session_state["landscape_files"] = landscape_files
     landscape_files["peptide_activity_landscape_png"] = artifacts.get("activity_landscape_png")
+    landscape_files["peptide_activity_landscape_html"] = artifacts.get("activity_landscape_html")
     landscape_files["peptide_sampling_nodes_landscape_png"] = artifacts.get(
         "sampling_nodes_landscape_png"
+    )
+    landscape_files["peptide_sampling_nodes_landscape_html"] = artifacts.get(
+        "sampling_nodes_landscape_html"
     )
     landscape_files["peptide_generated_peptides_landscape_png"] = artifacts.get(
         "generated_peptides_landscape_png"
     )
+    landscape_files["peptide_generated_peptides_landscape_html"] = artifacts.get(
+        "generated_peptides_landscape_html"
+    )
+    landscape_files["peptide_activity_landscape_table_csv"] = artifacts.get(
+        "activity_landscape_table_csv"
+    )
+    landscape_files["peptide_landscape_figure_ids"] = artifacts.get("landscape_figure_ids") or []
     landscape_files["peptide_generated_projection_csv"] = artifacts.get(
         "generated_peptide_projection_csv"
     )
-    landscape_files["peptide_node_seqlogo_pngs"] = artifacts.get("node_seqlogo_pngs") or []
-    landscape_files["peptide_node_logo_manifest_csv"] = artifacts.get(
-        "node_logo_manifest_csv"
+    landscape_files["peptide_generated_projection_overlay_csv"] = artifacts.get(
+        "generated_peptide_projection_overlay_csv"
     )
+    landscape_files["peptide_node_seqlogo_pngs"] = artifacts.get("node_seqlogo_pngs") or []
+    landscape_files["peptide_node_logo_manifest_csv"] = artifacts.get("node_logo_manifest_csv")
 
 
 def _save_peptide_landscape_artifacts(
@@ -1288,7 +1437,9 @@ def _save_peptide_landscape_artifacts(
     selected_nodes: pd.DataFrame,
     metadata: Dict[str, Any],
     include_seq2logo: bool,
+    penalize_n_terminal_gaps: bool = True,
     bundle: Optional[PeptideLandscapeBundle] = None,
+    source_agent: Optional[str] = None,
 ) -> Dict[str, Any]:
     counter = int(session_state.get("_peptide_landscape_run_counter", 0)) + 1
     session_state["_peptide_landscape_run_counter"] = counter
@@ -1309,6 +1460,7 @@ def _save_peptide_landscape_artifacts(
     pairwise_rel = rel("pairwise_identity.csv")
     aligned_rel = rel("aligned_peptides.csv")
     projection_rel = rel("generated_peptide_projection.csv")
+    projection_overlay_rel = rel("generated_peptide_projection_overlay.csv")
     freq_rel = rel("position_frequency_matrix.csv")
     seq2logo_rel = rel("seq2logo.png")
     metadata_rel = rel("metadata.json")
@@ -1323,6 +1475,7 @@ def _save_peptide_landscape_artifacts(
     analysis = _build_peptide_candidate_analysis(
         candidates,
         alphabet=metadata.get("peptide_alphabet"),
+        penalize_n_terminal_gaps=penalize_n_terminal_gaps,
     )
     with S3.open(identity_rel, "w") as handle:
         json.dump(analysis["identity_summary"], handle, indent=2)
@@ -1351,9 +1504,17 @@ def _save_peptide_landscape_artifacts(
         with S3.open(projection_rel, "w") as handle:
             projection_df.to_csv(handle, index=False)
         projection_path = S3.path(projection_rel)
+        projection_overlay_df = _altair_projection_overlay_table(projection_df)
+        if not projection_overlay_df.empty:
+            with S3.open(projection_overlay_rel, "w") as handle:
+                projection_overlay_df.to_csv(handle, index=False)
+            projection_overlay_path = S3.path(projection_overlay_rel)
+        else:
+            projection_overlay_path = None
     else:
         projection_df = pd.DataFrame()
         projection_path = None
+        projection_overlay_path = None
 
     freq_df = analysis["position_frequency_matrix"]
     if not freq_df.empty:
@@ -1368,19 +1529,26 @@ def _save_peptide_landscape_artifacts(
         candidates,
         alphabet=metadata.get("peptide_alphabet"),
         include_seq2logo=include_seq2logo,
+        penalize_n_terminal_gaps=penalize_n_terminal_gaps,
         rel=rel,
     )
     visualization_artifacts = _save_peptide_landscape_visualizations(
         bundle,
         selected_nodes,
         projection_df,
+        projection_overlay_rel if projection_overlay_path else None,
         metadata,
         rel,
+        session_state=session_state,
+        source_agent=source_agent,
     )
 
     metadata_payload = {
         "peptide_landscape_run_id": run_id,
         "metadata": metadata,
+        "alignment_settings": {
+            "penalize_n_terminal_gaps": penalize_n_terminal_gaps,
+        },
         "identity_summary": analysis["identity_summary"],
         "diversity_summary": analysis["diversity_summary"],
         "alignment_summary": analysis["alignment_summary"],
@@ -1392,6 +1560,7 @@ def _save_peptide_landscape_artifacts(
             "pairwise_identity_csv": pairwise_path,
             "aligned_peptides_csv": aligned_path,
             "generated_peptide_projection_csv": projection_path,
+            "generated_peptide_projection_overlay_csv": projection_overlay_path,
             "position_frequency_matrix_csv": freq_path,
             "seq2logo_png": seq2logo_path,
             "node_logo_manifest_csv": node_logo_artifacts.get("node_logo_manifest_csv"),
@@ -1399,13 +1568,18 @@ def _save_peptide_landscape_artifacts(
                 key: visualization_artifacts.get(key)
                 for key in (
                     "activity_landscape_png",
+                    "activity_landscape_html",
                     "sampling_nodes_landscape_png",
+                    "sampling_nodes_landscape_html",
                     "generated_peptides_landscape_png",
+                    "generated_peptides_landscape_html",
+                    "activity_landscape_table_csv",
                 )
             },
         },
         "node_sequence_logos": node_logo_artifacts.get("node_sequence_logos", []),
         "landscape_visualizations": visualization_artifacts.get("landscape_visualizations", []),
+        "landscape_figure_ids": visualization_artifacts.get("landscape_figure_ids", []),
     }
     with S3.open(metadata_rel, "w") as handle:
         json.dump(metadata_payload, handle, indent=2)
@@ -1418,8 +1592,9 @@ def _save_peptide_landscape_artifacts(
         "diversity_summary_json_rel_path": diversity_rel,
         "pairwise_identity_csv_rel_path": pairwise_rel if pairwise_path else None,
         "aligned_peptides_csv_rel_path": aligned_rel if aligned_path else None,
-        "generated_peptide_projection_csv_rel_path": (
-            projection_rel if projection_path else None
+        "generated_peptide_projection_csv_rel_path": (projection_rel if projection_path else None),
+        "generated_peptide_projection_overlay_csv_rel_path": (
+            projection_overlay_rel if projection_overlay_path else None
         ),
         "position_frequency_matrix_csv_rel_path": freq_rel if freq_path else None,
         "seq2logo_png_rel_path": seq2logo_rel if seq2logo_path else None,
@@ -1442,6 +1617,7 @@ def _save_peptide_landscape_artifacts(
         "diversity_summary": analysis["diversity_summary"],
         "alignment_summary": analysis["alignment_summary"],
         "generated_peptide_projection_csv": projection_path,
+        "generated_peptide_projection_overlay_csv": projection_overlay_path,
         **node_logo_artifacts,
         **visualization_artifacts,
     }
@@ -2103,10 +2279,7 @@ class PeptideDesignerToolkit(Toolkit):
             "repo_id": HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO,
             "default_landscape_id": DEFAULT_PEPTIDE_LANDSCAPE_ID,
             "landscapes": list_cached_peptide_landscapes(local_dir=local_dir),
-            "note": (
-                "Peptide landscapes are aggregate node-level bundles. Raw DBAASP records "
-                "are not redistributed or required for sampling."
-            ),
+            "note": "Peptide landscapes are aggregate node-level bundles for sampling.",
         }
 
     def list_peptide_landscape_organisms(
@@ -2137,7 +2310,6 @@ class PeptideDesignerToolkit(Toolkit):
             "organism_count": len(bundle.organisms),
             "plotted_organisms": bundle.plotted_organisms,
             "plotted_organism_count": len(bundle.plotted_organisms),
-            "raw_source_data_redistributed": bundle.manifest.get("raw_source_data_redistributed"),
         }
 
     def load_peptide_landscape(
@@ -2152,8 +2324,7 @@ class PeptideDesignerToolkit(Toolkit):
         """
         Download/cache and load an aggregate peptide landscape bundle.
 
-        The loaded bundle contains node-level aggregate landscapes and GTM tensors,
-        not raw DBAASP peptide records.
+        The loaded bundle contains node-level aggregate landscapes and GTM tensors.
         """
         bundle = self._load_peptide_landscape_bundle(
             landscape_id=landscape_id,
@@ -2172,9 +2343,6 @@ class PeptideDesignerToolkit(Toolkit):
                     "path": str(bundle.root_path),
                     "repo_id": HUGGINGFACE_PEPTIDE_DESIGNER_DATA_REPO,
                     "organism_count": len(bundle.organisms),
-                    "raw_source_data_redistributed": bundle.manifest.get(
-                        "raw_source_data_redistributed"
-                    ),
                 },
                 label=f"Peptide landscape: {bundle.landscape_id}",
                 source_agent=getattr(agent, "name", None),
@@ -2198,6 +2366,7 @@ class PeptideDesignerToolkit(Toolkit):
         decode_mode: str = "categorical",
         include_plots: bool = False,
         include_seq2logo: bool = True,
+        penalize_n_terminal_gaps: bool = True,
         random_state: Optional[int] = None,
         return_format: SampleReturnFormat = "summary",
         session_key: str = "landscape_sampled_peptides",
@@ -2207,10 +2376,11 @@ class PeptideDesignerToolkit(Toolkit):
         """
         Sample peptides from active zones of an aggregate HF peptide landscape.
 
-        Sampling uses node coordinates and GTM/WAE tensors from the landscape bundle.
-        It does not sample or redistribute raw DBAASP peptide rows. Summary mode also
-        stores activity landscape, selected-node, generated-peptide projection PNGs, and
-        one sequence logo per node with accepted generated peptides.
+        Sampling uses node coordinates and GTM/WAE tensors from the landscape bundle. Summary
+        mode also stores standard GTMToolkit activity landscape, selected-node, and
+        generated-peptide projection plots plus one sequence logo per node with accepted
+        generated peptides. Sequence-logo alignment penalizes N-terminal gaps by default
+        so short peptides are not visually shifted away from the first residue positions.
         """
         bundle = self._load_peptide_landscape_bundle(
             landscape_id=landscape_id,
@@ -2235,6 +2405,7 @@ class PeptideDesignerToolkit(Toolkit):
             temperature=temperature,
             decode_mode=decode_mode,
             include_seq2logo=include_seq2logo,
+            penalize_n_terminal_gaps=penalize_n_terminal_gaps,
             random_state=random_state,
             return_format=return_format,
             session_key=session_key,
@@ -2257,6 +2428,7 @@ class PeptideDesignerToolkit(Toolkit):
         allow_missing: bool = False,
         include_plots: bool = False,
         include_seq2logo: bool = True,
+        penalize_n_terminal_gaps: bool = True,
         random_state: Optional[int] = None,
         return_format: SampleReturnFormat = "summary",
         session_key: str = "coordinate_sampled_peptides",
@@ -2268,8 +2440,10 @@ class PeptideDesignerToolkit(Toolkit):
 
         Coordinates are resolved to aggregate node centers. If organism is supplied,
         the returned node metadata includes organism-specific activity values. Summary
-        mode also stores activity landscape, selected-node, generated-peptide projection
-        PNGs, and one sequence logo per node with accepted generated peptides.
+        mode also stores standard GTMToolkit activity landscape, selected-node, and
+        generated-peptide projection plots plus one sequence logo per node with accepted
+        generated peptides. Sequence-logo alignment penalizes N-terminal gaps by default
+        so short peptides are not visually shifted away from the first residue positions.
         """
         bundle = self._load_peptide_landscape_bundle(
             landscape_id=landscape_id,
@@ -2290,6 +2464,7 @@ class PeptideDesignerToolkit(Toolkit):
             temperature=temperature,
             decode_mode=decode_mode,
             include_seq2logo=include_seq2logo,
+            penalize_n_terminal_gaps=penalize_n_terminal_gaps,
             random_state=random_state,
             return_format=return_format,
             session_key=session_key,
@@ -2303,6 +2478,7 @@ class PeptideDesignerToolkit(Toolkit):
         self,
         reference: Union[str, List[str], List[Dict[str, Any]]] = "landscape_sampled_peptides",
         include_seq2logo: bool = True,
+        penalize_n_terminal_gaps: bool = True,
         session_key: str = "peptide_candidate_analysis",
         agent: Optional[Agent] = None,
         session_state: Optional[Dict[str, Any]] = None,
@@ -2313,6 +2489,8 @@ class PeptideDesignerToolkit(Toolkit):
         Args:
             reference: Session key, candidate artifact path, CSV path, or inline list.
             include_seq2logo: Whether to render a PyFAMSA-aligned Logomaker logo PNG.
+            penalize_n_terminal_gaps: Move leading alignment gaps to the C-terminus before
+                frequency/logo generation. Disable this to inspect direct PyFAMSA alignment.
             session_key: Session key under which the analysis pointer is stored.
             agent: Optional agent with session state.
             session_state: Optional explicit shared session state.
@@ -2337,6 +2515,7 @@ class PeptideDesignerToolkit(Toolkit):
             "session_key": session_key,
             "count_returned": len(candidates),
             "reference": str(reference),
+            "penalize_n_terminal_gaps": penalize_n_terminal_gaps,
         }
         for state in state_targets:
             artifacts = _save_peptide_landscape_artifacts(
@@ -2346,12 +2525,18 @@ class PeptideDesignerToolkit(Toolkit):
                 selected_nodes=empty_nodes,
                 metadata=metadata,
                 include_seq2logo=include_seq2logo,
+                penalize_n_terminal_gaps=penalize_n_terminal_gaps,
+                source_agent=getattr(agent, "name", None),
             )
             _publish_peptide_landscape_visualizations_to_session(state, artifacts)
             node_logo_markdown = _node_logo_display_markdown(artifacts)
             artifacts_with_logos = {
                 **artifacts,
                 "node_logo_display_markdown": node_logo_markdown,
+                "display_markdown": _peptide_artifact_display_markdown(
+                    "",
+                    node_logo_markdown,
+                ),
             }
             state[session_key] = {
                 **artifacts_with_logos,
@@ -2429,11 +2614,7 @@ class PeptideDesignerToolkit(Toolkit):
                 "units": endpoint.get("units"),
                 "activity_threshold": bundle.sampler.get("activity_threshold"),
             },
-            "raw_source_data_redistributed": bundle.manifest.get("raw_source_data_redistributed"),
-            "note": (
-                "Loaded aggregate node-level peptide landscape. Raw DBAASP rows are not "
-                "present and are not needed for coordinate-based WAE sampling."
-            ),
+            "note": "Loaded aggregate node-level peptide landscape for coordinate-based WAE sampling.",
         }
 
     def _sample_peptides_from_selected_landscape_nodes(
@@ -2447,6 +2628,7 @@ class PeptideDesignerToolkit(Toolkit):
         temperature: float,
         decode_mode: str,
         include_seq2logo: bool,
+        penalize_n_terminal_gaps: bool,
         random_state: Optional[int],
         return_format: SampleReturnFormat,
         session_key: str,
@@ -2540,7 +2722,7 @@ class PeptideDesignerToolkit(Toolkit):
             "temperature": temperature,
             "decode_mode": decode_mode,
             "peptide_alphabet": alphabet,
-            "raw_source_data_redistributed": bundle.manifest.get("raw_source_data_redistributed"),
+            "penalize_n_terminal_gaps": penalize_n_terminal_gaps,
         }
         if "organism" in selected_nodes.columns and selected_nodes["organism"].notna().any():
             metadata["organisms"] = sorted(
@@ -2566,15 +2748,11 @@ class PeptideDesignerToolkit(Toolkit):
                 selected_nodes=selected_nodes,
                 metadata=metadata,
                 include_seq2logo=include_seq2logo,
+                penalize_n_terminal_gaps=penalize_n_terminal_gaps,
                 bundle=bundle,
-            )
-            figure_ids = _register_peptide_landscape_visualization_figures(
-                state,
-                artifacts,
-                metadata,
                 source_agent=getattr(agent, "name", None),
-                source_tool=source_tool,
             )
+            figure_ids = artifacts.get("landscape_figure_ids") or []
             _publish_peptide_landscape_visualizations_to_session(state, artifacts)
             display_markdown = _peptide_landscape_display_markdown(artifacts)
             node_logo_markdown = _node_logo_display_markdown(artifacts)
@@ -2583,6 +2761,10 @@ class PeptideDesignerToolkit(Toolkit):
                 "landscape_figure_ids": figure_ids,
                 "landscape_display_markdown": display_markdown,
                 "node_logo_display_markdown": node_logo_markdown,
+                "display_markdown": _peptide_artifact_display_markdown(
+                    display_markdown,
+                    node_logo_markdown,
+                ),
             }
             state[session_key] = {
                 **artifacts_with_figures,
@@ -2596,9 +2778,6 @@ class PeptideDesignerToolkit(Toolkit):
                 "selected_node_ids": metadata["selected_node_ids"],
                 "landscape_figure_ids": figure_ids,
                 "preview": _compact_peptide_preview(candidates),
-                "raw_source_data_redistributed": bundle.manifest.get(
-                    "raw_source_data_redistributed"
-                ),
             }
             analysis_id = register_session_object(
                 state,
@@ -2619,13 +2798,20 @@ class PeptideDesignerToolkit(Toolkit):
                     "generated_peptide_projection_csv": artifacts.get(
                         "generated_peptide_projection_csv"
                     ),
-                    "activity_landscape_png": artifacts.get("activity_landscape_png"),
-                    "sampling_nodes_landscape_png": artifacts.get(
-                        "sampling_nodes_landscape_png"
+                    "generated_peptide_projection_overlay_csv": artifacts.get(
+                        "generated_peptide_projection_overlay_csv"
                     ),
+                    "activity_landscape_png": artifacts.get("activity_landscape_png"),
+                    "activity_landscape_html": artifacts.get("activity_landscape_html"),
+                    "sampling_nodes_landscape_png": artifacts.get("sampling_nodes_landscape_png"),
+                    "sampling_nodes_landscape_html": artifacts.get("sampling_nodes_landscape_html"),
                     "generated_peptides_landscape_png": artifacts.get(
                         "generated_peptides_landscape_png"
                     ),
+                    "generated_peptides_landscape_html": artifacts.get(
+                        "generated_peptides_landscape_html"
+                    ),
+                    "activity_landscape_table_csv": artifacts.get("activity_landscape_table_csv"),
                     "landscape_figure_ids": figure_ids,
                     "seq2logo_png": artifacts.get("seq2logo_png"),
                 },
@@ -2653,9 +2839,8 @@ class PeptideDesignerToolkit(Toolkit):
             **selected_artifacts,
             "note": (
                 "Generated peptides were decoded from aggregate active-zone node "
-                "coordinates. Raw DBAASP peptide rows were not sampled or redistributed. "
-                "Landscape PNGs show the activity map used, selected sampling nodes, and "
-                "generated peptides projected back to their sampled GTM nodes."
+                "coordinates. Landscape files are rendered through the standard "
+                "GTMToolkit ChemographyKit classification plot path."
             ),
         }
 
