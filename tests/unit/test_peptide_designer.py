@@ -408,6 +408,18 @@ def test_sample_peptides_from_landscape_persists_analysis_artifacts(monkeypatch,
     assert len(pointer["landscape_figure_ids"]) == 3
     assert "![Peptide activity landscape]" in pointer["display_markdown"]
     assert "![Peptide logo for GTM node" in pointer["display_markdown"]
+    required_kinds = {item["kind"] for item in pointer["required_output_artifacts"]}
+    assert "used_activity_landscape" in required_kinds
+    assert "projected_generated_peptides_landscape" in required_kinds
+    assert "node_seq2logo" in required_kinds
+    assert "![Peptide activity landscape used for sampling]" in pointer["required_output_markdown"]
+    assert (
+        "![Generated peptides projected on peptide activity landscape]"
+        in pointer["required_output_markdown"]
+    )
+    assert "![Node seq2logo for GTM node" in pointer["required_output_markdown"]
+    assert summary["required_output_artifacts"] == pointer["required_output_artifacts"]
+    assert summary["required_output_markdown"] == pointer["required_output_markdown"]
     figures = shared_state["session_objects"]["figures"]
     assert {figures[figure_id]["figure_kind"] for figure_id in pointer["landscape_figure_ids"]} == {
         "gtm_activity_classification"
@@ -442,6 +454,10 @@ def test_sample_peptides_from_landscape_persists_analysis_artifacts(monkeypatch,
     assert (
         shared_state["landscape_files"]["peptide_node_seqlogo_pngs"] == pointer["node_seqlogo_pngs"]
     )
+    registered_analysis = shared_state["session_objects"]["analyses"]["ana_001"]
+    assert registered_analysis["required_output_artifacts"] == pointer["required_output_artifacts"]
+    assert registered_analysis["required_output_markdown"] == pointer["required_output_markdown"]
+    assert registered_analysis["node_seqlogo_pngs"] == pointer["node_seqlogo_pngs"]
     assert pointer["seq2logo_png"].endswith(".png")
     assert shared_state["session_objects"]["current"]["analysis"] == "ana_001"
 
@@ -482,6 +498,102 @@ def test_sample_peptides_from_landscape_persists_analysis_artifacts(monkeypatch,
         "seq2logo_png",
         "penalize_n_terminal_gaps",
     }.issubset(node_logo_manifest.columns)
+
+
+def test_seq2logo_probability_matrix_drops_all_gap_positions():
+    freq_df = pd.DataFrame(
+        {
+            "position": [1, 2, 3],
+            "n_observed": [3, 3, 3],
+            "A": [0.5, 0.0, 0.25],
+            "C": [0.5, 0.0, 0.25],
+            "D": [0.0, 0.0, 0.5],
+        }
+    )
+
+    logo_df, skipped_positions = peptide_designer_module._seq2logo_probability_matrix(freq_df)
+
+    assert skipped_positions == [2]
+    assert list(logo_df.index) == [1, 3]
+    assert np.allclose(logo_df.sum(axis=1), [1.0, 1.0])
+
+
+def test_landscape_sampling_keeps_gtm_maps_when_seqlogo_rendering_fails(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    _write_synthetic_peptide_landscape(tmp_path)
+    monkeypatch.setenv("PEPTIDE_DESIGNER_DATA_PATH", str(tmp_path))
+    toolkit = _toolkit_without_model(monkeypatch, tmp_path)
+    decoded = iter(["A C D", "A C E", "A C F", "A C D", "A C E"] * 4)
+
+    def fake_decode(latent_vectors, **kwargs):
+        return [next(decoded) for _ in latent_vectors]
+
+    def fail_seqlogo(*args, **kwargs):
+        raise RuntimeError("forced seqlogo failure")
+
+    monkeypatch.setattr(toolkit, "decode_latent", fake_decode)
+    monkeypatch.setattr(peptide_designer_module, "_write_seq2logo_plot", fail_seqlogo)
+    shared_state = {}
+
+    summary = toolkit.sample_peptides_from_landscape(
+        organism="E. coli",
+        n_candidates=3,
+        top_n_nodes=2,
+        local_noise_scale=0.0,
+        random_state=7,
+        session_state=shared_state,
+    )
+
+    pointer = shared_state["landscape_sampled_peptides"]
+    assert summary["count_returned"] == 3
+    assert pointer["activity_landscape_png"].endswith(".png")
+    assert pointer["sampling_nodes_landscape_png"].endswith(".png")
+    assert pointer["generated_peptides_landscape_png"].endswith(".png")
+    assert len(pointer["landscape_figure_ids"]) == 3
+    assert pointer["seq2logo_status"] == "skipped"
+    assert pointer["seq2logo_png"] is None
+    assert pointer["node_sequence_logos"] == []
+    assert pointer["node_logo_failures"]
+    required_kinds = {item["kind"] for item in pointer["required_output_artifacts"]}
+    assert "used_activity_landscape" in required_kinds
+    assert "projected_generated_peptides_landscape" in required_kinds
+    assert "node_seq2logo" not in required_kinds
+    assert "![Peptide activity landscape used for sampling]" in pointer["required_output_markdown"]
+    assert (
+        "![Generated peptides projected on peptide activity landscape]"
+        in pointer["required_output_markdown"]
+    )
+    assert "Node seq2logo" not in pointer["required_output_markdown"]
+
+
+def test_landscape_sampling_summary_returns_required_outputs_without_session_state(
+    monkeypatch, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    _write_synthetic_peptide_landscape(tmp_path)
+    monkeypatch.setenv("PEPTIDE_DESIGNER_DATA_PATH", str(tmp_path))
+    toolkit = _toolkit_without_model(monkeypatch, tmp_path)
+
+    monkeypatch.setattr(
+        toolkit,
+        "decode_latent",
+        lambda latent_vectors, **kwargs: ["A C D" for _ in latent_vectors],
+    )
+
+    summary = toolkit.sample_peptides_from_landscape(
+        organism="E. coli",
+        n_candidates=1,
+        top_n_nodes=1,
+        local_noise_scale=0.0,
+        return_format="summary",
+    )
+
+    required_kinds = {item["kind"] for item in summary["required_output_artifacts"]}
+    assert summary["count_returned"] == 1
+    assert "used_activity_landscape" in required_kinds
+    assert "projected_generated_peptides_landscape" in required_kinds
+    assert "node_seq2logo" in required_kinds
+    assert "![Peptide activity landscape used for sampling]" in summary["required_output_markdown"]
 
 
 def test_n_terminal_gap_penalty_moves_leading_alignment_gaps_to_c_terminus():
@@ -559,7 +671,10 @@ def test_peptide_designer_prompt_prefers_hf_aggregate_landscapes():
     assert "sample_peptides_from_landscape" in joined
     assert "return_format='summary'" in joined
     assert "display_markdown" in joined
+    assert "required_output_markdown" in joined
+    assert "node seq2logo" in joined
     assert "PyFAMSA-aligned Logomaker" in joined
     team_joined = "\n".join(AGENT_TEAM_INSTRUCTIONS)
     assert "include_seq2logo=True" in team_joined
     assert "return_format='summary'" in team_joined
+    assert "required_output_markdown" in team_joined

@@ -977,7 +977,7 @@ AGENT_TEAM_INSTRUCTIONS = [
     "    'antimicrobial activity landscape', 'peptide activity landscape', or active peptide zones:",
     "    • Route to Peptide Designer agent (it has both peptide-generation and GTM tools)",
     "    • Prefer HF aggregate landscape tools (`list_peptide_landscapes`, `load_peptide_landscape`, `sample_peptides_from_landscape`) for activity-guided sampling",
-    "    • For AMP prompts that mention active zones, pre-built/prebuilt GTM landscapes, or organism-specific activity guidance, delegate `sample_peptides_from_landscape(..., include_seq2logo=True, return_format='summary')` and ask the Peptide Designer to show returned image markdown",
+    "    • For AMP prompts that mention active zones, pre-built/prebuilt GTM landscapes, or organism-specific activity guidance, delegate `sample_peptides_from_landscape(..., include_seq2logo=True, return_format='summary')` and ask the Peptide Designer to show returned `required_output_markdown` image markdown",
     "  - For SMILES-based GTM operations (density, activity, optimization):",
     "    • Route to GTM Agent as before",
     # GTM optimization strategy
@@ -1212,7 +1212,8 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "  - Report generated peptides as candidates from high-activity nodes; node scores are inherited landscape-zone scores, not sequence-specific measured activity values",
     "  - After landscape-guided sampling, identity/diversity analysis, PyFAMSA-aligned Logomaker logo artifacts, and standard GTMToolkit landscape plots are generated automatically",
     "  - Keep `penalize_n_terminal_gaps=True` for sequence-logo analysis unless the user explicitly wants raw PyFAMSA alignment output",
-    "  - Final answers for landscape-guided sampling must paste returned `display_markdown` when non-empty; otherwise paste `landscape_display_markdown` and `node_logo_display_markdown` image links explicitly",
+    "  - Final answers for landscape-guided sampling must paste returned `required_output_markdown` when non-empty; it contains the peptide activity landscape used for sampling, the projected generated-peptide landscape, and any node seq2logo images that rendered successfully",
+    "  - If `required_output_markdown` is empty, paste returned `display_markdown` when non-empty; otherwise paste `landscape_display_markdown` and `node_logo_display_markdown` image links explicitly",
     "  - Treat each sampled GTM node like a peptide analogue cluster; show every returned node sequence logo when available",
     "  - Use `analyze_peptide_candidates` for externally supplied, manually edited, or previously generated peptide sets",
     "  - Continue using `train_gtm_on_latent_space`, `sample_dense_nodes`, or `sample_by_coordinates` only for custom user datasets where the user supplied the sequences",

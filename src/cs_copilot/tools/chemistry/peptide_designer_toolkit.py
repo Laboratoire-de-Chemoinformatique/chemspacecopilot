@@ -57,6 +57,7 @@ PEPTIDE_LANDSCAPE_ARTIFACT_DIR = "peptide_landscape_runs"
 PEPTIDE_LANDSCAPE_ENGINE = "wae_landscape"
 MAX_INLINE_PAIRWISE_IDENTITIES = 200
 PEPTIDE_ALIGNMENT_GAP = "-"
+SEQ2LOGO_PROBABILITY_EPS = 1e-9
 
 
 def _filter_valid_unique_peptides(raw: List[Any]) -> List[str]:
@@ -763,6 +764,24 @@ def _build_peptide_candidate_analysis(
     }
 
 
+def _seq2logo_probability_matrix(freq_df: pd.DataFrame) -> tuple[pd.DataFrame, List[int]]:
+    amino_acids = [col for col in freq_df.columns if col not in {"position", "n_observed"}]
+    if freq_df.empty or not amino_acids or "position" not in freq_df.columns:
+        return pd.DataFrame(), []
+
+    positions = pd.to_numeric(freq_df["position"], errors="coerce")
+    logo_df = freq_df[amino_acids].apply(pd.to_numeric, errors="coerce").fillna(0.0).clip(lower=0.0)
+    row_sums = logo_df.sum(axis=1)
+    valid_mask = positions.notna() & np.isfinite(row_sums) & (row_sums > SEQ2LOGO_PROBABILITY_EPS)
+    skipped_positions = [int(value) for value in positions[~valid_mask].dropna().tolist()]
+    if not valid_mask.any():
+        return pd.DataFrame(), skipped_positions
+
+    normalized = logo_df.loc[valid_mask].div(row_sums.loc[valid_mask], axis=0)
+    normalized.index = positions.loc[valid_mask].astype(int).to_numpy()
+    return normalized, skipped_positions
+
+
 def _write_seq2logo_plot(
     freq_df: pd.DataFrame,
     rel_path: str,
@@ -772,42 +791,59 @@ def _write_seq2logo_plot(
     if freq_df.empty:
         return None
 
-    amino_acids = [col for col in freq_df.columns if col not in {"position", "n_observed"}]
-    if not amino_acids:
+    logo_df, skipped_positions = _seq2logo_probability_matrix(freq_df)
+    if logo_df.empty:
+        logger.warning(
+            "Skipping peptide seq2logo plot for %s: no positions have non-gap amino-acid mass.",
+            rel_path,
+        )
         return None
+    if skipped_positions:
+        logger.warning(
+            "Skipping %d all-gap/empty aligned positions while rendering peptide seq2logo "
+            "for %s: %s",
+            len(skipped_positions),
+            rel_path,
+            skipped_positions[:20],
+        )
 
-    import matplotlib
+    fig = None
+    try:
+        import matplotlib
 
-    matplotlib.use("Agg", force=True)
-    import logomaker
-    import matplotlib.pyplot as plt
+        matplotlib.use("Agg", force=True)
+        import logomaker
+        import matplotlib.pyplot as plt
 
-    fig_width = max(8, min(18, len(freq_df) * 0.45))
-    fig, ax = plt.subplots(figsize=(fig_width, 3.2))
-    logo_df = freq_df[amino_acids].copy()
-    logo_df.index = freq_df["position"].astype(int).to_numpy()
-    logomaker.Logo(
-        logo_df,
-        color_scheme="chemistry",
-        stack_order="big_on_top",
-        fade_probabilities=True,
-        ax=ax,
-        vpad=0.02,
-        width=0.9,
-    )
-    ax.set_xlabel("Position")
-    ax.set_ylabel("Frequency")
-    ax.set_ylim(0, 1)
-    ax.set_title(title)
-    ax.set_xticks(logo_df.index)
-    ax.set_xticklabels([str(value) for value in logo_df.index], fontsize=8)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    fig.tight_layout()
-    with S3.open(rel_path, "wb") as handle:
-        fig.savefig(handle, format="png", dpi=160)
-    plt.close(fig)
-    return S3.path(rel_path)
+        fig_width = max(8, min(18, len(logo_df) * 0.45))
+        fig, ax = plt.subplots(figsize=(fig_width, 3.2))
+        logomaker.Logo(
+            logo_df,
+            color_scheme="chemistry",
+            stack_order="big_on_top",
+            fade_probabilities=True,
+            ax=ax,
+            vpad=0.02,
+            width=0.9,
+        )
+        ax.set_xlabel("Position")
+        ax.set_ylabel("Frequency")
+        ax.set_ylim(0, 1)
+        ax.set_title(title)
+        ax.set_xticks(logo_df.index)
+        ax.set_xticklabels([str(value) for value in logo_df.index], fontsize=8)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        with S3.open(rel_path, "wb") as handle:
+            fig.savefig(handle, format="png", dpi=160)
+        return S3.path(rel_path)
+    except Exception as exc:
+        logger.warning("Skipping peptide seq2logo plot for %s: %s", rel_path, exc)
+        return None
+    finally:
+        if fig is not None:
+            plt.close(fig)
 
 
 def _candidate_node_id(candidate: Dict[str, Any]) -> Optional[int]:
@@ -834,6 +870,7 @@ def _save_node_sequence_logo_artifacts(
             "node_seqlogo_pngs": [],
             "node_logo_manifest_csv": None,
             "node_logo_manifest_csv_rel_path": None,
+            "node_logo_failures": [],
         }
 
     grouped: Dict[int, List[Dict[str, Any]]] = {}
@@ -846,6 +883,7 @@ def _save_node_sequence_logo_artifacts(
         grouped.setdefault(node_id, []).append(candidate)
 
     records: List[Dict[str, Any]] = []
+    failures: List[Dict[str, Any]] = []
     for node_id in sorted(grouped):
         node_candidates = grouped[node_id]
         node_analysis = _build_peptide_candidate_analysis(
@@ -855,6 +893,12 @@ def _save_node_sequence_logo_artifacts(
         )
         freq_df = node_analysis["position_frequency_matrix"]
         if freq_df.empty:
+            failures.append(
+                {
+                    "node_id": node_id,
+                    "reason": "empty_position_frequency_matrix",
+                }
+            )
             continue
 
         freq_rel = rel(f"node_{node_id}_position_frequency_matrix.csv")
@@ -871,12 +915,24 @@ def _save_node_sequence_logo_artifacts(
         else:
             aligned_path = None
             aligned_rel_path = None
-        logo_path = _write_seq2logo_plot(
-            freq_df,
-            logo_rel,
-            title=f"Peptide Sequence Logo for GTM Node {node_id}",
-        )
+        try:
+            logo_path = _write_seq2logo_plot(
+                freq_df,
+                logo_rel,
+                title=f"Peptide Sequence Logo for GTM Node {node_id}",
+            )
+        except Exception as exc:
+            logger.warning("Skipping peptide seq2logo plot for GTM node %s: %s", node_id, exc)
+            logo_path = None
         if not logo_path:
+            failures.append(
+                {
+                    "node_id": node_id,
+                    "reason": "seq2logo_render_skipped",
+                    "position_frequency_matrix_csv": S3.path(freq_rel),
+                    "position_frequency_matrix_csv_rel_path": freq_rel,
+                }
+            )
             continue
         identity = node_analysis["identity_summary"]
         alignment = node_analysis["alignment_summary"]
@@ -911,6 +967,7 @@ def _save_node_sequence_logo_artifacts(
         "node_seqlogo_pngs": [record["seq2logo_png"] for record in records],
         "node_logo_manifest_csv": manifest_path,
         "node_logo_manifest_csv_rel_path": manifest_rel_path,
+        "node_logo_failures": failures,
     }
 
 
@@ -1331,6 +1388,77 @@ def _node_logo_display_markdown(artifacts: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _peptide_required_output_artifacts(artifacts: Dict[str, Any]) -> List[Dict[str, Any]]:
+    required: List[Dict[str, Any]] = []
+
+    if artifacts.get("activity_landscape_png"):
+        required.append(
+            {
+                "kind": "used_activity_landscape",
+                "label": "Peptide activity landscape used for sampling",
+                "path": artifacts.get("activity_landscape_png"),
+                "rel_path": artifacts.get("activity_landscape_png_rel_path"),
+                "html_path": artifacts.get("activity_landscape_html"),
+                "html_rel_path": artifacts.get("activity_landscape_html_rel_path"),
+                "table_csv": artifacts.get("activity_landscape_table_csv"),
+                "table_csv_rel_path": artifacts.get("activity_landscape_table_csv_rel_path"),
+            }
+        )
+
+    if artifacts.get("generated_peptides_landscape_png"):
+        required.append(
+            {
+                "kind": "projected_generated_peptides_landscape",
+                "label": "Generated peptides projected on peptide activity landscape",
+                "path": artifacts.get("generated_peptides_landscape_png"),
+                "rel_path": artifacts.get("generated_peptides_landscape_png_rel_path"),
+                "html_path": artifacts.get("generated_peptides_landscape_html"),
+                "html_rel_path": artifacts.get("generated_peptides_landscape_html_rel_path"),
+                "projection_csv": artifacts.get("generated_peptide_projection_csv"),
+                "projection_csv_rel_path": artifacts.get(
+                    "generated_peptide_projection_csv_rel_path"
+                ),
+                "projection_overlay_csv": artifacts.get("generated_peptide_projection_overlay_csv"),
+                "projection_overlay_csv_rel_path": artifacts.get(
+                    "generated_peptide_projection_overlay_csv_rel_path"
+                ),
+            }
+        )
+
+    for record in artifacts.get("node_sequence_logos") or []:
+        path = record.get("seq2logo_png")
+        node_id = record.get("node_id")
+        if not path:
+            continue
+        required.append(
+            {
+                "kind": "node_seq2logo",
+                "label": f"Node seq2logo for GTM node {node_id}",
+                "node_id": node_id,
+                "path": path,
+                "rel_path": record.get("seq2logo_png_rel_path"),
+                "aligned_peptides_csv": record.get("aligned_peptides_csv"),
+                "aligned_peptides_csv_rel_path": record.get("aligned_peptides_csv_rel_path"),
+                "position_frequency_matrix_csv": record.get("position_frequency_matrix_csv"),
+                "position_frequency_matrix_csv_rel_path": record.get(
+                    "position_frequency_matrix_csv_rel_path"
+                ),
+            }
+        )
+
+    return required
+
+
+def _peptide_required_output_markdown(required_artifacts: Sequence[Dict[str, Any]]) -> str:
+    lines = []
+    for item in required_artifacts:
+        path = item.get("path")
+        label = item.get("label")
+        if path and label:
+            lines.append(f"![{label}]({path})")
+    return "\n".join(lines)
+
+
 def _peptide_artifact_display_markdown(
     landscape_markdown: str,
     node_logo_markdown: str,
@@ -1396,6 +1524,10 @@ def _publish_peptide_landscape_visualizations_to_session(
     )
     analysis_results["peptide_node_seqlogo_pngs"] = artifacts.get("node_seqlogo_pngs") or []
     analysis_results["peptide_node_logo_manifest_csv"] = artifacts.get("node_logo_manifest_csv")
+    analysis_results["peptide_required_output_artifacts"] = (
+        artifacts.get("required_output_artifacts") or []
+    )
+    analysis_results["peptide_required_output_markdown"] = artifacts.get("required_output_markdown")
 
     landscape_files = session_state.setdefault("landscape_files", {})
     if not isinstance(landscape_files, dict):
@@ -1427,6 +1559,10 @@ def _publish_peptide_landscape_visualizations_to_session(
     )
     landscape_files["peptide_node_seqlogo_pngs"] = artifacts.get("node_seqlogo_pngs") or []
     landscape_files["peptide_node_logo_manifest_csv"] = artifacts.get("node_logo_manifest_csv")
+    landscape_files["peptide_required_output_artifacts"] = (
+        artifacts.get("required_output_artifacts") or []
+    )
+    landscape_files["peptide_required_output_markdown"] = artifacts.get("required_output_markdown")
 
 
 def _save_peptide_landscape_artifacts(
@@ -1524,14 +1660,6 @@ def _save_peptide_landscape_artifacts(
     else:
         freq_path = None
 
-    seq2logo_path = _write_seq2logo_plot(freq_df, seq2logo_rel) if include_seq2logo else None
-    node_logo_artifacts = _save_node_sequence_logo_artifacts(
-        candidates,
-        alphabet=metadata.get("peptide_alphabet"),
-        include_seq2logo=include_seq2logo,
-        penalize_n_terminal_gaps=penalize_n_terminal_gaps,
-        rel=rel,
-    )
     visualization_artifacts = _save_peptide_landscape_visualizations(
         bundle,
         selected_nodes,
@@ -1542,6 +1670,79 @@ def _save_peptide_landscape_artifacts(
         session_state=session_state,
         source_agent=source_agent,
     )
+    if not include_seq2logo:
+        seq2logo_path = None
+        seq2logo_status = "disabled"
+        seq2logo_skipped_reason = None
+    elif freq_df.empty:
+        seq2logo_path = None
+        seq2logo_status = "skipped"
+        seq2logo_skipped_reason = "empty_position_frequency_matrix"
+    else:
+        try:
+            seq2logo_path = _write_seq2logo_plot(freq_df, seq2logo_rel)
+        except Exception as exc:
+            logger.warning("Skipping peptide seq2logo plot for %s: %s", seq2logo_rel, exc)
+            seq2logo_path = None
+        seq2logo_status = "written" if seq2logo_path else "skipped"
+        seq2logo_skipped_reason = (
+            None if seq2logo_path else "no_renderable_logo_positions_or_renderer_failure"
+        )
+    node_logo_artifacts = _save_node_sequence_logo_artifacts(
+        candidates,
+        alphabet=metadata.get("peptide_alphabet"),
+        include_seq2logo=include_seq2logo,
+        penalize_n_terminal_gaps=penalize_n_terminal_gaps,
+        rel=rel,
+    )
+
+    artifact_paths = {
+        "selected_nodes_csv": S3.path(selected_nodes_rel),
+        "generated_peptides_csv": S3.path(generated_rel),
+        "identity_summary_json": S3.path(identity_rel),
+        "diversity_summary_json": S3.path(diversity_rel),
+        "pairwise_identity_csv": pairwise_path,
+        "aligned_peptides_csv": aligned_path,
+        "generated_peptide_projection_csv": projection_path,
+        "generated_peptide_projection_overlay_csv": projection_overlay_path,
+        "position_frequency_matrix_csv": freq_path,
+        "seq2logo_png": seq2logo_path,
+        "node_logo_manifest_csv": node_logo_artifacts.get("node_logo_manifest_csv"),
+        **{
+            key: visualization_artifacts.get(key)
+            for key in (
+                "activity_landscape_png",
+                "activity_landscape_html",
+                "sampling_nodes_landscape_png",
+                "sampling_nodes_landscape_html",
+                "generated_peptides_landscape_png",
+                "generated_peptides_landscape_html",
+                "activity_landscape_table_csv",
+            )
+        },
+    }
+    artifact_snapshot = {
+        **artifact_paths,
+        "selected_nodes_csv_rel_path": selected_nodes_rel,
+        "generated_peptides_csv_rel_path": generated_rel,
+        "identity_summary_json_rel_path": identity_rel,
+        "diversity_summary_json_rel_path": diversity_rel,
+        "pairwise_identity_csv_rel_path": pairwise_rel if pairwise_path else None,
+        "aligned_peptides_csv_rel_path": aligned_rel if aligned_path else None,
+        "generated_peptide_projection_csv_rel_path": (projection_rel if projection_path else None),
+        "generated_peptide_projection_overlay_csv_rel_path": (
+            projection_overlay_rel if projection_overlay_path else None
+        ),
+        "position_frequency_matrix_csv_rel_path": freq_rel if freq_path else None,
+        "seq2logo_png_rel_path": seq2logo_rel if seq2logo_path else None,
+        "node_logo_manifest_csv_rel_path": node_logo_artifacts.get(
+            "node_logo_manifest_csv_rel_path"
+        ),
+        **node_logo_artifacts,
+        **visualization_artifacts,
+    }
+    required_output_artifacts = _peptide_required_output_artifacts(artifact_snapshot)
+    required_output_markdown = _peptide_required_output_markdown(required_output_artifacts)
 
     metadata_payload = {
         "peptide_landscape_run_id": run_id,
@@ -1552,32 +1753,13 @@ def _save_peptide_landscape_artifacts(
         "identity_summary": analysis["identity_summary"],
         "diversity_summary": analysis["diversity_summary"],
         "alignment_summary": analysis["alignment_summary"],
-        "artifacts": {
-            "selected_nodes_csv": S3.path(selected_nodes_rel),
-            "generated_peptides_csv": S3.path(generated_rel),
-            "identity_summary_json": S3.path(identity_rel),
-            "diversity_summary_json": S3.path(diversity_rel),
-            "pairwise_identity_csv": pairwise_path,
-            "aligned_peptides_csv": aligned_path,
-            "generated_peptide_projection_csv": projection_path,
-            "generated_peptide_projection_overlay_csv": projection_overlay_path,
-            "position_frequency_matrix_csv": freq_path,
-            "seq2logo_png": seq2logo_path,
-            "node_logo_manifest_csv": node_logo_artifacts.get("node_logo_manifest_csv"),
-            **{
-                key: visualization_artifacts.get(key)
-                for key in (
-                    "activity_landscape_png",
-                    "activity_landscape_html",
-                    "sampling_nodes_landscape_png",
-                    "sampling_nodes_landscape_html",
-                    "generated_peptides_landscape_png",
-                    "generated_peptides_landscape_html",
-                    "activity_landscape_table_csv",
-                )
-            },
-        },
+        "artifacts": artifact_paths,
+        "required_output_artifacts": required_output_artifacts,
+        "required_output_markdown": required_output_markdown,
+        "seq2logo_status": seq2logo_status,
+        "seq2logo_skipped_reason": seq2logo_skipped_reason,
         "node_sequence_logos": node_logo_artifacts.get("node_sequence_logos", []),
+        "node_logo_failures": node_logo_artifacts.get("node_logo_failures", []),
         "landscape_visualizations": visualization_artifacts.get("landscape_visualizations", []),
         "landscape_figure_ids": visualization_artifacts.get("landscape_figure_ids", []),
     }
@@ -1585,7 +1767,7 @@ def _save_peptide_landscape_artifacts(
         json.dump(metadata_payload, handle, indent=2)
 
     return {
-        **metadata_payload["artifacts"],
+        **artifact_paths,
         "selected_nodes_csv_rel_path": selected_nodes_rel,
         "generated_peptides_csv_rel_path": generated_rel,
         "identity_summary_json_rel_path": identity_rel,
@@ -1618,6 +1800,10 @@ def _save_peptide_landscape_artifacts(
         "alignment_summary": analysis["alignment_summary"],
         "generated_peptide_projection_csv": projection_path,
         "generated_peptide_projection_overlay_csv": projection_overlay_path,
+        "required_output_artifacts": required_output_artifacts,
+        "required_output_markdown": required_output_markdown,
+        "seq2logo_status": seq2logo_status,
+        "seq2logo_skipped_reason": seq2logo_skipped_reason,
         **node_logo_artifacts,
         **visualization_artifacts,
     }
@@ -2558,6 +2744,8 @@ class PeptideDesignerToolkit(Toolkit):
                     "node_logo_manifest_csv": artifacts.get("node_logo_manifest_csv"),
                     "node_seqlogo_pngs": artifacts.get("node_seqlogo_pngs"),
                     "seq2logo_png": artifacts.get("seq2logo_png"),
+                    "required_output_artifacts": artifacts.get("required_output_artifacts") or [],
+                    "required_output_markdown": artifacts.get("required_output_markdown"),
                 },
                 label="Peptide candidate analysis",
                 source_agent=getattr(agent, "name", None),
@@ -2730,13 +2918,10 @@ class PeptideDesignerToolkit(Toolkit):
             )
 
         state_targets = update_state_targets(agent, session_state)
-        if return_format == "list" or not state_targets:
-            if return_format == "summary" and not state_targets:
-                logger.info(
-                    "sample_peptides_from_landscape called with return_format='summary' "
-                    "but no session state was available; falling back to list."
-                )
+        if return_format == "list":
             return candidates
+        if not state_targets:
+            state_targets = [{}]
 
         selected_artifacts: Dict[str, Any] = {}
         selected_analysis_id: Optional[str] = None
@@ -2791,6 +2976,12 @@ class PeptideDesignerToolkit(Toolkit):
                     "count_attempted": attempted,
                     "count_returned": len(candidates),
                     "selected_node_ids": metadata["selected_node_ids"],
+                    "required_output_artifacts": artifacts.get("required_output_artifacts") or [],
+                    "required_output_markdown": artifacts.get("required_output_markdown"),
+                    "display_markdown": artifacts_with_figures.get("display_markdown"),
+                    "node_logo_manifest_csv": artifacts.get("node_logo_manifest_csv"),
+                    "node_seqlogo_pngs": artifacts.get("node_seqlogo_pngs") or [],
+                    "node_sequence_logos": artifacts.get("node_sequence_logos") or [],
                     "metadata_json": artifacts["metadata_json"],
                     "metadata_json_rel_path": artifacts["metadata_json_rel_path"],
                     "generated_peptides_csv": artifacts["generated_peptides_csv"],
