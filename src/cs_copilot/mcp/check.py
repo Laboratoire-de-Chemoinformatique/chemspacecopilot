@@ -20,6 +20,11 @@ DEFAULT_REQUIRED_TOOLS = (
     "chembl_fetch_compounds",
     "gtm_optimization",
     "report_save_markdown",
+    "skill_list",
+    "pandas_create_dataframe",
+    "mol_validate_design_candidates",
+    "peptide_validate_design_candidates",
+    "synplanner_identify_input",
 )
 
 EXPECTED_READ_ONLY_HINTS = {
@@ -28,6 +33,11 @@ EXPECTED_READ_ONLY_HINTS = {
     "chembl_fetch_compounds": False,
     "gtm_optimization": False,
     "report_save_markdown": False,
+    "skill_list": True,
+    "pandas_create_dataframe": False,
+    "mol_validate_design_candidates": True,
+    "peptide_validate_design_candidates": True,
+    "synplanner_identify_input": True,
 }
 
 EXPECTED_INSTRUCTION_SNIPPETS = (
@@ -38,8 +48,6 @@ EXPECTED_INSTRUCTION_SNIPPETS = (
     "chembl_retrieval_judge",
     "Review write actions",
 )
-
-
 
 CHATGPT_CONNECTOR_NAME = "ChemSpace Copilot"
 CHATGPT_CONNECTOR_DESCRIPTION = (
@@ -61,6 +69,7 @@ CHATGPT_EXPECTED_EVIDENCE = (
     "The answer names `chembl_fetch_compounds` as the ChEMBL retrieval tool.",
 )
 
+
 class CheckError(RuntimeError):
     """Raised when the readiness check cannot prove MCP connectivity."""
 
@@ -77,6 +86,7 @@ class CheckReport:
     required_tools: tuple[str, ...]
     fetch_id: str
     workflow_prompt_id: str
+    skill_id: str
     auth_enabled: bool
     mode: str
     annotated_tool_count: int
@@ -457,6 +467,35 @@ async def _probe_server(
                         ),
                     )
 
+                    skill_id = await _verify_search_fetch(
+                        session,
+                        query="gtm activity landscape skill",
+                        expected_id="skill:gtm-activity-landscape",
+                        required_text=(
+                            "Skill: GTM activity landscape",
+                            "gtm_create_activity_landscapes",
+                            "Required tools",
+                        ),
+                    )
+                    await _verify_search_fetch(
+                        session,
+                        query="molecular design",
+                        expected_id="tool:mol_validate_design_candidates",
+                        required_text=("Tool: mol_validate_design_candidates",),
+                    )
+                    await _verify_search_fetch(
+                        session,
+                        query="peptide design",
+                        expected_id="tool:peptide_validate_design_candidates",
+                        required_text=("Tool: peptide_validate_design_candidates",),
+                    )
+                    await _verify_search_fetch(
+                        session,
+                        query="synplanner",
+                        expected_id="tool:synplanner_identify_input",
+                        required_text=("Tool: synplanner_identify_input",),
+                    )
+
                     return CheckReport(
                         endpoint_url=endpoint_url,
                         session_id=get_session_id(),
@@ -466,6 +505,7 @@ async def _probe_server(
                         required_tools=required_tools,
                         fetch_id=fetch_id,
                         workflow_prompt_id=workflow_prompt_id,
+                        skill_id=skill_id,
                         auth_enabled=bool(auth_token),
                         mode=mode,
                         annotated_tool_count=annotated_tool_count,
@@ -616,6 +656,7 @@ def _print_report(report: CheckReport, *, json_output: bool = False) -> None:
     )
     payload = _report_payload(report)
     print(f"workflow_prompt: ok ({report.workflow_prompt_id})")
+    print(f"skill_fetch: ok ({report.skill_id})")
     print(f"search_fetch: ok ({report.fetch_id})")
     print(f"chatgpt_connector_name: {payload['chatgpt_connector_name']}")
     print(f"chatgpt_smoke_prompt: {payload['chatgpt_smoke_prompt']}")

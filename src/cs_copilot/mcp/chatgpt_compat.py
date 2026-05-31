@@ -49,13 +49,13 @@ class _Document:
     id: str
     title: str
     url: str
-    kind: Literal["catalog", "tool", "prompt", "resource"]
+    kind: Literal["catalog", "tool", "prompt", "skill", "resource"]
     summary: str
     metadata: dict[str, Any]
 
 
 def search(query: str) -> SearchOutput:
-    """Search ChemSpace MCP tools, prompts, and session artifacts."""
+    """Search ChemSpace MCP tools, skills, prompts, and session artifacts."""
 
     scored = _rank_documents(_iter_documents(), query)
     return SearchOutput(
@@ -79,6 +79,7 @@ def _iter_documents() -> Iterable[_Document]:
     yield from _catalog_documents()
     yield from _tool_documents()
     yield from _prompt_documents()
+    yield from _skill_documents()
     yield from _resource_documents()
 
 
@@ -111,6 +112,14 @@ def _catalog_documents() -> Iterable[_Document]:
         metadata={},
     )
     yield _Document(
+        id="catalog:skills",
+        title="ChemSpace skill catalog",
+        url="cscopilot://mcp/skills",
+        kind="catalog",
+        summary="List of reusable ChemSpace workflow skills and their required tools.",
+        metadata={},
+    )
+    yield _Document(
         id="catalog:session",
         title="ChemSpace session artifacts",
         url="cscopilot://session/manifest.json",
@@ -133,6 +142,7 @@ def _tool_documents() -> Iterable[_Document]:
             metadata={
                 "name": spec.mcp_name,
                 "method": spec.method,
+                "group": spec.group,
                 "forced_arguments": sorted(spec.forces),
             },
         )
@@ -151,6 +161,27 @@ def _prompt_documents() -> Iterable[_Document]:
             metadata={
                 "name": spec.mcp_name,
                 "arguments": list(spec.arguments),
+            },
+        )
+
+
+def _skill_documents() -> Iterable[_Document]:
+    from cs_copilot.skills import list_skills
+
+    for spec in list_skills():
+        yield _Document(
+            id=f"skill:{spec.slug}",
+            title=f"Skill: {spec.title}",
+            url=f"cscopilot://mcp/skills/{spec.slug}",
+            kind="skill",
+            summary=spec.summary,
+            metadata={
+                "slug": spec.slug,
+                "status": spec.status,
+                "tags": list(spec.tags),
+                "required_tools": list(spec.required_tools),
+                "optional_tools": list(spec.optional_tools),
+                "artifact_outputs": list(spec.artifact_outputs),
             },
         )
 
@@ -180,7 +211,8 @@ def _rank_documents(docs: Iterable[_Document], query: str) -> list[tuple[_Docume
     terms = _tokenize(query)
     ranked: list[tuple[_Document, int]] = []
     for index, doc in enumerate(docs):
-        haystack = f"{doc.id} {doc.title} {doc.summary} {doc.kind}".lower()
+        metadata_text = " ".join(str(value) for value in doc.metadata.values())
+        haystack = f"{doc.id} {doc.title} {doc.summary} {doc.kind} {metadata_text}".lower()
         if not terms:
             score = max(1, 100 - index)
         else:
@@ -214,6 +246,8 @@ def _fetch_document(doc: _Document) -> FetchOutput:
         text = _render_tool(doc)
     elif doc.kind == "prompt":
         text = _render_prompt(doc)
+    elif doc.kind == "skill":
+        text = _render_skill(doc)
     elif doc.kind == "resource":
         text = _render_resource(doc)
     else:  # pragma: no cover - exhaustive for type checkers
@@ -245,6 +279,16 @@ def _render_catalog(doc_id: str) -> str:
             rows.append(f"- {doc.metadata['name']}: {doc.summary}{suffix}")
         return "ChemSpace MCP prompts\n\n" + "\n".join(rows)
 
+    if doc_id == "catalog:skills":
+        rows = []
+        for doc in _skill_documents():
+            tools = doc.metadata.get("required_tools") or []
+            suffix = ""
+            if tools:
+                suffix = " Required tools: " + ", ".join(str(tool) for tool in tools)
+            rows.append(f"- {doc.metadata['slug']}: {doc.summary}{suffix}")
+        return "ChemSpace skills\n\n" + "\n".join(rows)
+
     if doc_id == "catalog:session":
         rows = []
         for doc in _resource_documents():
@@ -263,8 +307,10 @@ def _render_catalog(doc_id: str) -> str:
 def _render_tool(doc: _Document) -> str:
     forced = doc.metadata.get("forced_arguments") or []
     forced_text = ", ".join(forced) if forced else "none"
+    group_text = doc.metadata.get("group") or "uncategorized"
     return (
         f"Tool: {doc.metadata['name']}\n\n"
+        f"Group: {group_text}\n"
         f"Summary: {doc.summary}\n"
         f"Backed by toolkit method: {doc.metadata['method']}\n"
         f"Server-forced arguments hidden from clients: {forced_text}\n\n"
@@ -292,6 +338,25 @@ def _render_prompt(doc: _Document) -> str:
         )
 
     return f"Prompt: {name}\n\n{spec.summary}\n\n{spec.render()}"
+
+
+def _render_skill(doc: _Document) -> str:
+    from cs_copilot.skills import get_skill
+
+    spec = get_skill(str(doc.metadata["slug"]))
+    required = ", ".join(spec.required_tools) or "none"
+    optional = ", ".join(spec.optional_tools) or "none"
+    artifacts = ", ".join(spec.artifact_outputs) or "none"
+    return (
+        f"Skill: {spec.title}\n\n"
+        f"Slug: {spec.slug}\n"
+        f"Status: {spec.status}\n"
+        f"Summary: {spec.summary}\n"
+        f"Required tools: {required}\n"
+        f"Optional tools: {optional}\n"
+        f"Expected artifacts: {artifacts}\n\n"
+        f"{spec.skill_md}"
+    )
 
 
 def _render_resource(doc: _Document) -> str:

@@ -11,7 +11,7 @@ from agno.db.sqlite import SqliteDb  # ✅ v2.1.x style DB import
 from agno.models.base import Model  # Agno v2 base class
 from agno.team import Team
 
-from cs_copilot.tools import SessionMemoryToolkit
+from cs_copilot.tools import SessionMemoryToolkit, SkillToolkit
 from cs_copilot.utils.resources import analyze_resources
 
 from .config import CS_COPILOT_MEMORY_DB  # optional now; kept for compatibility
@@ -151,7 +151,7 @@ def get_cs_copilot_agent_team(
         session_state=shared_session_state,
         add_session_state_to_context=True,
         enable_agentic_state=True,
-        tools=[SessionMemoryToolkit()],
+        tools=[SessionMemoryToolkit(), SkillToolkit()],
         # Prompting
         description=(
             "You are an intelligent coordinator orchestrating a team of specialized cheminformatics agents. "
@@ -174,7 +174,14 @@ def get_cs_copilot_agent_team(
             "(3) For analysis requests, automatically add Report Generator unless user explicitly requests raw data only, "
             "(4) For ambiguous opening requests, apply the INITIAL CLARIFICATION FLOW (peptides vs molecules, then exploratory vs generative), (5) Synthesize insights from agent outputs into coherent analyses."
         ),
-        instructions=AGENT_TEAM_INSTRUCTIONS,
+        instructions=[
+            *AGENT_TEAM_INSTRUCTIONS,
+            (
+                "For multi-step scientific workflows, consult the Skills tools "
+                "(`list_skills`, `search_skills`, `fetch_skill`) before routing "
+                "specialized agents so the team follows reusable ChemSpace procedures."
+            ),
+        ],
         # UX & observability
         markdown=markdown,
         debug_mode=debug_mode,

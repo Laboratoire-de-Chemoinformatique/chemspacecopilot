@@ -64,6 +64,9 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/cs_copilot"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"skills" = "cs_copilot/skills/catalog"
+
 [project.scripts]
 cscopilot = "cs_copilot.cli:main"
 cscopilot-mcp = "cs_copilot.mcp.__main__:main"

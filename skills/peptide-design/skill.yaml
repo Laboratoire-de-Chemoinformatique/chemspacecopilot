@@ -1,0 +1,20 @@
+slug: peptide-design
+title: Peptide design
+summary: Generate, validate, rank, and analyze peptide candidates, including antimicrobial peptide workflows and latent-space GTM analysis.
+status: agno_available
+tags:
+  - peptide
+  - antimicrobial-peptide
+  - latent-space
+  - design
+required_tools:
+  - session_materialize_candidate_set_dataset
+optional_tools:
+  - gtm_train_on_latent_space
+  - gtm_create_peptide_activity_landscapes
+artifact_outputs:
+  - peptide_candidate_artifact
+  - peptide_dataset_csv
+  - peptide_landscape_csv
+example_prompts:
+  - Design antimicrobial peptide candidates and prepare the validated set for latent-space GTM analysis.

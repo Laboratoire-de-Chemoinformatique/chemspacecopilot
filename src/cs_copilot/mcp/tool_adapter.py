@@ -19,6 +19,7 @@ import logging
 import traceback
 import typing
 from dataclasses import dataclass, field
+from time import perf_counter
 from typing import Any, Callable, Dict, Mapping
 
 from .context import MCPAgentContext
@@ -41,6 +42,7 @@ class ToolSpec:
     toolkit_factory: Callable[[], Any]
     method: str
     summary: str
+    group: str | None = None
     forces: Mapping[str, Any] = field(default_factory=dict)
     read_only: bool = False
     destructive: bool = False
@@ -147,6 +149,9 @@ def build_tool(
         public_annotations["return"] = return_annotation
 
     async def _invoke(**kwargs: Any) -> Any:
+        from .manifests import record_tool_call
+
+        started = perf_counter()
         call_kwargs: Dict[str, Any] = dict(kwargs)
         if "agent" in sig.parameters:
             call_kwargs["agent"] = ctx
@@ -160,9 +165,30 @@ def build_tool(
                 result = await bound_method(**call_kwargs)
             else:
                 result = await asyncio.to_thread(bound_method, **call_kwargs)
-        except MCPToolError:
+            coerced = _coerce_return_value(result)
+        except MCPToolError as exc:
+            duration_ms = (perf_counter() - started) * 1000
+            record_tool_call(
+                ctx=ctx,
+                tool_name=spec.mcp_name,
+                public_args=kwargs,
+                forced_args=spec.forces,
+                status="error",
+                duration_ms=duration_ms,
+                error=str(exc),
+            )
             raise
         except Exception as exc:  # noqa: BLE001 — convert to protocol error
+            duration_ms = (perf_counter() - started) * 1000
+            record_tool_call(
+                ctx=ctx,
+                tool_name=spec.mcp_name,
+                public_args=kwargs,
+                forced_args=spec.forces,
+                status="error",
+                duration_ms=duration_ms,
+                error=str(exc),
+            )
             logger.error(
                 "MCP tool %s failed: %s\n%s",
                 spec.mcp_name,
@@ -171,7 +197,17 @@ def build_tool(
             )
             raise MCPToolError(f"{spec.mcp_name} failed: {exc}") from exc
 
-        return _coerce_return_value(result)
+        duration_ms = (perf_counter() - started) * 1000
+        record_tool_call(
+            ctx=ctx,
+            tool_name=spec.mcp_name,
+            public_args=kwargs,
+            forced_args=spec.forces,
+            status="success",
+            duration_ms=duration_ms,
+            result=coerced,
+        )
+        return coerced
 
     _invoke.__name__ = spec.mcp_name
     _invoke.__qualname__ = spec.mcp_name

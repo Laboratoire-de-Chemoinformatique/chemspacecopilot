@@ -248,6 +248,34 @@ subscription tier.
 
 A runnable command reference lives at `examples/mcp/chatgpt_remote.md`.
 
+## Skills and manifests
+
+The MCP server also exposes the shared ChemSpace skill catalog through the
+ChatGPT-compatible `search` / `fetch` tools. Use `fetch("catalog:skills")`
+to list reusable workflows, then fetch `skill:<slug>` for the full `SKILL.md`
+procedure and required tool names. The same catalog is available to the Agno
+team through its read-only Skills toolkit.
+
+Every MCP toolkit call made after normal MCP bootstrap writes a compact JSON
+run manifest under `workflows/<workflow_id>/manifests/mcp/`. Manifests record
+the runtime, tool name, redacted public arguments, server-forced arguments,
+status, duration, and output summary. They are visible through the existing
+`cscopilot://session/` resource listing.
+
+## Private Agno delegation
+
+By default the MCP server keeps external-client reasoning separate from the
+Agno team. Trusted private deployments can opt into one coarse delegation tool:
+
+```sh
+cscopilot-mcp-serve --enable-agno-team-tool
+```
+
+This registers `agno_team_run(prompt)`, which loads the configured Agno model
+and delegates the prompt to the ChemSpace Agno team. Prefer fine-grained MCP
+skills and tools for normal external clients; use this flag only where the
+client is trusted and model/API access is intentional.
+
 ## What the server exposes
 
 ### Tools
