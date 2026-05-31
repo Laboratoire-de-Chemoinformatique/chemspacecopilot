@@ -31,3 +31,27 @@ def test_every_method_resolves_against_its_toolkit():
         instance = spec.toolkit_factory()
         bound = getattr(instance, spec.method, None)
         assert callable(bound), f"{spec.mcp_name}: missing method {spec.method!r}"
+
+
+def test_every_spec_has_explicit_safety_hints():
+    for spec in all_specs():
+        assert isinstance(spec.read_only, bool), spec.mcp_name
+        assert isinstance(spec.destructive, bool), spec.mcp_name
+        assert isinstance(spec.open_world, bool), spec.mcp_name
+
+
+def test_review_sensitive_tools_are_classified_conservatively():
+    specs = {spec.mcp_name: spec for spec in all_specs()}
+
+    assert specs["chembl_describe_dataset"].read_only is True
+    assert specs["chem_calculate_tanimoto_similarity"].read_only is True
+    assert specs["session_resolve_candidate_set"].read_only is True
+    assert specs["robustness_generate_insights"].read_only is True
+
+    assert specs["chembl_fetch_compounds"].read_only is False
+    assert specs["gtm_optimization"].read_only is False
+    assert specs["gtm_sample_nodes"].read_only is False
+    assert specs["session_select_session_object"].read_only is False
+    assert specs["session_summarize_session_memory"].read_only is False
+    assert specs["report_save_markdown"].read_only is False
+    assert specs["robustness_export_analysis_report"].read_only is False

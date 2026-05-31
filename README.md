@@ -125,6 +125,9 @@ The repository also includes a tracked `.modelconf` file. Edit it if you want to
 
 ```bash
 uv sync
+
+# Optional retrosynthesis agent (platform support depends on SynPlanner/CGRtools wheels)
+uv sync --extra synplanner
 ```
 
 </details>
@@ -194,12 +197,35 @@ unaffected.
 
 ```bash
 uv sync --extra mcp
+
+# Preflight the remote HTTP path ChatGPT/tunnels will call
+cscopilot-mcp-check
+
+# Local stdio MCP clients (Codex, Claude Code)
 cscopilot-mcp --session-id demo --workflow-slug chemical_space
+
+# Remote MCP clients (ChatGPT apps, browser-hosted clients)
+cscopilot-mcp-serve --session-id demo --workflow-slug chemical_space --host 127.0.0.1 --port 8000
+# Add --allowed-host <your-host> when a reverse proxy preserves the public Host header.
+
+# Optional bearer-token protection for HTTP clients/proxies that send Authorization
+CS_COPILOT_MCP_AUTH_TOKEN=change-me cscopilot-mcp-serve --session-id demo --workflow-slug chemical_space --host 127.0.0.1 --port 8000 --allowed-host <your-host>
 ```
 
+For ChatGPT, expose the streamable HTTP endpoint (`/mcp`) through a reachable
+HTTPS URL or an approved secure tunnel. If a proxy forwards public Host or
+Origin headers, pass them with `--allowed-host` / `--allowed-origin`. The
+server includes read-only
+`search` / `fetch` tools for ChatGPT data-only/deep-research compatibility,
+plus the full ChemSpace tool catalog for full MCP developer-mode clients. Tool
+descriptors include MCP `readOnlyHint` annotations so ChatGPT can distinguish
+pure lookup tools from state-changing ChemSpace workflows.
+
 Example client configs ship under `examples/mcp/`
-(`claude_code.json`, `codex.toml`). See `docs/mcp.md` for the full tool /
-prompt / resource catalog and the ChEMBL LLM-as-judge gating contract.
+(`claude_code.json`, `codex.toml`, `codex_http.toml`, `chatgpt_remote.md`,
+`codex_subscription_smoke.md`, `secure_mcp_tunnel.md`). See `docs/mcp.md`
+for the full tool / prompt / resource catalog and the ChEMBL LLM-as-judge
+gating contract.
 
 ## Architecture
 
@@ -215,7 +241,7 @@ The system uses a **Factory Pattern + Registry** for agent creation. The default
 | **Report Generator** | Formats analysis results into reports and visual outputs |
 | **Molecular Designer** | Small-molecule design via autoencoder and LLM engines, including standalone and GTM-guided modes |
 | **Peptide Designer** | Peptide design via WAE and LLM engines, latent-space GTM workflows, and DBAASP-backed peptide activity landscapes |
-| **SynPlanner** | Retrosynthetic planning and route visualization for target molecules |
+| **SynPlanner** | Retrosynthetic planning and route visualization for target molecules (install with `uv sync --extra synplanner`) |
 
 ### Separate Evaluation Agent
 

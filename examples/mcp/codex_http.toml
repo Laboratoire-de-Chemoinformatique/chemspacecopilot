@@ -1,0 +1,11 @@
+# Example for connecting Codex or another HTTP-capable MCP client to a
+# deployed ChemSpace MCP streamable HTTP endpoint.
+#
+# Start the server with the same token environment variable, for example:
+#   CS_COPILOT_MCP_AUTH_TOKEN=change-me cscopilot-mcp-serve --host 127.0.0.1 --port 8000 --allowed-host mcp.example.com
+
+[mcp_servers.chemspace_http]
+url = "https://mcp.example.com/mcp"
+bearer_token_env_var = "CS_COPILOT_MCP_AUTH_TOKEN"
+startup_timeout_sec = 30
+tool_timeout_sec = 300
