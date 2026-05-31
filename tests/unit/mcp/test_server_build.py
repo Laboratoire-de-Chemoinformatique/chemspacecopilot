@@ -41,6 +41,7 @@ def test_server_instructions_are_chatgpt_orchestration_contract(server):
     assert "Do not invoke the Agno team" in SERVER_INSTRUCTIONS
     assert "chemspace_workflow" in SERVER_INSTRUCTIONS
     assert "chembl_retrieval_judge" in SERVER_INSTRUCTIONS
+    assert "catalog:skills" in SERVER_INSTRUCTIONS
 
 
 def test_tools_registered(server):
@@ -50,6 +51,56 @@ def test_tools_registered(server):
     assert "chembl_fetch_compounds" in names
     assert "gtm_optimization" in names
     assert "report_save_markdown" in names
+    assert "skill_fetch" in names
+    assert "pandas_create_dataframe" in names
+    assert "mol_validate_design_candidates" in names
+    assert "peptide_validate_design_candidates" in names
+    assert "synplanner_identify_input" in names
+    assert "agno_team_run" not in names
+
+
+def test_all_direct_parity_tools_registered(server):
+    names = {tool.name for tool in server._tool_manager.list_tools()}
+
+    expected = {
+        "skill_list",
+        "skill_search",
+        "skill_fetch",
+        "pandas_load_dataframe_from_session",
+        "pandas_create_dataframe",
+        "pandas_run_operation",
+        "pandas_normalize_for_analysis",
+        "mol_list_design_engines",
+        "mol_design_molecules",
+        "mol_generate_analogs",
+        "mol_interpolate_molecules",
+        "mol_validate_design_candidates",
+        "mol_rank_design_candidates",
+        "mol_register_design_candidates",
+        "peptide_list_design_engines",
+        "peptide_design_peptides",
+        "peptide_generate_analogs",
+        "peptide_design_interpolation",
+        "peptide_validate_design_candidates",
+        "peptide_rank_design_candidates",
+        "peptide_load_design_candidates",
+        "peptide_validate_model_loaded",
+        "peptide_get_latent_dimension",
+        "peptide_encode_peptides",
+        "peptide_decode_latent",
+        "peptide_sample_peptides",
+        "peptide_interpolate_peptides",
+        "peptide_reconstruct_sequence",
+        "peptide_explore_latent_neighborhood",
+        "peptide_get_model_info",
+        "synplanner_identify_input",
+        "synplanner_convert_name_to_smiles",
+        "synplanner_plan_synthesis",
+        "synplanner_describe_plan",
+        "synplanner_get_route_visualizations",
+    }
+
+    assert expected.issubset(names)
 
 
 def test_tool_annotations_for_chatgpt_approval(server):
@@ -66,6 +117,10 @@ def test_tool_annotations_for_chatgpt_approval(server):
     assert tools["chembl_describe_dataset"].annotations.readOnlyHint is True
     assert tools["gtm_get_density_summary"].annotations.readOnlyHint is True
     assert tools["session_resolve_candidate_set"].annotations.readOnlyHint is True
+    assert tools["skill_fetch"].annotations.readOnlyHint is True
+    assert tools["mol_validate_design_candidates"].annotations.readOnlyHint is True
+    assert tools["peptide_validate_design_candidates"].annotations.readOnlyHint is True
+    assert tools["synplanner_identify_input"].annotations.readOnlyHint is True
 
     assert tools["chembl_fetch_compounds"].annotations.readOnlyHint is False
     assert tools["gtm_optimization"].annotations.readOnlyHint is False
@@ -73,6 +128,23 @@ def test_tool_annotations_for_chatgpt_approval(server):
     assert tools["session_select_session_object"].annotations.readOnlyHint is False
     assert tools["session_summarize_session_memory"].annotations.readOnlyHint is False
     assert tools["report_save_markdown"].annotations.readOnlyHint is False
+    assert tools["pandas_create_dataframe"].annotations.readOnlyHint is False
+    assert tools["mol_design_molecules"].annotations.readOnlyHint is False
+    assert tools["peptide_design_peptides"].annotations.readOnlyHint is False
+    assert tools["synplanner_plan_synthesis"].annotations.readOnlyHint is False
+
+
+def test_agno_team_tool_is_opt_in(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    apply_session_id("mcp-agno-opt-in-test")
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-agno-opt-in-test", workflow_slug="smoke"))
+    from cs_copilot.mcp.server import build_server
+
+    server = build_server(ctx, enable_agno_team_tool=True)
+    tools = {tool.name: tool for tool in server._tool_manager.list_tools()}
+
+    assert "agno_team_run" in tools
+    assert tools["agno_team_run"].annotations.readOnlyHint is False
 
 
 def test_prompts_registered(server):

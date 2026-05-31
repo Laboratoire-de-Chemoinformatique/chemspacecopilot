@@ -380,6 +380,10 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         if pubchem_smiles:
             return pubchem_smiles
 
+        fallback_smiles = self._FALLBACK_NAMES.get(cleaned.lower())
+        if fallback_smiles:
+            return self._canonicalize_smiles(fallback_smiles)
+
         # If PubChem search failed, check if we have an LLM guess
         if canonical_llm_guess:
             # Generate image for the LLM guess

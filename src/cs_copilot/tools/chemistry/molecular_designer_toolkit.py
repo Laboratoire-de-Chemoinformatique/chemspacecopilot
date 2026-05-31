@@ -887,8 +887,10 @@ class MolecularDesignerToolkit(Toolkit):
             model = getattr(agent, "model", None) if agent is not None else None
             if model is None:
                 raise MolecularDesignerError(
-                    "LLM design requires an agent with a model. Use this tool through "
-                    "the Molecular Designer agent or choose engine='autoencoder'."
+                    "LLM design requires an agent with a model. In default MCP, "
+                    "MCPAgentContext.model is None; use agno_team_run or the Agno "
+                    "team runtime for internal-model design, or choose "
+                    "engine='autoencoder'."
                 )
             return LLMDesignEngine(model)
         raise MolecularDesignerError(

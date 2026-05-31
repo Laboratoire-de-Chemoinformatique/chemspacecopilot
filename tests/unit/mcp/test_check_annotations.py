@@ -111,12 +111,13 @@ def test_report_payload_is_machine_readable():
         required_tools=("search", "fetch"),
         fetch_id="tool:chembl_fetch_compounds",
         workflow_prompt_id="prompt:chemspace_workflow",
+        skill_id="skill:gtm-activity-landscape",
         auth_enabled=True,
         mode="existing-url",
         annotated_tool_count=55,
         read_only_tool_count=31,
         write_tool_count=24,
-        instructions_length=485,
+        instructions_length=445,
     )
 
     payload = _report_payload(report)
@@ -125,6 +126,7 @@ def test_report_payload_is_machine_readable():
     assert payload["auth"] == "bearer-token"
     assert payload["required_tools"] == ["search", "fetch"]
     assert payload["workflow_prompt_id"] == "prompt:chemspace_workflow"
+    assert payload["skill_id"] == "skill:gtm-activity-landscape"
     assert payload["chatgpt_connector_name"] == "ChemSpace Copilot"
     assert "chembl_fetch_compounds" in str(payload["chatgpt_expected_evidence"])
     assert "fetch prompt:chemspace_workflow" in str(payload["chatgpt_smoke_prompt"])

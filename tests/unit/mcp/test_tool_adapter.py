@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 from typing import Any, Dict, Optional
 
 import pandas as pd
@@ -12,6 +13,7 @@ import pytest
 from cs_copilot.mcp.context import MCPAgentContext
 from cs_copilot.mcp.errors import MCPToolError
 from cs_copilot.mcp.tool_adapter import ToolSpec, build_tool
+from cs_copilot.storage import S3, ensure_output_context
 
 
 class _DummyToolkit:
@@ -37,6 +39,9 @@ class _DummyToolkit:
 
     def big_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame({"x": list(range(5))})
+
+    def secret_echo(self, api_key: str, token_value: str) -> dict[str, str]:
+        return {"status": "ok", "api_key": api_key, "token_value": token_value}
 
 
 def _spec(method: str, **kwargs: Any) -> ToolSpec:
@@ -96,3 +101,69 @@ def test_adapter_coerces_dataframe_return():
     assert isinstance(result, dict)
     assert result["row_count"] == 5
     assert result["columns"] == ["x"]
+
+
+def _manifest_payloads(tmp_path, session_name: str):
+    manifest_root = (
+        tmp_path
+        / "data"
+        / "sessions"
+        / session_name
+        / "workflows"
+        / session_name
+        / "manifests"
+        / "mcp"
+    )
+    return [json.loads(path.read_text(encoding="utf-8")) for path in sorted(manifest_root.glob("*.json"))]
+
+
+def test_adapter_writes_success_manifest(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    session_name = "manifest-success"
+    S3.set_session_prefix(f"sessions/{session_name}")
+    ctx = MCPAgentContext()
+    ensure_output_context(ctx.session_state, workflow_slug="smoke")
+    tool = build_tool(_spec("echo"), _DummyToolkit(), ctx)
+
+    asyncio.run(tool(text="ab", count=2))
+
+    payloads = _manifest_payloads(tmp_path, session_name)
+    assert len(payloads) == 1
+    payload = payloads[0]
+    assert payload["runtime"] == "mcp"
+    assert payload["tool_name"] == "dummy_echo"
+    assert payload["status"] == "success"
+    assert payload["public_args"]["text"] == "ab"
+    assert payload["output_summary"]["type"] == "str"
+
+
+def test_adapter_writes_error_manifest(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    session_name = "manifest-error"
+    S3.set_session_prefix(f"sessions/{session_name}")
+    ctx = MCPAgentContext()
+    ensure_output_context(ctx.session_state, workflow_slug="smoke")
+    tool = build_tool(_spec("boom"), _DummyToolkit(), ctx)
+
+    with pytest.raises(MCPToolError):
+        asyncio.run(tool())
+
+    payloads = _manifest_payloads(tmp_path, session_name)
+    assert len(payloads) == 1
+    assert payloads[0]["status"] == "error"
+    assert "boom" in payloads[0]["error"]
+
+
+def test_adapter_redacts_secret_manifest_args(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    session_name = "manifest-redaction"
+    S3.set_session_prefix(f"sessions/{session_name}")
+    ctx = MCPAgentContext()
+    ensure_output_context(ctx.session_state, workflow_slug="smoke")
+    tool = build_tool(_spec("secret_echo"), _DummyToolkit(), ctx)
+
+    asyncio.run(tool(api_key="secret", token_value="token"))
+
+    payload = _manifest_payloads(tmp_path, session_name)[0]
+    assert payload["public_args"]["api_key"] == "<redacted>"
+    assert payload["public_args"]["token_value"] == "<redacted>"

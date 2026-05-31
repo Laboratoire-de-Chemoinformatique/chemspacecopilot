@@ -190,6 +190,14 @@ def _parse_args(
         action="store_true",
         help="Skip exposing session artifacts as MCP resources.",
     )
+    parser.add_argument(
+        "--enable-agno-team-tool",
+        action="store_true",
+        help=(
+            "Register private agno_team_run delegation tool. Use only for "
+            "trusted clients; default MCP mode keeps Agno reasoning disabled."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -227,6 +235,7 @@ def main(
         include_chatgpt_compat=not args.no_chatgpt_compat,
         include_prompts=not args.no_prompts,
         include_resources=not args.no_resources,
+        enable_agno_team_tool=args.enable_agno_team_tool,
         host=args.host,
         port=args.port,
         mount_path=args.mount_path,

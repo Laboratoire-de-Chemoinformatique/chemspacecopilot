@@ -28,13 +28,12 @@ _LOCAL_ALLOWED_ORIGINS = ("http://127.0.0.1:*", "http://localhost:*", "http://[:
 
 SERVER_INSTRUCTIONS = (
     "ChemSpace Copilot MCP: the external MCP client is the reasoning layer. "
-    "Do not invoke the Agno team or any configured API model. First fetch/use "
-    "`chemspace_workflow`; then choose `chembl_*`, `gtm_*`, `chem_*`, "
-    "`session_*`, `report_*`, or `robustness_*` tools. Use `session_*` and "
-    "cscopilot://session/ resources to resolve prior artifacts. For ChEMBL "
-    "judge filtering, use `chembl_retrieval_judge` and "
-    "`chembl_metadata_judge` with your own reasoning. Review write actions "
-    "before approval."
+    "Do not invoke the Agno team unless `agno_team_run` was explicitly enabled. "
+    "Fetch `catalog:skills` and `chemspace_workflow`; then choose `skill_*`, "
+    "`chembl_*`, `gtm_*`, `chem_*`, `pandas_*`, `mol_*`, `peptide_*`, "
+    "`synplanner_*`, `session_*`, `report_*`, or `robustness_*` tools. "
+    "For ChEMBL judge filtering, use `chembl_retrieval_judge` / "
+    "`chembl_metadata_judge` with your own reasoning. Review write actions before approval."
 )
 
 
@@ -45,6 +44,7 @@ def build_server(
     include_chatgpt_compat: bool = True,
     include_prompts: bool = True,
     include_resources: bool = True,
+    enable_agno_team_tool: bool = False,
     host: str = "127.0.0.1",
     port: int = 8000,
     mount_path: str = "/",
@@ -151,6 +151,8 @@ def build_server(
         if include_chatgpt_compat:
             _register_chatgpt_compat_tools(server, ToolAnnotations)
         _register_tools(server, ctx, ToolAnnotations)
+        if enable_agno_team_tool:
+            _register_agno_team_tool(server, ctx, ToolAnnotations)
     if include_prompts:
         _register_prompts(server, Prompt)
 
@@ -262,6 +264,22 @@ def _register_chatgpt_compat_tools(server: Any, tool_annotations_cls: Any) -> No
             "documentation or the text content of a session artifact."
         ),
         annotations=_tool_annotations(tool_annotations_cls, read_only=True),
+        structured_output=True,
+    )
+
+
+def _register_agno_team_tool(server: Any, ctx: MCPAgentContext, tool_annotations_cls: Any) -> None:
+    from .agno_delegate import build_agno_team_tool
+
+    server.add_tool(
+        build_agno_team_tool(ctx),
+        name="agno_team_run",
+        description=(
+            "Private trusted-client escape hatch: delegate one prompt to the "
+            "ChemSpace Agno team, using the configured Agno model. Disabled "
+            "by default; prefer fine-grained MCP skills and tools for external clients."
+        ),
+        annotations=_tool_annotations(tool_annotations_cls, read_only=False),
         structured_output=True,
     )
 

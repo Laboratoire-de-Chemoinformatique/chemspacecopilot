@@ -44,6 +44,7 @@ from .io.pointer_pandas_tools import PointerPandasTools
 from .io.report_export import save_markdown_report, save_rich_report
 from .io.session_memory import SessionMemoryToolkit
 from .io.session_toolkit import SessionToolkit
+from .io.skill_toolkit import SkillToolkit
 
 # Backwards compatibility alias
 from .io.utils import image_to_base64, safe_file_operation, validate_positive_int
@@ -54,6 +55,7 @@ __all__ = [
     "PointerPandasTools",
     "SessionToolkit",
     "SessionMemoryToolkit",
+    "SkillToolkit",
     "GTMToolkit",
     "BaseChemistryToolkit",
     "ChemicalSimilarityToolkit",

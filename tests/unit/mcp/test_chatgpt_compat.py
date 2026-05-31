@@ -61,6 +61,47 @@ def test_fetch_round_trips_text_session_artifact(isolated_session):
     assert fetched.metadata["mime_type"] == "text/markdown"
 
 
+def test_search_and_fetch_skill_documentation(isolated_session):
+    result = search("gtm activity landscape skill")
+    ids = [item.id for item in result.results]
+    assert "skill:gtm-activity-landscape" in ids
+
+    fetched = fetch("skill:gtm-activity-landscape")
+    assert fetched.title == "Skill: GTM activity landscape"
+    assert fetched.metadata["kind"] == "skill"
+    assert "gtm_create_activity_landscapes" in fetched.text
+    assert "# GTM Activity Landscape" in fetched.text
+
+
+def test_fetch_skill_catalog(isolated_session):
+    fetched = fetch("catalog:skills")
+    assert fetched.metadata["kind"] == "catalog"
+    assert "chembl-target-retrieval" in fetched.text
+    assert "retrosynthesis-planning" in fetched.text
+
+
 def test_fetch_rejects_unknown_id(isolated_session):
     with pytest.raises(ValueError, match="Unknown ChemSpace MCP"):
         fetch("missing")
+
+
+def test_search_finds_new_direct_tool_namespaces(isolated_session):
+    molecular = [item.id for item in search("molecular design").results]
+    peptide = [item.id for item in search("peptide design").results]
+    synplanner = [item.id for item in search("synplanner").results]
+
+    assert "tool:mol_validate_design_candidates" in molecular
+    assert "tool:peptide_validate_design_candidates" in peptide
+    assert "tool:synplanner_identify_input" in synplanner
+
+
+def test_fetch_renders_new_direct_tool_documentation(isolated_session):
+    skill_doc = fetch("tool:skill_fetch")
+    mol_doc = fetch("tool:mol_validate_design_candidates")
+
+    assert skill_doc.title == "Tool: skill_fetch"
+    assert "Group: skills" in skill_doc.text
+    assert "SKILL.md" in skill_doc.text
+    assert mol_doc.title == "Tool: mol_validate_design_candidates"
+    assert "Group: molecular_design" in mol_doc.text
+    assert "Validate" in mol_doc.text

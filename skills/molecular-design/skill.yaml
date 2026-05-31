@@ -1,0 +1,20 @@
+slug: molecular-design
+title: Molecular design
+summary: Generate, validate, rank, and persist small-molecule candidates, optionally using a GTM-guided context.
+status: agno_available
+tags:
+  - molecular-design
+  - small-molecule
+  - analog-generation
+  - validation
+required_tools:
+  - session_materialize_candidate_set_dataset
+optional_tools:
+  - chem_find_most_similar
+  - gtm_project_data
+artifact_outputs:
+  - candidate_set_artifact
+  - candidate_dataset_csv
+  - validation_summary
+example_prompts:
+  - Generate validated analogs for this seed molecule and register the candidate set for downstream GTM projection.
