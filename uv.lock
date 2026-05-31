@@ -1010,7 +1010,6 @@ dependencies = [
     { name = "seaborn" },
     { name = "sentence-transformers" },
     { name = "sqlalchemy" },
-    { name = "synplanner" },
     { name = "tabulate" },
     { name = "tantivy" },
     { name = "torch" },
@@ -1027,6 +1026,9 @@ mcp = [
 ]
 postgresql = [
     { name = "psycopg2-binary" },
+]
+synplanner = [
+    { name = "synplanner" },
 ]
 
 [package.dev-dependencies]
@@ -1084,7 +1086,7 @@ requires-dist = [
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "sentence-transformers", specifier = ">=5.2.0" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
-    { name = "synplanner", specifier = ">=1.2.1" },
+    { name = "synplanner", marker = "extra == 'synplanner'", specifier = ">=1.2.1" },
     { name = "tabulate", specifier = ">=0.9.0" },
     { name = "tantivy", specifier = ">=0.25.0" },
     { name = "torch", specifier = ">=2.9.0" },
@@ -1094,7 +1096,7 @@ requires-dist = [
     { name = "ugtm", specifier = ">=2.1.0.post2" },
     { name = "vl-convert-python", specifier = ">=1.8.0" },
 ]
-provides-extras = ["postgresql", "mcp"]
+provides-extras = ["postgresql", "mcp", "synplanner"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -30,10 +30,16 @@ async def _list_capabilities() -> None:
     )
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
-            await session.initialize()
+            initialize_result = await session.initialize()
+            instructions = initialize_result.instructions or ""
+            assert "external MCP client is the reasoning layer" in instructions
+            assert "chemspace_workflow" in instructions
+            assert len(instructions) <= 512
 
             tools = await session.list_tools()
             tool_names = {t.name for t in tools.tools}
+            assert "search" in tool_names
+            assert "fetch" in tool_names
             assert "chembl_fetch_compounds" in tool_names
             assert "gtm_optimization" in tool_names
 

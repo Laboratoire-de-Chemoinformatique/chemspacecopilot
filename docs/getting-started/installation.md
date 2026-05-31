@@ -12,6 +12,16 @@
 uv sync
 ```
 
+Optional extras:
+
+```bash
+# MCP server for ChatGPT/Codex/Claude-style external clients
+uv sync --extra mcp
+
+# Retrosynthesis agent; requires SynPlanner/CGRtools wheels for your platform
+uv sync --extra synplanner
+```
+
 ## Environment Configuration
 
 For file-based configuration, copy `.env.example` to `.env` in the project root:

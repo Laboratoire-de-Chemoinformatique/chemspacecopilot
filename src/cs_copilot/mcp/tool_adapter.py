@@ -42,6 +42,9 @@ class ToolSpec:
     method: str
     summary: str
     forces: Mapping[str, Any] = field(default_factory=dict)
+    read_only: bool = False
+    destructive: bool = False
+    open_world: bool = False
 
 
 def _coerce_return_value(value: Any) -> Any:
