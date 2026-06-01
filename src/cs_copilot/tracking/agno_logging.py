@@ -23,6 +23,7 @@ so calling it after ``Agent(...)`` / ``Team(...)`` is enough.
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
@@ -247,7 +248,7 @@ def make_pre_hook(sink: JsonlSink, *, scope: str) -> Callable:
                     "event": f"{scope}.run.start",
                     "actor": _actor_name(agent=agent, team=kwargs.get("team")),
                     "session_id": getattr(session, "session_id", None)
-                    or sink.session_id,
+                    or sink.default_session_id,
                     "user_id": user_id,
                     "input": _input_to_payload(run_input),
                     "metadata": metadata,
@@ -309,7 +310,7 @@ def make_post_hook(sink: JsonlSink, *, scope: str) -> Callable:
                     "run_id": getattr(run_output, "run_id", None),
                     "session_id": getattr(session, "session_id", None)
                     or getattr(run_output, "session_id", None)
-                    or sink.session_id,
+                    or sink.default_session_id,
                     "user_id": user_id,
                     "status": str(getattr(run_output, "status", "")) or None,
                     "model": {
@@ -336,8 +337,15 @@ def make_tool_hook(sink: JsonlSink) -> Callable:
     """Build a tool_hook (middleware) that logs every tool call I/O.
 
     Agno passes hooks ``(function_name, function_call, arguments, **kw)`` and
-    expects them to invoke ``function_call(**arguments)`` themselves and return
-    the result (see ``agno/tools/function.py:_build_hook_args``).
+    expects them to invoke ``function_call(**arguments)`` and return the
+    result (see ``agno/tools/function.py:_build_hook_args``).
+
+    In Agno's async execution chain, ``function_call`` (the inner ``next_func``)
+    is always ``async def`` — even for sync tool entrypoints — so calling it
+    returns a coroutine that must be awaited. We stay a sync hook (so the
+    sync chain still runs us) and, when we detect a coroutine, hand back an
+    awaitable that performs the await + result logging once the chain awaits
+    us.
     """
 
     def tool_hook(  # type: ignore[no-untyped-def]
@@ -359,31 +367,41 @@ def make_tool_hook(sink: JsonlSink) -> Callable:
                 "arguments": _safe_dump(arguments),
             }
         )
-        try:
-            result = function_call(**(arguments or {}))
-        except Exception as exc:
-            sink.write(
-                {
-                    "event": "tool.call.end",
-                    "actor": actor,
-                    "tool": function_name,
-                    "status": "error",
-                    "duration_ms": int((time.perf_counter() - started) * 1000),
-                    "error": repr(exc),
-                }
-            )
-            raise
-        sink.write(
-            {
+
+        def _log_end(status: str, *, result: Any = None, error: Optional[BaseException] = None) -> None:
+            payload: Dict[str, Any] = {
                 "event": "tool.call.end",
                 "actor": actor,
                 "tool": function_name,
-                "status": "ok",
+                "status": status,
                 "duration_ms": int((time.perf_counter() - started) * 1000),
-                "result": _safe_dump(result),
             }
-        )
-        return result
+            if status == "ok":
+                payload["result"] = _safe_dump(result)
+            else:
+                payload["error"] = repr(error)
+            sink.write(payload)
+
+        try:
+            outcome = function_call(**(arguments or {}))
+        except Exception as exc:
+            _log_end("error", error=exc)
+            raise
+
+        if inspect.iscoroutine(outcome):
+            async def _await_and_log():  # type: ignore[no-untyped-def]
+                try:
+                    value = await outcome
+                except Exception as exc:
+                    _log_end("error", error=exc)
+                    raise
+                _log_end("ok", result=value)
+                return value
+
+            return _await_and_log()
+
+        _log_end("ok", result=outcome)
+        return outcome
 
     tool_hook.__name__ = "cs_copilot_tool_log"
     return tool_hook
