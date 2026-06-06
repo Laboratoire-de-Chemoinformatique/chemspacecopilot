@@ -303,7 +303,8 @@ The server also exposes two read-only ChatGPT compatibility tools:
 | `fetch` | Fetch a search result by id, returning tool/prompt documentation or text artifact content. |
 
 Use `cscopilot-mcp` once and then `list_tools` from your MCP client to see
-the current set (there are ~50 tools plus `search` / `fetch`).
+the current set (there are 88 direct ChemSpace tools plus the read-only
+`search` / `fetch` compatibility tools).
 
 ### Prompts
 

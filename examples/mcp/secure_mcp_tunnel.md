@@ -17,7 +17,7 @@ uv sync --extra mcp
 USE_S3=false cscopilot-mcp-check
 ```
 
-Expected output includes `55` tools, `12` prompts, `server_instructions: ok`, `tool_annotations: ok`, `workflow_prompt: ok`, and `search_fetch: ok`. Add `--json` when you want a machine-readable proof for setup logs, connector metadata, the first ChatGPT smoke prompt, and expected evidence.
+Expected output includes `90` tools, `12` prompts, `server_instructions: ok`, `tool_annotations: ok`, `workflow_prompt: ok`, and `search_fetch: ok`. The default tool count is 88 direct ChemSpace tools plus the read-only `search` / `fetch` compatibility tools. Add `--json` when you want a machine-readable proof for setup logs, connector metadata, the first ChatGPT smoke prompt, and expected evidence.
 
 ## 2. Install tunnel-client
 
