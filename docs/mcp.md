@@ -1,13 +1,13 @@
 # MCP server (optional)
 
-ChemSpace Copilot ships an **optional** Model Context Protocol server that
+cs_copilot ships an **optional** Model Context Protocol server that
 exposes the same chemistry, chemography, ChEMBL, design, and reporting
 toolkits as the Chainlit app — but driven by an external MCP client such as
 [Codex](https://github.com/openai/codex) or
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instead of the
 Agno multi-agent team.
 
-In MCP mode the external client is the reasoning engine. The ChemSpace MCP
+In MCP mode the external client is the reasoning engine. The cs_copilot MCP
 server only surfaces primitives — it never instantiates the Agno team, the
 agent factories, or the configured model backend (DeepSeek / Ollama /
 OpenRouter). The default Chainlit and CLI runtimes are unaffected.
@@ -37,10 +37,10 @@ cscopilot-mcp-check
 ```
 
 The check starts a temporary streamable HTTP server, connects with the MCP
-client, verifies the core ChemSpace tools, validates the MCP server
+client, verifies the core cs_copilot tools, validates the MCP server
 instructions and ChatGPT-facing tool annotations, lists prompts and resources,
 and uses the ChatGPT-compatible `search` / `fetch` pair to fetch both
-`chembl_fetch_compounds` documentation and the `chemspace_workflow`
+`chembl_fetch_compounds` documentation and the `cs_copilot_workflow`
 orchestration prompt. It also prints ChatGPT connector metadata and a smoke
 prompt with expected evidence for the final connector test. It prints the local
 `http://127.0.0.1:<port>/mcp` endpoint that must be exposed as HTTPS or
@@ -115,7 +115,7 @@ Flags:
 | `--disable-dns-rebinding-protection` | False | Disable MCP Host/Origin checks. Use only behind a trusted proxy or tunnel with equivalent controls. |
 | `--auth-token-env` | `CS_COPILOT_MCP_AUTH_TOKEN` | Environment variable containing a required HTTP bearer token. Auth is disabled when the variable is unset. |
 | `--auth-token` | unset | Direct bearer token value. Prefer `--auth-token-env` so secrets do not appear in process listings. |
-| `--auth-client-id` | `chemspace-mcp-client` | Client id attached to accepted static bearer tokens. |
+| `--auth-client-id` | `cs_copilot-mcp-client` | Client id attached to accepted static bearer tokens. |
 | `--auth-scope` | none | Required bearer-token scope. Can be supplied multiple times. |
 | `--auth-issuer-url` | endpoint URL | Issuer URL advertised in MCP protected-resource metadata. |
 | `--auth-resource-url` | endpoint URL | Public MCP resource URL advertised in auth metadata. Set this to the HTTPS URL seen by remote clients. |
@@ -145,7 +145,7 @@ depending on your Claude Code version):
 ```jsonc
 {
   "mcpServers": {
-    "chemspace": {
+    "cs_copilot": {
       "command": "cscopilot-mcp",
       "args": ["--session-id", "demo", "--workflow-slug", "chemical_space"],
       "env": { "SESSION_ID": "demo", "USE_S3": "false" }
@@ -161,11 +161,11 @@ A reference snippet lives at `examples/mcp/claude_code.json`.
 Codex reads `~/.codex/config.toml`. Add a server entry like this:
 
 ```toml
-[mcp_servers.chemspace]
+[mcp_servers.cs_copilot]
 command = "cscopilot-mcp"
 args = ["--session-id", "demo", "--workflow-slug", "chemical_space"]
 
-[mcp_servers.chemspace.env]
+[mcp_servers.cs_copilot.env]
 SESSION_ID = "demo"
 USE_S3 = "false"
 ```
@@ -181,7 +181,7 @@ HTTPS and configure the client with the streamable HTTP URL. If you set
 Codex can source that token from an environment variable:
 
 ```toml
-[mcp_servers.chemspace_http]
+[mcp_servers.cs_copilot_http]
 url = "https://mcp.example.com/mcp"
 bearer_token_env_var = "CS_COPILOT_MCP_AUTH_TOKEN"
 startup_timeout_sec = 30
@@ -191,7 +191,7 @@ tool_timeout_sec = 300
 A reference snippet lives at `examples/mcp/codex_http.toml`.
 
 For a ChatGPT-authenticated Codex smoke test that proves a subscription-model
-reasoning client can call ChemSpace MCP tools over both stdio and streamable
+reasoning client can call cs_copilot MCP tools over both stdio and streamable
 HTTP, see `examples/mcp/codex_subscription_smoke.md`.
 
 ## ChatGPT app / connector setup
@@ -205,7 +205,7 @@ that terminates HTTPS and restricts access.
 OpenAI's current ChatGPT app auth guidance says ChatGPT cannot present custom
 API keys. Do not enable `CS_COPILOT_MCP_AUTH_TOKEN` for a plain ChatGPT
 connector unless your tunnel or reverse proxy injects the header before the
-request reaches ChemSpace. For a direct ChatGPT production connector, use
+request reaches cs_copilot. For a direct ChatGPT production connector, use
 Secure MCP Tunnel / OpenAI client identification controls, or implement proper
 OAuth 2.1 resource metadata and per-tool `securitySchemes`. The static bearer
 token option in this package is intended for clients such as Codex and for
@@ -219,13 +219,13 @@ origin shown in proxy logs, for example `--allowed-origin https://chatgpt.com`.
 For private servers, the current OpenAI Secure MCP Tunnel flow is:
 
 1. Create or select a tunnel in Platform tunnel settings.
-2. Configure a local `tunnel-client` profile that can reach ChemSpace Copilot.
+2. Configure a local `tunnel-client` profile that can reach cs_copilot.
 3. Run `tunnel-client doctor --profile <profile> --explain`.
 4. Keep `tunnel-client run --profile <profile>` healthy while creating or
    testing the ChatGPT connector.
 5. In ChatGPT connector settings, select **Tunnel** for the private MCP server.
 
-A ChemSpace-specific tunnel runbook lives at
+A cs_copilot-specific tunnel runbook lives at
 `examples/mcp/secure_mcp_tunnel.md`.
 
 In ChatGPT settings, create an app from the remote MCP server URL. Use:
@@ -235,7 +235,7 @@ In ChatGPT settings, create an app from the remote MCP server URL. Use:
 
 Recommended connector metadata:
 
-- Name: `ChemSpace Copilot`
+- Name: `cs_copilot`
 - Description: `Chemistry and chemography MCP tools for ChEMBL retrieval, GTM chemical-space modeling, chemoinformatics analysis, molecular design, peptide design, session artifacts, and report generation.`
 
 Current OpenAI docs say ChatGPT developer mode supports full MCP tools over
@@ -250,7 +250,7 @@ A runnable command reference lives at `examples/mcp/chatgpt_remote.md`.
 
 ## Skills and manifests
 
-The MCP server also exposes the shared ChemSpace skill catalog through the
+The MCP server also exposes the shared cs_copilot skill catalog through the
 ChatGPT-compatible `search` / `fetch` tools. Use `fetch("catalog:skills")`
 to list reusable workflows, then fetch `skill:<slug>` for the full `SKILL.md`
 procedure and required tool names. The same catalog is available to the Agno
@@ -272,7 +272,7 @@ cscopilot-mcp-serve --enable-agno-team-tool
 ```
 
 This registers `agno_team_run(prompt)`, which loads the configured Agno model
-and delegates the prompt to the ChemSpace Agno team. Prefer fine-grained MCP
+and delegates the prompt to the cs_copilot Agno team. Prefer fine-grained MCP
 skills and tools for normal external clients; use this flag only where the
 client is trusted and model/API access is intentional.
 
@@ -280,7 +280,7 @@ client is trusted and model/API access is intentional.
 
 ### Tools
 
-ChemSpace toolkit methods are wrapped one-to-one as MCP tools, namespaced
+cs_copilot toolkit methods are wrapped one-to-one as MCP tools, namespaced
 by toolkit (`chembl_*`, `gtm_*`, `chem_*`, `session_*`, `report_*`,
 `robustness_*`). Tool arguments mirror the toolkit method signatures, with
 the `agent` / `session_state` parameters injected by the server and hidden
@@ -292,28 +292,28 @@ pure computation tools. Tools that fetch-and-store data, load mutable GTM
 state, sample/register zones, update session memory, train models, or save
 reports are advertised as write actions with `readOnlyHint=False`.
 `destructiveHint` and `openWorldHint` are currently `False` for every tool
-because ChemSpace writes are scoped to private session storage and do not
+because cs_copilot writes are scoped to private session storage and do not
 delete data or publish to public internet state.
 
 The server also exposes two read-only ChatGPT compatibility tools:
 
 | Tool | Purpose |
 |------|---------|
-| `search` | Search the ChemSpace MCP tool catalog, prompt catalog, and active session artifacts. |
+| `search` | Search the cs_copilot MCP tool catalog, prompt catalog, and active session artifacts. |
 | `fetch` | Fetch a search result by id, returning tool/prompt documentation or text artifact content. |
 
 Use `cscopilot-mcp` once and then `list_tools` from your MCP client to see
-the current set (there are 88 direct ChemSpace tools plus the read-only
+the current set (there are 88 direct cs_copilot tools plus the read-only
 `search` / `fetch` compatibility tools).
 
 ### Prompts
 
 The agent and team instruction sets from `cs_copilot.agents.prompts` are
-exposed as MCP prompts so the client can adopt a ChemSpace "persona":
+exposed as MCP prompts so the client can adopt a cs_copilot "persona":
 
 | Prompt | Role |
 |--------|------|
-| `chemspace_workflow` | Top-level orchestration. Use this first. |
+| `cs_copilot_workflow` | Top-level orchestration. Use this first. |
 | `chembl_agent` | ChEMBL data retrieval + validation workflow. |
 | `gtm_agent` | GTM build / load / project / sample workflow. |
 | `chemoinformatician_agent` | Scaffold, clustering, SAR analyses. |

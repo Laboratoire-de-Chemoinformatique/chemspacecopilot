@@ -1,4 +1,4 @@
-"""Integration smoke: serve ChemSpace MCP over streamable HTTP.
+"""Integration smoke: serve cs_copilot MCP over streamable HTTP.
 
 Marked ``live`` because it spawns a subprocess and opens a localhost port.
 Run with::
@@ -81,11 +81,11 @@ async def _assert_remote_capabilities(url: str, proc: asyncio.subprocess.Process
 
                     workflow_result = await session.call_tool(
                         "fetch",
-                        {"id": "prompt:chemspace_workflow"},
+                        {"id": "prompt:cs_copilot_workflow"},
                     )
                     workflow_payload = workflow_result.structuredContent
                     assert workflow_payload
-                    assert workflow_payload["id"] == "prompt:chemspace_workflow"
+                    assert workflow_payload["id"] == "prompt:cs_copilot_workflow"
                     assert "external reasoner" in workflow_payload["text"]
                     assert get_session_id()
                     return

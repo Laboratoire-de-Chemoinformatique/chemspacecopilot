@@ -1,4 +1,4 @@
-"""Local readiness check for remote ChemSpace MCP clients."""
+"""Local readiness check for remote cs_copilot MCP clients."""
 
 from __future__ import annotations
 
@@ -43,29 +43,29 @@ EXPECTED_READ_ONLY_HINTS = {
 EXPECTED_INSTRUCTION_SNIPPETS = (
     "external MCP client is the reasoning layer",
     "Do not invoke the Agno team",
-    "chemspace_workflow",
+    "cs_copilot_workflow",
     "session_*",
     "chembl_retrieval_judge",
     "Review write actions",
 )
 
-CHATGPT_CONNECTOR_NAME = "ChemSpace Copilot"
+CHATGPT_CONNECTOR_NAME = "cs_copilot"
 CHATGPT_CONNECTOR_DESCRIPTION = (
     "Chemistry and chemography MCP tools for ChEMBL retrieval, GTM "
     "chemical-space modeling, chemoinformatics analysis, molecular design, "
     "peptide design, session artifacts, and report generation."
 )
 CHATGPT_SMOKE_PROMPT = (
-    "Use ChemSpace Copilot. Do not use built-in browsing or other tools. "
-    "Use only the ChemSpace Copilot connector. Search the MCP catalog for "
-    "ChEMBL retrieval tools, fetch prompt:chemspace_workflow, and explain "
-    "which ChemSpace tool would fetch CDK2 inhibitor activity data. Do not "
+    "Use cs_copilot. Do not use built-in browsing or other tools. "
+    "Use only the cs_copilot connector. Search the MCP catalog for "
+    "ChEMBL retrieval tools, fetch prompt:cs_copilot_workflow, and explain "
+    "which cs_copilot tool would fetch CDK2 inhibitor activity data. Do not "
     "run long ChEMBL or GTM jobs yet."
 )
 CHATGPT_EXPECTED_EVIDENCE = (
-    "ChatGPT selects the ChemSpace Copilot connector / Developer Mode app.",
-    "The transcript shows a `search` tool call against the ChemSpace MCP catalog.",
-    "The transcript shows a `fetch` tool call for `prompt:chemspace_workflow`.",
+    "ChatGPT selects the cs_copilot connector / Developer Mode app.",
+    "The transcript shows a `search` tool call against the cs_copilot MCP catalog.",
+    "The transcript shows a `fetch` tool call for `prompt:cs_copilot_workflow`.",
     "The answer names `chembl_fetch_compounds` as the ChEMBL retrieval tool.",
 )
 
@@ -118,7 +118,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="cscopilot-mcp-check",
         description=(
-            "Verify ChatGPT-ready ChemSpace MCP capabilities by probing an "
+            "Verify ChatGPT-ready cs_copilot MCP capabilities by probing an "
             "existing streamable HTTP endpoint or by starting a temporary "
             "local MCP server."
         ),
@@ -457,10 +457,10 @@ async def _probe_server(
                     )
                     workflow_prompt_id = await _verify_search_fetch(
                         session,
-                        query="chemspace workflow prompt",
-                        expected_id="prompt:chemspace_workflow",
+                        query="cs_copilot workflow prompt",
+                        expected_id="prompt:cs_copilot_workflow",
                         required_text=(
-                            "Prompt: chemspace_workflow",
+                            "Prompt: cs_copilot_workflow",
                             "external reasoner",
                             "agent selection",
                             "session_state",
@@ -638,7 +638,7 @@ def _print_report(report: CheckReport, *, json_output: bool = False) -> None:
         print(json.dumps(_report_payload(report), indent=2, sort_keys=True))
         return
 
-    print("ChemSpace MCP readiness check passed")
+    print("cs_copilot MCP readiness check passed")
     print(f"endpoint_url: {report.endpoint_url}")
     print(f"mcp_session_id: {report.session_id or '<none>'}")
     print(f"tools: {report.tool_count}")
@@ -670,7 +670,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         report = asyncio.run(run_check(args))
     except Exception as exc:  # noqa: BLE001 - CLI should show actionable failure text
-        print(f"ChemSpace MCP readiness check failed: {exc}", file=sys.stderr)
+        print(f"cs_copilot MCP readiness check failed: {exc}", file=sys.stderr)
         return 1
     _print_report(report, json_output=args.json)
     return 0

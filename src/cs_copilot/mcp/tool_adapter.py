@@ -1,4 +1,4 @@
-"""Adapter that wraps ChemSpace toolkit methods as FastMCP tools.
+"""Adapter that wraps cs_copilot toolkit methods as FastMCP tools.
 
 The adapter is the only place that knows about:
 

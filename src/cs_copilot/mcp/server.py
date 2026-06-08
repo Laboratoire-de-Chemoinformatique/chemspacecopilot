@@ -1,4 +1,4 @@
-"""FastMCP server wiring for ChemSpace Copilot.
+"""FastMCP server wiring for cs_copilot.
 
 This is the only module that imports from ``mcp.server.fastmcp``. All other
 modules in the package stay pure-Python so they can be unit-tested without
@@ -27,9 +27,9 @@ _LOCAL_ALLOWED_HOSTS = ("127.0.0.1:*", "localhost:*", "[::1]:*")
 _LOCAL_ALLOWED_ORIGINS = ("http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*")
 
 SERVER_INSTRUCTIONS = (
-    "ChemSpace Copilot MCP: the external MCP client is the reasoning layer. "
+    "cs_copilot MCP: the external MCP client is the reasoning layer. "
     "Do not invoke the Agno team unless `agno_team_run` was explicitly enabled. "
-    "Fetch `catalog:skills` and `chemspace_workflow`; then choose `skill_*`, "
+    "Fetch `catalog:skills` and `cs_copilot_workflow`; then choose `skill_*`, "
     "`chembl_*`, `gtm_*`, `chem_*`, `pandas_*`, `mol_*`, `peptide_*`, "
     "`synplanner_*`, `session_*`, `report_*`, or `robustness_*` tools. "
     "For ChEMBL judge filtering, use `chembl_retrieval_judge` / "
@@ -55,7 +55,7 @@ def build_server(
     stateless_http: bool = False,
     log_level: str = "INFO",
     auth_token: str | None = None,
-    auth_token_client_id: str = "chemspace-mcp-client",
+    auth_token_client_id: str = "cs_copilot-mcp-client",
     auth_token_scopes: list[str] | None = None,
     auth_issuer_url: str | None = None,
     auth_resource_url: str | None = None,
@@ -76,7 +76,7 @@ def build_server(
 
     from . import resources as _resources
 
-    class _ChemSpaceFastMCP(FastMCP):
+    class _CsCopilotFastMCP(FastMCP):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
             self._cs_include_resources = include_resources
@@ -88,7 +88,7 @@ def build_server(
                 MCPResource(
                     uri=entry.uri,  # type: ignore[arg-type]
                     name=entry.name,
-                    description=f"ChemSpace session artifact ({entry.mime_type}).",
+                    description=f"cs_copilot session artifact ({entry.mime_type}).",
                     mimeType=entry.mime_type,
                 )
                 for entry in _resources.list_entries()
@@ -124,8 +124,8 @@ def build_server(
             scopes=tuple(auth_token_scopes or ()),
         )
 
-    server = _ChemSpaceFastMCP(
-        name="chemspace-copilot",
+    server = _CsCopilotFastMCP(
+        name="cs_copilot",
         instructions=SERVER_INSTRUCTIONS,
         host=host,
         port=port,
@@ -249,7 +249,7 @@ def _register_chatgpt_compat_tools(server: Any, tool_annotations_cls: Any) -> No
         search,
         name="search",
         description=(
-            "Search the ChemSpace MCP tool catalog, prompt catalog, and active "
+            "Search the cs_copilot MCP tool catalog, prompt catalog, and active "
             "session artifacts. This read-only compatibility tool is intended "
             "for ChatGPT data-only apps, company knowledge, and deep research."
         ),
@@ -260,7 +260,7 @@ def _register_chatgpt_compat_tools(server: Any, tool_annotations_cls: Any) -> No
         fetch,
         name="fetch",
         description=(
-            "Fetch a ChemSpace MCP search result by id. Returns tool/prompt "
+            "Fetch a cs_copilot MCP search result by id. Returns tool/prompt "
             "documentation or the text content of a session artifact."
         ),
         annotations=_tool_annotations(tool_annotations_cls, read_only=True),
@@ -276,7 +276,7 @@ def _register_agno_team_tool(server: Any, ctx: MCPAgentContext, tool_annotations
         name="agno_team_run",
         description=(
             "Private trusted-client escape hatch: delegate one prompt to the "
-            "ChemSpace Agno team, using the configured Agno model. Disabled "
+            "cs_copilot Agno team, using the configured Agno model. Disabled "
             "by default; prefer fine-grained MCP skills and tools for external clients."
         ),
         annotations=_tool_annotations(tool_annotations_cls, read_only=False),

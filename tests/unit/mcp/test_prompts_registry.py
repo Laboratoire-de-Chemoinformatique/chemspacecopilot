@@ -52,8 +52,8 @@ def test_chembl_metadata_judge_template_renders():
     assert "ABL1" in rendered
 
 
-def test_chemspace_workflow_prompt_uses_team_instructions():
-    spec = next(s for s in all_specs() if s.mcp_name == "chemspace_workflow")
+def test_cs_copilot_workflow_prompt_uses_team_instructions():
+    spec = next(s for s in all_specs() if s.mcp_name == "cs_copilot_workflow")
     rendered = spec.render()
     assert agent_prompts.AGENT_TEAM_INSTRUCTIONS, "team instructions constant is empty"
     # The rendered prompt should contain the first line of the team instructions.

@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "chemspace": {
+    "cs_copilot": {
       "command": "cscopilot-mcp",
       "args": [
         "--session-id",

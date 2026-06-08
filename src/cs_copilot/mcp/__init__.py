@@ -1,9 +1,9 @@
-"""Optional Model Context Protocol (MCP) server for ChemSpace Copilot.
+"""Optional Model Context Protocol (MCP) server for cs_copilot.
 
-The ChemSpace Copilot default runtime (Chainlit / CLI / Agno multi-agent team)
+The cs_copilot default runtime (Chainlit / CLI / Agno multi-agent team)
 does not import anything from this package and is unaffected by it.
 
-The MCP server exposes ChemSpace primitives — toolkit methods, agent prompt
+The MCP server exposes cs_copilot primitives — toolkit methods, agent prompt
 constants, and session artifacts — to external MCP clients (Codex,
 Claude Code). In its default mode it never executes the Agno team: the
 external client is the reasoning engine.

@@ -1,4 +1,4 @@
-"""Explicit registry of ChemSpace toolkit methods exposed as MCP tools.
+"""Explicit registry of cs_copilot toolkit methods exposed as MCP tools.
 
 The registry is intentionally curated rather than introspected: it lets us
 choose names, hide internal helpers, and document overrides like the ChEMBL
@@ -81,10 +81,10 @@ def _backend_unavailable(name: str, exc: Exception) -> MCPToolError:
 
 
 class _SkillFacade:
-    """Direct MCP access to the pure-Python ChemSpace skill catalog."""
+    """Direct MCP access to the pure-Python cs_copilot skill catalog."""
 
     def list(self, include_content: bool = False) -> List[dict[str, Any]]:
-        """List reusable ChemSpace workflow skills."""
+        """List reusable cs_copilot workflow skills."""
         from cs_copilot.skills import list_skills
 
         return [spec.as_dict(include_content=include_content) for spec in list_skills()]
@@ -95,7 +95,7 @@ class _SkillFacade:
         limit: int = 10,
         include_content: bool = False,
     ) -> List[dict[str, Any]]:
-        """Search reusable ChemSpace workflow skills by metadata or tool names."""
+        """Search reusable cs_copilot workflow skills by metadata or tool names."""
         from cs_copilot.skills import search_skills
 
         return [
@@ -104,7 +104,7 @@ class _SkillFacade:
         ]
 
     def fetch(self, slug: str, include_content: bool = True) -> dict[str, Any]:
-        """Fetch one reusable ChemSpace workflow skill by slug."""
+        """Fetch one reusable cs_copilot workflow skill by slug."""
         from cs_copilot.skills import get_skill
 
         return get_skill(slug).as_dict(include_content=include_content)
@@ -1074,21 +1074,21 @@ _SKILL_SPECS: List[ToolSpec] = [
         mcp_name="skill_list",
         toolkit_factory=_SKILLS,
         method="list",
-        summary="List reusable ChemSpace workflow skills from the local skill catalog.",
+        summary="List reusable cs_copilot workflow skills from the local skill catalog.",
         read_only=True,
     ),
     ToolSpec(
         mcp_name="skill_search",
         toolkit_factory=_SKILLS,
         method="search",
-        summary="Search reusable ChemSpace workflow skills by metadata and tool names.",
+        summary="Search reusable cs_copilot workflow skills by metadata and tool names.",
         read_only=True,
     ),
     ToolSpec(
         mcp_name="skill_fetch",
         toolkit_factory=_SKILLS,
         method="fetch",
-        summary="Fetch one reusable ChemSpace workflow skill, including SKILL.md content.",
+        summary="Fetch one reusable cs_copilot workflow skill, including SKILL.md content.",
         read_only=True,
     ),
 ]
@@ -1118,7 +1118,7 @@ _PANDAS_METHODS = [
     (
         "pandas_normalize_for_analysis",
         "normalize_for_analysis",
-        "Normalize a DataFrame for downstream ChemSpace analysis workflows.",
+        "Normalize a DataFrame for downstream cs_copilot analysis workflows.",
         False,
     ),
 ]

@@ -1,4 +1,4 @@
-"""Error types for the ChemSpace MCP server.
+"""Error types for the cs_copilot MCP server.
 
 A small umbrella class lets unit tests assert on error semantics without
 having to import the optional ``mcp`` package. The server boundary converts

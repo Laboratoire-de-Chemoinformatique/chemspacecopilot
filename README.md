@@ -190,7 +190,7 @@ An example workflow is available in `notebooks/cs_copilot.ipynb`.
 ### MCP server (optional)
 
 An optional Model Context Protocol server lets external MCP clients
-(Codex, Claude Code) drive ChemSpace toolkits, prompts, and session
+(Codex, Claude Code) drive cs_copilot toolkits, prompts, and session
 artifacts directly — the external client is the reasoning engine; the Agno
 multi-agent team is not invoked. The default Chainlit and CLI runtimes are
 unaffected.
@@ -217,9 +217,9 @@ HTTPS URL or an approved secure tunnel. If a proxy forwards public Host or
 Origin headers, pass them with `--allowed-host` / `--allowed-origin`. The
 server includes read-only
 `search` / `fetch` tools for ChatGPT data-only/deep-research compatibility,
-plus the full ChemSpace tool catalog for full MCP developer-mode clients. Tool
+plus the full cs_copilot tool catalog for full MCP developer-mode clients. Tool
 descriptors include MCP `readOnlyHint` annotations so ChatGPT can distinguish
-pure lookup tools from state-changing ChemSpace workflows.
+pure lookup tools from state-changing cs_copilot workflows.
 
 Example client configs ship under `examples/mcp/`
 (`claude_code.json`, `codex.toml`, `codex_http.toml`, `chatgpt_remote.md`,

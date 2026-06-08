@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Sequence
 
 DEFAULT_AUTH_TOKEN_ENV = "CS_COPILOT_MCP_AUTH_TOKEN"
-DEFAULT_AUTH_CLIENT_ID = "chemspace-mcp-client"
+DEFAULT_AUTH_CLIENT_ID = "cs_copilot-mcp-client"
 
 
 @dataclass(frozen=True)

@@ -33,7 +33,7 @@ async def _list_capabilities() -> None:
             initialize_result = await session.initialize()
             instructions = initialize_result.instructions or ""
             assert "external MCP client is the reasoning layer" in instructions
-            assert "chemspace_workflow" in instructions
+            assert "cs_copilot_workflow" in instructions
             assert len(instructions) <= 512
 
             tools = await session.list_tools()
@@ -45,7 +45,7 @@ async def _list_capabilities() -> None:
 
             prompts = await session.list_prompts()
             prompt_names = {p.name for p in prompts.prompts}
-            assert "chemspace_workflow" in prompt_names
+            assert "cs_copilot_workflow" in prompt_names
             assert "chembl_retrieval_judge" in prompt_names
 
             resources = await session.list_resources()

@@ -16,7 +16,7 @@ def build_agno_team_tool(ctx: MCPAgentContext):
     """
 
     async def agno_team_run(prompt: str) -> dict[str, Any]:
-        """Run the private ChemSpace Agno team for a trusted prompt."""
+        """Run the private cs_copilot Agno team for a trusted prompt."""
 
         return await asyncio.to_thread(_run_team, prompt, ctx)
 

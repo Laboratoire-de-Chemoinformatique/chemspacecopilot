@@ -1,8 +1,8 @@
-# Drop this stanza into ~/.codex/config.toml to register the ChemSpace MCP
+# Drop this stanza into ~/.codex/config.toml to register the cs_copilot MCP
 # server with Codex. The command resolves cscopilot-mcp via PATH, so make
 # sure the cs_copilot environment with the [mcp] extra is activated.
 
-[mcp_servers.chemspace]
+[mcp_servers.cs_copilot]
 command = "cscopilot-mcp"
 args = [
     "--session-id", "demo",
@@ -10,6 +10,6 @@ args = [
     "--log-level", "info",
 ]
 
-[mcp_servers.chemspace.env]
+[mcp_servers.cs_copilot.env]
 SESSION_ID = "demo"
 USE_S3 = "false"
