@@ -1,6 +1,6 @@
 """Bootstrap helpers for the MCP server's storage and session lifecycle.
 
-The ChemSpace storage client (`src/cs_copilot/storage/client.py`) resolves
+The cs_copilot storage client (`src/cs_copilot/storage/client.py`) resolves
 ``SESSION_ID`` at import time. This module exists so the CLI entry point can
 set the desired ``SESSION_ID`` *before* the storage module is imported, then
 bind the workflow layout and the agent-context singleton.

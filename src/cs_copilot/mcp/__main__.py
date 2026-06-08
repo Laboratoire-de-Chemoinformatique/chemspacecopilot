@@ -1,4 +1,4 @@
-"""Entry points for the ChemSpace Copilot MCP server.
+"""Entry points for the cs_copilot MCP server.
 
 Run local stdio clients with::
 
@@ -33,7 +33,7 @@ def _parse_args(
     parser = argparse.ArgumentParser(
         prog=prog,
         description=(
-            "ChemSpace Copilot MCP server. Exposes ChemSpace toolkits, "
+            "cs_copilot MCP server. Exposes cs_copilot toolkits, "
             "prompts, and session artifacts to external MCP clients over "
             "stdio, SSE, or streamable HTTP."
         ),

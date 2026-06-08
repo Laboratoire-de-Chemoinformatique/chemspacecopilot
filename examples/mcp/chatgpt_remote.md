@@ -1,7 +1,7 @@
 # ChatGPT remote MCP endpoint
 
 ChatGPT connects to remote MCP servers; it cannot start the local stdio
-`cscopilot-mcp` command. Run ChemSpace Copilot with an HTTP transport, then
+`cscopilot-mcp` command. Run cs_copilot with an HTTP transport, then
 connect ChatGPT to the resulting HTTPS URL through ChatGPT Apps / Developer
 Mode.
 
@@ -14,7 +14,7 @@ cscopilot-mcp-check
 
 The preflight starts a temporary streamable HTTP server and verifies the same
 MCP path that ChatGPT or Secure MCP Tunnel will call, including server
-instructions, tool annotations, and the fetchable `chemspace_workflow`
+instructions, tool annotations, and the fetchable `cs_copilot_workflow`
 orchestration prompt used by the subscription model as the reasoning layer. For a private workstation
 connection, use the full runbook in `examples/mcp/secure_mcp_tunnel.md`.
 
@@ -90,6 +90,6 @@ Local endpoint: `http://127.0.0.1:8000/sse`
 The remote server registers:
 
 - `search` and `fetch` for ChatGPT data-only apps, company knowledge, and deep research.
-- The full ChemSpace `chembl_*`, `gtm_*`, `chem_*`, `session_*`, `report_*`, and `robustness_*` tools for full MCP developer-mode clients.
-- MCP tool annotations: pure lookup/computation tools advertise `readOnlyHint=True`; ChemSpace workflows that store data, update session state, train, sample, or save reports advertise `readOnlyHint=False`.
-- ChemSpace workflow prompts and session artifact resources.
+- The full cs_copilot `chembl_*`, `gtm_*`, `chem_*`, `session_*`, `report_*`, and `robustness_*` tools for full MCP developer-mode clients.
+- MCP tool annotations: pure lookup/computation tools advertise `readOnlyHint=True`; cs_copilot workflows that store data, update session state, train, sample, or save reports advertise `readOnlyHint=False`.
+- cs_copilot workflow prompts and session artifact resources.

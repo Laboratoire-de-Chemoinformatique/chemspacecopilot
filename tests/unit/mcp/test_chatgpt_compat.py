@@ -17,7 +17,7 @@ def isolated_session(tmp_path, monkeypatch):
 
 
 def test_search_returns_catalog_entries(isolated_session):
-    result = search("ChemSpace tools")
+    result = search("cs_copilot tools")
     ids = {item.id for item in result.results}
     assert "catalog:overview" in ids
     assert "catalog:tools" in ids
@@ -34,13 +34,13 @@ def test_search_can_find_tool_documentation(isolated_session):
     assert fetched.metadata["kind"] == "tool"
 
 
-def test_fetch_renders_chemspace_workflow_prompt(isolated_session):
-    result = search("chemspace workflow prompt")
+def test_fetch_renders_cs_copilot_workflow_prompt(isolated_session):
+    result = search("cs_copilot workflow prompt")
     ids = [item.id for item in result.results]
-    assert "prompt:chemspace_workflow" in ids
+    assert "prompt:cs_copilot_workflow" in ids
 
-    fetched = fetch("prompt:chemspace_workflow")
-    assert fetched.title == "Prompt: chemspace_workflow"
+    fetched = fetch("prompt:cs_copilot_workflow")
+    assert fetched.title == "Prompt: cs_copilot_workflow"
     assert fetched.metadata["kind"] == "prompt"
     assert "external reasoner" in fetched.text
     assert "agent selection" in fetched.text
@@ -49,7 +49,7 @@ def test_fetch_renders_chemspace_workflow_prompt(isolated_session):
 
 def test_fetch_round_trips_text_session_artifact(isolated_session):
     with S3.open("notes.md", "w") as handle:
-        handle.write("# Notes\nChemSpace MCP artifact\n")
+        handle.write("# Notes\ncs_copilot MCP artifact\n")
 
     result = search("notes")
     ids = [item.id for item in result.results]
@@ -81,7 +81,7 @@ def test_fetch_skill_catalog(isolated_session):
 
 
 def test_fetch_rejects_unknown_id(isolated_session):
-    with pytest.raises(ValueError, match="Unknown ChemSpace MCP"):
+    with pytest.raises(ValueError, match="Unknown cs_copilot MCP"):
         fetch("missing")
 
 

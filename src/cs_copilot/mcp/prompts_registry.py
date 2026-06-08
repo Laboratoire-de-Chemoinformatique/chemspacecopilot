@@ -1,4 +1,4 @@
-"""Registry mapping ChemSpace prompt constants to MCP prompts.
+"""Registry mapping cs_copilot prompt constants to MCP prompts.
 
 Each entry exposes one of the curated agent / team instruction lists in
 ``src/cs_copilot/agents/prompts.py`` (pure string content, no Agno team
@@ -42,10 +42,10 @@ def _agent_prompt(constant_name: str, mcp_name: str, summary: str) -> PromptSpec
 # the role the prompt asks the external reasoner to adopt.
 _AGENT_PROMPTS: List[PromptSpec] = [
     PromptSpec(
-        mcp_name="chemspace_workflow",
+        mcp_name="cs_copilot_workflow",
         summary=(
-            "Top-level ChemSpace orchestration prompt. Adopt this when driving "
-            "the ChemSpace toolkits as an external reasoner — it covers agent "
+            "Top-level cs_copilot orchestration prompt. Adopt this when driving "
+            "the cs_copilot toolkits as an external reasoner — it covers agent "
             "selection, molecule-vs-peptide routing, and workflow composition."
         ),
         render=lambda: _join_instructions(_load_prompts().AGENT_TEAM_INSTRUCTIONS),

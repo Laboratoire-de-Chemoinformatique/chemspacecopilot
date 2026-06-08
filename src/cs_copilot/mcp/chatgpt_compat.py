@@ -2,7 +2,7 @@
 
 ChatGPT developer mode can call arbitrary MCP tools, but data-only apps,
 company knowledge, and deep research rely on the conventional read-only
-``search`` and ``fetch`` pair. These helpers expose ChemSpace's MCP tool
+``search`` and ``fetch`` pair. These helpers expose cs_copilot's MCP tool
 catalog, prompt catalog, and current session artifacts through that interface
 without importing the optional MCP SDK.
 """
@@ -55,7 +55,7 @@ class _Document:
 
 
 def search(query: str) -> SearchOutput:
-    """Search ChemSpace MCP tools, skills, prompts, and session artifacts."""
+    """Search cs_copilot MCP tools, skills, prompts, and session artifacts."""
 
     scored = _rank_documents(_iter_documents(), query)
     return SearchOutput(
@@ -67,12 +67,12 @@ def search(query: str) -> SearchOutput:
 
 
 def fetch(id: str) -> FetchOutput:
-    """Fetch one ChemSpace MCP catalog entry or session artifact by id."""
+    """Fetch one cs_copilot MCP catalog entry or session artifact by id."""
 
     for doc in _iter_documents():
         if doc.id == id:
             return _fetch_document(doc)
-    raise ValueError(f"Unknown ChemSpace MCP search result id: {id!r}")
+    raise ValueError(f"Unknown cs_copilot MCP search result id: {id!r}")
 
 
 def _iter_documents() -> Iterable[_Document]:
@@ -86,42 +86,42 @@ def _iter_documents() -> Iterable[_Document]:
 def _catalog_documents() -> Iterable[_Document]:
     yield _Document(
         id="catalog:overview",
-        title="ChemSpace Copilot MCP overview",
+        title="cs_copilot MCP overview",
         url="cscopilot://mcp/overview",
         kind="catalog",
         summary=(
-            "Overview of the ChemSpace MCP server, remote transports, tool "
+            "Overview of the cs_copilot MCP server, remote transports, tool "
             "catalog, prompt catalog, and session artifact resources."
         ),
         metadata={},
     )
     yield _Document(
         id="catalog:tools",
-        title="ChemSpace MCP tool catalog",
+        title="cs_copilot MCP tool catalog",
         url="cscopilot://mcp/tools",
         kind="catalog",
-        summary="List of callable ChemSpace MCP tools for full MCP clients.",
+        summary="List of callable cs_copilot MCP tools for full MCP clients.",
         metadata={},
     )
     yield _Document(
         id="catalog:prompts",
-        title="ChemSpace MCP prompt catalog",
+        title="cs_copilot MCP prompt catalog",
         url="cscopilot://mcp/prompts",
         kind="catalog",
-        summary="List of ChemSpace workflow and agent prompts exposed over MCP.",
+        summary="List of cs_copilot workflow and agent prompts exposed over MCP.",
         metadata={},
     )
     yield _Document(
         id="catalog:skills",
-        title="ChemSpace skill catalog",
+        title="cs_copilot skill catalog",
         url="cscopilot://mcp/skills",
         kind="catalog",
-        summary="List of reusable ChemSpace workflow skills and their required tools.",
+        summary="List of reusable cs_copilot workflow skills and their required tools.",
         metadata={},
     )
     yield _Document(
         id="catalog:session",
-        title="ChemSpace session artifacts",
+        title="cs_copilot session artifacts",
         url="cscopilot://session/manifest.json",
         kind="catalog",
         summary="Files, reports, plots, and datasets written by the active session.",
@@ -267,7 +267,7 @@ def _render_catalog(doc_id: str) -> str:
         rows = []
         for doc in _tool_documents():
             rows.append(f"- {doc.metadata['name']}: {doc.summary}")
-        return "ChemSpace MCP tools\n\n" + "\n".join(rows)
+        return "cs_copilot MCP tools\n\n" + "\n".join(rows)
 
     if doc_id == "catalog:prompts":
         rows = []
@@ -277,7 +277,7 @@ def _render_catalog(doc_id: str) -> str:
             if args:
                 suffix = " Arguments: " + ", ".join(str(arg.get("name")) for arg in args)
             rows.append(f"- {doc.metadata['name']}: {doc.summary}{suffix}")
-        return "ChemSpace MCP prompts\n\n" + "\n".join(rows)
+        return "cs_copilot MCP prompts\n\n" + "\n".join(rows)
 
     if doc_id == "catalog:skills":
         rows = []
@@ -287,17 +287,17 @@ def _render_catalog(doc_id: str) -> str:
             if tools:
                 suffix = " Required tools: " + ", ".join(str(tool) for tool in tools)
             rows.append(f"- {doc.metadata['slug']}: {doc.summary}{suffix}")
-        return "ChemSpace skills\n\n" + "\n".join(rows)
+        return "cs_copilot skills\n\n" + "\n".join(rows)
 
     if doc_id == "catalog:session":
         rows = []
         for doc in _resource_documents():
             rows.append(f"- {doc.url}: {doc.summary}")
-        return "ChemSpace session artifacts\n\n" + "\n".join(rows)
+        return "cs_copilot session artifacts\n\n" + "\n".join(rows)
 
     return (
-        "ChemSpace Copilot MCP server\n\n"
-        "Use full ChatGPT developer-mode MCP access to call ChemSpace tools "
+        "cs_copilot MCP server\n\n"
+        "Use full ChatGPT developer-mode MCP access to call cs_copilot tools "
         "directly. Use this search/fetch interface for read-only discovery, "
         "deep research, company knowledge, and citations over the tool catalog, "
         "prompt catalog, and session artifacts."

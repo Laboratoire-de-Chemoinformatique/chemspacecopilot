@@ -1,6 +1,6 @@
-"""Resource access for the ChemSpace MCP server.
+"""Resource access for the cs_copilot MCP server.
 
-Resources expose session artifacts (datasets, plots, reports) that ChemSpace
+Resources expose session artifacts (datasets, plots, reports) that cs_copilot
 toolkits write under the active S3 / local session prefix. We surface them
 under a custom ``cscopilot://`` URI scheme so the S3 and local backends share
 one representation; the actual read is delegated to

@@ -1,6 +1,6 @@
 """Lightweight Agno-agent shim used by the MCP server.
 
-ChemSpace toolkit methods that accept ``agent: Optional[Agent]`` read and
+cs_copilot toolkit methods that accept ``agent: Optional[Agent]`` read and
 write ``agent.session_state`` to share data across calls. In MCP mode there
 is no real Agno agent — the MCP client (Codex / Claude Code) is the reasoning
 engine — so we provide a tiny stand-in that exposes the small subset of the
