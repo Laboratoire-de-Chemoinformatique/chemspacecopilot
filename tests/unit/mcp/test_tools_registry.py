@@ -24,6 +24,7 @@ def test_chembl_fetch_forces_judge_disabled():
     spec = next(s for s in all_specs() if s.mcp_name == "chembl_fetch_compounds")
     assert spec.forces.get("enable_retrieval_judge") is False
     assert spec.forces.get("enable_metadata_judge") is False
+    assert "chembl_prepare_retrieval" in spec.summary
 
 
 def test_every_method_resolves_against_its_toolkit():
@@ -44,6 +45,8 @@ def test_review_sensitive_tools_are_classified_conservatively():
     specs = {spec.mcp_name: spec for spec in all_specs()}
 
     assert specs["chembl_describe_dataset"].read_only is True
+    assert specs["chembl_prepare_retrieval"].read_only is True
+    assert specs["chemspace_plan_analysis"].read_only is True
     assert specs["chem_calculate_tanimoto_similarity"].read_only is True
     assert specs["session_resolve_candidate_set"].read_only is True
     assert specs["robustness_generate_insights"].read_only is True
@@ -96,6 +99,8 @@ def test_direct_mcp_parity_tool_names_are_present():
         "synplanner_plan_synthesis",
         "synplanner_describe_plan",
         "synplanner_get_route_visualizations",
+        "chembl_prepare_retrieval",
+        "chemspace_plan_analysis",
     }
 
     assert expected.issubset(names)
@@ -114,6 +119,7 @@ def test_every_spec_has_discoverability_group():
         "molecular_design",
         "peptide_design",
         "synplanner",
+        "workflow",
     }
 
     groups = {spec.group for spec in all_specs()}

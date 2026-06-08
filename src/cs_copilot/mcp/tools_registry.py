@@ -110,6 +110,36 @@ class _SkillFacade:
         return get_skill(slug).as_dict(include_content=include_content)
 
 
+class _WorkflowPolicyFacade:
+    """Read-only workflow preflight helpers for external MCP reasoners."""
+
+    def prepare_chembl_retrieval(
+        self,
+        user_request: str,
+        session_summary: str | None = None,
+    ) -> dict[str, Any]:
+        """Preflight a ChEMBL request before calling retrieval tools."""
+        from cs_copilot.workflows import prepare_chembl_retrieval
+
+        return prepare_chembl_retrieval(
+            user_request=user_request,
+            session_summary=session_summary,
+        )
+
+    def plan_chemical_space_analysis(
+        self,
+        user_request: str,
+        session_summary: str | None = None,
+    ) -> dict[str, Any]:
+        """Preflight a chemical-space analysis request before mutating tools."""
+        from cs_copilot.workflows import plan_chemical_space_analysis
+
+        return plan_chemical_space_analysis(
+            user_request=user_request,
+            session_summary=session_summary,
+        )
+
+
 class _MolecularDesignerFacade:
     """MCP-safe facade that loads the autoencoder only for generation calls."""
 
@@ -124,9 +154,7 @@ class _MolecularDesignerFacade:
                     MolecularDesignerToolkit,
                 )
 
-                self._inner = MolecularDesignerToolkit(
-                    autoencoder_toolkit=AutoencoderToolkit()
-                )
+                self._inner = MolecularDesignerToolkit(autoencoder_toolkit=AutoencoderToolkit())
             except Exception as exc:  # noqa: BLE001
                 raise _backend_unavailable("Molecular designer", exc) from exc
         return self._inner
@@ -757,22 +785,41 @@ def _pointer_pandas_facade() -> _PointerPandasFacade:
     return _PointerPandasFacade()
 
 
+@functools.lru_cache(maxsize=1)
+def _workflow_policy_facade() -> _WorkflowPolicyFacade:
+    return _WorkflowPolicyFacade()
+
+
 _MOLECULAR_DESIGN = _molecular_designer_facade
 _PEPTIDE_DESIGN = _peptide_designer_facade
 _SYNPLANNER = _factory("cs_copilot.tools.chemistry.synplanner_toolkit:SynPlannerToolkit")
 _PANDAS = _pointer_pandas_facade
 _SKILLS = _skill_facade
+_WORKFLOW_POLICY = _workflow_policy_facade
 
 
 # ChEMBL ---------------------------------------------------------------------
 
 _CHEMBL_SPECS: List[ToolSpec] = [
     ToolSpec(
+        mcp_name="chembl_prepare_retrieval",
+        toolkit_factory=_WORKFLOW_POLICY,
+        method="prepare_chembl_retrieval",
+        summary=(
+            "Preflight a ChEMBL retrieval request. Use this read-only workflow gate "
+            "before chembl_fetch_compounds to identify missing target, organism, "
+            "assay-type, or mechanism clarification."
+        ),
+        read_only=True,
+    ),
+    ToolSpec(
         mcp_name="chembl_fetch_compounds",
         toolkit_factory=_CHEMBL,
         method="fetch_compounds",
         summary=(
-            "Fetch ChEMBL bioactivity data for one or more keyword targets. "
+            "Low-level execution tool that fetches ChEMBL bioactivity data for "
+            "one or more keyword targets. For vague user requests, call "
+            "chembl_prepare_retrieval first and fetch only after can_proceed=true. "
             "In MCP mode the in-process LLM-as-judge filtering is disabled; "
             "use the chembl_retrieval_judge / chembl_metadata_judge prompts "
             "if you want to perform equivalent filtering with this client."
@@ -1036,6 +1083,22 @@ _REPORT_SPECS: List[ToolSpec] = [
         toolkit_factory=_report_facade,
         method="save_rich",
         summary="Save an image-rich (HTML/PDF/Markdown) report into the session layout.",
+    ),
+]
+
+
+# Workflow preflight ---------------------------------------------------------
+
+_WORKFLOW_SPECS: List[ToolSpec] = [
+    ToolSpec(
+        mcp_name="chemspace_plan_analysis",
+        toolkit_factory=_WORKFLOW_POLICY,
+        method="plan_chemical_space_analysis",
+        summary=(
+            "Preflight a broad chemical-space analysis request before ChEMBL, "
+            "GTM, chemotype, or report-generation tools are called."
+        ),
+        read_only=True,
     ),
 ]
 
@@ -1396,6 +1459,7 @@ def iter_specs() -> Iterable[ToolSpec]:
     yield from _with_group(_SIMILARITY_SPECS, "chem")
     yield from _with_group(_SESSION_SPECS, "session")
     yield from _with_group(_REPORT_SPECS, "report")
+    yield from _with_group(_WORKFLOW_SPECS, "workflow")
     yield from _with_group(_ROBUSTNESS_SPECS, "robustness")
     yield from _with_group(_SKILL_SPECS, "skills")
     yield from _with_group(_PANDAS_SPECS, "pandas")

@@ -27,11 +27,16 @@ def test_search_can_find_tool_documentation(isolated_session):
     result = search("chembl fetch compounds")
     ids = [item.id for item in result.results]
     assert "tool:chembl_fetch_compounds" in ids
+    assert "tool:chembl_prepare_retrieval" in ids
 
     fetched = fetch("tool:chembl_fetch_compounds")
     assert fetched.title == "Tool: chembl_fetch_compounds"
     assert "LLM-as-judge" in fetched.text
     assert fetched.metadata["kind"] == "tool"
+
+    preflight = fetch("tool:chembl_prepare_retrieval")
+    assert preflight.title == "Tool: chembl_prepare_retrieval"
+    assert "preflight" in preflight.text.lower()
 
 
 def test_fetch_renders_cs_copilot_workflow_prompt(isolated_session):

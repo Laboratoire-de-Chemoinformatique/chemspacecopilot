@@ -280,11 +280,19 @@ client is trusted and model/API access is intentional.
 
 ### Tools
 
-cs_copilot toolkit methods are wrapped one-to-one as MCP tools, namespaced
-by toolkit (`chembl_*`, `gtm_*`, `chem_*`, `session_*`, `report_*`,
-`robustness_*`). Tool arguments mirror the toolkit method signatures, with
-the `agent` / `session_state` parameters injected by the server and hidden
-from the public schema.
+cs_copilot toolkit methods and workflow preflight helpers are exposed as MCP
+tools, namespaced by toolkit or workflow (`chembl_*`, `chemspace_*`, `gtm_*`,
+`chem_*`, `session_*`, `report_*`, `robustness_*`). Tool arguments mirror the
+toolkit method signatures, with the `agent` / `session_state` parameters
+injected by the server and hidden from the public schema.
+
+For vague ChEMBL or chemical-space requests, call the read-only preflight
+tools before mutating execution tools:
+
+| Tool | Purpose |
+|------|---------|
+| `chembl_prepare_retrieval` | Validate target, organism, assay type, and mechanism requirements before `chembl_fetch_compounds`. |
+| `chemspace_plan_analysis` | Classify broad chemical-space intent and identify missing dataset/workflow details before ChEMBL, GTM, SAR, or report tools. |
 
 The server attaches MCP tool annotations for ChatGPT / Apps approval UX:
 `readOnlyHint=True` is used only for strict lookup, retrieval, listing, or
@@ -303,8 +311,8 @@ The server also exposes two read-only ChatGPT compatibility tools:
 | `fetch` | Fetch a search result by id, returning tool/prompt documentation or text artifact content. |
 
 Use `cscopilot-mcp` once and then `list_tools` from your MCP client to see
-the current set (there are 88 direct cs_copilot tools plus the read-only
-`search` / `fetch` compatibility tools).
+the current set of direct cs_copilot tools plus the read-only `search` /
+`fetch` compatibility tools.
 
 ### Prompts
 

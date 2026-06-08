@@ -17,7 +17,9 @@ from .lazy import require_mcp
 DEFAULT_REQUIRED_TOOLS = (
     "search",
     "fetch",
+    "chembl_prepare_retrieval",
     "chembl_fetch_compounds",
+    "chemspace_plan_analysis",
     "gtm_optimization",
     "report_save_markdown",
     "skill_list",
@@ -30,7 +32,9 @@ DEFAULT_REQUIRED_TOOLS = (
 EXPECTED_READ_ONLY_HINTS = {
     "search": True,
     "fetch": True,
+    "chembl_prepare_retrieval": True,
     "chembl_fetch_compounds": False,
+    "chemspace_plan_analysis": True,
     "gtm_optimization": False,
     "report_save_markdown": False,
     "skill_list": True,
@@ -44,6 +48,8 @@ EXPECTED_INSTRUCTION_SNIPPETS = (
     "external MCP client is the reasoning layer",
     "Do not invoke the Agno team",
     "cs_copilot_workflow",
+    "chembl_prepare_retrieval",
+    "chemspace_plan_analysis",
     "session_*",
     "chembl_retrieval_judge",
     "Review write actions",
@@ -59,13 +65,14 @@ CHATGPT_SMOKE_PROMPT = (
     "Use cs_copilot. Do not use built-in browsing or other tools. "
     "Use only the cs_copilot connector. Search the MCP catalog for "
     "ChEMBL retrieval tools, fetch prompt:cs_copilot_workflow, and explain "
-    "which cs_copilot tool would fetch CDK2 inhibitor activity data. Do not "
-    "run long ChEMBL or GTM jobs yet."
+    "which preflight and retrieval tools would handle CDK2 inhibitor activity "
+    "data. Do not run long ChEMBL or GTM jobs yet."
 )
 CHATGPT_EXPECTED_EVIDENCE = (
     "ChatGPT selects the cs_copilot connector / Developer Mode app.",
     "The transcript shows a `search` tool call against the cs_copilot MCP catalog.",
     "The transcript shows a `fetch` tool call for `prompt:cs_copilot_workflow`.",
+    "The answer names `chembl_prepare_retrieval` as the ChEMBL preflight tool.",
     "The answer names `chembl_fetch_compounds` as the ChEMBL retrieval tool.",
 )
 
@@ -180,10 +187,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--required-tool",
         action="append",
         default=[],
-        help=(
-            "Additional MCP tool name that must be present. Can be supplied "
-            "multiple times."
-        ),
+        help=("Additional MCP tool name that must be present. Can be supplied " "multiple times."),
     )
     parser.add_argument(
         "--json",
@@ -287,15 +291,13 @@ async def _open_streamable_http_client(endpoint_url: str, auth_token: str | None
         raise
 
 
-
 def _validate_server_instructions(instructions: str | None) -> int:
     if not instructions:
         raise CheckError("MCP endpoint did not expose server instructions")
     missing = [snippet for snippet in EXPECTED_INSTRUCTION_SNIPPETS if snippet not in instructions]
     if missing:
         raise CheckError(
-            "MCP endpoint exposed incomplete server instructions; missing: "
-            + ", ".join(missing)
+            "MCP endpoint exposed incomplete server instructions; missing: " + ", ".join(missing)
         )
     if len(instructions) > 512:
         raise CheckError(
@@ -313,7 +315,11 @@ def _annotation_value(tool: object, field: str) -> object:
 
 
 def _validate_tool_annotations(tools: Sequence[object]) -> tuple[int, int, int]:
-    missing = sorted(str(getattr(tool, "name", "<unnamed>")) for tool in tools if getattr(tool, "annotations", None) is None)
+    missing = sorted(
+        str(getattr(tool, "name", "<unnamed>"))
+        for tool in tools
+        if getattr(tool, "annotations", None) is None
+    )
     if missing:
         raise CheckError("MCP endpoint exposed tools without annotations: " + ", ".join(missing))
 
@@ -351,8 +357,7 @@ def _validate_tool_annotations(tools: Sequence[object]) -> tuple[int, int, int]:
         )
     if bad_open_world:
         raise CheckError(
-            "MCP endpoint exposed unexpected open-world tools: "
-            + ", ".join(sorted(bad_open_world))
+            "MCP endpoint exposed unexpected open-world tools: " + ", ".join(sorted(bad_open_world))
         )
 
     mismatched = []
@@ -364,7 +369,9 @@ def _validate_tool_annotations(tools: Sequence[object]) -> tuple[int, int, int]:
         if actual is not expected:
             mismatched.append(f"{name}={actual!r}, expected {expected!r}")
     if mismatched:
-        raise CheckError("MCP endpoint exposed incorrect readOnlyHint values: " + "; ".join(mismatched))
+        raise CheckError(
+            "MCP endpoint exposed incorrect readOnlyHint values: " + "; ".join(mismatched)
+        )
 
     return len(tools), read_only, write
 
@@ -398,8 +405,7 @@ async def _verify_search_fetch(
     missing_text = [snippet for snippet in required_text if snippet not in text]
     if missing_text:
         raise CheckError(
-            f"fetch result {fetch_id!r} was missing required text: "
-            + ", ".join(missing_text)
+            f"fetch result {fetch_id!r} was missing required text: " + ", ".join(missing_text)
         )
     return fetch_id
 
@@ -436,8 +442,7 @@ async def _probe_server(
                     missing = sorted(set(required_tools) - tool_names)
                     if missing:
                         raise CheckError(
-                            "MCP endpoint is missing required tools: "
-                            + ", ".join(missing)
+                            "MCP endpoint is missing required tools: " + ", ".join(missing)
                         )
                     annotated_tool_count, read_only_tool_count, write_tool_count = (
                         _validate_tool_annotations(tools.tools)

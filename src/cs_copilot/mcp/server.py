@@ -27,13 +27,13 @@ _LOCAL_ALLOWED_HOSTS = ("127.0.0.1:*", "localhost:*", "[::1]:*")
 _LOCAL_ALLOWED_ORIGINS = ("http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*")
 
 SERVER_INSTRUCTIONS = (
-    "cs_copilot MCP: the external MCP client is the reasoning layer. "
-    "Do not invoke the Agno team unless `agno_team_run` was explicitly enabled. "
-    "Fetch `catalog:skills` and `cs_copilot_workflow`; then choose `skill_*`, "
-    "`chembl_*`, `gtm_*`, `chem_*`, `pandas_*`, `mol_*`, `peptide_*`, "
-    "`synplanner_*`, `session_*`, `report_*`, or `robustness_*` tools. "
-    "For ChEMBL judge filtering, use `chembl_retrieval_judge` / "
-    "`chembl_metadata_judge` with your own reasoning. Review write actions before approval."
+    "cs_copilot MCP: external MCP client is the reasoning layer. "
+    "Do not invoke the Agno team unless `agno_team_run` is enabled. "
+    "Fetch `catalog:skills` and `cs_copilot_workflow`. "
+    "Use `chembl_prepare_retrieval` / `chemspace_plan_analysis` before vague "
+    "ChEMBL or chemical-space writes. Choose `chembl_*`, `chemspace_*`, "
+    "`gtm_*`, `session_*`, `report_*`, or other tools as needed. "
+    "Use `chembl_retrieval_judge` for ChEMBL row filtering. Review write actions."
 )
 
 

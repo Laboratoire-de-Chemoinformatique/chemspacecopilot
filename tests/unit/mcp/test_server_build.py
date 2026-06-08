@@ -40,6 +40,8 @@ def test_server_instructions_are_chatgpt_orchestration_contract(server):
     assert "external MCP client is the reasoning layer" in SERVER_INSTRUCTIONS
     assert "Do not invoke the Agno team" in SERVER_INSTRUCTIONS
     assert "cs_copilot_workflow" in SERVER_INSTRUCTIONS
+    assert "chembl_prepare_retrieval" in SERVER_INSTRUCTIONS
+    assert "chemspace_plan_analysis" in SERVER_INSTRUCTIONS
     assert "chembl_retrieval_judge" in SERVER_INSTRUCTIONS
     assert "catalog:skills" in SERVER_INSTRUCTIONS
 
@@ -48,7 +50,9 @@ def test_tools_registered(server):
     names = sorted(t.name for t in server._tool_manager.list_tools())
     assert "search" in names
     assert "fetch" in names
+    assert "chembl_prepare_retrieval" in names
     assert "chembl_fetch_compounds" in names
+    assert "chemspace_plan_analysis" in names
     assert "gtm_optimization" in names
     assert "report_save_markdown" in names
     assert "skill_fetch" in names
@@ -98,6 +102,8 @@ def test_all_direct_parity_tools_registered(server):
         "synplanner_plan_synthesis",
         "synplanner_describe_plan",
         "synplanner_get_route_visualizations",
+        "chembl_prepare_retrieval",
+        "chemspace_plan_analysis",
     }
 
     assert expected.issubset(names)
@@ -113,6 +119,8 @@ def test_tool_annotations_for_chatgpt_approval(server):
 
     assert tools["search"].annotations.readOnlyHint is True
     assert tools["fetch"].annotations.readOnlyHint is True
+    assert tools["chembl_prepare_retrieval"].annotations.readOnlyHint is True
+    assert tools["chemspace_plan_analysis"].annotations.readOnlyHint is True
     assert tools["chem_calculate_tanimoto_similarity"].annotations.readOnlyHint is True
     assert tools["chembl_describe_dataset"].annotations.readOnlyHint is True
     assert tools["gtm_get_density_summary"].annotations.readOnlyHint is True
