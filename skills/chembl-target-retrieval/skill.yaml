@@ -8,6 +8,7 @@ tags:
   - retrieval
   - standardization
 required_tools:
+  - chembl_prepare_retrieval
   - chembl_convert_to_chembl_query
   - chembl_fetch_compounds
   - chembl_describe_dataset

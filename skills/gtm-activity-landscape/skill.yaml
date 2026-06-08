@@ -8,6 +8,7 @@ tags:
   - activity-landscape
   - sar
 required_tools:
+  - chemspace_plan_analysis
   - gtm_optimization
   - gtm_save_model_and_data
   - gtm_create_activity_landscapes
