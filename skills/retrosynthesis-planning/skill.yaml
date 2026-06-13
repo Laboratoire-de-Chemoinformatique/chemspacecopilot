@@ -9,11 +9,13 @@ tags:
   - route-planning
 required_tools:
   - session_resolve_session_reference
-optional_tools:
   - synplanner_identify_input
   - synplanner_plan_synthesis
   - synplanner_describe_plan
+optional_tools:
+  - synplanner_convert_name_to_smiles
   - synplanner_get_route_visualizations
+  - report_save_rich
 artifact_outputs:
   - synthesis_plan_json
   - route_visualization_svg

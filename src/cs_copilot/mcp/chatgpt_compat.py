@@ -3,8 +3,8 @@
 ChatGPT developer mode can call arbitrary MCP tools, but data-only apps,
 company knowledge, and deep research rely on the conventional read-only
 ``search`` and ``fetch`` pair. These helpers expose cs_copilot's MCP tool
-catalog, prompt catalog, and current session artifacts through that interface
-without importing the optional MCP SDK.
+catalog, prompt catalog, skill catalog, workflow catalog, and current session
+artifacts through that interface without importing the optional MCP SDK.
 """
 
 from __future__ import annotations
@@ -49,13 +49,13 @@ class _Document:
     id: str
     title: str
     url: str
-    kind: Literal["catalog", "tool", "prompt", "skill", "resource"]
+    kind: Literal["catalog", "tool", "prompt", "skill", "workflow", "resource"]
     summary: str
     metadata: dict[str, Any]
 
 
 def search(query: str) -> SearchOutput:
-    """Search cs_copilot MCP tools, skills, prompts, and session artifacts."""
+    """Search cs_copilot MCP tools, skills, workflows, prompts, and artifacts."""
 
     scored = _rank_documents(_iter_documents(), query)
     return SearchOutput(
@@ -80,6 +80,7 @@ def _iter_documents() -> Iterable[_Document]:
     yield from _tool_documents()
     yield from _prompt_documents()
     yield from _skill_documents()
+    yield from _workflow_documents()
     yield from _resource_documents()
 
 
@@ -117,6 +118,14 @@ def _catalog_documents() -> Iterable[_Document]:
         url="cscopilot://mcp/skills",
         kind="catalog",
         summary="List of reusable cs_copilot workflow skills and their required tools.",
+        metadata={},
+    )
+    yield _Document(
+        id="catalog:workflows",
+        title="cs_copilot workflow catalog",
+        url="cscopilot://mcp/workflows",
+        kind="catalog",
+        summary="List of reusable cs_copilot workflow contracts and orchestration metadata.",
         metadata={},
     )
     yield _Document(
@@ -186,6 +195,29 @@ def _skill_documents() -> Iterable[_Document]:
         )
 
 
+def _workflow_documents() -> Iterable[_Document]:
+    from cs_copilot.workflows import list_workflows
+
+    for spec in list_workflows():
+        yield _Document(
+            id=f"workflow:{spec.slug}",
+            title=f"Workflow: {spec.title}",
+            url=f"cscopilot://mcp/workflows/{spec.slug}",
+            kind="workflow",
+            summary=spec.summary,
+            metadata={
+                "slug": spec.slug,
+                "status": spec.status,
+                "tags": list(spec.tags),
+                "preflight_tools": list(spec.preflight_tools),
+                "required_tools": list(spec.required_tools),
+                "optional_tools": list(spec.optional_tools),
+                "expected_artifacts": list(spec.expected_artifacts),
+                "recommended_prompt": spec.recommended_prompt,
+            },
+        )
+
+
 def _resource_documents() -> Iterable[_Document]:
     from .resources import list_entries
 
@@ -248,6 +280,8 @@ def _fetch_document(doc: _Document) -> FetchOutput:
         text = _render_prompt(doc)
     elif doc.kind == "skill":
         text = _render_skill(doc)
+    elif doc.kind == "workflow":
+        text = _render_workflow(doc)
     elif doc.kind == "resource":
         text = _render_resource(doc)
     else:  # pragma: no cover - exhaustive for type checkers
@@ -289,6 +323,22 @@ def _render_catalog(doc_id: str) -> str:
             rows.append(f"- {doc.metadata['slug']}: {doc.summary}{suffix}")
         return "cs_copilot skills\n\n" + "\n".join(rows)
 
+    if doc_id == "catalog:workflows":
+        rows = []
+        for doc in _workflow_documents():
+            tools = doc.metadata.get("required_tools") or []
+            preflight = doc.metadata.get("preflight_tools") or []
+            suffix_parts = []
+            if preflight:
+                suffix_parts.append(
+                    "Preflight tools: " + ", ".join(str(tool) for tool in preflight)
+                )
+            if tools:
+                suffix_parts.append("Required tools: " + ", ".join(str(tool) for tool in tools))
+            suffix = " " + " ".join(suffix_parts) if suffix_parts else ""
+            rows.append(f"- {doc.metadata['slug']}: {doc.summary}{suffix}")
+        return "cs_copilot workflows\n\n" + "\n".join(rows)
+
     if doc_id == "catalog:session":
         rows = []
         for doc in _resource_documents():
@@ -300,7 +350,7 @@ def _render_catalog(doc_id: str) -> str:
         "Use full ChatGPT developer-mode MCP access to call cs_copilot tools "
         "directly. Use this search/fetch interface for read-only discovery, "
         "deep research, company knowledge, and citations over the tool catalog, "
-        "prompt catalog, and session artifacts."
+        "prompt catalog, skill catalog, workflow catalog, and session artifacts."
     )
 
 
@@ -356,6 +406,29 @@ def _render_skill(doc: _Document) -> str:
         f"Optional tools: {optional}\n"
         f"Expected artifacts: {artifacts}\n\n"
         f"{spec.skill_md}"
+    )
+
+
+def _render_workflow(doc: _Document) -> str:
+    from cs_copilot.workflows import get_workflow
+
+    spec = get_workflow(str(doc.metadata["slug"]))
+    preflight = ", ".join(spec.preflight_tools) or "none"
+    required = ", ".join(spec.required_tools) or "none"
+    optional = ", ".join(spec.optional_tools) or "none"
+    artifacts = ", ".join(spec.expected_artifacts) or "none"
+    prompt = spec.recommended_prompt or "none"
+    return (
+        f"Workflow: {spec.title}\n\n"
+        f"Slug: {spec.slug}\n"
+        f"Status: {spec.status}\n"
+        f"Summary: {spec.summary}\n"
+        f"Recommended prompt: {prompt}\n"
+        f"Preflight tools: {preflight}\n"
+        f"Required tools: {required}\n"
+        f"Optional tools: {optional}\n"
+        f"Expected artifacts: {artifacts}\n\n"
+        f"{spec.workflow_md}"
     )
 
 

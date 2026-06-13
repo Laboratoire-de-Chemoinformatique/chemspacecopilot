@@ -66,6 +66,7 @@ packages = ["src/cs_copilot"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "skills" = "cs_copilot/skills/catalog"
+"workflow_catalog" = "cs_copilot/workflows/catalog"
 
 [project.scripts]
 cscopilot = "cs_copilot.cli:main"

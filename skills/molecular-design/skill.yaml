@@ -8,8 +8,15 @@ tags:
   - analog-generation
   - validation
 required_tools:
+  - mol_list_design_engines
+  - mol_validate_design_candidates
+  - mol_rank_design_candidates
+  - mol_register_design_candidates
   - session_materialize_candidate_set_dataset
 optional_tools:
+  - mol_design_molecules
+  - mol_generate_analogs
+  - mol_interpolate_molecules
   - chem_find_most_similar
   - gtm_project_data
 artifact_outputs:

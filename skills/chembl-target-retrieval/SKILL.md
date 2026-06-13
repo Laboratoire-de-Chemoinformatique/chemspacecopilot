@@ -7,10 +7,11 @@ Use this skill when the user needs ChEMBL bioactivity data for a target, organis
 1. Call `chembl_prepare_retrieval` with the user's request before running retrieval.
 2. If preflight returns `needs_clarification=true`, ask the returned clarification questions and do not call mutating ChEMBL tools yet.
 3. Use `chembl_convert_to_chembl_query` if the clarified request is natural language and needs canonical ChEMBL keyword form.
-4. Call `chembl_fetch_compounds` only after preflight returns `can_proceed=true`. In MCP mode, external reasoning performs any judge-like filtering.
-5. Use `chembl_describe_dataset` on the clean dataset path returned by the retrieval call.
-6. Report the raw dataset, clean dataset, descriptor Parquet, filtered rows if present, and standardization report paths.
-7. Treat `clean_dataset_path` as the downstream dataset. `dataset_path` is only a backward-compatible alias for the clean dataset.
+4. Call `chembl_fetch_compounds` only after preflight returns `can_proceed=true`.
+5. In MCP mode, the in-process ChEMBL LLM-as-judge is disabled. If ambiguous rows need judge-like filtering, fetch and apply `chembl_retrieval_judge` / `chembl_metadata_judge` prompts with the external MCP client's reasoning.
+6. Use `chembl_describe_dataset` on the clean dataset path returned by the retrieval call.
+7. Report the raw dataset, clean dataset, descriptor Parquet, filtered rows if present, and standardization report paths.
+8. Treat `clean_dataset_path` as the downstream dataset. `dataset_path` is only a backward-compatible alias for the clean dataset.
 
 ## Expected Outputs
 

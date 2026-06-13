@@ -8,8 +8,17 @@ tags:
   - latent-space
   - design
 required_tools:
+  - peptide_list_design_engines
+  - peptide_validate_design_candidates
+  - peptide_rank_design_candidates
   - session_materialize_candidate_set_dataset
 optional_tools:
+  - peptide_validate_model_loaded
+  - peptide_get_model_info
+  - peptide_design_peptides
+  - peptide_generate_analogs
+  - peptide_design_interpolation
+  - peptide_load_design_candidates
   - gtm_train_on_latent_space
   - gtm_create_peptide_activity_landscapes
 artifact_outputs:

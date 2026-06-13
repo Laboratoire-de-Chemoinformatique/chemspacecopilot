@@ -32,6 +32,19 @@ def test_skill_tools_work_directly():
     assert "#" in fetched["skill_md"]
 
 
+def test_workflow_tools_work_directly():
+    workflows = _spec("workflow_list").toolkit_factory()
+
+    listed = workflows.list()
+    searched = workflows.search("chembl gtm report")
+    fetched = workflows.fetch("chembl-to-gtm-report")
+
+    assert any(workflow["slug"] == "chembl-to-gtm-report" for workflow in listed)
+    assert searched[0]["slug"] == "chembl-to-gtm-report"
+    assert fetched["slug"] == "chembl-to-gtm-report"
+    assert "report_save_rich" in fetched["workflow_md"]
+
+
 def test_molecular_validate_and_rank_work_without_model_access():
     tools = _spec("mol_validate_design_candidates").toolkit_factory()
 

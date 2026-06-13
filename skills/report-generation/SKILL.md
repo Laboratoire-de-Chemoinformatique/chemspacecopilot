@@ -4,7 +4,7 @@ Use this skill when the user asks for a report, presentation artifact, or consol
 
 ## Procedure
 
-1. Inspect session memory to identify available datasets, GTM maps, landscapes, candidate sets, synthesis plans, and figures.
+1. Inspect session memory with `session_list_session_objects`, `session_list_loadable_session_data`, and/or `session_summarize_session_memory` to identify available datasets, GTM maps, landscapes, candidate sets, synthesis plans, and figures.
 2. Choose the report type from the available session objects and the user request.
 3. Include provenance paths for raw data, clean data, standardization reports, plots, generated candidates, and synthesis artifacts when present.
 4. Prefer `report_save_rich` for image-rich HTML/PDF outputs and `report_save_markdown` for lightweight text reports.

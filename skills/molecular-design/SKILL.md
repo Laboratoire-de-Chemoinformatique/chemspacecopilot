@@ -6,10 +6,13 @@ Use this skill when the user wants small-molecule analogs, scaffold variants, or
 
 1. Confirm the task is small-molecule design, not peptide design.
 2. Resolve the seed compound from the user prompt or session memory.
-3. Prefer high-level molecular design workflows in the Agno team when running inside cs_copilot. The current MCP surface exposes downstream session and GTM tools, but not the full molecular designer toolkit.
-4. Validate generated candidates before presenting structures as final.
-5. Register candidate sets and keep large candidate lists in artifacts rather than chat text.
-6. Use `session_materialize_candidate_set_dataset` before GTM projection or batch retrosynthesis.
+3. Inspect available engines with `mol_list_design_engines`.
+4. In default MCP, use `engine="autoencoder"` for generation. `engine="llm"` is unavailable because `MCPAgentContext.model` is `None` unless trusted `agno_team_run` delegation is explicitly enabled.
+5. Generate candidates with `mol_design_molecules`, `mol_generate_analogs`, or `mol_interpolate_molecules` as appropriate.
+6. Validate generated or user-provided structures with `mol_validate_design_candidates` before presenting structures as final.
+7. Rank validated candidates with `mol_rank_design_candidates`, using seed similarity when a seed SMILES is available.
+8. Persist final candidates with `mol_register_design_candidates` and keep large candidate lists in artifacts rather than chat text.
+9. Use `session_materialize_candidate_set_dataset` before GTM projection or batch retrosynthesis. Use `gtm_project_data` only after a suitable GTM map exists.
 
 ## Expected Outputs
 
