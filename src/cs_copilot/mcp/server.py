@@ -249,9 +249,9 @@ def _register_chatgpt_compat_tools(server: Any, tool_annotations_cls: Any) -> No
         search,
         name="search",
         description=(
-            "Search the cs_copilot MCP tool catalog, prompt catalog, and active "
-            "session artifacts. This read-only compatibility tool is intended "
-            "for ChatGPT data-only apps, company knowledge, and deep research."
+            "Search the cs_copilot MCP tool, prompt, skill, workflow, and active "
+            "session artifact catalogs. This read-only compatibility tool is "
+            "intended for ChatGPT data-only apps, company knowledge, and deep research."
         ),
         annotations=_tool_annotations(tool_annotations_cls, read_only=True),
         structured_output=True,

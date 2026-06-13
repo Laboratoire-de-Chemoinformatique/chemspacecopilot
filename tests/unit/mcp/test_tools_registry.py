@@ -101,6 +101,9 @@ def test_direct_mcp_parity_tool_names_are_present():
         "synplanner_get_route_visualizations",
         "chembl_prepare_retrieval",
         "chemspace_plan_analysis",
+        "workflow_list",
+        "workflow_search",
+        "workflow_fetch",
     }
 
     assert expected.issubset(names)
@@ -131,6 +134,9 @@ def test_new_direct_tool_safety_hints_are_classified():
     specs = {spec.mcp_name: spec for spec in all_specs()}
 
     assert specs["skill_fetch"].read_only is True
+    assert specs["workflow_list"].read_only is True
+    assert specs["workflow_search"].read_only is True
+    assert specs["workflow_fetch"].read_only is True
     assert specs["mol_list_design_engines"].read_only is True
     assert specs["mol_validate_design_candidates"].read_only is True
     assert specs["mol_rank_design_candidates"].read_only is True

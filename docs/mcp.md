@@ -248,13 +248,21 @@ subscription tier.
 
 A runnable command reference lives at `examples/mcp/chatgpt_remote.md`.
 
-## Skills and manifests
+## Skills, workflows, and manifests
 
 The MCP server also exposes the shared cs_copilot skill catalog through the
 ChatGPT-compatible `search` / `fetch` tools. Use `fetch("catalog:skills")`
-to list reusable workflows, then fetch `skill:<slug>` for the full `SKILL.md`
+to list reusable skills, then fetch `skill:<slug>` for the full `SKILL.md`
 procedure and required tool names. The same catalog is available to the Agno
 team through its read-only Skills toolkit.
+
+The MCP server also exposes reusable workflow contracts. Use
+`fetch("catalog:workflows")` or the direct read-only `workflow_list`,
+`workflow_search`, and `workflow_fetch` tools to discover workflow metadata,
+preflight tools, required tools, expected artifacts, and the recommended MCP
+prompt. Workflow contracts are orchestration guidance for the external MCP
+client; they do not execute the Agno team or replace the existing Chainlit
+runtime.
 
 Every MCP toolkit call made after normal MCP bootstrap writes a compact JSON
 run manifest under `workflows/<workflow_id>/manifests/mcp/`. Manifests record
@@ -307,7 +315,7 @@ The server also exposes two read-only ChatGPT compatibility tools:
 
 | Tool | Purpose |
 |------|---------|
-| `search` | Search the cs_copilot MCP tool catalog, prompt catalog, and active session artifacts. |
+| `search` | Search the cs_copilot MCP tool, prompt, skill, workflow, and active session artifact catalogs. |
 | `fetch` | Fetch a search result by id, returning tool/prompt documentation or text artifact content. |
 
 Use `cscopilot-mcp` once and then `list_tools` from your MCP client to see

@@ -1,0 +1,42 @@
+"""Workflow policy and catalog MCP tool specs."""
+
+from __future__ import annotations
+
+from typing import List
+
+from ..facades.workflows import workflow_catalog_facade, workflow_policy_facade
+from ..tool_adapter import ToolSpec
+
+SPECS: List[ToolSpec] = [
+    ToolSpec(
+        mcp_name="chemspace_plan_analysis",
+        toolkit_factory=workflow_policy_facade,
+        method="plan_chemical_space_analysis",
+        summary=(
+            "Preflight a broad chemical-space analysis request before ChEMBL, "
+            "GTM, chemotype, or report-generation tools are called."
+        ),
+        read_only=True,
+    ),
+    ToolSpec(
+        mcp_name="workflow_list",
+        toolkit_factory=workflow_catalog_facade,
+        method="list",
+        summary="List reusable cs_copilot workflow contracts from the local catalog.",
+        read_only=True,
+    ),
+    ToolSpec(
+        mcp_name="workflow_search",
+        toolkit_factory=workflow_catalog_facade,
+        method="search",
+        summary="Search reusable cs_copilot workflow contracts by metadata and tool names.",
+        read_only=True,
+    ),
+    ToolSpec(
+        mcp_name="workflow_fetch",
+        toolkit_factory=workflow_catalog_facade,
+        method="fetch",
+        summary="Fetch one reusable cs_copilot workflow contract, including its markdown body.",
+        read_only=True,
+    ),
+]

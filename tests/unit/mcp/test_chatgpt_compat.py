@@ -85,6 +85,25 @@ def test_fetch_skill_catalog(isolated_session):
     assert "retrosynthesis-planning" in fetched.text
 
 
+def test_search_and_fetch_workflow_documentation(isolated_session):
+    result = search("chembl gtm report workflow")
+    ids = [item.id for item in result.results]
+    assert "workflow:chembl-to-gtm-report" in ids
+
+    fetched = fetch("workflow:chembl-to-gtm-report")
+    assert fetched.title == "Workflow: ChEMBL to GTM report"
+    assert fetched.metadata["kind"] == "workflow"
+    assert "report_save_rich" in fetched.text
+    assert "# ChEMBL To GTM Report" in fetched.text
+
+
+def test_fetch_workflow_catalog(isolated_session):
+    fetched = fetch("catalog:workflows")
+    assert fetched.metadata["kind"] == "catalog"
+    assert "chembl-to-gtm-report" in fetched.text
+    assert "robustness-report" in fetched.text
+
+
 def test_fetch_rejects_unknown_id(isolated_session):
     with pytest.raises(ValueError, match="Unknown cs_copilot MCP"):
         fetch("missing")

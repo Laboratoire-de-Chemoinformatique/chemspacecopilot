@@ -56,6 +56,7 @@ def test_tools_registered(server):
     assert "gtm_optimization" in names
     assert "report_save_markdown" in names
     assert "skill_fetch" in names
+    assert "workflow_fetch" in names
     assert "pandas_create_dataframe" in names
     assert "mol_validate_design_candidates" in names
     assert "peptide_validate_design_candidates" in names
@@ -70,6 +71,9 @@ def test_all_direct_parity_tools_registered(server):
         "skill_list",
         "skill_search",
         "skill_fetch",
+        "workflow_list",
+        "workflow_search",
+        "workflow_fetch",
         "pandas_load_dataframe_from_session",
         "pandas_create_dataframe",
         "pandas_run_operation",
@@ -126,6 +130,7 @@ def test_tool_annotations_for_chatgpt_approval(server):
     assert tools["gtm_get_density_summary"].annotations.readOnlyHint is True
     assert tools["session_resolve_candidate_set"].annotations.readOnlyHint is True
     assert tools["skill_fetch"].annotations.readOnlyHint is True
+    assert tools["workflow_fetch"].annotations.readOnlyHint is True
     assert tools["mol_validate_design_candidates"].annotations.readOnlyHint is True
     assert tools["peptide_validate_design_candidates"].annotations.readOnlyHint is True
     assert tools["synplanner_identify_input"].annotations.readOnlyHint is True
