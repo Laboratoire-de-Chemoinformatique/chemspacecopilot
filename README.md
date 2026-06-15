@@ -220,6 +220,10 @@ server includes read-only
 plus the full cs_copilot tool catalog for full MCP developer-mode clients. Tool
 descriptors include MCP `readOnlyHint` annotations so ChatGPT can distinguish
 pure lookup tools from state-changing cs_copilot workflows.
+By default, LLM-dependent MCP tool paths create `llm_*` tasks for the external
+client to complete. Trusted private deployments can pass
+`--llm-policy agno-model` to load only the configured Agno model for toolkit
+LLM calls, without enabling the Agno team.
 
 Example client configs ship under `examples/mcp/`
 (`claude_code.json`, `codex.toml`, `codex_http.toml`, `chatgpt_remote.md`,

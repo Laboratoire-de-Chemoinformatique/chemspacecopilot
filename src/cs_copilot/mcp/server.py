@@ -33,6 +33,7 @@ SERVER_INSTRUCTIONS = (
     "Use `chembl_prepare_retrieval` / `chemspace_plan_analysis` before vague "
     "ChEMBL or chemical-space writes. Choose `chembl_*`, `chemspace_*`, "
     "`gtm_*`, `session_*`, `report_*`, or other tools as needed. "
+    "Use `llm_*` when a tool returns `needs_external_llm`. "
     "Use `chembl_retrieval_judge` for ChEMBL row filtering. Review write actions."
 )
 

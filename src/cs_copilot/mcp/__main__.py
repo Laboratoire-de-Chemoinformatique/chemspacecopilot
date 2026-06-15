@@ -22,6 +22,7 @@ from .lazy import require_mcp
 from .session import BootstrapConfig, apply_session_id, bootstrap, configure_logging
 
 _TRANSPORTS = ("stdio", "sse", "streamable-http")
+_LLM_POLICIES = ("external", "agno-model", "disabled")
 
 
 def _parse_args(
@@ -171,6 +172,17 @@ def _parse_args(
         help="Logger level for the MCP process (logs to stderr).",
     )
     parser.add_argument(
+        "--llm-policy",
+        default=os.getenv("CS_COPILOT_MCP_LLM_POLICY", "external"),
+        choices=_LLM_POLICIES,
+        help=(
+            "MCP LLM behavior. 'external' stores pending LLM tasks for the MCP "
+            "client to complete; 'agno-model' loads only the configured Agno "
+            "model for in-process toolkit LLM calls; 'disabled' rejects "
+            "LLM-dependent work."
+        ),
+    )
+    parser.add_argument(
         "--no-tools",
         action="store_true",
         help="Skip registering MCP tools (useful for prompt/resource debugging).",
@@ -216,6 +228,7 @@ def main(
         session_id=args.session_id,
         workflow_slug=args.workflow_slug,
         log_level=args.log_level,
+        llm_policy=args.llm_policy,
     )
     configure_logging(config.log_level)
     apply_session_id(config.session_id)

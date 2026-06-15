@@ -20,10 +20,10 @@ def test_mcp_names_are_unique():
     assert not duplicates, f"Duplicate MCP tool names: {duplicates!r}"
 
 
-def test_chembl_fetch_forces_judge_disabled():
+def test_chembl_fetch_uses_policy_facade_without_static_judge_forces():
     spec = next(s for s in all_specs() if s.mcp_name == "chembl_fetch_compounds")
-    assert spec.forces.get("enable_retrieval_judge") is False
-    assert spec.forces.get("enable_metadata_judge") is False
+    assert spec.forces == {}
+    assert spec.method == "fetch_compounds"
     assert "chembl_prepare_retrieval" in spec.summary
 
 
@@ -67,6 +67,11 @@ def test_direct_mcp_parity_tool_names_are_present():
         "skill_list",
         "skill_search",
         "skill_fetch",
+        "llm_create_task",
+        "llm_list_pending_tasks",
+        "llm_get_task",
+        "llm_submit_task_result",
+        "llm_cancel_task",
         "pandas_load_dataframe_from_session",
         "pandas_create_dataframe",
         "pandas_run_operation",
@@ -100,6 +105,8 @@ def test_direct_mcp_parity_tool_names_are_present():
         "synplanner_describe_plan",
         "synplanner_get_route_visualizations",
         "chembl_prepare_retrieval",
+        "chembl_create_external_judge_task",
+        "chembl_submit_external_judge_result",
         "chemspace_plan_analysis",
         "workflow_list",
         "workflow_search",
@@ -118,6 +125,7 @@ def test_every_spec_has_discoverability_group():
         "report",
         "robustness",
         "skills",
+        "llm",
         "pandas",
         "molecular_design",
         "peptide_design",
@@ -137,6 +145,8 @@ def test_new_direct_tool_safety_hints_are_classified():
     assert specs["workflow_list"].read_only is True
     assert specs["workflow_search"].read_only is True
     assert specs["workflow_fetch"].read_only is True
+    assert specs["llm_list_pending_tasks"].read_only is True
+    assert specs["llm_get_task"].read_only is True
     assert specs["mol_list_design_engines"].read_only is True
     assert specs["mol_validate_design_candidates"].read_only is True
     assert specs["mol_rank_design_candidates"].read_only is True
@@ -149,6 +159,11 @@ def test_new_direct_tool_safety_hints_are_classified():
 
     assert specs["pandas_create_dataframe"].read_only is False
     assert specs["pandas_run_operation"].read_only is False
+    assert specs["llm_create_task"].read_only is False
+    assert specs["llm_submit_task_result"].read_only is False
+    assert specs["llm_cancel_task"].read_only is False
+    assert specs["chembl_create_external_judge_task"].read_only is False
+    assert specs["chembl_submit_external_judge_result"].read_only is False
     assert specs["mol_design_molecules"].read_only is False
     assert specs["mol_generate_analogs"].read_only is False
     assert specs["mol_register_design_candidates"].read_only is False

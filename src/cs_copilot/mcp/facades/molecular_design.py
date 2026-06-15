@@ -7,6 +7,31 @@ from typing import Any, List
 
 from .common import backend_unavailable, ensure_llm_engine_available
 
+_MOLECULAR_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "candidates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "smiles": {"type": "string"},
+                    "rationale": {"type": "string"},
+                    "score": {"type": "number"},
+                },
+                "required": ["smiles"],
+            },
+        }
+    },
+    "required": ["candidates"],
+}
+
+
+def _format_constraints(constraints: dict[str, Any] | None) -> str:
+    if not constraints:
+        return "none"
+    return "\n".join(f"- {key}: {value}" for key, value in sorted(constraints.items()))
+
 
 class MolecularDesignerFacade:
     """Load the molecular autoencoder only for generation calls."""
@@ -45,6 +70,43 @@ class MolecularDesignerFacade:
             "default_engine": "autoencoder",
         }
 
+    def _external_design_task(
+        self,
+        *,
+        agent: Any,
+        task_type: str,
+        consumer_tool: str,
+        prompt_text: str,
+        input_payload: dict[str, Any],
+        session_key: str,
+    ) -> dict[str, Any]:
+        task = agent.llm.create_task(
+            task_type=task_type,
+            prompt_name="molecular_designer_agent",
+            prompt_text=prompt_text,
+            input_payload=input_payload,
+            output_schema=_MOLECULAR_OUTPUT_SCHEMA,
+            consumer_tool=consumer_tool,
+            metadata={
+                "session_key": session_key,
+                "next_tools": [
+                    "llm_get_task",
+                    "llm_submit_task_result",
+                    "mol_validate_design_candidates",
+                    "mol_rank_design_candidates",
+                    "mol_register_design_candidates",
+                ],
+            },
+        )
+        return {
+            "status": "needs_external_llm",
+            "llm_policy": getattr(agent, "llm_policy", "external"),
+            "task_id": task["task_id"],
+            "task_type": task["task_type"],
+            "task": task,
+            "resume_tools": task["metadata"]["next_tools"],
+        }
+
     def design_molecules(
         self,
         goal: str,
@@ -64,12 +126,38 @@ class MolecularDesignerFacade:
         _source_tool: str = "design_molecules",
     ) -> Any:
         """Design small-molecule candidates with a selected design engine."""
-        ensure_llm_engine_available(
+        if ensure_llm_engine_available(
             engine,
             agent,
             domain="molecular",
             fallback_engine="autoencoder",
-        )
+        ):
+            prompt = (
+                "Propose valid small-molecule candidates as SMILES.\n"
+                f"Goal: {goal}\n"
+                f"Requested candidates: {n_candidates}\n"
+                f"Seed SMILES: {seed_smiles or 'none'}\n"
+                f"Generation mode: {generation_mode}\n"
+                f"Constraints:\n{_format_constraints(constraints)}\n\n"
+                "Return JSON with a top-level candidates array. Each candidate "
+                "must include a SMILES string and may include rationale and score."
+            )
+            return self._external_design_task(
+                agent=agent,
+                task_type="molecular.design",
+                consumer_tool="mol_design_molecules",
+                prompt_text=prompt,
+                input_payload={
+                    "goal": goal,
+                    "n_candidates": n_candidates,
+                    "seed_smiles": seed_smiles,
+                    "constraints": constraints or {},
+                    "generation_mode": generation_mode,
+                    "include_invalid": include_invalid,
+                    "return_format": return_format,
+                },
+                session_key=session_key,
+            )
         return self._toolkit().design_molecules(
             goal=goal,
             engine=engine,
@@ -103,12 +191,36 @@ class MolecularDesignerFacade:
         session_state: dict[str, Any] | None = None,
     ) -> Any:
         """Generate small-molecule analogs around a seed SMILES."""
-        ensure_llm_engine_available(
+        if ensure_llm_engine_available(
             engine,
             agent,
             domain="molecular",
             fallback_engine="autoencoder",
-        )
+        ):
+            prompt = (
+                "Propose close small-molecule analogs as valid SMILES.\n"
+                f"Seed SMILES: {seed_smiles}\n"
+                f"Goal: {goal}\n"
+                f"Requested analogs: {n_analogs}\n"
+                "Prefer conservative structural changes unless the goal asks "
+                "for broader exploration.\n\n"
+                "Return JSON with a top-level candidates array. Each candidate "
+                "must include a SMILES string and may include rationale and score."
+            )
+            return self._external_design_task(
+                agent=agent,
+                task_type="molecular.analog",
+                consumer_tool="mol_generate_analogs",
+                prompt_text=prompt,
+                input_payload={
+                    "seed_smiles": seed_smiles,
+                    "goal": goal,
+                    "n_analogs": n_analogs,
+                    "include_invalid": include_invalid,
+                    "return_format": return_format,
+                },
+                session_key=session_key,
+            )
         return self._toolkit().generate_analogs(
             seed_smiles=seed_smiles,
             goal=goal,

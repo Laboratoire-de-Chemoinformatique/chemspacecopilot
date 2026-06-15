@@ -122,6 +122,7 @@ Flags:
 | `--session-id` | auto-generated | Storage prefix used as the session root. |
 | `--workflow-slug` | `workflow` | Workflow folder inside the session layout. |
 | `--log-level` | `info` | Logger level (logs to stderr). |
+| `--llm-policy` | `external` | LLM behavior for MCP tools: `external` stores pending `llm_*` tasks for the client, `agno-model` loads only the configured Agno model for toolkit LLM calls, and `disabled` rejects LLM-dependent work. Can also be set with `CS_COPILOT_MCP_LLM_POLICY`. |
 | `--no-tools` | False | Skip MCP tool registration. |
 | `--no-chatgpt-compat` | False | Skip the read-only `search` / `fetch` tools. |
 | `--no-prompts` | False | Skip MCP prompt registration. |
@@ -270,6 +271,22 @@ the runtime, tool name, redacted public arguments, server-forced arguments,
 status, duration, and output summary. They are visible through the existing
 `cscopilot://session/` resource listing.
 
+## LLM policy
+
+The MCP server has one LLM policy shared by every MCP tool:
+
+| Policy | Behavior |
+|--------|----------|
+| `external` | Default. Tools that need LLM reasoning create pending tasks in session state. The MCP client reads them with `llm_get_task`, reasons with its own LLM, and submits results with `llm_submit_task_result` or a domain-specific submit tool. |
+| `agno-model` | Loads only the configured Agno model into `MCPAgentContext.model`. Toolkit LLM calls such as ChEMBL judges and `engine="llm"` design can run in-process, but the Agno team is still not constructed or invoked. |
+| `disabled` | Rejects LLM-dependent work and keeps deterministic/non-LLM tools available. |
+
+The generic task lifecycle tools are `llm_create_task`,
+`llm_list_pending_tasks`, `llm_get_task`, `llm_submit_task_result`, and
+`llm_cancel_task`. Small-molecule and peptide design tools return
+`status: "needs_external_llm"` in default mode when called with
+`engine="llm"`.
+
 ## Private Agno delegation
 
 By default the MCP server keeps external-client reasoning separate from the
@@ -290,8 +307,8 @@ client is trusted and model/API access is intentional.
 
 cs_copilot toolkit methods and workflow preflight helpers are exposed as MCP
 tools, namespaced by toolkit or workflow (`chembl_*`, `chemspace_*`, `gtm_*`,
-`chem_*`, `session_*`, `report_*`, `robustness_*`). Tool arguments mirror the
-toolkit method signatures, with the `agent` / `session_state` parameters
+`chem_*`, `session_*`, `report_*`, `robustness_*`, `llm_*`). Tool arguments mirror
+the toolkit method signatures, with the `agent` / `session_state` parameters
 injected by the server and hidden from the public schema.
 
 For vague ChEMBL or chemical-space requests, call the read-only preflight
@@ -358,16 +375,21 @@ The Chainlit / CLI runtime runs an LLM-as-judge step on `chembl_fetch_compounds`
 results to filter rows pulled in by short / ambiguous keywords. That step
 uses the configured Agno model.
 
-In MCP mode the judge is **disabled by default**: the external reasoner is
-already in the loop, so the in-process judge would be redundant and would
-also break the "the MCP server must not execute the Agno team" invariant.
-The toolkit returns the unfiltered rows and reports
-`judge_status: "disabled"` in the summary.
+In default MCP mode (`--llm-policy external`) the in-process judge is skipped:
+the external MCP client is already the reasoning layer. The toolkit returns
+rows that would otherwise need in-process judging and reports
+`judge_status: "disabled"` / `metadata_judge_status: "disabled"` when relevant.
 
-To recreate the equivalent filtering with the MCP client's own reasoning,
-fetch the `chembl_retrieval_judge` / `chembl_metadata_judge` prompts. They
-accept `target_query`, `keywords`, `organism_filter`, and `items` arguments
-and return the exact template the in-process judge would have used.
+Use `chembl_create_external_judge_task` to create a pending retrieval or
+metadata judge task from the same prompt templates as the in-process judge,
+then submit validated decisions with `chembl_submit_external_judge_result`
+or the generic `llm_submit_task_result`. The parameterised
+`chembl_retrieval_judge` / `chembl_metadata_judge` prompts remain available
+for clients that want to render the prompt directly.
+
+For trusted private deployments, `--llm-policy agno-model` enables the
+existing in-process ChEMBL LLM-as-judge code using the configured model only.
+It does not enable `agno_team_run` and does not instantiate the Agno team.
 
 ## Architectural invariants
 

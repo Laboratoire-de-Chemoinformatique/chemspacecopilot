@@ -18,6 +18,7 @@ from .tool_specs import (
     chemistry,
     design,
     gtm,
+    llm,
     pandas,
     reporting,
     robustness,
@@ -42,6 +43,7 @@ def iter_specs() -> Iterable[ToolSpec]:
     yield from _with_group(session.SPECS, "session")
     yield from _with_group(reporting.SPECS, "report")
     yield from _with_group(workflow.SPECS, "workflow")
+    yield from _with_group(llm.SPECS, "llm")
     yield from _with_group(robustness.SPECS, "robustness")
     yield from _with_group(skills.SPECS, "skills")
     yield from _with_group(pandas.SPECS, "pandas")
