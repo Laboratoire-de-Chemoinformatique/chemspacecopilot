@@ -28,13 +28,13 @@ _LOCAL_ALLOWED_ORIGINS = ("http://127.0.0.1:*", "http://localhost:*", "http://[:
 
 SERVER_INSTRUCTIONS = (
     "cs_copilot MCP: external MCP client is the reasoning layer. "
-    "Do not invoke the Agno team unless `agno_team_run` is enabled. "
-    "Fetch `catalog:skills` and `cs_copilot_workflow`. "
-    "Use `chembl_prepare_retrieval` / `chemspace_plan_analysis` before vague "
-    "ChEMBL or chemical-space writes. Choose `chembl_*`, `chemspace_*`, "
-    "`gtm_*`, `session_*`, `report_*`, or other tools as needed. "
-    "Use `llm_*` when a tool returns `needs_external_llm`. "
-    "Use `chembl_retrieval_judge` for ChEMBL row filtering. Review write actions."
+    "Do not invoke the Agno team unless agno_team_run is enabled. "
+    "Start with mcp_bootstrap and prompt cs_copilot_mcp_workflow; "
+    "cs_copilot_workflow remains legacy. Fetch workflow/skills. "
+    "Use chembl_prepare_retrieval / chemspace_plan_analysis before vague "
+    "ChEMBL or chemical-space writes. Choose chembl_*, gtm_*, session_*, "
+    "report_*, design, or other tools. Use llm_* for needs_external_llm. "
+    "Use chembl_retrieval_judge for row filtering. Review write actions."
 )
 
 

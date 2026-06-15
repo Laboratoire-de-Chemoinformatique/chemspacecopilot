@@ -110,7 +110,7 @@ def test_report_payload_is_machine_readable():
         resource_count=1,
         required_tools=("search", "fetch"),
         fetch_id="tool:chembl_fetch_compounds",
-        workflow_prompt_id="prompt:cs_copilot_workflow",
+        workflow_prompt_id="prompt:cs_copilot_mcp_workflow",
         skill_id="skill:gtm-activity-landscape",
         auth_enabled=True,
         mode="existing-url",
@@ -125,9 +125,9 @@ def test_report_payload_is_machine_readable():
     assert payload["status"] == "passed"
     assert payload["auth"] == "bearer-token"
     assert payload["required_tools"] == ["search", "fetch"]
-    assert payload["workflow_prompt_id"] == "prompt:cs_copilot_workflow"
+    assert payload["workflow_prompt_id"] == "prompt:cs_copilot_mcp_workflow"
     assert payload["skill_id"] == "skill:gtm-activity-landscape"
     assert payload["chatgpt_connector_name"] == "cs_copilot"
     assert "chembl_fetch_compounds" in str(payload["chatgpt_expected_evidence"])
-    assert "fetch prompt:cs_copilot_workflow" in str(payload["chatgpt_smoke_prompt"])
+    assert "fetch prompt:cs_copilot_mcp_workflow" in str(payload["chatgpt_smoke_prompt"])
     assert "ChatGPT app" in str(payload["chatgpt_next"])

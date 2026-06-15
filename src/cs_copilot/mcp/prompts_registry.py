@@ -38,9 +38,44 @@ def _agent_prompt(constant_name: str, mcp_name: str, summary: str) -> PromptSpec
     return PromptSpec(mcp_name=mcp_name, summary=summary, render=_render)
 
 
+def _render_mcp_workflow_prompt() -> str:
+    return _join_instructions(
+        (
+            "You are the external MCP reasoner for cs_copilot.",
+            "Do not delegate to the Agno team unless the private agno_team_run tool is "
+            "explicitly enabled and the user asks for trusted delegation.",
+            "For each new user request, call mcp_bootstrap first with the user request "
+            "and optional workflow_slug if one is known.",
+            "Fetch the recommended workflow and skill documents before calling tools that "
+            "write session artifacts, train models, fetch data, generate candidates, or "
+            "save reports.",
+            "Use chembl_prepare_retrieval before ChEMBL retrieval and "
+            "chemspace_plan_analysis before broad chemical-space or GTM work.",
+            "If mcp_bootstrap or a preflight tool returns clarifying questions, ask those "
+            "questions before calling write tools.",
+            "Call MCP tools directly by name; the agent-style prompts are role guidance, "
+            "not separate workers in default MCP mode.",
+            "Use llm_* task tools when a tool returns status needs_external_llm.",
+            "Treat cscopilot://session resources and session_* tools as the source of "
+            "truth for prior artifacts, datasets, candidates, GTM maps, reports, and "
+            "synthesis plans.",
+            "Review write actions before running them and report saved artifact paths back "
+            "to the user.",
+        )
+    )
+
+
 # Curated agent / workflow prompts. The names are stable; descriptions describe
 # the role the prompt asks the external reasoner to adopt.
 _AGENT_PROMPTS: List[PromptSpec] = [
+    PromptSpec(
+        mcp_name="cs_copilot_mcp_workflow",
+        summary=(
+            "MCP-native top-level orchestration prompt. Use this first when "
+            "driving cs_copilot as an external MCP reasoner."
+        ),
+        render=_render_mcp_workflow_prompt,
+    ),
     PromptSpec(
         mcp_name="cs_copilot_workflow",
         summary=(

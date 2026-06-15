@@ -27,6 +27,15 @@ def test_agent_prompts_render_non_empty_text():
     assert rendered.strip(), "rendered prompt was empty"
 
 
+def test_mcp_workflow_prompt_is_external_reasoner_native():
+    spec = next(s for s in all_specs() if s.mcp_name == "cs_copilot_mcp_workflow")
+    rendered = spec.render()
+
+    assert "external MCP reasoner" in rendered
+    assert "mcp_bootstrap" in rendered
+    assert "Call MCP tools directly" in rendered
+
+
 def test_chembl_retrieval_judge_template_renders():
     spec = next(s for s in all_specs() if s.mcp_name == "chembl_retrieval_judge")
     rendered = spec.render(

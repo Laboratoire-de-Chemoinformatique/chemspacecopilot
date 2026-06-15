@@ -80,7 +80,7 @@ async def _run_existing_url_check(tmp_path: Path) -> None:
         assert report.write_tool_count >= 1
         assert 0 < report.instructions_length <= 512
         assert report.prompt_count >= 1
-        assert report.workflow_prompt_id == "prompt:cs_copilot_workflow"
+        assert report.workflow_prompt_id == "prompt:cs_copilot_mcp_workflow"
         assert report.fetch_id == "tool:chembl_fetch_compounds"
     finally:
         stdout, stderr = await _terminate_process(proc)
@@ -108,15 +108,13 @@ def test_readiness_check_entrypoint(tmp_path, monkeypatch, capsys):
     assert "cs_copilot MCP readiness check passed" in captured.out
     assert "server_instructions: ok" in captured.out
     assert "tool_annotations: ok" in captured.out
-    assert "workflow_prompt: ok (prompt:cs_copilot_workflow)" in captured.out
+    assert "workflow_prompt: ok (prompt:cs_copilot_mcp_workflow)" in captured.out
     assert "search_fetch: ok" in captured.out
     assert "chatgpt_connector_name: cs_copilot" in captured.out
     assert "chatgpt_smoke_prompt:" in captured.out
     assert "chatgpt_connector_name: cs_copilot" in captured.out
     assert "chatgpt_smoke_prompt:" in captured.out
     assert "endpoint_url: http://127.0.0.1:" in captured.out
-
-
 
 
 def test_readiness_check_json_output(tmp_path, monkeypatch, capsys):
@@ -138,10 +136,10 @@ def test_readiness_check_json_output(tmp_path, monkeypatch, capsys):
     assert payload["auth"] == "none"
     assert payload["tool_count"] >= 5
     assert payload["annotated_tool_count"] == payload["tool_count"]
-    assert payload["workflow_prompt_id"] == "prompt:cs_copilot_workflow"
+    assert payload["workflow_prompt_id"] == "prompt:cs_copilot_mcp_workflow"
     assert payload["fetch_id"] == "tool:chembl_fetch_compounds"
     assert payload["chatgpt_connector_name"] == "cs_copilot"
-    assert "fetch prompt:cs_copilot_workflow" in payload["chatgpt_smoke_prompt"]
+    assert "fetch prompt:cs_copilot_mcp_workflow" in payload["chatgpt_smoke_prompt"]
     assert "chembl_fetch_compounds" in "\n".join(payload["chatgpt_expected_evidence"])
 
 
@@ -163,7 +161,7 @@ def test_readiness_check_entrypoint_with_bearer_auth(tmp_path, monkeypatch, caps
     assert "auth: bearer-token" in captured.out
     assert "server_instructions: ok" in captured.out
     assert "tool_annotations: ok" in captured.out
-    assert "workflow_prompt: ok (prompt:cs_copilot_workflow)" in captured.out
+    assert "workflow_prompt: ok (prompt:cs_copilot_mcp_workflow)" in captured.out
     assert "search_fetch: ok" in captured.out
 
 

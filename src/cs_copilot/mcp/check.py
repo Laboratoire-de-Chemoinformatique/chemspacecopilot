@@ -17,6 +17,7 @@ from .lazy import require_mcp
 DEFAULT_REQUIRED_TOOLS = (
     "search",
     "fetch",
+    "mcp_bootstrap",
     "chembl_prepare_retrieval",
     "chembl_fetch_compounds",
     "chemspace_plan_analysis",
@@ -33,6 +34,7 @@ DEFAULT_REQUIRED_TOOLS = (
 EXPECTED_READ_ONLY_HINTS = {
     "search": True,
     "fetch": True,
+    "mcp_bootstrap": True,
     "chembl_prepare_retrieval": True,
     "chembl_fetch_compounds": False,
     "chemspace_plan_analysis": True,
@@ -49,6 +51,8 @@ EXPECTED_READ_ONLY_HINTS = {
 EXPECTED_INSTRUCTION_SNIPPETS = (
     "external MCP client is the reasoning layer",
     "Do not invoke the Agno team",
+    "mcp_bootstrap",
+    "cs_copilot_mcp_workflow",
     "cs_copilot_workflow",
     "chembl_prepare_retrieval",
     "chemspace_plan_analysis",
@@ -66,14 +70,15 @@ CHATGPT_CONNECTOR_DESCRIPTION = (
 CHATGPT_SMOKE_PROMPT = (
     "Use cs_copilot. Do not use built-in browsing or other tools. "
     "Use only the cs_copilot connector. Search the MCP catalog for "
-    "ChEMBL retrieval tools, fetch prompt:cs_copilot_workflow, and explain "
-    "which preflight and retrieval tools would handle CDK2 inhibitor activity "
-    "data. Do not run long ChEMBL or GTM jobs yet."
+    "ChEMBL retrieval tools, fetch prompt:cs_copilot_mcp_workflow, and explain "
+    "how mcp_bootstrap, preflight, and retrieval tools would handle CDK2 "
+    "inhibitor activity data. Do not run long ChEMBL or GTM jobs yet."
 )
 CHATGPT_EXPECTED_EVIDENCE = (
     "ChatGPT selects the cs_copilot connector / Developer Mode app.",
     "The transcript shows a `search` tool call against the cs_copilot MCP catalog.",
-    "The transcript shows a `fetch` tool call for `prompt:cs_copilot_workflow`.",
+    "The transcript shows a `fetch` tool call for `prompt:cs_copilot_mcp_workflow`.",
+    "The answer names `mcp_bootstrap` as the first orchestration tool.",
     "The answer names `chembl_prepare_retrieval` as the ChEMBL preflight tool.",
     "The answer names `chembl_fetch_compounds` as the ChEMBL retrieval tool.",
 )
@@ -464,13 +469,13 @@ async def _probe_server(
                     )
                     workflow_prompt_id = await _verify_search_fetch(
                         session,
-                        query="cs_copilot workflow prompt",
-                        expected_id="prompt:cs_copilot_workflow",
+                        query="mcp workflow prompt",
+                        expected_id="prompt:cs_copilot_mcp_workflow",
                         required_text=(
-                            "Prompt: cs_copilot_workflow",
-                            "external reasoner",
-                            "agent selection",
-                            "session_state",
+                            "Prompt: cs_copilot_mcp_workflow",
+                            "external MCP reasoner",
+                            "mcp_bootstrap",
+                            "Call MCP tools directly",
                         ),
                     )
 

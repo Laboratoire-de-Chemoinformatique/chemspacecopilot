@@ -59,8 +59,10 @@ async def _assert_remote_capabilities(url: str, proc: asyncio.subprocess.Process
                     tool_names = set(tools_by_name)
                     assert "search" in tool_names
                     assert "fetch" in tool_names
+                    assert "mcp_bootstrap" in tool_names
                     assert tools_by_name["search"].annotations.readOnlyHint is True
                     assert tools_by_name["fetch"].annotations.readOnlyHint is True
+                    assert tools_by_name["mcp_bootstrap"].annotations.readOnlyHint is True
                     assert tools_by_name["chembl_fetch_compounds"].annotations.readOnlyHint is False
 
                     search_result = await session.call_tool(
@@ -81,12 +83,12 @@ async def _assert_remote_capabilities(url: str, proc: asyncio.subprocess.Process
 
                     workflow_result = await session.call_tool(
                         "fetch",
-                        {"id": "prompt:cs_copilot_workflow"},
+                        {"id": "prompt:cs_copilot_mcp_workflow"},
                     )
                     workflow_payload = workflow_result.structuredContent
                     assert workflow_payload
-                    assert workflow_payload["id"] == "prompt:cs_copilot_workflow"
-                    assert "external reasoner" in workflow_payload["text"]
+                    assert workflow_payload["id"] == "prompt:cs_copilot_mcp_workflow"
+                    assert "external MCP reasoner" in workflow_payload["text"]
                     assert get_session_id()
                     return
         except Exception as exc:  # noqa: BLE001 - retry until server is ready

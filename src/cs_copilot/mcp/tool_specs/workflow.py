@@ -4,10 +4,21 @@ from __future__ import annotations
 
 from typing import List
 
+from ..facades.bootstrap import mcp_bootstrap_facade
 from ..facades.workflows import workflow_catalog_facade, workflow_policy_facade
 from ..tool_adapter import ToolSpec
 
 SPECS: List[ToolSpec] = [
+    ToolSpec(
+        mcp_name="mcp_bootstrap",
+        toolkit_factory=mcp_bootstrap_facade,
+        method="bootstrap",
+        summary=(
+            "Recommend the MCP-native prompt, workflow contract, skills, "
+            "preflight tools, and next action for a user request."
+        ),
+        read_only=True,
+    ),
     ToolSpec(
         mcp_name="chemspace_plan_analysis",
         toolkit_factory=workflow_policy_facade,
