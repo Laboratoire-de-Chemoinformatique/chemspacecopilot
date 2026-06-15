@@ -13,17 +13,25 @@ def ensure_llm_engine_available(
     *,
     domain: str,
     fallback_engine: str,
-) -> None:
-    """Reject LLM-backed design when the default MCP shim has no model."""
+) -> bool:
+    """Return True when an LLM-backed call should become an external task."""
 
     if str(engine or "").strip().lower() != "llm":
-        return
+        return False
     if getattr(agent, "model", None) is not None:
-        return
+        return False
+    policy = str(getattr(agent, "llm_policy", "external") or "external").strip().lower()
+    if policy == "external" and getattr(agent, "llm", None) is not None:
+        return True
+    if policy == "disabled":
+        raise MCPToolError(
+            f"LLM-backed {domain} design is disabled by MCP llm_policy='disabled'. "
+            f"Choose engine='{fallback_engine}' for deterministic generation."
+        )
     raise MCPToolError(
-        f"LLM-backed {domain} design is unavailable in default MCP because "
-        "MCPAgentContext.model is None. Use agno_team_run or the Agno team "
-        f"runtime for internal-model design, or choose engine='{fallback_engine}'."
+        f"LLM-backed {domain} design requires MCP llm_policy='external' with "
+        f"the LLM broker, or llm_policy='agno-model'. Choose engine='{fallback_engine}' "
+        "for deterministic generation."
     )
 
 

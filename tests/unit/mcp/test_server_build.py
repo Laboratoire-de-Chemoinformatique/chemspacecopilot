@@ -42,8 +42,19 @@ def test_server_instructions_are_chatgpt_orchestration_contract(server):
     assert "cs_copilot_workflow" in SERVER_INSTRUCTIONS
     assert "chembl_prepare_retrieval" in SERVER_INSTRUCTIONS
     assert "chemspace_plan_analysis" in SERVER_INSTRUCTIONS
+    assert "llm_*" in SERVER_INSTRUCTIONS
     assert "chembl_retrieval_judge" in SERVER_INSTRUCTIONS
     assert "catalog:skills" in SERVER_INSTRUCTIONS
+
+
+def test_bootstrap_attaches_default_external_llm_broker(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    apply_session_id("mcp-llm-policy-test")
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-llm-policy-test", workflow_slug="smoke"))
+
+    assert ctx.llm_policy == "external"
+    assert ctx.model is None
+    assert ctx.llm is not None
 
 
 def test_tools_registered(server):
@@ -57,6 +68,8 @@ def test_tools_registered(server):
     assert "report_save_markdown" in names
     assert "skill_fetch" in names
     assert "workflow_fetch" in names
+    assert "llm_list_pending_tasks" in names
+    assert "llm_submit_task_result" in names
     assert "pandas_create_dataframe" in names
     assert "mol_validate_design_candidates" in names
     assert "peptide_validate_design_candidates" in names
@@ -74,6 +87,11 @@ def test_all_direct_parity_tools_registered(server):
         "workflow_list",
         "workflow_search",
         "workflow_fetch",
+        "llm_create_task",
+        "llm_list_pending_tasks",
+        "llm_get_task",
+        "llm_submit_task_result",
+        "llm_cancel_task",
         "pandas_load_dataframe_from_session",
         "pandas_create_dataframe",
         "pandas_run_operation",
@@ -107,6 +125,8 @@ def test_all_direct_parity_tools_registered(server):
         "synplanner_describe_plan",
         "synplanner_get_route_visualizations",
         "chembl_prepare_retrieval",
+        "chembl_create_external_judge_task",
+        "chembl_submit_external_judge_result",
         "chemspace_plan_analysis",
     }
 
@@ -131,6 +151,8 @@ def test_tool_annotations_for_chatgpt_approval(server):
     assert tools["session_resolve_candidate_set"].annotations.readOnlyHint is True
     assert tools["skill_fetch"].annotations.readOnlyHint is True
     assert tools["workflow_fetch"].annotations.readOnlyHint is True
+    assert tools["llm_list_pending_tasks"].annotations.readOnlyHint is True
+    assert tools["llm_get_task"].annotations.readOnlyHint is True
     assert tools["mol_validate_design_candidates"].annotations.readOnlyHint is True
     assert tools["peptide_validate_design_candidates"].annotations.readOnlyHint is True
     assert tools["synplanner_identify_input"].annotations.readOnlyHint is True
@@ -142,6 +164,9 @@ def test_tool_annotations_for_chatgpt_approval(server):
     assert tools["session_summarize_session_memory"].annotations.readOnlyHint is False
     assert tools["report_save_markdown"].annotations.readOnlyHint is False
     assert tools["pandas_create_dataframe"].annotations.readOnlyHint is False
+    assert tools["llm_create_task"].annotations.readOnlyHint is False
+    assert tools["llm_submit_task_result"].annotations.readOnlyHint is False
+    assert tools["llm_cancel_task"].annotations.readOnlyHint is False
     assert tools["mol_design_molecules"].annotations.readOnlyHint is False
     assert tools["peptide_design_peptides"].annotations.readOnlyHint is False
     assert tools["synplanner_plan_synthesis"].annotations.readOnlyHint is False

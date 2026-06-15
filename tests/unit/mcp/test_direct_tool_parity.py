@@ -10,6 +10,7 @@ import pytest
 
 from cs_copilot.mcp.context import MCPAgentContext
 from cs_copilot.mcp.errors import MCPToolError
+from cs_copilot.mcp.llm import LLMBroker
 from cs_copilot.mcp.tool_adapter import build_tool
 from cs_copilot.mcp.tools_registry import all_specs
 from cs_copilot.storage import S3, ensure_output_context
@@ -67,18 +68,148 @@ def test_peptide_validate_and_rank_work_without_model_access():
     assert ranked[-1]["valid"] is False
 
 
-def test_llm_design_engines_fail_clearly_in_default_mcp():
+def test_llm_design_engines_create_external_tasks_in_default_mcp():
     ctx = MCPAgentContext()
+    ctx.llm = LLMBroker(ctx)
     mol_spec = _spec("mol_design_molecules")
     pep_spec = _spec("peptide_design_peptides")
 
     mol_tool = build_tool(mol_spec, mol_spec.toolkit_factory(), ctx)
     pep_tool = build_tool(pep_spec, pep_spec.toolkit_factory(), ctx)
 
-    with pytest.raises(MCPToolError, match="agno_team_run"):
+    mol_result = asyncio.run(mol_tool(goal="design molecules", engine="llm"))
+    pep_result = asyncio.run(pep_tool(goal="design peptides", engine="llm"))
+
+    assert mol_result["status"] == "needs_external_llm"
+    assert mol_result["task_type"] == "molecular.design"
+    assert pep_result["status"] == "needs_external_llm"
+    assert pep_result["task_type"] == "peptide.design"
+    pending = ctx.llm.list_tasks()
+    assert [task["task_type"] for task in pending] == [
+        "molecular.design",
+        "peptide.design",
+    ]
+
+
+def test_llm_design_engines_fail_when_llm_policy_is_disabled():
+    ctx = MCPAgentContext(llm_policy="disabled")
+    ctx.llm = LLMBroker(ctx)
+    mol_spec = _spec("mol_design_molecules")
+    mol_tool = build_tool(mol_spec, mol_spec.toolkit_factory(), ctx)
+
+    with pytest.raises(MCPToolError, match="llm_policy='disabled'"):
         asyncio.run(mol_tool(goal="design molecules", engine="llm"))
-    with pytest.raises(MCPToolError, match="agno_team_run"):
-        asyncio.run(pep_tool(goal="design peptides", engine="llm"))
+
+
+def test_llm_lifecycle_tools_work_directly():
+    ctx = MCPAgentContext()
+    ctx.llm = LLMBroker(ctx)
+
+    create_spec = _spec("llm_create_task")
+    create_tool = build_tool(create_spec, create_spec.toolkit_factory(), ctx)
+    list_spec = _spec("llm_list_pending_tasks")
+    list_tool = build_tool(list_spec, list_spec.toolkit_factory(), ctx)
+    submit_spec = _spec("llm_submit_task_result")
+    submit_tool = build_tool(submit_spec, submit_spec.toolkit_factory(), ctx)
+
+    created = asyncio.run(
+        create_tool(task_type="unit.test", prompt_text="Return JSON.", consumer_tool="unit")
+    )
+    pending = asyncio.run(list_tool())
+    completed = asyncio.run(submit_tool(task_id=created["task_id"], result={"answer": "ok"}))
+
+    assert pending[0]["task_id"] == created["task_id"]
+    assert completed["status"] == "completed"
+    assert completed["result"] == {"answer": "ok"}
+
+
+def test_chembl_external_judge_task_and_submit_work_without_backend_probe():
+    from cs_copilot.mcp.facades.chembl import ChemblMCPFacade
+    from cs_copilot.tools.databases.chembl import ChemblToolkit
+
+    ctx = MCPAgentContext()
+    ctx.llm = LLMBroker(ctx)
+    facade = ChemblMCPFacade()
+    facade._inner = ChemblToolkit.__new__(ChemblToolkit)
+
+    task = facade.create_external_judge_task(
+        judge_type="retrieval",
+        target_query="CDK2",
+        keywords="CDK",
+        organism_filter="Homo sapiens",
+        items=[
+            {
+                "item_id": "item_1",
+                "judge_scope": "protein",
+                "judge_basis": "target_pref_name",
+                "value": "Cyclin-dependent kinase 2",
+                "row_count": 1,
+                "assay_chembl_ids": ["CHEMBL1"],
+                "sample_descriptions": ["CDK2 inhibition"],
+            }
+        ],
+        agent=ctx,
+    )
+    submitted = facade.submit_external_judge_result(
+        task_id=task["task_id"],
+        result={"decisions": [{"item_id": "item_1", "keep": True, "explanation": "match"}]},
+        expected_item_ids=["item_1"],
+        agent=ctx,
+    )
+
+    assert task["prompt_name"] == "chembl_retrieval_judge"
+    assert "Cyclin-dependent kinase 2" in task["prompt_text"]
+    assert submitted["status"] == "completed"
+
+
+def test_chembl_external_judge_tasks_are_created_from_current_dataset(tmp_path, monkeypatch):
+    from cs_copilot.mcp.facades.chembl import ChemblMCPFacade
+    from cs_copilot.tools.databases.chembl import ChemblToolkit
+
+    monkeypatch.chdir(tmp_path)
+    S3.set_session_prefix("sessions/chembl-external-judge")
+    ctx = MCPAgentContext()
+    ctx.llm = LLMBroker(ctx)
+    raw_path = "chembl_raw.csv"
+    with S3.open(raw_path, "w") as handle:
+        handle.write(
+            "query_keywords,target_pref_name,target_organism,target_type,"
+            "assay_chembl_id,description\n"
+            "CDK,Cyclin-dependent kinase 2,Homo sapiens,SINGLE PROTEIN,"
+            "CHEMBL1,CDK2 inhibition\n"
+        )
+    ctx.session_state["session_objects"] = {
+        "current": {"dataset": "ds_001"},
+        "datasets": {
+            "ds_001": {
+                "raw_dataset_path": raw_path,
+                "query_keywords": ["CDK"],
+                "standardization_summary": {
+                    "chembl_retrieval_filtering": {
+                        "judge_status": "disabled",
+                        "suspicious_row_count": 1,
+                        "metadata_judge_status": "disabled",
+                        "metadata_judge_row_count": 1,
+                    }
+                },
+            }
+        },
+    }
+    facade = ChemblMCPFacade()
+    facade._inner = ChemblToolkit.__new__(ChemblToolkit)
+
+    tasks = facade._create_external_judge_tasks_from_current_dataset(
+        target_query="CDK2",
+        organism_filter="Homo sapiens",
+        agent=ctx,
+        session_state=ctx.session_state,
+    )
+
+    assert [task["task_type"] for task in tasks] == [
+        "chembl.retrieval_judge",
+        "chembl.metadata_judge",
+    ]
+    assert len(ctx.llm.list_tasks()) == 2
 
 
 def test_pandas_facade_schema_hides_injected_parameters():

@@ -21,6 +21,7 @@ class BootstrapConfig:
     session_id: Optional[str] = None
     workflow_slug: Optional[str] = None
     log_level: str = "info"
+    llm_policy: str = "external"
 
 
 _LEVELS = {
@@ -72,6 +73,7 @@ def bootstrap(config: BootstrapConfig):
     from cs_copilot.storage import S3, ensure_output_context
 
     from .context import MCPAgentContext, set_current_context
+    from .llm import LLMBroker, normalize_llm_policy
 
     requested = os.environ.get("SESSION_ID", "").strip()
     if requested:
@@ -79,7 +81,15 @@ def bootstrap(config: BootstrapConfig):
         # it even when the storage module had already auto-generated one.
         S3.set_session_prefix(f"sessions/{requested}")
 
-    ctx = MCPAgentContext()
+    llm_policy = normalize_llm_policy(config.llm_policy)
+    model = None
+    if llm_policy == "agno-model":
+        from .llm.agno_model import load_configured_model
+
+        model = load_configured_model()
+
+    ctx = MCPAgentContext(model=model, llm_policy=llm_policy)
+    ctx.llm = LLMBroker(ctx)
     ensure_output_context(ctx.session_state, workflow_slug=config.workflow_slug)
     set_current_context(ctx)
     return ctx
