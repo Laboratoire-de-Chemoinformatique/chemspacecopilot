@@ -163,7 +163,10 @@ def _parse_args(
     parser.add_argument(
         "--workflow-slug",
         default=None,
-        help="Workflow slug stored in the session output layout.",
+        help=(
+            "Workflow slug used only to label the session output layout. It "
+            "does not fetch, inject, or execute a workflow contract."
+        ),
     )
     parser.add_argument(
         "--log-level",

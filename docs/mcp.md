@@ -40,7 +40,7 @@ The check starts a temporary streamable HTTP server, connects with the MCP
 client, verifies the core cs_copilot tools, validates the MCP server
 instructions and ChatGPT-facing tool annotations, lists prompts and resources,
 and uses the ChatGPT-compatible `search` / `fetch` pair to fetch both
-`chembl_fetch_compounds` documentation and the `cs_copilot_workflow`
+`chembl_fetch_compounds` documentation and the `cs_copilot_mcp_workflow`
 orchestration prompt. It also prints ChatGPT connector metadata and a smoke
 prompt with expected evidence for the final connector test. It prints the local
 `http://127.0.0.1:<port>/mcp` endpoint that must be exposed as HTTPS or
@@ -120,7 +120,7 @@ Flags:
 | `--auth-issuer-url` | endpoint URL | Issuer URL advertised in MCP protected-resource metadata. |
 | `--auth-resource-url` | endpoint URL | Public MCP resource URL advertised in auth metadata. Set this to the HTTPS URL seen by remote clients. |
 | `--session-id` | auto-generated | Storage prefix used as the session root. |
-| `--workflow-slug` | `workflow` | Workflow folder inside the session layout. |
+| `--workflow-slug` | `workflow` | Workflow folder inside the session output layout. This labels artifacts/manifests; it does not fetch, inject, or execute a workflow contract. |
 | `--log-level` | `info` | Logger level (logs to stderr). |
 | `--llm-policy` | `external` | LLM behavior for MCP tools: `external` stores pending `llm_*` tasks for the client, `agno-model` loads only the configured Agno model for toolkit LLM calls, and `disabled` rejects LLM-dependent work. Can also be set with `CS_COPILOT_MCP_LLM_POLICY`. |
 | `--no-tools` | False | Skip MCP tool registration. |
@@ -251,6 +251,17 @@ A runnable command reference lives at `examples/mcp/chatgpt_remote.md`.
 
 ## Skills, workflows, and manifests
 
+For full MCP clients, the recommended first call for a new user request is:
+
+```text
+mcp_bootstrap(user_request="<the user's request>")
+```
+
+The read-only bootstrap tool returns the MCP-native prompt to use, any matched
+workflow contract, relevant skill procedures, preflight tools, and the next
+safe action. It is advisory only: it does not mutate session state, execute a
+workflow, or call the Agno team.
+
 The MCP server also exposes the shared cs_copilot skill catalog through the
 ChatGPT-compatible `search` / `fetch` tools. Use `fetch("catalog:skills")`
 to list reusable skills, then fetch `skill:<slug>` for the full `SKILL.md`
@@ -316,6 +327,7 @@ tools before mutating execution tools:
 
 | Tool | Purpose |
 |------|---------|
+| `mcp_bootstrap` | Recommend the MCP-native prompt, workflow contract, skills, preflight tools, and next action for a user request. |
 | `chembl_prepare_retrieval` | Validate target, organism, assay type, and mechanism requirements before `chembl_fetch_compounds`. |
 | `chemspace_plan_analysis` | Classify broad chemical-space intent and identify missing dataset/workflow details before ChEMBL, GTM, SAR, or report tools. |
 
@@ -341,12 +353,13 @@ the current set of direct cs_copilot tools plus the read-only `search` /
 
 ### Prompts
 
-The agent and team instruction sets from `cs_copilot.agents.prompts` are
-exposed as MCP prompts so the client can adopt a cs_copilot "persona":
+The MCP server exposes a native external-client orchestration prompt plus the
+agent and team instruction sets from `cs_copilot.agents.prompts`:
 
 | Prompt | Role |
 |--------|------|
-| `cs_copilot_workflow` | Top-level orchestration. Use this first. |
+| `cs_copilot_mcp_workflow` | MCP-native top-level orchestration. Use this first with `mcp_bootstrap`. |
+| `cs_copilot_workflow` | Legacy team-level orchestration prompt, kept for compatibility. |
 | `chembl_agent` | ChEMBL data retrieval + validation workflow. |
 | `gtm_agent` | GTM build / load / project / sample workflow. |
 | `chemoinformatician_agent` | Scaffold, clustering, SAR analyses. |

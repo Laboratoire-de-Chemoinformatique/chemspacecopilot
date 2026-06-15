@@ -39,12 +39,13 @@ def test_server_instructions_are_chatgpt_orchestration_contract(server):
     assert len(SERVER_INSTRUCTIONS) <= 512
     assert "external MCP client is the reasoning layer" in SERVER_INSTRUCTIONS
     assert "Do not invoke the Agno team" in SERVER_INSTRUCTIONS
+    assert "mcp_bootstrap" in SERVER_INSTRUCTIONS
+    assert "cs_copilot_mcp_workflow" in SERVER_INSTRUCTIONS
     assert "cs_copilot_workflow" in SERVER_INSTRUCTIONS
     assert "chembl_prepare_retrieval" in SERVER_INSTRUCTIONS
     assert "chemspace_plan_analysis" in SERVER_INSTRUCTIONS
     assert "llm_*" in SERVER_INSTRUCTIONS
     assert "chembl_retrieval_judge" in SERVER_INSTRUCTIONS
-    assert "catalog:skills" in SERVER_INSTRUCTIONS
 
 
 def test_bootstrap_attaches_default_external_llm_broker(tmp_path, monkeypatch):
@@ -61,6 +62,7 @@ def test_tools_registered(server):
     names = sorted(t.name for t in server._tool_manager.list_tools())
     assert "search" in names
     assert "fetch" in names
+    assert "mcp_bootstrap" in names
     assert "chembl_prepare_retrieval" in names
     assert "chembl_fetch_compounds" in names
     assert "chemspace_plan_analysis" in names
@@ -84,6 +86,7 @@ def test_all_direct_parity_tools_registered(server):
         "skill_list",
         "skill_search",
         "skill_fetch",
+        "mcp_bootstrap",
         "workflow_list",
         "workflow_search",
         "workflow_fetch",
@@ -150,6 +153,7 @@ def test_tool_annotations_for_chatgpt_approval(server):
     assert tools["gtm_get_density_summary"].annotations.readOnlyHint is True
     assert tools["session_resolve_candidate_set"].annotations.readOnlyHint is True
     assert tools["skill_fetch"].annotations.readOnlyHint is True
+    assert tools["mcp_bootstrap"].annotations.readOnlyHint is True
     assert tools["workflow_fetch"].annotations.readOnlyHint is True
     assert tools["llm_list_pending_tasks"].annotations.readOnlyHint is True
     assert tools["llm_get_task"].annotations.readOnlyHint is True
@@ -187,6 +191,7 @@ def test_agno_team_tool_is_opt_in(tmp_path, monkeypatch):
 
 def test_prompts_registered(server):
     names = sorted(p.name for p in server._prompt_manager.list_prompts())
+    assert "cs_copilot_mcp_workflow" in names
     assert "cs_copilot_workflow" in names
     assert "chembl_retrieval_judge" in names
 

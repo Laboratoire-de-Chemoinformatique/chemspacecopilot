@@ -52,6 +52,18 @@ def test_fetch_renders_cs_copilot_workflow_prompt(isolated_session):
     assert "session_state" in fetched.text
 
 
+def test_fetch_renders_mcp_native_workflow_prompt(isolated_session):
+    result = search("mcp workflow prompt")
+    ids = [item.id for item in result.results]
+    assert "prompt:cs_copilot_mcp_workflow" in ids
+
+    fetched = fetch("prompt:cs_copilot_mcp_workflow")
+    assert fetched.title == "Prompt: cs_copilot_mcp_workflow"
+    assert fetched.metadata["kind"] == "prompt"
+    assert "external MCP reasoner" in fetched.text
+    assert "mcp_bootstrap" in fetched.text
+
+
 def test_fetch_round_trips_text_session_artifact(isolated_session):
     with S3.open("notes.md", "w") as handle:
         handle.write("# Notes\ncs_copilot MCP artifact\n")
@@ -117,6 +129,7 @@ def test_search_finds_new_direct_tool_namespaces(isolated_session):
     assert "tool:mol_validate_design_candidates" in molecular
     assert "tool:peptide_validate_design_candidates" in peptide
     assert "tool:synplanner_identify_input" in synplanner
+    assert "tool:mcp_bootstrap" in [item.id for item in search("mcp bootstrap").results]
 
 
 def test_fetch_renders_new_direct_tool_documentation(isolated_session):

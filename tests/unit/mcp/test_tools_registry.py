@@ -67,6 +67,7 @@ def test_direct_mcp_parity_tool_names_are_present():
         "skill_list",
         "skill_search",
         "skill_fetch",
+        "mcp_bootstrap",
         "llm_create_task",
         "llm_list_pending_tasks",
         "llm_get_task",
@@ -145,6 +146,7 @@ def test_new_direct_tool_safety_hints_are_classified():
     assert specs["workflow_list"].read_only is True
     assert specs["workflow_search"].read_only is True
     assert specs["workflow_fetch"].read_only is True
+    assert specs["mcp_bootstrap"].read_only is True
     assert specs["llm_list_pending_tasks"].read_only is True
     assert specs["llm_get_task"].read_only is True
     assert specs["mol_list_design_engines"].read_only is True
