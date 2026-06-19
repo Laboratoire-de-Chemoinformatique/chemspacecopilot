@@ -90,7 +90,16 @@ See the [Docker guide](docs/getting-started/docker.md) for the full Docker deplo
 
 For file-based configuration, copy `.env.example` to `.env` in the project root:
 
+Before the first local Chainlit run, generate a Chainlit auth secret and copy
+the generated key into `.env` as `CHAINLIT_AUTH_SECRET`:
+
 ```bash
+uv run chainlit create-secret
+```
+
+```bash
+CHAINLIT_AUTH_SECRET=your-generated-key-here
+
 # Required only for the default DeepSeek provider
 DEEPSEEK_API_KEY=your-api-key-here
 
