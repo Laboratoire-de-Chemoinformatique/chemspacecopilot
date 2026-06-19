@@ -187,6 +187,9 @@ uv run chainlit run chainlit_app.py -w
 
 Notes:
 - The bundled `chainlit.toml` currently has `[persistence] enabled = false`.
+- The default local login credentials are username `admin` and password `admin123`
+  (defined in `chainlit_app.py`). Change these before exposing the app beyond
+  local development.
 - The app sets a per-thread title from your first message; you can rename it in the UI.
 
 ### Jupyter Notebook
