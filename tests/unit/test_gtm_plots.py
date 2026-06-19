@@ -456,6 +456,68 @@ def test_save_gtm_landscape_plot_altair_overlays_projected_points(
     assert "projected compound overlay" in result
 
 
+def test_save_gtm_landscape_plot_altair_overlay_keeps_last_node_on_landscape_grid(
+    monkeypatch, tmp_path
+):
+    """Corrected projection coords at N + 0.5 should not expand the overlay grid."""
+
+    landscape_path = tmp_path / "regression.csv"
+    overlay_path = tmp_path / "analogs.csv"
+    pd.DataFrame(
+        {
+            "x": [1, 1, 2, 2],
+            "y": [1, 2, 1, 2],
+            "nodes": [1, 2, 3, 4],
+            "density": [1.0, 2.0, 3.0, 4.0],
+            "filtered_reg_density": [5.0, 6.0, 7.0, 8.0],
+        }
+    ).to_csv(landscape_path, index=False)
+    pd.DataFrame({gtm_operations.SMILES_COLUMN: ["CCO"]}).to_csv(overlay_path, index=False)
+
+    responsibilities = np.array([[0.0, 0.0, 0.0, 1.0]])
+    calls = {}
+
+    monkeypatch.setattr(
+        gtm_operations,
+        "data_load_and_prep",
+        lambda *_args, **_kwargs: (
+            None,
+            pd.DataFrame({gtm_operations.SMILES_COLUMN: ["CCO"]}),
+            None,
+            responsibilities,
+        ),
+    )
+    monkeypatch.setattr(
+        gtm_operations,
+        "encode_molecules",
+        lambda *_args, **_kwargs: pd.DataFrame({gtm_operations.SMILES_COLUMN: ["CCO"]}),
+    )
+    monkeypatch.setattr(
+        gtm_operations,
+        "altair_discrete_regression_landscape",
+        lambda *_args, **_kwargs: alt.Chart(pd.DataFrame({"x": [1], "y": [1]})).mark_rect(),
+    )
+
+    def _fake_overlay(points_table, num_nodes):
+        calls["overlay_table"] = points_table.copy()
+        calls["overlay_num_nodes"] = num_nodes
+        return alt.Chart(pd.DataFrame({"x": [2.5], "y": [2.5]})).mark_circle()
+
+    monkeypatch.setattr(gtm_operations, "_build_projected_points_layer", _fake_overlay)
+    monkeypatch.setattr(gtm_operations, "_write_chart_outputs", lambda *_args, **_kwargs: None)
+
+    gtm_operations.save_gtm_landscape_plot(
+        str(landscape_path),
+        "regression",
+        renderer="altair",
+        overlay_dataset_file=str(overlay_path),
+        gtm_model_file="model.pkl.gz",
+    )
+
+    assert calls["overlay_table"][["x", "y"]].iloc[0].tolist() == [2.5, 2.5]
+    assert calls["overlay_num_nodes"] == 4
+
+
 def test_save_gtm_landscape_plot_altair_adds_marked_node_labels(monkeypatch, tmp_path):
     """Discussed nodes passed as mark_nodes should be added as an Altair label layer."""
 
@@ -574,6 +636,69 @@ def test_save_gtm_landscape_plot_plotly_overlays_projected_points(
     assert calls["scatter"]["marker"]["size"] == gtm_operations.PROJECTED_PLOTLY_POINTS_SIZE
     assert calls["layout"] == {"width": 600, "height": 600}
     assert "projected compound overlay" in result
+
+
+def test_save_gtm_landscape_plot_plotly_projects_overlay_without_altair_cell_offset(
+    monkeypatch, tmp_path
+):
+    """Plotly heatmap cells are centered on integer node coordinates."""
+
+    landscape_path = tmp_path / "plotly_regression.csv"
+    overlay_path = tmp_path / "plotly_analogs.csv"
+    pd.DataFrame(
+        {
+            "x": [1, 1, 2, 2],
+            "y": [1, 2, 1, 2],
+            "nodes": [1, 2, 3, 4],
+            "density": [1.0, 2.0, 3.0, 4.0],
+            "filtered_reg_density": [5.0, 6.0, 7.0, 8.0],
+        }
+    ).to_csv(landscape_path, index=False)
+    pd.DataFrame({gtm_operations.SMILES_COLUMN: ["CCO"]}).to_csv(overlay_path, index=False)
+
+    responsibilities = np.array([[0.0, 0.0, 0.0, 1.0]])
+    calls = {}
+
+    class _DummyFigure:
+        def add_scatter(self, **kwargs):
+            calls["scatter"] = kwargs
+
+        def update_layout(self, **kwargs):
+            calls["layout"] = kwargs
+
+    monkeypatch.setattr(
+        gtm_operations,
+        "data_load_and_prep",
+        lambda *_args, **_kwargs: (
+            None,
+            pd.DataFrame({gtm_operations.SMILES_COLUMN: ["CCO"]}),
+            None,
+            responsibilities,
+        ),
+    )
+    monkeypatch.setattr(
+        gtm_operations,
+        "encode_molecules",
+        lambda *_args, **_kwargs: pd.DataFrame({gtm_operations.SMILES_COLUMN: ["CCO"]}),
+    )
+    monkeypatch.setattr(
+        gtm_operations,
+        "plotly_smooth_regression_landscape",
+        lambda *_args, **_kwargs: _DummyFigure(),
+    )
+    monkeypatch.setattr(gtm_operations, "_write_plotly_outputs", lambda *_args, **_kwargs: True)
+
+    gtm_operations.save_gtm_landscape_plot(
+        str(landscape_path),
+        "regression",
+        renderer="plotly",
+        overlay_dataset_file=str(overlay_path),
+        gtm_model_file="model.pkl.gz",
+    )
+
+    assert calls["scatter"]["x"] == [2.0]
+    assert calls["scatter"]["y"] == [2.0]
+    assert calls["layout"] == {"width": 600, "height": 600}
 
 
 def test_save_gtm_landscape_plot_plotly_query_is_rejected(tmp_path):

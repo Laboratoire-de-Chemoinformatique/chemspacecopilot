@@ -260,7 +260,13 @@ class TestDetectCachedModels:
 
     def test_detect_cached_models_structure(self):
         result = _detect_cached_models()
-        assert set(result.keys()) == {"autoencoder", "peptide_designer", "gtm", "dbaasp_data"}
+        assert set(result.keys()) == {
+            "autoencoder",
+            "peptide_designer",
+            "peptide_landscape",
+            "gtm",
+            "dbaasp_data",
+        }
         for v in result.values():
             assert isinstance(v, bool)
 
@@ -281,6 +287,7 @@ class TestBuildRecommendations:
             "cached_models": {
                 "autoencoder": True,
                 "peptide_designer": True,
+                "peptide_landscape": True,
                 "gtm": True,
                 "dbaasp_data": True,
             },
@@ -299,6 +306,7 @@ class TestBuildRecommendations:
             "cached_models": {
                 "autoencoder": False,
                 "peptide_designer": False,
+                "peptide_landscape": False,
                 "gtm": False,
                 "dbaasp_data": False,
             },
@@ -318,6 +326,7 @@ class TestBuildRecommendations:
             "cached_models": {
                 "autoencoder": True,
                 "peptide_designer": True,
+                "peptide_landscape": True,
                 "gtm": True,
                 "dbaasp_data": True,
             },

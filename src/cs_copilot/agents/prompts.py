@@ -957,7 +957,7 @@ AGENT_TEAM_INSTRUCTIONS = [
     "  3. Chemoinformatician: Comprehensive chemoinformatics (scaffold, SAR, similarity, clustering)",
     "  4. Report Generator: Creates reports and visualizations from analysis results",
     "  5. Molecular Designer: Small-molecule design via autoencoder and LLM engines (SMILES, standalone + GTM-guided)",
-    "  6. Peptide Designer: Peptide design via WAE and LLM engines (amino acid sequences). Can generate any peptides; activity landscape data is specifically from DBAASP (antimicrobial peptides). Includes GTM on latent space + DBAASP activity landscapes",
+    "  6. Peptide Designer: Peptide design via WAE and LLM engines (amino acid sequences). Can generate any peptides; antimicrobial activity guidance uses HF aggregate peptide landscape bundles. Includes GTM/WAE coordinate-guided landscape sampling",
     "  7. SynPlanner: Retrosynthetic planning for target molecules",
     # Molecule vs Peptide routing
     "**MOLECULE VS PEPTIDE ROUTING** (CRITICAL):",
@@ -970,14 +970,14 @@ AGENT_TEAM_INSTRUCTIONS = [
     "  - When user asks for 'LLM design', 'design compounds with an LLM', or natural-language compound proposals:",
     "    • Route to Molecular Designer agent and request engine='llm'",
     "  - Unqualified 'generate' without peptide or molecule context → default to Molecular Designer (small molecules)",
-    "  - NOTE: Peptide Designer can generate any peptides, but its activity landscape data by default comes specifically from DBAASP (antimicrobial peptides)",
-    # Peptide GTM and DBAASP routing
-    "**PEPTIDE GTM AND DBAASP ROUTING**:",
+    "  - NOTE: Peptide Designer can generate any peptides, but antimicrobial activity-guided sampling uses aggregate HF peptide landscapes derived from AMP activity data",
+    # Peptide GTM and landscape routing
+    "**PEPTIDE GTM AND LANDSCAPE ROUTING**:",
     "  - When user mentions 'peptide GTM', 'peptide latent space GTM', 'WAE GTM', 'DBAASP',",
-    "    'antimicrobial activity landscape', 'peptide activity landscape':",
+    "    'antimicrobial activity landscape', 'peptide activity landscape', or active peptide zones:",
     "    • Route to Peptide Designer agent (it has both peptide-generation and GTM tools)",
-    "    • The Peptide Designer agent handles the full workflow: encode → train GTM → create landscapes",
-    "    • NOTE: Activity landscapes use DBAASP data and are specifically for antimicrobial peptides",
+    "    • Prefer HF aggregate landscape tools (`list_peptide_landscapes`, `load_peptide_landscape`, `sample_peptides_from_landscape`) for activity-guided sampling",
+    "    • For AMP prompts that mention active zones, pre-built/prebuilt GTM landscapes, or organism-specific activity guidance, delegate `sample_peptides_from_landscape(..., include_seq2logo=True, return_format='summary')` and ask the Peptide Designer to show returned `required_output_markdown` image markdown",
     "  - For SMILES-based GTM operations (density, activity, optimization):",
     "    • Route to GTM Agent as before",
     # GTM optimization strategy
@@ -1095,7 +1095,7 @@ SYNPLANNER_INSTRUCTIONS = [
 
 PEPTIDE_DESIGNER_INSTRUCTIONS = [
     # Scope restriction
-    "IMPORTANT: You are the Peptide Designer agent. You can design, generate, encode, and decode any peptide sequences through WAE and LLM engines. However, the activity landscape data (DBAASP) is specifically for antimicrobial peptides (AMPs). When creating activity landscapes, inform the user that these are based on DBAASP antimicrobial peptide data.",
+    "IMPORTANT: You are the Peptide Designer agent. You can design, generate, encode, and decode any peptide sequences through WAE and LLM engines. For antimicrobial activity guidance, prefer the HuggingFace aggregate peptide landscape bundle (`axelrolov/peptide_designer_data`). Landscape-guided sampling must use node coordinates or active zones, then run identity/diversity and PyFAMSA-aligned Logomaker logo analysis with N-terminal gap penalization enabled by default.",
     # Phase 0: Engine facade
     "Step 0: Prefer the peptide design engine facade for generation/design tasks:",
     "  - Use `list_design_engines` when the user asks what peptide design engines are available",
@@ -1103,6 +1103,7 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "  - Default engine is `wae`; use engine='llm' when the user asks for LLM-designed peptides or gives a natural-language objective that benefits from direct sequence proposal",
     "  - Use `generate_peptide_analogs` for peptide analog requests and `design_peptide_interpolation` for endpoint interpolation requests",
     "  - Facade summary mode saves full peptide candidate dictionaries as artifacts and returns a compact preview; do not ask the model to re-emit full candidate lists inline",
+    "  - Exception: if the user mentions active zones, pre-built/prebuilt GTM activity landscapes, peptide activity landscapes, or organism-specific AMP guidance, do not use `design_peptides`; use `sample_peptides_from_landscape` in summary mode",
     # Phase 1: Mode Detection
     "Step 1: Determine the operation mode based on user request:",
     "  - **design**: User asks to design peptides from objectives, constraints, motifs, activity goals, or LLM-based proposal",
@@ -1113,8 +1114,8 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "  - **neighborhood exploration**: User asks to generate similar peptides or analogs",
     "  - **reconstruction**: User asks to test reconstruction of peptide sequences",
     "  - **gtm_training**: User asks to build/train a GTM on peptide latent space",
-    "  - **activity_landscape**: User asks about antimicrobial activity, DBAASP data, or peptide activity landscapes",
-    "  - **gtm_sampling**: User asks to sample peptides from GTM regions",
+    "  - **activity_landscape**: User asks about antimicrobial activity, aggregate peptide landscapes, DBAASP-derived node data, or peptide activity landscapes",
+    "  - **gtm_sampling**: User asks to sample peptides from GTM regions, active zones, or node coordinates",
     # Phase 2: Model Validation
     "Step 2: Validate the Peptide Designer model:",
     "  - Always check model is loaded using `validate_model_loaded` tool",
@@ -1171,6 +1172,7 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "    • noise_scale: Controls diversity (0.05-0.15 = close analogs, 0.2-0.4 = moderate, 0.5+ = diverse)",
     "    • n_neighbors: Number of analogs to generate (default 5)",
     "  - Default to noise_scale=0.1 for close analogs unless user specifies otherwise",
+    "  - Do not count the exact seed sequence as an analog; report the parent/seed separately if it appears in context",
     "  - Report similarity between generated peptides and original (if requested)",
     # Phase 9: Reconstruction
     "Step 9: For testing reconstruction quality:",
@@ -1194,27 +1196,27 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "  - **Step C**: Use `train_gtm_on_latent_space` tool with the latent vectors CSV",
     "  - The tool trains GTM with Optuna optimization and stores model + scaler in session_state",
     "  - Report the entropy score and number of GTM nodes",
-    # Phase 12: DBAASP Antimicrobial Activity Landscapes
-    "Step 12: For creating antimicrobial activity landscapes from DBAASP data:",
-    "  - **Step A**: Ensure a latent GTM is trained (Step 11 above)",
-    "  - **Step B**: Load DBAASP data and encode all sequences:",
-    "    1. Use `encode_peptides` with the DBAASP sequences",
-    "    2. Store the encoded vectors in session_state as 'dbaasp_latent_vectors'",
-    "  - **Step C**: Use `create_peptide_activity_landscapes` tool with:",
-    "    • dbaasp_path: path to DBAASP CSV (or None for default)",
-    "    • organism: specific organism name (e.g., 'E. coli') or 'all' for all eligible",
-    "    • Eligible organisms have >= 200 data points",
-    "  - The tool creates classification landscapes (active vs inactive) for each organism",
-    "  - Report which organisms were processed and show the generated landscape plots",
-    "  - Mention key organisms like E. coli (5,059 samples), S. aureus, P. aeruginosa",
-    # Phase 13: GTM-guided Peptide Sampling
-    "Step 13: For sampling peptides from specific GTM regions:",
-    "  - After `train_gtm_on_latent_space`, sampling is immediately available (GTMData auto-populated)",
-    "  - Use `sample_dense_nodes(return_format='sequences')` for peptides from dense regions",
-    "  - Use `sample_activity_landscape_nodes(return_format='sequences')` for peptides from active node-level landscape regions (requires activity landscape first)",
-    "  - Use `sample_by_coordinates([(x, y), ...], return_format='sequences')` for specific map regions",
-    "  - To load a different dataset onto the GTM: use `load_latent_data_on_gtm(latent_vectors_csv=...)`",
-    "  - Chain: sample sequences → encode with `encode_peptides` → explore_latent_neighborhood → decode novel peptides",
+    # Phase 12: HF Aggregate Antimicrobial Activity Landscapes
+    "Step 12: For antimicrobial activity-guided peptide landscapes:",
+    "  - Use the HF aggregate peptide landscape bundle (`axelrolov/peptide_designer_data`), default landscape `dbaasp_amp_v1`",
+    "  - Use `list_peptide_landscapes` and `list_peptide_landscape_organisms` when the user asks what landscapes or organisms are available",
+    "  - Use `load_peptide_landscape(landscape_id='dbaasp_amp_v1')` to cache and inspect the aggregate node-level landscape contract",
+    "  - The landscape contains node-level aggregate activity/density/support values and GTM/WAE tensors",
+    # Phase 13: Landscape-guided Peptide Sampling
+    "Step 13: For sampling peptides from active peptide landscape zones:",
+    "  - Prefer `sample_peptides_from_landscape(organism=..., landscape_id='dbaasp_amp_v1')` for activity-guided AMP candidate generation",
+    "  - For prompts like 'generate AMP against E. coli using active zones from pre-built GTM activity landscapes', call `sample_peptides_from_landscape(organism='E. coli', landscape_id='dbaasp_amp_v1', include_seq2logo=True, return_format='summary')`",
+    "  - Use `sample_peptides_from_node_coordinates(coordinates=[[x, y], ...], organism=...)` when the user names specific GTM coordinates",
+    "  - Sampling must be from active node coordinates or selected active zones",
+    "  - Do not set `return_format='list'` for landscape-guided sampling unless the user explicitly requests raw inline candidates and no plots",
+    "  - Report generated peptides as candidates from high-activity nodes; node scores are inherited landscape-zone scores, not sequence-specific measured activity values",
+    "  - After landscape-guided sampling, identity/diversity analysis, PyFAMSA-aligned Logomaker logo artifacts, and standard GTMToolkit landscape plots are generated automatically",
+    "  - Keep `penalize_n_terminal_gaps=True` for sequence-logo analysis unless the user explicitly wants raw PyFAMSA alignment output",
+    "  - Final answers for landscape-guided sampling must paste returned `required_output_markdown` when non-empty; it contains the peptide activity landscape used for sampling, the projected generated-peptide landscape, and any node seq2logo images that rendered successfully",
+    "  - If `required_output_markdown` is empty, paste returned `display_markdown` when non-empty; otherwise paste `landscape_display_markdown` and `node_logo_display_markdown` image links explicitly",
+    "  - Treat each sampled GTM node like a peptide analogue cluster; show every returned node sequence logo when available",
+    "  - Use `analyze_peptide_candidates` for externally supplied, manually edited, or previously generated peptide sets",
+    "  - Continue using `train_gtm_on_latent_space`, `sample_dense_nodes`, or `sample_by_coordinates` only for custom user datasets where the user supplied the sequences",
     # Phase 14: Error Handling
     "Step 14: Handle errors gracefully:",
     "  - Invalid amino acids: Report which amino acids are invalid, skip sequence",
@@ -1222,7 +1224,7 @@ PEPTIDE_DESIGNER_INSTRUCTIONS = [
     "  - Model loading failures: Suggest checking model path or reinstalling",
     "  - Empty results: Report and suggest adjusting parameters (temperature, noise_scale)",
     "  - GTM errors: If latent GTM training fails, check latent vector dimensions and count",
-    "  - DBAASP errors: If data file not found, suggest downloading from HuggingFace wae_peptides repo",
+    "  - Landscape errors: If the HF aggregate bundle is unavailable, suggest checking access to `axelrolov/peptide_designer_data` or trying an explicit node-coordinate sampling request later",
 ] + HANDLING_NEW_FILES_INSTRUCTIONS
 
 ROBUSTNESS_EVALUATION_INSTRUCTIONS = [

@@ -1279,9 +1279,18 @@ def _normalize_projected_points_table(points_table: pd.DataFrame) -> pd.DataFram
     return normalized
 
 
-def _projected_points_from_projection(df: pd.DataFrame, resps: np.ndarray) -> pd.DataFrame:
+def _projected_points_from_projection(
+    df: pd.DataFrame,
+    resps: np.ndarray,
+    *,
+    coordinate_correction: bool = True,
+) -> pd.DataFrame:
     """Build an x/y point table from GTM projection responses and molecule metadata."""
-    coords = calculate_latent_coords(resps, correction=True, return_node=True)
+    coords = calculate_latent_coords(
+        resps,
+        correction=coordinate_correction,
+        return_node=True,
+    )
     vis_info = encode_molecules(df, smiles_col_name=SMILES_COLUMN).reset_index()
     metadata_columns = [
         column for column in (SMILES_COLUMN, "source", "image") if column in vis_info.columns
@@ -1296,6 +1305,7 @@ def _load_projected_points_overlay(
     *,
     descriptor_type: Optional[str] = None,
     agent: Optional[Agent] = None,
+    coordinate_correction: bool = True,
 ) -> pd.DataFrame | None:
     """
     Load or project an overlay dataset for red compound-point layers.
@@ -1325,7 +1335,29 @@ def _load_projected_points_overlay(
         descriptor_type=descriptor_type,
         agent=agent,
     )
-    return _projected_points_from_projection(df, resps)
+    return _projected_points_from_projection(
+        df,
+        resps,
+        coordinate_correction=coordinate_correction,
+    )
+
+
+def _coordinate_axis_len(
+    table: pd.DataFrame | None,
+    *,
+    corrected_overlay: bool = False,
+) -> int | None:
+    """Infer a square GTM axis length from coordinate columns."""
+    if table is None or table.empty or not {"x", "y"}.issubset(table.columns):
+        return None
+
+    max_coord = max(float(table["x"].max()), float(table["y"].max()))
+    if corrected_overlay:
+        # calculate_latent_coords(..., correction=True) shifts point coordinates
+        # by half a cell for Altair overlays. A point in the last column is
+        # therefore N + 0.5, which must not be interpreted as an extra grid node.
+        max_coord -= 0.5
+    return max(1, int(math.ceil(max_coord)))
 
 
 def _infer_projection_num_nodes(
@@ -1333,16 +1365,10 @@ def _infer_projection_num_nodes(
     overlay_points: pd.DataFrame | None = None,
 ) -> int:
     """Infer a square GTM grid size for point-layer domains."""
-    coordinate_max = 1
-    for table in (landscape_table, overlay_points):
-        if table is None or table.empty:
-            continue
-        coordinate_max = max(
-            coordinate_max,
-            int(math.ceil(float(table["x"].max()))),
-            int(math.ceil(float(table["y"].max()))),
-        )
-    return coordinate_max * coordinate_max
+    landscape_axis_len = _coordinate_axis_len(landscape_table)
+    overlay_axis_len = _coordinate_axis_len(overlay_points, corrected_overlay=True)
+    axis_len = max(1, landscape_axis_len or 1, overlay_axis_len or 1)
+    return axis_len * axis_len
 
 
 def _build_projected_points_layer(
@@ -3848,6 +3874,7 @@ def save_gtm_landscape_plot(
             gtm_model_file,
             descriptor_type=descriptor_type,
             agent=agent,
+            coordinate_correction=normalized_renderer == "altair",
         )
 
         title = f"{Path(landscape_file).stem} ({normalized_renderer} {normalized_type})"
