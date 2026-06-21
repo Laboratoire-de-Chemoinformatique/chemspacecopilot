@@ -257,10 +257,19 @@ For full MCP clients, the recommended first call for a new user request is:
 mcp_bootstrap(user_request="<the user's request>")
 ```
 
-The read-only bootstrap tool returns the MCP-native prompt to use, any matched
-workflow contract, relevant skill procedures, preflight tools, and the next
-safe action. It is advisory only: it does not mutate session state, execute a
-workflow, or call the Agno team.
+The read-only bootstrap tool is an organization step. It returns the
+MCP-native prompt to use, matched workflow and skill documents to fetch,
+read-only preflight tools to run, and an ordered action plan. It is advisory
+only: it does not mutate session state, execute a workflow, or call the Agno
+team.
+
+Bootstrap-level questions are limited to bootstrap blockers such as an empty
+request or an unknown explicit workflow slug. Domain questions belong to the
+preflight tools. If `chembl_prepare_retrieval` or
+`chemspace_plan_analysis` returns `needs_clarification=true`, ask the returned
+questions before calling mutating tools. Do not infer missing target, organism,
+assay type, mechanism, analysis intent, dataset source, or workflow details
+just to avoid asking the user.
 
 The MCP server also exposes the shared cs_copilot skill catalog through the
 ChatGPT-compatible `search` / `fetch` tools. Use `fetch("catalog:skills")`
@@ -327,7 +336,7 @@ tools before mutating execution tools:
 
 | Tool | Purpose |
 |------|---------|
-| `mcp_bootstrap` | Recommend the MCP-native prompt, workflow contract, skills, preflight tools, and next action for a user request. |
+| `mcp_bootstrap` | Recommend the MCP-native prompt, workflow contract, skills, preflight tools, and ordered action plan for a user request. |
 | `chembl_prepare_retrieval` | Validate target, organism, assay type, and mechanism requirements before `chembl_fetch_compounds`. |
 | `chemspace_plan_analysis` | Classify broad chemical-space intent and identify missing dataset/workflow details before ChEMBL, GTM, SAR, or report tools. |
 
