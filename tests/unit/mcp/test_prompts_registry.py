@@ -34,6 +34,7 @@ def test_mcp_workflow_prompt_is_external_reasoner_native():
     assert "external MCP reasoner" in rendered
     assert "mcp_bootstrap" in rendered
     assert "Call MCP tools directly" in rendered
+    assert "Do not invent missing target" in rendered
 
 
 def test_chembl_retrieval_judge_template_renders():

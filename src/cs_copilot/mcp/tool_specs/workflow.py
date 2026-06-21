@@ -15,7 +15,7 @@ SPECS: List[ToolSpec] = [
         method="bootstrap",
         summary=(
             "Recommend the MCP-native prompt, workflow contract, skills, "
-            "preflight tools, and next action for a user request."
+            "preflight tools, and ordered action plan for a user request."
         ),
         read_only=True,
     ),

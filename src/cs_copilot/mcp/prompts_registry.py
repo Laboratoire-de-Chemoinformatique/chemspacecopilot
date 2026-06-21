@@ -46,13 +46,15 @@ def _render_mcp_workflow_prompt() -> str:
             "explicitly enabled and the user asks for trusted delegation.",
             "For each new user request, call mcp_bootstrap first with the user request "
             "and optional workflow_slug if one is known.",
-            "Fetch the recommended workflow and skill documents before calling tools that "
-            "write session artifacts, train models, fetch data, generate candidates, or "
-            "save reports.",
+            "Treat mcp_bootstrap as an organization step: fetch its recommended prompt, "
+            "workflow, and skill documents, then run its listed read-only preflight tools.",
             "Use chembl_prepare_retrieval before ChEMBL retrieval and "
             "chemspace_plan_analysis before broad chemical-space or GTM work.",
-            "If mcp_bootstrap or a preflight tool returns clarifying questions, ask those "
+            "If bootstrap itself returns bootstrap_questions, ask them before continuing.",
+            "If a preflight tool returns needs_clarification=true, ask the returned "
             "questions before calling write tools.",
+            "Do not invent missing target, organism, assay type, mechanism, analysis "
+            "intent, dataset source, or workflow details just to avoid asking the user.",
             "Call MCP tools directly by name; the agent-style prompts are role guidance, "
             "not separate workers in default MCP mode.",
             "Use llm_* task tools when a tool returns status needs_external_llm.",

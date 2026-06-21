@@ -16,65 +16,38 @@ class MCPBootstrapFacade:
         user_request: str,
         workflow_slug: str | None = None,
     ) -> dict[str, Any]:
-        """Recommend MCP prompts, workflow contracts, skills, and next actions."""
+        """Recommend MCP prompts, workflow contracts, skills, and next actions.
+
+        Bootstrap is intentionally an organization step.  Domain-specific
+        clarification questions belong to the read-only preflight tools because
+        those tools can receive richer session context than bootstrap has.
+        """
 
         request = " ".join(str(user_request or "").split())
         workflow, workflow_error = _select_workflow(request, workflow_slug)
-        skill_slugs = _select_skills(request, workflow.slug if workflow else None)
-
-        chembl_decision = None
-        chemical_space_decision = None
-        if _looks_like_chembl_request(request):
-            from cs_copilot.workflows import prepare_chembl_retrieval
-
-            chembl_decision = prepare_chembl_retrieval(request)
-        if _looks_like_chemical_space_request(request):
-            from cs_copilot.workflows import plan_chemical_space_analysis
-
-            chemical_space_decision = plan_chemical_space_analysis(request)
 
         preflight_tools = _dedupe(
             [
                 *(workflow.preflight_tools if workflow else ()),
-                *(
-                    _policy_preflight_tool(
-                        chembl_decision,
-                        tool_name="chembl_prepare_retrieval",
-                    )
-                ),
-                *(
-                    _policy_preflight_tool(
-                        chemical_space_decision,
-                        tool_name="chemspace_plan_analysis",
-                    )
-                ),
+                *_request_preflight_tools(request),
             ]
         )
-        recommended_next_tools = _dedupe(
-            [
-                *_policy_recommended_tools(chembl_decision),
-                *_policy_recommended_tools(chemical_space_decision),
-            ]
+        skill_slugs = _select_skills(
+            request,
+            workflow.slug if workflow else None,
+            allow_fallback_search=not preflight_tools,
         )
         required_tools = list(workflow.required_tools) if workflow else []
         optional_tools = list(workflow.optional_tools) if workflow else []
+        recommended_next_tools = _recommended_execution_tools(workflow)
 
         questions = _dedupe(
             [
-                *(chembl_decision or {}).get("clarifying_questions", []),
-                *(chemical_space_decision or {}).get("clarifying_questions", []),
                 *(["Which workflow should be used?"] if workflow_error else []),
                 *(["What cs_copilot task should be planned?"] if not request else []),
             ]
         )
         status = "needs_clarification" if questions else "ok"
-        next_action = _next_action(
-            status=status,
-            questions=questions,
-            workflow=workflow,
-            skill_slugs=skill_slugs,
-            preflight_tools=preflight_tools,
-        )
 
         fetch_ids = _dedupe(
             [
@@ -82,6 +55,13 @@ class MCPBootstrapFacade:
                 *(["workflow:" + workflow.slug] if workflow else []),
                 *[f"skill:{slug}" for slug in skill_slugs],
             ]
+        )
+        action_plan = _action_plan(
+            status=status,
+            questions=questions,
+            fetch_ids=fetch_ids,
+            preflight_tools=preflight_tools,
+            required_tools=required_tools,
         )
         payload: dict[str, Any] = {
             "status": status,
@@ -102,16 +82,16 @@ class MCPBootstrapFacade:
             "required_tools": required_tools,
             "optional_tools": optional_tools,
             "fetch_ids": fetch_ids,
-            "next_action": next_action,
+            "next_action": action_plan[0],
+            "action_plan": action_plan,
+            "bootstrap_questions": questions,
+            "clarification_contract": _clarification_contract(
+                bootstrap_questions=questions,
+                preflight_tools=preflight_tools,
+                blocked_tools=[*required_tools, *optional_tools],
+            ),
             "rationale": _rationale(workflow, skill_slugs, workflow_slug, workflow_error),
         }
-        policy_results: dict[str, Any] = {}
-        if chembl_decision is not None:
-            policy_results["chembl_prepare_retrieval"] = chembl_decision
-        if chemical_space_decision is not None:
-            policy_results["chemspace_plan_analysis"] = chemical_space_decision
-        if policy_results:
-            payload["policy_results"] = policy_results
         if workflow_error:
             payload["warning"] = workflow_error
         return payload
@@ -157,7 +137,12 @@ def _workflow_slug_from_terms(lower: str) -> str | None:
     return None
 
 
-def _select_skills(request: str, workflow_slug: str | None) -> list[str]:
+def _select_skills(
+    request: str,
+    workflow_slug: str | None,
+    *,
+    allow_fallback_search: bool = True,
+) -> list[str]:
     from cs_copilot.skills import get_skill, search_skills
 
     lower = request.lower()
@@ -180,7 +165,7 @@ def _select_skills(request: str, workflow_slug: str | None) -> list[str]:
     if _contains_any(lower, ("retrosynthesis", "synthesis", "synthetic route")):
         slugs.append("retrosynthesis-planning")
 
-    if not slugs and request:
+    if allow_fallback_search and not slugs and request:
         slugs.extend(spec.slug for spec in search_skills(request, limit=2))
     return _dedupe(slugs)
 
@@ -209,54 +194,88 @@ def _looks_like_chemical_space_request(request: str) -> bool:
             "scaffold",
             "sar",
             "report",
-            "chembl",
         ),
     )
 
 
-def _policy_preflight_tool(decision: dict[str, Any] | None, *, tool_name: str) -> list[str]:
-    if not decision:
-        return []
-    return [tool_name]
-
-
-def _policy_recommended_tools(decision: dict[str, Any] | None) -> list[str]:
-    if not decision:
-        return []
-    tools = [str(tool) for tool in decision.get("recommended_next_tools", []) if tool]
-    tool = decision.get("recommended_next_tool")
-    if tool:
-        tools.append(str(tool))
+def _request_preflight_tools(request: str) -> list[str]:
+    tools: list[str] = []
+    if _looks_like_chembl_request(request):
+        tools.append("chembl_prepare_retrieval")
+    if _looks_like_chemical_space_request(request):
+        tools.append("chemspace_plan_analysis")
     return tools
 
 
-def _next_action(
+def _recommended_execution_tools(workflow: Any) -> list[str]:
+    if not workflow:
+        return []
+    return _dedupe([*workflow.required_tools, *workflow.optional_tools])
+
+
+def _action_plan(
     *,
     status: str,
     questions: list[str],
-    workflow: Any,
-    skill_slugs: list[str],
+    fetch_ids: list[str],
     preflight_tools: list[str],
-) -> dict[str, Any]:
+    required_tools: list[str],
+) -> list[dict[str, Any]]:
     if status == "needs_clarification":
-        return {
-            "type": "ask_clarification",
-            "questions": questions,
-        }
-    if preflight_tools:
-        return {
-            "type": "call_tool",
-            "tool": preflight_tools[0],
-        }
-    fetch_ids = _dedupe(
-        [
-            *(["workflow:" + workflow.slug] if workflow else []),
-            *[f"skill:{slug}" for slug in skill_slugs],
+        return [
+            {
+                "type": "ask_clarification",
+                "phase": "bootstrap",
+                "questions": questions,
+            }
         ]
-    )
+
+    actions: list[dict[str, Any]] = []
+    if fetch_ids:
+        actions.append({"type": "fetch_context", "ids": fetch_ids})
+    if preflight_tools:
+        actions.extend(
+            {
+                "type": "call_tool",
+                "phase": "preflight",
+                "tool": tool,
+                "guard": "If needs_clarification=true, ask the returned questions before write tools.",
+            }
+            for tool in preflight_tools
+        )
+    if required_tools:
+        actions.append(
+            {
+                "type": "call_tools_after_preflight",
+                "tools": required_tools,
+            }
+        )
+    return actions or [{"type": "answer_directly"}]
+
+
+def _clarification_contract(
+    *,
+    bootstrap_questions: list[str],
+    preflight_tools: list[str],
+    blocked_tools: list[str],
+) -> dict[str, Any]:
+    source = "bootstrap" if bootstrap_questions else "preflight_tools"
     return {
-        "type": "fetch_context" if fetch_ids else "answer_directly",
-        "ids": fetch_ids,
+        "source": source if preflight_tools or bootstrap_questions else "none",
+        "ask_user_when": (
+            "A preflight tool returns needs_clarification=true, or bootstrap "
+            "status is needs_clarification."
+        ),
+        "do_not_infer_missing_requirements": [
+            "target_specificity",
+            "target_confirmation",
+            "organism",
+            "assay_types",
+            "mechanism",
+            "analysis_intent",
+            "data_source",
+        ],
+        "blocked_tools_until_clarified": _dedupe(blocked_tools),
     }
 
 
@@ -275,6 +294,8 @@ def _rationale(
         notes.append("The requested workflow_slug did not match a known workflow.")
     if skill_slugs:
         notes.append("Fetch relevant skill procedures before mutating tools.")
+    if workflow and workflow.preflight_tools:
+        notes.append("Run read-only preflight tools before write tools.")
     return notes
 
 
