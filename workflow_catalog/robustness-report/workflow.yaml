@@ -6,6 +6,10 @@ tags:
   - robustness
   - evaluation
   - report
+keywords:
+  - robustness
+  - prompt variation
+  - test run
 preflight_tools:
 required_tools:
   - robustness_load_test_results

@@ -7,6 +7,12 @@ tags:
   - antimicrobial-peptide
   - latent-space
   - design
+keywords:
+  - peptide
+  - amp
+  - antimicrobial
+  - amino acid
+  - dbaasp
 required_tools:
   - peptide_list_design_engines
   - peptide_validate_design_candidates

@@ -6,6 +6,11 @@ tags:
   - design
   - candidates
   - gtm
+keywords:
+  - candidate
+  - analog
+  - analogue
+  - design
 required_tools:
   - session_materialize_candidate_set_dataset
 optional_tools:

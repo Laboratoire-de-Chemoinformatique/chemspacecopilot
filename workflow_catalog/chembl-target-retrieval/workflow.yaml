@@ -6,6 +6,11 @@ tags:
   - chembl
   - bioactivity
   - retrieval
+keywords:
+  - chembl
+  - bioactivity
+  - assay
+  - activity data
 preflight_tools:
   - chembl_prepare_retrieval
 required_tools:

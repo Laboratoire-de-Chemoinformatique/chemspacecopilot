@@ -13,6 +13,7 @@ SKILL_YAML = "skill.yaml"
 SKILLS_ENV = "CS_COPILOT_SKILLS_DIR"
 _LIST_FIELDS = {
     "tags",
+    "keywords",
     "required_tools",
     "optional_tools",
     "artifact_outputs",
@@ -30,6 +31,7 @@ class SkillSpec:
     summary: str
     status: str
     tags: tuple[str, ...]
+    keywords: tuple[str, ...]
     required_tools: tuple[str, ...]
     optional_tools: tuple[str, ...]
     artifact_outputs: tuple[str, ...]
@@ -44,6 +46,7 @@ class SkillSpec:
             "summary": self.summary,
             "status": self.status,
             "tags": list(self.tags),
+            "keywords": list(self.keywords),
             "required_tools": list(self.required_tools),
             "optional_tools": list(self.optional_tools),
             "artifact_outputs": list(self.artifact_outputs),
@@ -74,6 +77,7 @@ class SkillRegistry:
 
     def search_skills(self, query: str, *, limit: int = 10) -> list[SkillSpec]:
         terms = _tokenize(query)
+        query_lc = (query or "").lower()
         scored: list[tuple[int, SkillSpec]] = []
         for index, spec in enumerate(self.list_skills()):
             haystack = _search_text(spec)
@@ -81,6 +85,7 @@ class SkillRegistry:
                 score = max(1, 100 - index)
             else:
                 score = sum(_term_score(term, haystack, spec) for term in terms)
+                score += _keyword_score(query_lc, spec.keywords)
             if score > 0:
                 scored.append((score, spec))
         scored.sort(key=lambda item: (-item[0], item[1].slug))
@@ -167,6 +172,7 @@ def _load_skill(path: Path) -> SkillSpec:
         summary=str(data["summary"]).strip(),
         status=str(data.get("status") or "stable").strip(),
         tags=_as_tuple(data.get("tags")),
+        keywords=_as_tuple(data.get("keywords")),
         required_tools=_as_tuple(data.get("required_tools")),
         optional_tools=_as_tuple(data.get("optional_tools")),
         artifact_outputs=_as_tuple(data.get("artifact_outputs")),
@@ -251,12 +257,39 @@ def _search_text(spec: SkillSpec) -> str:
             spec.summary,
             spec.status,
             " ".join(spec.tags),
+            " ".join(spec.keywords),
             " ".join(spec.required_tools),
             " ".join(spec.optional_tools),
             " ".join(spec.artifact_outputs),
             " ".join(spec.example_prompts),
         )
     ).lower()
+
+
+# Weight for a routing keyword that appears as a whole-word phrase in the query.
+# Sits between a tag hit (20) and a slug-substring hit (40): keywords are a
+# strong, deliberate routing signal but should not outrank an exact slug match.
+_KEYWORD_PHRASE_SCORE = 35
+
+
+def _keyword_score(query_lc: str, keywords: tuple[str, ...]) -> int:
+    """Score routing keywords (incl. multi-word phrases) against the full query.
+
+    The per-term scorer in :func:`_term_score` only sees tokenized words, so it
+    cannot match multi-word keywords such as "amino acid". This scans the raw
+    lowercased query for each keyword as a whole-word phrase instead.
+    """
+
+    if not query_lc or not keywords:
+        return 0
+    total = 0
+    for keyword in keywords:
+        kw = keyword.strip().lower()
+        # Whole-word (so "amp" never matches "example") but plural-tolerant
+        # ("candidate" matches "candidates", "analog" matches "analogs").
+        if kw and re.search(rf"\b{re.escape(kw)}(?:s|es)?\b", query_lc):
+            total += _KEYWORD_PHRASE_SCORE
+    return total
 
 
 def _term_score(term: str, haystack: str, spec: SkillSpec) -> int:

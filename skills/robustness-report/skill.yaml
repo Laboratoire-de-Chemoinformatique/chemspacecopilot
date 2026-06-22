@@ -6,6 +6,10 @@ tags:
   - robustness
   - evaluation
   - report
+keywords:
+  - robustness
+  - prompt variation
+  - test run
 required_tools:
   - robustness_load_test_results
   - robustness_analyze_score_distribution

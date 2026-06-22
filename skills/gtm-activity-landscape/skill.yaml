@@ -7,6 +7,12 @@ tags:
   - chemography
   - activity-landscape
   - sar
+keywords:
+  - gtm
+  - activity landscape
+  - density map
+  - project
+  - projection
 required_tools:
   - chemspace_plan_analysis
   - gtm_optimization

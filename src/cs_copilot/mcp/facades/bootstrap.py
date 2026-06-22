@@ -5,6 +5,8 @@ from __future__ import annotations
 import functools
 from typing import Any
 
+from cs_copilot.routing import RoutingResult, match_request
+
 _MCP_PROMPT = "cs_copilot_mcp_workflow"
 
 
@@ -21,25 +23,22 @@ class MCPBootstrapFacade:
         Bootstrap is intentionally an organization step.  Domain-specific
         clarification questions belong to the read-only preflight tools because
         those tools can receive richer session context than bootstrap has.
+
+        Workflow / skill / preflight selection is delegated to
+        :func:`cs_copilot.routing.match_request`, the single source of truth
+        shared with the Agno team's routing prose.
         """
 
         request = " ".join(str(user_request or "").split())
-        workflow, workflow_error = _select_workflow(request, workflow_slug)
+        routing: RoutingResult = match_request(request, workflow_slug=workflow_slug)
+        workflow = routing.workflow
+        workflow_error = routing.workflow_error
 
-        preflight_tools = _dedupe(
-            [
-                *(workflow.preflight_tools if workflow else ()),
-                *_request_preflight_tools(request),
-            ]
-        )
-        skill_slugs = _select_skills(
-            request,
-            workflow.slug if workflow else None,
-            allow_fallback_search=not preflight_tools,
-        )
+        preflight_tools = list(routing.preflight_tools)
+        skill_slugs = list(routing.skills)
         required_tools = list(workflow.required_tools) if workflow else []
         optional_tools = list(workflow.optional_tools) if workflow else []
-        recommended_next_tools = _recommended_execution_tools(workflow)
+        recommended_next_tools = _dedupe([*required_tools, *optional_tools])
 
         questions = _dedupe(
             [
@@ -95,122 +94,6 @@ class MCPBootstrapFacade:
         if workflow_error:
             payload["warning"] = workflow_error
         return payload
-
-
-def _select_workflow(request: str, workflow_slug: str | None):
-    from cs_copilot.workflows import get_workflow, search_workflows
-
-    if workflow_slug:
-        try:
-            return get_workflow(workflow_slug), None
-        except KeyError as exc:
-            return None, str(exc)
-
-    lower = request.lower()
-    explicit_slug = _workflow_slug_from_terms(lower)
-    if explicit_slug:
-        return get_workflow(explicit_slug), None
-
-    results = search_workflows(request, limit=1) if request else []
-    if results and _search_result_is_useful(request, results[0].slug):
-        return results[0], None
-    return None, None
-
-
-def _workflow_slug_from_terms(lower: str) -> str | None:
-    if _contains_any(lower, ("robustness", "prompt variation", "test run")):
-        return "robustness-report"
-    if _contains_any(lower, ("normalize", "normalise", "standardize dataset", "uploaded")):
-        return "dataset-normalization"
-    if _contains_any(lower, ("retrosynthesis", "synthesis", "synthetic route")):
-        return "retrosynthesis-for-candidates"
-    if _contains_any(lower, ("chembl", "bioactivity", "assay", "activity data")):
-        if _contains_any(lower, ("gtm", "map", "landscape", "report")):
-            return "chembl-to-gtm-report"
-        return "chembl-target-retrieval"
-    if _contains_any(lower, ("activity landscape", "gtm", "density map", "project")):
-        return "gtm-activity-landscape"
-    if _contains_any(lower, ("candidate", "analog", "analogue", "design")) and _contains_any(
-        lower, ("gtm", "project", "map")
-    ):
-        return "candidate-design-to-gtm"
-    return None
-
-
-def _select_skills(
-    request: str,
-    workflow_slug: str | None,
-    *,
-    allow_fallback_search: bool = True,
-) -> list[str]:
-    from cs_copilot.skills import get_skill, search_skills
-
-    lower = request.lower()
-    slugs: list[str] = []
-    if workflow_slug:
-        try:
-            get_skill(workflow_slug)
-        except KeyError:
-            pass
-        else:
-            slugs.append(workflow_slug)
-
-    if _contains_any(lower, ("peptide", "amino acid", "amp", "antimicrobial")):
-        slugs.append("peptide-design")
-    elif _contains_any(lower, ("design", "generate", "analog", "analogue", "candidate")):
-        slugs.append("molecular-design")
-
-    if _contains_any(lower, ("report", "summary")):
-        slugs.append("report-generation")
-    if _contains_any(lower, ("retrosynthesis", "synthesis", "synthetic route")):
-        slugs.append("retrosynthesis-planning")
-
-    if allow_fallback_search and not slugs and request:
-        slugs.extend(spec.slug for spec in search_skills(request, limit=2))
-    return _dedupe(slugs)
-
-
-def _looks_like_chembl_request(request: str) -> bool:
-    lower = request.lower()
-    return bool(request) and _contains_any(
-        lower,
-        ("chembl", "bioactivity", "assay", "activity data", "fetch", "retrieve", "download"),
-    )
-
-
-def _looks_like_chemical_space_request(request: str) -> bool:
-    lower = request.lower()
-    return bool(request) and _contains_any(
-        lower,
-        (
-            "chemical space",
-            "compound",
-            "compounds",
-            "gtm",
-            "map",
-            "landscape",
-            "density",
-            "project",
-            "scaffold",
-            "sar",
-            "report",
-        ),
-    )
-
-
-def _request_preflight_tools(request: str) -> list[str]:
-    tools: list[str] = []
-    if _looks_like_chembl_request(request):
-        tools.append("chembl_prepare_retrieval")
-    if _looks_like_chemical_space_request(request):
-        tools.append("chemspace_plan_analysis")
-    return tools
-
-
-def _recommended_execution_tools(workflow: Any) -> list[str]:
-    if not workflow:
-        return []
-    return _dedupe([*workflow.required_tools, *workflow.optional_tools])
 
 
 def _action_plan(
@@ -297,21 +180,6 @@ def _rationale(
     if workflow and workflow.preflight_tools:
         notes.append("Run read-only preflight tools before write tools.")
     return notes
-
-
-def _search_result_is_useful(request: str, slug: str) -> bool:
-    lower = request.lower()
-    if slug == "candidate-design-to-gtm" and not _contains_any(
-        lower, ("gtm", "project", "projection", "map")
-    ):
-        return False
-    terms = set(lower.replace("-", " ").split())
-    slug_terms = set(slug.replace("-", " ").split())
-    return bool(terms & slug_terms)
-
-
-def _contains_any(value: str, terms: tuple[str, ...]) -> bool:
-    return any(term in value for term in terms)
 
 
 def _dedupe(values: list[str]) -> list[str]:

@@ -6,6 +6,11 @@ tags:
   - retrosynthesis
   - synplanner
   - candidates
+keywords:
+  - retrosynthesis
+  - synthesis
+  - synthetic route
+  - retrosynthetic
 preflight_tools:
 required_tools:
   - session_resolve_session_reference

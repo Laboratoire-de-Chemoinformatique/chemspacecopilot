@@ -6,6 +6,11 @@ tags:
   - chembl
   - gtm
   - report
+keywords:
+  - chembl
+  - gtm
+  - report
+  - landscape
 required_tools:
   - chembl_prepare_retrieval
   - chembl_convert_to_chembl_query

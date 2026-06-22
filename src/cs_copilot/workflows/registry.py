@@ -13,6 +13,7 @@ WORKFLOW_YAML = "workflow.yaml"
 WORKFLOWS_ENV = "CS_COPILOT_WORKFLOWS_DIR"
 _LIST_FIELDS = {
     "tags",
+    "keywords",
     "preflight_tools",
     "required_tools",
     "optional_tools",
@@ -30,6 +31,7 @@ class WorkflowSpec:
     summary: str
     status: str
     tags: tuple[str, ...]
+    keywords: tuple[str, ...]
     preflight_tools: tuple[str, ...]
     required_tools: tuple[str, ...]
     optional_tools: tuple[str, ...]
@@ -45,6 +47,7 @@ class WorkflowSpec:
             "summary": self.summary,
             "status": self.status,
             "tags": list(self.tags),
+            "keywords": list(self.keywords),
             "preflight_tools": list(self.preflight_tools),
             "required_tools": list(self.required_tools),
             "optional_tools": list(self.optional_tools),
@@ -76,6 +79,7 @@ class WorkflowRegistry:
 
     def search_workflows(self, query: str, *, limit: int = 10) -> list[WorkflowSpec]:
         terms = _tokenize(query)
+        query_lc = (query or "").lower()
         scored: list[tuple[int, WorkflowSpec]] = []
         for index, spec in enumerate(self.list_workflows()):
             haystack = _search_text(spec)
@@ -83,6 +87,7 @@ class WorkflowRegistry:
                 score = max(1, 100 - index)
             else:
                 score = sum(_term_score(term, haystack, spec) for term in terms)
+                score += _keyword_score(query_lc, spec.keywords)
             if score > 0:
                 scored.append((score, spec))
         scored.sort(key=lambda item: (-item[0], item[1].slug))
@@ -170,6 +175,7 @@ def _load_workflow(path: Path) -> WorkflowSpec:
         summary=str(data["summary"]).strip(),
         status=str(data.get("status") or "stable").strip(),
         tags=_as_tuple(data.get("tags")),
+        keywords=_as_tuple(data.get("keywords")),
         preflight_tools=_as_tuple(data.get("preflight_tools")),
         required_tools=_as_tuple(data.get("required_tools")),
         optional_tools=_as_tuple(data.get("optional_tools")),
@@ -255,6 +261,7 @@ def _search_text(spec: WorkflowSpec) -> str:
             spec.summary,
             spec.status,
             " ".join(spec.tags),
+            " ".join(spec.keywords),
             " ".join(spec.preflight_tools),
             " ".join(spec.required_tools),
             " ".join(spec.optional_tools),
@@ -262,6 +269,32 @@ def _search_text(spec: WorkflowSpec) -> str:
             spec.recommended_prompt or "",
         )
     ).lower()
+
+
+# Weight for a routing keyword that appears as a whole-word phrase in the query.
+# Sits between a tag hit (20) and a slug-substring hit (40): keywords are a
+# strong, deliberate routing signal but should not outrank an exact slug match.
+_KEYWORD_PHRASE_SCORE = 35
+
+
+def _keyword_score(query_lc: str, keywords: tuple[str, ...]) -> int:
+    """Score routing keywords (incl. multi-word phrases) against the full query.
+
+    The per-term scorer in :func:`_term_score` only sees tokenized words, so it
+    cannot match multi-word keywords such as "amino acid". This scans the raw
+    lowercased query for each keyword as a whole-word phrase instead.
+    """
+
+    if not query_lc or not keywords:
+        return 0
+    total = 0
+    for keyword in keywords:
+        kw = keyword.strip().lower()
+        # Whole-word (so "amp" never matches "example") but plural-tolerant
+        # ("candidate" matches "candidates", "analog" matches "analogs").
+        if kw and re.search(rf"\b{re.escape(kw)}(?:s|es)?\b", query_lc):
+            total += _KEYWORD_PHRASE_SCORE
+    return total
 
 
 def _term_score(term: str, haystack: str, spec: WorkflowSpec) -> int:
