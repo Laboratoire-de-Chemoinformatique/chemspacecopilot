@@ -17,6 +17,8 @@ import os
 from typing import Sequence
 from urllib.parse import quote
 
+from dotenv import load_dotenv
+
 from .auth import DEFAULT_AUTH_CLIENT_ID, DEFAULT_AUTH_TOKEN_ENV
 from .lazy import require_mcp
 from .session import BootstrapConfig, apply_session_id, bootstrap, configure_logging
@@ -224,6 +226,7 @@ def main(
 ) -> None:
     """Run the MCP server. Blocks until the client disconnects."""
 
+    load_dotenv()
     require_mcp()
     args = _parse_args(argv, default_transport=default_transport, prog=prog)
 
