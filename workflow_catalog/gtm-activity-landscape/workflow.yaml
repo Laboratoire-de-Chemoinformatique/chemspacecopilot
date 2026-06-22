@@ -6,6 +6,12 @@ tags:
   - gtm
   - activity-landscape
   - sar
+keywords:
+  - gtm
+  - activity landscape
+  - density map
+  - project
+  - projection
 preflight_tools:
   - chemspace_plan_analysis
 required_tools:

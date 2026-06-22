@@ -7,6 +7,15 @@ tags:
   - small-molecule
   - analog-generation
   - validation
+keywords:
+  - design
+  - generate
+  - analog
+  - analogue
+  - candidate
+  - smiles
+  - molecule
+  - small molecule
 required_tools:
   - mol_list_design_engines
   - mol_validate_design_candidates

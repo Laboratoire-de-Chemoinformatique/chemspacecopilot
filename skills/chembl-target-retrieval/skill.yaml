@@ -7,6 +7,11 @@ tags:
   - bioactivity
   - retrieval
   - standardization
+keywords:
+  - chembl
+  - bioactivity
+  - assay
+  - activity data
 required_tools:
   - chembl_prepare_retrieval
   - chembl_convert_to_chembl_query

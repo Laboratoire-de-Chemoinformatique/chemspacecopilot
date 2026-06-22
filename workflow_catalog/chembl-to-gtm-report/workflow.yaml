@@ -6,6 +6,11 @@ tags:
   - chembl
   - gtm
   - report
+keywords:
+  - chembl
+  - gtm
+  - report
+  - landscape
 preflight_tools:
   - chembl_prepare_retrieval
   - chemspace_plan_analysis

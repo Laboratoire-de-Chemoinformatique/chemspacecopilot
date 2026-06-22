@@ -7,6 +7,11 @@ tags:
   - synplanner
   - synthesis
   - route-planning
+keywords:
+  - retrosynthesis
+  - synthesis
+  - synthetic route
+  - retrosynthetic
 required_tools:
   - session_resolve_session_reference
   - synplanner_identify_input

@@ -6,6 +6,12 @@ tags:
   - dataset
   - pandas
   - normalization
+keywords:
+  - normalize
+  - normalise
+  - standardize dataset
+  - uploaded
+  - normalization
 preflight_tools:
 required_tools:
   - pandas_normalize_for_analysis

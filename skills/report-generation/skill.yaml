@@ -7,6 +7,9 @@ tags:
   - artifacts
   - html
   - markdown
+keywords:
+  - report
+  - summary
 required_tools:
   - report_save_markdown
   - report_save_rich
