@@ -18,9 +18,11 @@ SPECS: List[ToolSpec] = [
         toolkit_factory=workflow_policy_facade,
         method="prepare_chembl_retrieval",
         summary=(
-            "Preflight a ChEMBL retrieval request. Use this read-only workflow gate "
-            "before chembl_fetch_compounds to identify missing target, organism, "
-            "assay-type, or mechanism clarification."
+            "Read-only preflight gate that validates a ChEMBL retrieval before "
+            "chembl_fetch_compounds. You extract the target (gene symbol, protein name, "
+            "ChEMBL id, or organism), organism, assay_types, and mechanism from the "
+            "request and pass them in; the gate checks completeness and returns "
+            "clarifying questions for anything missing. Do not infer fields just to pass."
         ),
         read_only=True,
     ),

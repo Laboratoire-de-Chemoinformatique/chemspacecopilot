@@ -1,10 +1,36 @@
-"""Deterministic chemical-space analysis preflight policy."""
+"""Deterministic chemical-space analysis preflight policy.
+
+Like the ChEMBL gate, this validates structured fields the external MCP reasoner
+supplies — it does not parse the user's free text. The caller (the connected LLM)
+classifies the requested analysis intents and the dataset source; this module
+enforces that both are present and maps the chosen intents to the recommended
+execution tools.
+"""
 
 from __future__ import annotations
 
-import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
+
+# Recognized analysis intents (the caller selects from these).
+_KNOWN_INTENTS = (
+    "chembl_retrieval",
+    "gtm_build",
+    "gtm_analysis",
+    "density_landscape",
+    "activity_landscape",
+    "gtm_projection",
+    "chemotype_sar_analysis",
+    "report_generation",
+)
+
+# Recognized dataset sources.
+_KNOWN_DATASET_SOURCES = (
+    "session_clean_dataset",
+    "explicit_path",
+    "uploaded_dataset",
+    "chembl_retrieval",
+)
 
 
 @dataclass(frozen=True)
@@ -25,28 +51,33 @@ class ChemicalSpaceDecision:
 
 
 def plan_chemical_space_analysis(
-    user_request: str,
-    session_summary: str | None = None,
+    analysis_intents: list[str] | str | None = None,
+    dataset_source: str | None = None,
+    notes: str | None = None,
 ) -> dict[str, Any]:
-    """Return a structured preflight plan for chemical-space analysis."""
+    """Validate a chemical-space analysis plan from caller-supplied fields.
 
-    request = _clean(user_request)
-    context = _clean("\n".join(value for value in (user_request, session_summary) if value))
-    if not request:
-        return ChemicalSpaceDecision(
-            can_proceed=False,
-            needs_clarification=True,
-            missing_requirements=["user_request"],
-            clarifying_questions=["What chemical-space analysis should be planned?"],
-        ).as_dict()
+    Parameters
+    ----------
+    analysis_intents:
+        One or more of: ``chembl_retrieval``, ``gtm_build``, ``gtm_analysis``,
+        ``density_landscape``, ``activity_landscape``, ``gtm_projection``,
+        ``chemotype_sar_analysis``, ``report_generation``. Leave empty if the user
+        has not narrowed a broad "analyze chemical space" request; do not infer.
+    dataset_source:
+        One of ``session_clean_dataset``, ``explicit_path``, ``uploaded_dataset``,
+        or ``chembl_retrieval``.
+    notes:
+        Optional free-text context; recorded, never parsed for the decision.
+    """
 
-    intents = _detect_intents(request)
-    dataset_source = _detect_dataset_source(context)
+    intents = _normalize_intents(analysis_intents)
+    source = _clean(dataset_source) or None
     missing: list[str] = []
     questions: list[str] = []
-    notes: list[str] = []
+    plan_notes: list[str] = []
 
-    if not intents or _is_broad_chemical_space_request(request, intents):
+    if not intents:
         missing.append("analysis_intent")
         questions.append(
             "Which analysis do you want: ChEMBL retrieval, GTM density map, activity "
@@ -54,10 +85,10 @@ def plan_chemical_space_analysis(
         )
 
     if "chembl_retrieval" in intents:
-        notes.append("Use chembl_prepare_retrieval before calling ChEMBL retrieval tools.")
-        dataset_source = dataset_source or "chembl_retrieval"
+        plan_notes.append("Use chembl_prepare_retrieval before calling ChEMBL retrieval tools.")
+        source = source or "chembl_retrieval"
 
-    if not dataset_source:
+    if not source:
         missing.append("data_source")
         questions.append(
             "Which data source should be used: an existing session clean dataset, an explicit "
@@ -71,9 +102,9 @@ def plan_chemical_space_analysis(
         missing_requirements=missing,
         clarifying_questions=questions,
         analysis_intents=intents,
-        dataset_source=dataset_source,
+        dataset_source=source,
         recommended_next_tools=_recommended_tools(intents, can_proceed),
-        notes=notes,
+        notes=plan_notes,
     ).as_dict()
 
 
@@ -81,61 +112,14 @@ def _clean(value: str | None) -> str:
     return " ".join(str(value or "").split())
 
 
-def _detect_intents(request: str) -> list[str]:
-    lower = request.lower()
-    intents: list[str] = []
-
-    if any(term in lower for term in ("chembl", "fetch", "retrieve", "download")):
-        intents.append("chembl_retrieval")
-    if "activity landscape" in lower or "active region" in lower or "actives" in lower:
-        intents.append("activity_landscape")
-    if "density" in lower or "distribution" in lower:
-        intents.append("density_landscape")
-    if "project" in lower or "projection" in lower or "map new data" in lower:
-        intents.append("gtm_projection")
-    if "gtm" in lower or "map" in lower:
-        if any(term in lower for term in ("build", "train", "optimize", "create")):
-            intents.append("gtm_build")
-        else:
-            intents.append("gtm_analysis")
-    if any(term in lower for term in ("chemotype", "scaffold", "sar")):
-        intents.append("chemotype_sar_analysis")
-    if "report" in lower or "summary" in lower:
-        intents.append("report_generation")
-
-    return list(dict.fromkeys(intents))
-
-
-def _detect_dataset_source(context: str) -> str | None:
-    lower = context.lower()
-    if re.search(r"\b(?:s3://\S+|\S+\.(?:csv|parquet|tsv))\b", context):
-        return "explicit_path"
-    if any(
-        marker in lower
-        for marker in (
-            "clean_dataset_path",
-            "dataset_path",
-            "current clean dataset",
-            "existing clean dataset",
-            "session clean dataset",
-        )
-    ):
-        return "session_clean_dataset"
-    if "uploaded dataset" in lower or "uploaded file" in lower:
-        return "uploaded_dataset"
-    return None
-
-
-def _is_broad_chemical_space_request(request: str, intents: list[str]) -> bool:
-    lower = request.lower().strip()
-    broad_phrases = {
-        "analyze chemical space",
-        "analyse chemical space",
-        "chemical space analysis",
-        "analyze compounds",
-        "help me analyze compounds",
-    }
-    return lower in broad_phrases or (lower == "chemical space" and not intents)
+def _normalize_intents(value: list[str] | str | None) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items = [part.strip() for part in value.replace(";", ",").split(",")]
+    else:
+        items = [str(part).strip() for part in value]
+    return list(dict.fromkeys(item.lower() for item in items if item))
 
 
 def _recommended_tools(intents: list[str], can_proceed: bool) -> list[str]:

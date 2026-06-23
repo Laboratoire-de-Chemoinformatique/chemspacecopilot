@@ -24,8 +24,10 @@ SPECS: List[ToolSpec] = [
         toolkit_factory=workflow_policy_facade,
         method="plan_chemical_space_analysis",
         summary=(
-            "Preflight a broad chemical-space analysis request before ChEMBL, "
-            "GTM, chemotype, or report-generation tools are called."
+            "Validate a chemical-space analysis plan before ChEMBL, GTM, "
+            "chemotype, or report tools. You classify the analysis_intents and "
+            "dataset_source; this read-only gate checks both are present and maps "
+            "intents to recommended tools."
         ),
         read_only=True,
     ),
