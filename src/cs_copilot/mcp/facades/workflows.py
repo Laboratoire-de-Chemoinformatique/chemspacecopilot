@@ -11,28 +11,52 @@ class WorkflowPolicyFacade:
 
     def prepare_chembl_retrieval(
         self,
-        user_request: str,
-        session_summary: str | None = None,
+        target: str | None = None,
+        target_type: str | None = None,
+        organism: str | None = None,
+        assay_types: list[str] | None = None,
+        mechanism: str | None = None,
+        notes: str | None = None,
     ) -> dict[str, Any]:
-        """Preflight a ChEMBL request before calling retrieval tools."""
+        """Validate the ChEMBL retrieval dimensions you decided with the user.
+
+        You are the reasoning engine: extract the target (gene symbol, protein
+        name, ChEMBL id, or organism-level target), organism, assay types, and
+        mechanism from the request and pass them here. This gate only checks
+        completeness and returns clarifying questions for anything missing — do
+        not infer fields just to make it pass.
+        """
         from cs_copilot.workflows import prepare_chembl_retrieval
 
         return prepare_chembl_retrieval(
-            user_request=user_request,
-            session_summary=session_summary,
+            target=target,
+            target_type=target_type,
+            organism=organism,
+            assay_types=assay_types,
+            mechanism=mechanism,
+            notes=notes,
         )
 
     def plan_chemical_space_analysis(
         self,
-        user_request: str,
-        session_summary: str | None = None,
+        analysis_intents: list[str] | None = None,
+        dataset_source: str | None = None,
+        notes: str | None = None,
     ) -> dict[str, Any]:
-        """Preflight a chemical-space analysis request before mutating tools."""
+        """Validate a chemical-space analysis plan you classified for the user.
+
+        Pass the analysis intents (e.g. chembl_retrieval, gtm_build,
+        activity_landscape, report_generation) and the dataset source
+        (session_clean_dataset, explicit_path, uploaded_dataset, or
+        chembl_retrieval). This gate checks both are present and maps the intents
+        to recommended execution tools.
+        """
         from cs_copilot.workflows import plan_chemical_space_analysis
 
         return plan_chemical_space_analysis(
-            user_request=user_request,
-            session_summary=session_summary,
+            analysis_intents=analysis_intents,
+            dataset_source=dataset_source,
+            notes=notes,
         )
 
 
