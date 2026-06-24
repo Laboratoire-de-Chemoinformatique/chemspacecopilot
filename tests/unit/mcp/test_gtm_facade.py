@@ -20,7 +20,9 @@ def test_save_density_plot_resolves_session_model_and_calls_plot_writer(monkeypa
         }
         return "resolved-model.pkl.gz"
 
-    def fake_save(dataset_file, gtm_model_file, *, mark_nodes=None, descriptor_type=None, agent=None):
+    def fake_save(
+        dataset_file, gtm_model_file, *, mark_nodes=None, descriptor_type=None, agent=None
+    ):
         calls["save"] = {
             "dataset_file": dataset_file,
             "gtm_model_file": gtm_model_file,
