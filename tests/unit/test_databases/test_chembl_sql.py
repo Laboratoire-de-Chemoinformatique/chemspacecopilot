@@ -732,3 +732,40 @@ class TestBackendSelection:
         assert "✅ Fetched" in result
         mock_fetcher.fetch_assays.assert_called_once_with("kinase", None, regex_pattern=None)
         mock_fetcher.fetch_activities.assert_called_once()
+        mock_ensure_client.assert_not_called()
+
+    @patch.object(ChemblToolkit, "_ensure_client", side_effect=AssertionError("REST not expected"))
+    @patch.object(SqlChemblFetcher, "from_mysql_env")
+    @patch("cs_copilot.tools.databases.chembl.S3")
+    def test_fetch_compounds_uses_mysql_fetcher_without_rest_client(
+        self, mock_s3, mock_from_mysql, mock_ensure_client
+    ):
+        """A MySQL-backed retrieval must not initialize the REST client."""
+        mock_fetcher = MagicMock(spec=ChemblDataFetcher)
+        mock_fetcher.fetch_assays.return_value = [
+            {"assay_chembl_id": "CHEMBL1", "description": "kinase assay"}
+        ]
+        mock_fetcher.fetch_activities.return_value = [
+            {
+                "activity_id": 1,
+                "assay_chembl_id": "CHEMBL1",
+                "molecule_chembl_id": "MOL1",
+                "canonical_smiles": "CCO",
+                "standard_value": 10.0,
+            }
+        ]
+        mock_from_mysql.return_value = mock_fetcher
+
+        mock_file = MagicMock()
+        mock_s3.open.return_value.__enter__.return_value = mock_file
+        mock_s3.open.return_value.__exit__.return_value = False
+        mock_s3.path.side_effect = lambda rel: rel
+
+        toolkit = ChemblToolkit(backend="mysql")
+        result = toolkit.fetch_compounds("kinase")
+
+        assert "Data backend: LOCAL MySQL ChEMBL database" in result
+        mock_from_mysql.assert_called_once()
+        mock_fetcher.fetch_assays.assert_called_once_with("kinase", None, regex_pattern=None)
+        mock_fetcher.fetch_activities.assert_called_once()
+        mock_ensure_client.assert_not_called()

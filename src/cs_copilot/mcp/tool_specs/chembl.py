@@ -38,6 +38,8 @@ SPECS: List[ToolSpec] = [
             "client-side judge tasks, agno-model uses the configured model "
             "in-process, and disabled skips LLM judging."
         ),
+        run_in_worker_process=True,
+        worker_timeout_s=900,
     ),
     ToolSpec(
         mcp_name="chembl_create_external_judge_task",

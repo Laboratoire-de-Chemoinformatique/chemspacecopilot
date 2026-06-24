@@ -168,6 +168,12 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
     # ChEMBL-specific constants
     BASE_URL = "https://www.ebi.ac.uk/chembl/api/data"
+    BACKEND_DISPLAY_NAMES = {
+        "mysql": "LOCAL MySQL ChEMBL database",
+        "postgresql": "LOCAL PostgreSQL ChEMBL database",
+        "sqlite": "LOCAL SQLite ChEMBL database",
+        "rest": "ChEMBL REST API",
+    }
 
     # Default field mappings for different ChEMBL resources
     ACTIVITY_FIELDS = [
@@ -249,16 +255,11 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 pagination_mode=PaginationMode.OFFSET_LIMIT,
             )
 
-        _BACKEND_LABELS = {
-            "mysql": "Connected to a LOCAL MySQL ChEMBL database",
-            "postgresql": "Connected to a LOCAL PostgreSQL ChEMBL database",
-            "sqlite": "Connected to a LOCAL SQLite ChEMBL database",
-        }
         if "instructions" not in toolkit_kwargs:
-            if resolved in _BACKEND_LABELS:
+            if resolved in {"mysql", "postgresql", "sqlite"}:
                 backend_label = (
-                    f"Active backend: {_BACKEND_LABELS[resolved]}. "
-                    "The ChEMBL REST API is also available as a fallback."
+                    f"Active backend: {self.BACKEND_DISPLAY_NAMES[resolved]}. "
+                    "Direct ChEMBL retrieval uses this local backend."
                 )
             else:
                 backend_label = "Active backend: Using the ChEMBL REST API."
@@ -394,7 +395,13 @@ class ChemblToolkit(BaseDatabaseToolkit):
         """Get information about database capabilities including the active backend."""
         caps = super().get_capabilities()
         caps["active_backend"] = self._active_backend
+        caps["active_backend_label"] = self._backend_summary()
         return caps
+
+    def _backend_summary(self) -> str:
+        """Return the human-readable backend used by retrieval calls."""
+        active_backend = getattr(self, "_active_backend", "unknown")
+        return self.BACKEND_DISPLAY_NAMES.get(active_backend, str(active_backend))
 
     def query(self, params: QueryParams) -> ResultPage:
         """
@@ -601,7 +608,12 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
         keywords: list[str] = raw_keywords
 
-        logger.info(f"Fetching ChEMBL compounds for {len(keywords)} keyword(s): {keywords}")
+        logger.info(
+            "Fetching ChEMBL compounds for %d keyword(s) using %s: %s",
+            len(keywords),
+            self._backend_summary(),
+            keywords,
+        )
 
         all_dataframes = []
         all_assay_ids = set()  # Track unique assays across all keywords
@@ -662,7 +674,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
 
             # Step 4: Merge all DataFrames and remove duplicates
             if not all_dataframes:
-                return f"No data found for any of the keywords: {keywords}"
+                return (
+                    f"No data found for any of the keywords: {keywords}\n"
+                    f"Data backend: {self._backend_summary()}"
+                )
 
             logger.info(f"Merging {len(all_dataframes)} datasets and removing duplicates")
             merged_df = pd.concat(all_dataframes, ignore_index=True)
@@ -781,6 +796,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
                         "standardization_report_path": prepared.standardization_report_path,
                         "filtered_dataset_path": filtering.filtered_rows_path,
                         "query_keywords": keywords,
+                        "chembl_backend": self._active_backend,
+                        "chembl_backend_label": self._backend_summary(),
                         "row_count": int(len(clean_df)),
                         "raw_row_count": int(len(merged_df)),
                         "retrieved_raw_row_count": int(filtering.summary["retrieved_row_count"]),
@@ -876,6 +893,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
             "metadata_judge_status": "not_needed",
             "query_keywords": list(keywords),
             "organism_filter": organism_filter,
+            "backend": getattr(self, "_active_backend", "unknown"),
+            "backend_label": self._backend_summary(),
         }
         if df.empty:
             return _ChemblRetrievalFilterResult(
@@ -1481,8 +1500,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
             f"`{json.dumps(decision_counts, sort_keys=True, default=str)}`\n"
         )
 
-    @staticmethod
     def _format_all_rows_filtered_message(
+        self,
         keywords: Sequence[str],
         filtering_summary: Dict[str, Any],
         filtered_rows_path: Optional[str],
@@ -1497,6 +1516,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
             f"Target metadata rows evaluated: "
             f"{filtering_summary.get('metadata_judge_row_count', 0)}\n"
             f"Rows filtered out: {filtering_summary.get('filtered_row_count', 0)}\n"
+            f"Data backend: {self._backend_summary()}\n"
             f"Filtered rows artifact: `{filtered_rows_path}`\n"
             f"Retrieval filtering report: `{filtering_report_path}`"
         )
@@ -1607,6 +1627,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         message = (
             f"✅ Fetched and cleaned {len(df)} compound records from "
             f"{len(keywords)} keyword(s): {keywords_str}\n"
+            f"Data backend: {self._backend_summary()}\n"
             f"📄 Clean dataset ({save_label}): `{filename}`\n"
         )
         if raw_dataset_path:

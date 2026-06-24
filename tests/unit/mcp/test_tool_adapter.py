@@ -75,6 +75,29 @@ def test_adapter_injects_agent_and_session_state():
     assert ctx.session_state["last_count"] == 3
 
 
+def test_adapter_routes_worker_process_specs(monkeypatch):
+    ctx = MCPAgentContext(session_state={"existing": True})
+    instance = _DummyToolkit()
+    calls: list[tuple[str, dict[str, Any], MCPAgentContext]] = []
+
+    def fake_run_tool_job(spec: ToolSpec, kwargs: Dict[str, Any], job_ctx: MCPAgentContext):
+        calls.append((spec.mcp_name, dict(kwargs), job_ctx))
+        job_ctx.session_state["worker_ran"] = True
+        return "from worker"
+
+    import cs_copilot.mcp.jobs as jobs
+
+    monkeypatch.setattr(jobs, "run_tool_job", fake_run_tool_job)
+    spec = _spec("echo", run_in_worker_process=True, forces={"flag": False})
+    tool = build_tool(spec, instance, ctx)
+    result = asyncio.run(tool(text="ab", count=2))
+
+    assert result == "from worker"
+    assert calls == [(spec.mcp_name, {"text": "ab", "count": 2, "flag": False}, ctx)]
+    assert ctx.session_state["worker_ran"] is True
+    assert "last_text" not in ctx.session_state
+
+
 def test_adapter_forces_override_kwargs_and_hides_them():
     ctx = MCPAgentContext()
     instance = _DummyToolkit()
@@ -114,7 +137,10 @@ def _manifest_payloads(tmp_path, session_name: str):
         / "manifests"
         / "mcp"
     )
-    return [json.loads(path.read_text(encoding="utf-8")) for path in sorted(manifest_root.glob("*.json"))]
+    return [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted(manifest_root.glob("*.json"))
+    ]
 
 
 def test_adapter_writes_success_manifest(tmp_path, monkeypatch):
