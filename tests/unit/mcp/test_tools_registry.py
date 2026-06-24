@@ -24,6 +24,7 @@ def test_chembl_fetch_uses_policy_facade_without_static_judge_forces():
     spec = next(s for s in all_specs() if s.mcp_name == "chembl_fetch_compounds")
     assert spec.forces == {}
     assert spec.method == "fetch_compounds"
+    assert spec.run_in_worker_process is True
     assert "chembl_prepare_retrieval" in spec.summary
 
 
@@ -39,6 +40,7 @@ def test_every_spec_has_explicit_safety_hints():
         assert isinstance(spec.read_only, bool), spec.mcp_name
         assert isinstance(spec.destructive, bool), spec.mcp_name
         assert isinstance(spec.open_world, bool), spec.mcp_name
+        assert isinstance(spec.run_in_worker_process, bool), spec.mcp_name
 
 
 def test_review_sensitive_tools_are_classified_conservatively():

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import threading
 import time
 from concurrent.futures import ProcessPoolExecutor
 from functools import lru_cache
@@ -14,6 +15,7 @@ from rdkit.Chem.MolStandardize import rdMolStandardize
 
 logger = logging.getLogger(__name__)
 _STANDARDIZE_CACHE_SIZE = 16_384
+_DISABLE_PROCESS_POOL_VALUES = {"1", "true", "yes", "on"}
 _STANDARDIZERS: Optional[
     tuple[
         rdMolStandardize.Uncharger,
@@ -56,6 +58,14 @@ def _resolve_worker_count(max_workers: Optional[int], string_row_count: int) -> 
 
 def _chunk_size(item_count: int, worker_count: int) -> int:
     return max(1, math.ceil(item_count / worker_count))
+
+
+def _process_pool_allowed() -> bool:
+    """Return whether it is safe to create a process pool in this call context."""
+    disabled = os.getenv("CS_COPILOT_DISABLE_PROCESS_POOLS", "").strip().lower()
+    if disabled in _DISABLE_PROCESS_POOL_VALUES:
+        return False
+    return threading.current_thread() is threading.main_thread()
 
 
 def _standardize_chunk(args: tuple[list[str], bool]) -> list[Optional[str]]:
@@ -133,7 +143,12 @@ def standardize_smiles_column(
     string_values = [column_values[pos] for pos in string_positions]
     string_row_count = len(string_values)
     worker_count = _resolve_worker_count(max_workers, string_row_count)
-    mode = "processes" if string_row_count >= min_parallel_rows and worker_count > 1 else "serial"
+    process_pool_allowed = _process_pool_allowed()
+    mode = (
+        "processes"
+        if process_pool_allowed and string_row_count >= min_parallel_rows and worker_count > 1
+        else "serial"
+    )
     serial_fallback = False
 
     logger.info(

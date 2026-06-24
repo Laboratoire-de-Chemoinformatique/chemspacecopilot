@@ -20,7 +20,7 @@ import traceback
 import typing
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Any, Callable, Dict, Mapping
+from typing import Any, Callable, Dict, Mapping, Optional
 
 from .context import MCPAgentContext
 from .errors import MCPToolError
@@ -47,6 +47,8 @@ class ToolSpec:
     read_only: bool = False
     destructive: bool = False
     open_world: bool = False
+    run_in_worker_process: bool = False
+    worker_timeout_s: Optional[float] = None
 
 
 def _coerce_return_value(value: Any) -> Any:
@@ -153,15 +155,20 @@ def build_tool(
 
         started = perf_counter()
         call_kwargs: Dict[str, Any] = dict(kwargs)
-        if "agent" in sig.parameters:
-            call_kwargs["agent"] = ctx
-        if "session_state" in sig.parameters:
-            call_kwargs["session_state"] = ctx.session_state
+        if not spec.run_in_worker_process:
+            if "agent" in sig.parameters:
+                call_kwargs["agent"] = ctx
+            if "session_state" in sig.parameters:
+                call_kwargs["session_state"] = ctx.session_state
         for key, value in spec.forces.items():
             call_kwargs[key] = value
 
         try:
-            if inspect.iscoroutinefunction(bound_method):
+            if spec.run_in_worker_process:
+                from .jobs import run_tool_job
+
+                result = await asyncio.to_thread(run_tool_job, spec, call_kwargs, ctx)
+            elif inspect.iscoroutinefunction(bound_method):
                 result = await bound_method(**call_kwargs)
             else:
                 result = await asyncio.to_thread(bound_method, **call_kwargs)
