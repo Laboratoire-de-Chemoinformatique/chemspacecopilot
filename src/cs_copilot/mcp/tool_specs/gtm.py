@@ -8,6 +8,7 @@ from ..tool_adapter import ToolSpec
 from .common import factory
 
 _GTM = factory("cs_copilot.tools.chemography.gtm:GTMToolkit")
+_GTM_MCP = factory("cs_copilot.mcp.facades.gtm:GTMMCPFacade")
 
 _METHODS = [
     (
@@ -155,3 +156,16 @@ SPECS: List[ToolSpec] = [
     )
     for mcp_name, method, summary, read_only in _METHODS
 ]
+
+SPECS.append(
+    ToolSpec(
+        mcp_name="gtm_save_density_plot",
+        toolkit_factory=_GTM_MCP,
+        method="save_density_plot",
+        summary=(
+            "Generate and save a GTM density landscape plot with projected compound points "
+            "from a dataset and the current or explicit GTM model."
+        ),
+        read_only=False,
+    )
+)
