@@ -28,6 +28,13 @@ def test_chembl_fetch_uses_policy_facade_without_static_judge_forces():
     assert "chembl_prepare_retrieval" in spec.summary
 
 
+def test_gtm_density_plot_tool_is_exposed_for_mcp():
+    spec = next(s for s in all_specs() if s.mcp_name == "gtm_save_density_plot")
+    assert spec.method == "save_density_plot"
+    assert spec.read_only is False
+    assert "density landscape plot" in spec.summary
+
+
 def test_every_method_resolves_against_its_toolkit():
     for spec in all_specs():
         instance = spec.toolkit_factory()
@@ -111,6 +118,7 @@ def test_direct_mcp_parity_tool_names_are_present():
         "chembl_create_external_judge_task",
         "chembl_submit_external_judge_result",
         "chemspace_plan_analysis",
+        "gtm_save_density_plot",
         "workflow_list",
         "workflow_search",
         "workflow_fetch",

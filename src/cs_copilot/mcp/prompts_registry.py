@@ -50,6 +50,9 @@ def _render_mcp_workflow_prompt() -> str:
             "workflow, and skill documents, then run its listed read-only preflight tools.",
             "Use chembl_prepare_retrieval before ChEMBL retrieval and "
             "chemspace_plan_analysis before broad chemical-space or GTM work.",
+            "For GTM density visualizations in MCP mode, call gtm_save_density_plot "
+            "after the dataset and GTM model are available; gtm_load_density_matrix "
+            "returns density tables but is not itself the density-plot writer.",
             "If bootstrap itself returns bootstrap_questions, ask them before continuing.",
             "If a preflight tool returns needs_clarification=true, ask the returned "
             "questions before calling write tools.",
