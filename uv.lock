@@ -1004,13 +1004,13 @@ dependencies = [
     { name = "pymysql" },
     { name = "pypdf" },
     { name = "rdkit" },
+    { name = "reportlab" },
     { name = "requests" },
     { name = "rich" },
     { name = "s3fs" },
     { name = "seaborn" },
     { name = "sentence-transformers" },
     { name = "sqlalchemy" },
-    { name = "synplanner" },
     { name = "tabulate" },
     { name = "tantivy" },
     { name = "torch" },
@@ -1022,8 +1022,14 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+mcp = [
+    { name = "mcp" },
+]
 postgresql = [
     { name = "psycopg2-binary" },
+]
+synplanner = [
+    { name = "synplanner" },
 ]
 
 [package.dev-dependencies]
@@ -1062,6 +1068,7 @@ requires-dist = [
     { name = "lancedb", specifier = ">=0.25.2" },
     { name = "lxml-html-clean", specifier = ">=0.4.3" },
     { name = "marimo", specifier = ">=0.18.4" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
     { name = "newspaper4k", specifier = ">=0.9.3.1" },
     { name = "numba", specifier = ">=0.62.1" },
     { name = "ollama", specifier = ">=0.4.0" },
@@ -1074,13 +1081,14 @@ requires-dist = [
     { name = "pymysql", specifier = ">=1.1.0" },
     { name = "pypdf", specifier = ">=6.1.2" },
     { name = "rdkit", specifier = ">=2025.9.1" },
+    { name = "reportlab", specifier = ">=4.4.9" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "s3fs", specifier = ">=2025.9.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "sentence-transformers", specifier = ">=5.2.0" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
-    { name = "synplanner", specifier = ">=1.2.1" },
+    { name = "synplanner", marker = "extra == 'synplanner'", specifier = ">=1.2.1" },
     { name = "tabulate", specifier = ">=0.9.0" },
     { name = "tantivy", specifier = ">=0.25.0" },
     { name = "torch", specifier = ">=2.9.0" },
@@ -1090,7 +1098,7 @@ requires-dist = [
     { name = "ugtm", specifier = ">=2.1.0.post2" },
     { name = "vl-convert-python", specifier = ">=1.8.0" },
 ]
-provides-extras = ["postgresql"]
+provides-extras = ["postgresql", "mcp", "synplanner"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -11,7 +11,8 @@ from agno.db.sqlite import SqliteDb  # ✅ v2.1.x style DB import
 from agno.models.base import Model  # Agno v2 base class
 from agno.team import Team
 
-from cs_copilot.tools import SessionMemoryToolkit
+from cs_copilot.routing import render_routing_rules
+from cs_copilot.tools import SessionMemoryToolkit, SkillToolkit
 from cs_copilot.utils.resources import analyze_resources
 
 from .config import CS_COPILOT_MEMORY_DB  # optional now; kept for compatibility
@@ -151,7 +152,7 @@ def get_cs_copilot_agent_team(
         session_state=shared_session_state,
         add_session_state_to_context=True,
         enable_agentic_state=True,
-        tools=[SessionMemoryToolkit()],
+        tools=[SessionMemoryToolkit(), SkillToolkit()],
         # Prompting
         description=(
             "You are an intelligent coordinator orchestrating a team of specialized cheminformatics agents. "
@@ -164,17 +165,22 @@ def get_cs_copilot_agent_team(
             "• Molecular Designer: Small-molecule design via autoencoder and LLM engines (SMILES, standalone + GTM-guided)\n"
             "• Peptide Designer: Peptide design via WAE and LLM engines + GTM on latent space + DBAASP antimicrobial activity landscapes\n"
             "• SynPlanner: Retrosynthetic planning for target molecules\n\n"
-            "**Molecule vs Peptide Routing**:\n"
-            "  - 'peptide', 'amino acid', 'AMP', 'antimicrobial peptide' → Peptide Designer agent\n"
-            "  - 'SMILES', 'molecule', 'compound', 'small molecule', 'LLM design' → Molecular Designer agent\n"
-            "  - DBAASP/antimicrobial landscapes → Peptide Designer agent (has GTM tools)\n"
-            "  - Unqualified 'generate' → Molecular Designer (small molecules)\n\n"
+            # Routing prose is generated from the workflow/skill catalog keywords
+            # so it can never drift from the deterministic MCP bootstrap routing.
+            + render_routing_rules() + "\n\n"
             "When coordinating: (1) Assess if a predefined workflow covers the request, (2) Select and chain "
             "specialized agents for multi-step tasks (GTM → Chemoinformatician → Report Generator is common), "
             "(3) For analysis requests, automatically add Report Generator unless user explicitly requests raw data only, "
             "(4) For ambiguous opening requests, apply the INITIAL CLARIFICATION FLOW (peptides vs molecules, then exploratory vs generative), (5) Synthesize insights from agent outputs into coherent analyses."
         ),
-        instructions=AGENT_TEAM_INSTRUCTIONS,
+        instructions=[
+            *AGENT_TEAM_INSTRUCTIONS,
+            (
+                "For multi-step scientific workflows, consult the Skills tools "
+                "(`list_skills`, `search_skills`, `fetch_skill`) before routing "
+                "specialized agents so the team follows reusable ChemSpace procedures."
+            ),
+        ],
         # UX & observability
         markdown=markdown,
         debug_mode=debug_mode,

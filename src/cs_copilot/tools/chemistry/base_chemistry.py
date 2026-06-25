@@ -10,6 +10,7 @@ across different chemistry-related tools and applications.
 import logging
 import math
 import os
+import threading
 import time
 from concurrent.futures import ProcessPoolExecutor
 from typing import Any, Dict, List, Optional, Sequence, Union
@@ -23,6 +24,7 @@ from rdkit.Chem.Fingerprints import FingerprintMols
 from .standardize import standardize_smiles
 
 logger = logging.getLogger(__name__)
+_DISABLE_PROCESS_POOL_VALUES = {"1", "true", "yes", "on"}
 
 
 def _smiles_to_mol_or_none(smiles: str) -> "Chem.Mol | None":
@@ -342,6 +344,14 @@ def _chunk_size(item_count: int, worker_count: int) -> int:
     return max(1, math.ceil(item_count / worker_count))
 
 
+def _process_pool_allowed() -> bool:
+    """Return whether it is safe to create a process pool in this call context."""
+    disabled = os.getenv("CS_COPILOT_DISABLE_PROCESS_POOLS", "").strip().lower()
+    if disabled in _DISABLE_PROCESS_POOL_VALUES:
+        return False
+    return threading.current_thread() is threading.main_thread()
+
+
 def _morgan_fp_chunk(smiles_values: List[str], nbits: int) -> List[Optional[np.ndarray]]:
     """Worker: compute Morgan count fingerprints for a chunk of SMILES.
 
@@ -392,7 +402,12 @@ def calc_morgan_fp_batch(
     smiles_values = list(smiles_list)
     total_rows = len(smiles_values)
     worker_count = _resolve_worker_count(max_workers, total_rows)
-    mode = "processes" if total_rows >= min_parallel_rows and worker_count > 1 else "serial"
+    process_pool_allowed = _process_pool_allowed()
+    mode = (
+        "processes"
+        if process_pool_allowed and total_rows >= min_parallel_rows and worker_count > 1
+        else "serial"
+    )
     serial_fallback = False
 
     logger.info(

@@ -66,6 +66,7 @@ def test_team_keeps_session_history_without_cross_session_memories(monkeypatch, 
     assert team.store_tool_messages is True
     assert team.store_media is True
     assert any(tool.__class__.__name__ == "SessionMemoryToolkit" for tool in team.tools)
+    assert any(tool.__class__.__name__ == "SkillToolkit" for tool in team.tools)
 
     assert team.enable_agentic_memory is False
     assert team.enable_user_memories is False

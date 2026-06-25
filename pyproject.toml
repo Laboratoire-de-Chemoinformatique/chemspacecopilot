@@ -24,6 +24,7 @@ dependencies = [
     "lancedb>=0.25.2",
     "tantivy>=0.25.0",
     "pypdf>=6.1.2",
+    "reportlab>=4.4.9",
     "requests>=2.32.5",
     "exa-py>=1.16.1",
     "newspaper4k>=0.9.3.1",
@@ -33,7 +34,6 @@ dependencies = [
     "agno==2.1.9",
     "ollama>=0.4.0",
     "chembl-webresource-client>=0.10.9",
-    "SynPlanner>=1.2.1",
     "pubchempy>=1.0.5",
     "CairoSVG>=2.8.2",
     "vl-convert-python>=1.8.0",
@@ -65,12 +65,25 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/cs_copilot"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"skills" = "cs_copilot/skills/catalog"
+"workflow_catalog" = "cs_copilot/workflows/catalog"
+
 [project.scripts]
 cscopilot = "cs_copilot.cli:main"
+cscopilot-mcp = "cs_copilot.mcp.__main__:main"
+cscopilot-mcp-serve = "cs_copilot.mcp.__main__:serve_main"
+cscopilot-mcp-check = "cs_copilot.mcp.check:main"
 
 [project.optional-dependencies]
 postgresql = [
     "psycopg2-binary>=2.9.9",
+]
+mcp = [
+    "mcp>=1.2,<2",
+]
+synplanner = [
+    "SynPlanner>=1.2.1",
 ]
 
 [dependency-groups]
@@ -143,4 +156,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m \"not live\""
+markers = [
+    "live: tests that spawn subprocesses or hit external services (skipped by default; opt in with `-m live`)",
+]
