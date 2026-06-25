@@ -24,6 +24,7 @@ dependencies = [
     "lancedb>=0.25.2",
     "tantivy>=0.25.0",
     "pypdf>=6.1.2",
+    "reportlab>=4.4.9",
     "requests>=2.32.5",
     "exa-py>=1.16.1",
     "newspaper4k>=0.9.3.1",
