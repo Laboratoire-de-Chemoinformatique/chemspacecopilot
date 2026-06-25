@@ -1,0 +1,15 @@
+# Drop this stanza into ~/.codex/config.toml to register the cs_copilot MCP
+# server with Codex. The command resolves cscopilot-mcp via PATH, so make
+# sure the cs_copilot environment with the [mcp] extra is activated.
+
+[mcp_servers.cs_copilot]
+command = "cscopilot-mcp"
+args = [
+    "--session-id", "demo",
+    "--workflow-slug", "chemical_space",
+    "--log-level", "info",
+]
+
+[mcp_servers.cs_copilot.env]
+SESSION_ID = "demo"
+USE_S3 = "false"

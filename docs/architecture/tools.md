@@ -45,6 +45,16 @@ Backend is auto-detected: MySQL when `CHEMBL_MYSQL_HOST` is present, REST otherw
 
 Download the MySQL dump from the [ChEMBL downloads page](https://chembl.gitbook.io/chembl-interface-documentation/downloads) or the [EBI FTP](https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/latest/).
 
+## Optional SynPlanner Backend
+
+`SynPlannerToolkit` is part of the codebase, but the external `SynPlanner` package is an optional dependency because its `cgrtools-stable` dependency only ships wheels for selected platforms. Install it on supported systems with:
+
+```bash
+uv sync --extra synplanner
+```
+
+Without that extra, the SynPlanner agent/toolkit raises a clear install error when its backend is used; the rest of the ChemSpace tool stack and MCP server remain installable.
+
 ## Adding a New Tool
 
 1. Create a toolkit in `src/cs_copilot/tools/`:

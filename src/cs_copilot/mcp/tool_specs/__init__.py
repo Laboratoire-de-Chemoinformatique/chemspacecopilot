@@ -1,0 +1,1 @@
+"""Grouped MCP tool specifications."""

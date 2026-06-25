@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
@@ -154,6 +155,32 @@ class TestCalcMorganFpBatch:
     def test_min_parallel_rows_must_be_positive(self):
         with pytest.raises(ValueError):
             calc_morgan_fp_batch(["CCO"], nbits=32, min_parallel_rows=0)
+
+    def test_worker_thread_forces_serial_mode(self, monkeypatch, caplog):
+        class FailIfUsed:
+            def __init__(self, *args, **kwargs):
+                raise AssertionError("ProcessPoolExecutor should not be used in worker threads")
+
+        monkeypatch.setattr(_MODULE, "ProcessPoolExecutor", FailIfUsed)
+        smiles = ["CCO", "CCN", "CCCl", "c1ccccc1"]
+
+        with caplog.at_level(logging.INFO, logger=_MODULE.__name__):
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                result = executor.submit(
+                    calc_morgan_fp_batch,
+                    smiles,
+                    128,
+                    max_workers=2,
+                    min_parallel_rows=1,
+                ).result()
+
+        assert len(result) == len(smiles)
+        assert all(fp is not None for fp in result)
+        messages = [record.getMessage() for record in caplog.records]
+        assert any(
+            "Computing Morgan fingerprints: total_rows=4 mode=serial workers=2 nbits=128" in msg
+            for msg in messages
+        )
 
 
 class TestEncoderMorganIntegration:

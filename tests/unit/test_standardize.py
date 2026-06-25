@@ -3,6 +3,7 @@
 
 import importlib.util
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pandas as pd
@@ -191,5 +192,27 @@ class TestStandardizeSmilesColumn:
         with caplog.at_level(logging.INFO):
             standardize_smiles_column(df, "smiles", max_workers=2)
 
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("mode=serial workers=2" in message for message in messages)
+
+    def test_worker_thread_forces_serial_mode(self, monkeypatch, caplog):
+        class FailIfUsed:
+            def __init__(self, *args, **kwargs):
+                raise AssertionError("ProcessPoolExecutor should not be used in worker threads")
+
+        monkeypatch.setattr(_MODULE, "ProcessPoolExecutor", FailIfUsed)
+        df = pd.DataFrame({"smiles": ["CCO", "CCN", "CCCl", "c1ccccc1"]})
+
+        with caplog.at_level(logging.INFO):
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                result = executor.submit(
+                    standardize_smiles_column,
+                    df,
+                    "smiles",
+                    max_workers=2,
+                    min_parallel_rows=1,
+                ).result()
+
+        assert result["smiles"].notna().all()
         messages = [record.getMessage() for record in caplog.records]
         assert any("mode=serial workers=2" in message for message in messages)

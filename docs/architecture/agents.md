@@ -10,6 +10,7 @@ The system uses a **Factory Pattern + Registry** for agent creation.
 - `registry.py` — Dynamic agent registry with auto-discovery
 - `teams.py` — Multi-agent team coordination using the Agno framework
 - `prompts.py` — Agent instructions and system prompts
+- `skills/` — Shared reusable workflow procedures consumed by Agno and MCP
 
 ## Runtime Team Agents
 
@@ -21,7 +22,9 @@ The system uses a **Factory Pattern + Registry** for agent creation.
 | **Report Generator** | Formats analysis outputs into reports and visual artifacts |
 | **Molecular Designer** | Small-molecule design via autoencoder and LLM engines, including standalone and GTM-guided modes |
 | **Peptide Designer** | Peptide design via WAE and LLM engines, latent-space GTM workflows, and DBAASP-backed peptide activity landscapes |
-| **SynPlanner** | Retrosynthetic planning and route visualization for target molecules |
+| **SynPlanner** | Retrosynthetic planning and route visualization for target molecules; requires the optional `synplanner` extra |
+
+The team coordinator also has a read-only Skills toolkit (`list_skills`, `search_skills`, `fetch_skill`) so it can consult the same reusable workflow procedures exposed through MCP.
 
 ## Separate Evaluation Agent
 
