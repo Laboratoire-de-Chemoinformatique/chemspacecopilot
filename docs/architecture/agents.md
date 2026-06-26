@@ -26,6 +26,19 @@ The system uses a **Factory Pattern + Registry** for agent creation.
 
 The team coordinator also has a read-only Skills toolkit (`list_skills`, `search_skills`, `fetch_skill`) so it can consult the same reusable workflow procedures exposed through MCP.
 
+## Prompt / Skill Ownership
+
+Agent prompts in `src/cs_copilot/agents/prompts.py` define role identity,
+global routing policy, clarification rules, evidence standards, session-memory
+conventions, and artifact formatting. They should not contain long mutable
+tool sequences.
+
+Reusable task procedures live in `skills/<slug>/SKILL.md`. MCP-facing workflow
+contracts live in `workflow_catalog/<slug>/WORKFLOW.md` and define preflight
+tools, required tool groups, expected artifacts, and recommended prompts. When
+behavior changes for a domain workflow, update the skill or workflow catalog
+first and keep prompts high-level.
+
 ## Separate Evaluation Agent
 
 | Agent | Role |

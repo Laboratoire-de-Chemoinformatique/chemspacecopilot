@@ -6,4 +6,5 @@ Use this workflow when the user asks how to synthesize a generated candidate, se
 2. Use `synplanner_identify_input` and convert names with `synplanner_convert_name_to_smiles` when needed.
 3. Confirm the optional SynPlanner backend is available before promising route generation.
 4. Run `synplanner_plan_synthesis`, summarize with `synplanner_describe_plan`, and save visualizations with `synplanner_get_route_visualizations` when requested.
-5. Include route artifacts in a report if the user asks for a synthesis summary.
+5. If no route is found and an LLM fallback is allowed, label it as not SynPlanner-validated.
+6. Include route artifacts in a report if the user asks for a synthesis summary.

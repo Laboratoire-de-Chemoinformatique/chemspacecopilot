@@ -33,6 +33,8 @@ def test_mcp_workflow_prompt_is_external_reasoner_native():
 
     assert "external MCP reasoner" in rendered
     assert "mcp_bootstrap" in rendered
+    assert "workflow and skill documents" in rendered
+    assert "source of truth" in rendered
     assert "Call MCP tools directly" in rendered
     assert "Do not invent missing target" in rendered
     assert "gtm_save_density_plot" in rendered
@@ -70,3 +72,5 @@ def test_cs_copilot_workflow_prompt_uses_team_instructions():
     assert agent_prompts.AGENT_TEAM_INSTRUCTIONS, "team instructions constant is empty"
     # The rendered prompt should contain the first line of the team instructions.
     assert agent_prompts.AGENT_TEAM_INSTRUCTIONS[0] in rendered
+    assert "fetch_skill" in rendered
+    assert "source of truth" in rendered

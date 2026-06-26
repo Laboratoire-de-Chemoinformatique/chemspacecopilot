@@ -4,14 +4,16 @@ Use this skill when the user needs ChEMBL bioactivity data for a target, organis
 
 ## Procedure
 
-1. Call `chembl_prepare_retrieval` with the user's request before running retrieval.
-2. If preflight returns `needs_clarification=true`, ask the returned clarification questions and do not call mutating ChEMBL tools yet.
-3. Use `chembl_convert_to_chembl_query` if the clarified request is natural language and needs canonical ChEMBL keyword form.
-4. Call `chembl_fetch_compounds` only after preflight returns `can_proceed=true`.
-5. In MCP mode, the in-process ChEMBL LLM-as-judge is disabled. If ambiguous rows need judge-like filtering, fetch and apply `chembl_retrieval_judge` / `chembl_metadata_judge` prompts with the external MCP client's reasoning.
-6. Use `chembl_describe_dataset` on the clean dataset path returned by the retrieval call.
-7. Report the raw dataset, clean dataset, descriptor Parquet, filtered rows if present, and standardization report paths.
-8. Treat `clean_dataset_path` as the downstream dataset. `dataset_path` is only a backward-compatible alias for the clean dataset.
+1. Call `chembl_prepare_retrieval` with the user's request and available session summary before any mutating retrieval tool.
+2. If preflight returns `needs_clarification=true`, ask all returned clarification questions in one message and stop. Do not call retrieval tools until the user explicitly answers target specificity, organism, assay type, and mechanism requirements.
+3. Reject bare family names or family-plus-index targets such as "kinase 2", "receptor 5", "phosphatase", or "GPCR". Ask for a recognized gene symbol or full canonical protein name. Confirm abbreviations such as CDK2, EGFR, PDE4, BRAF, and JAK2 unless preflight has already confirmed the target.
+4. Never default organism, assay type, or mechanism. A mechanism answer of "unspecified", "any", or "no preference" is valid and means no mechanism filter.
+5. Use `chembl_convert_to_chembl_query` when the clarified target is natural language and needs canonical ChEMBL keyword form. Use the generated semantic keywords rather than adding punctuation variants manually; retrieval handles hyphen/space variants internally.
+6. Call `chembl_fetch_compounds` only after preflight returns `can_proceed=true`. Pass explicit organism, assay type, and mechanism values from the user or preflight. Omit the mechanism argument when the user selected no mechanism filter.
+7. In MCP mode, the in-process ChEMBL LLM-as-judge is disabled. If ambiguous rows need judge-like filtering, fetch and apply `chembl_retrieval_judge` / `chembl_metadata_judge` prompts with the external MCP client's reasoning.
+8. Use `chembl_describe_dataset` on the clean dataset path returned by retrieval. Verify the dataset covers the intended target and requested assay categories.
+9. Report raw, clean, filtered rows if present, descriptor Parquet, and standardization report paths. Summarize invalid rows, duplicates, raw-to-final SMILES collapses, stereochemistry handling, and activity merge policy.
+10. Treat `clean_dataset_path` as the downstream dataset. `dataset_path` is only a backward-compatible alias for the clean dataset.
 
 ## Expected Outputs
 
