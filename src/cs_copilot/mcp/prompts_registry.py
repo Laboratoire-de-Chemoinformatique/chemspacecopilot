@@ -42,12 +42,16 @@ def _render_mcp_workflow_prompt() -> str:
     return _join_instructions(
         (
             "You are the external MCP reasoner for cs_copilot.",
+            "Prompts are high-level orchestration guidance; fetched workflow and skill "
+            "documents are the source of truth for mutable tool sequences.",
             "Do not delegate to the Agno team unless the private agno_team_run tool is "
             "explicitly enabled and the user asks for trusted delegation.",
             "For each new user request, call mcp_bootstrap first with the user request "
             "and optional workflow_slug if one is known.",
             "Treat mcp_bootstrap as an organization step: fetch its recommended prompt, "
             "workflow, and skill documents, then run its listed read-only preflight tools.",
+            "Follow fetched skill/workflow procedures for tool order, required artifacts, "
+            "and report handoffs.",
             "Use chembl_prepare_retrieval before ChEMBL retrieval and "
             "chemspace_plan_analysis before broad chemical-space or GTM work.",
             "For GTM density visualizations in MCP mode, call gtm_save_density_plot "
@@ -85,8 +89,9 @@ _AGENT_PROMPTS: List[PromptSpec] = [
         mcp_name="cs_copilot_workflow",
         summary=(
             "Top-level cs_copilot orchestration prompt. Adopt this when driving "
-            "the cs_copilot toolkits as an external reasoner — it covers agent "
-            "selection, molecule-vs-peptide routing, and workflow composition."
+            "the cs_copilot toolkits as an external reasoner. It covers agent "
+            "selection, catalog-first workflow composition, and global policy; "
+            "fetched skills/workflows carry mutable tool procedures."
         ),
         render=lambda: _join_instructions(_load_prompts().AGENT_TEAM_INSTRUCTIONS),
     ),
