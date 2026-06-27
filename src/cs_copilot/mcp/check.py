@@ -491,6 +491,16 @@ async def _probe_server(
                     )
                     await _verify_search_fetch(
                         session,
+                        query="gtm density landscape skill",
+                        expected_id="skill:gtm-density-landscape",
+                        required_text=(
+                            "Skill: GTM density landscape",
+                            "gtm_save_density_plot",
+                            "Required tools",
+                        ),
+                    )
+                    await _verify_search_fetch(
+                        session,
                         query="molecular design",
                         expected_id="tool:mol_validate_design_candidates",
                         required_text=("Tool: mol_validate_design_candidates",),

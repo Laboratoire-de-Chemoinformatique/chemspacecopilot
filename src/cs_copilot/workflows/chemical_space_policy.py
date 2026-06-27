@@ -138,7 +138,7 @@ def _recommended_tools(intents: list[str], can_proceed: bool) -> list[str]:
     if "activity_landscape" in intents:
         tools.append("gtm_create_activity_landscapes")
     if "density_landscape" in intents:
-        tools.append("gtm_load_density_matrix")
+        tools.extend(["gtm_save_density_plot", "gtm_get_density_summary"])
     if "gtm_projection" in intents:
         tools.append("gtm_project_data")
     if "chemotype_sar_analysis" in intents:

@@ -35,10 +35,11 @@ def test_mcp_workflow_prompt_is_external_reasoner_native():
     assert "mcp_bootstrap" in rendered
     assert "workflow and skill documents" in rendered
     assert "source of truth" in rendered
+    assert "Follow fetched skill/workflow procedures" in rendered
     assert "Call MCP tools directly" in rendered
     assert "Do not invent missing target" in rendered
-    assert "gtm_save_density_plot" in rendered
-    assert "gtm_load_density_matrix" in rendered
+    assert "gtm_save_density_plot" not in rendered
+    assert "gtm_load_density_matrix" not in rendered
 
 
 def test_chembl_retrieval_judge_template_renders():

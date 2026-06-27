@@ -89,6 +89,16 @@ def test_search_and_fetch_skill_documentation(isolated_session):
     assert "gtm_create_activity_landscapes" in fetched.text
     assert "# GTM Activity Landscape" in fetched.text
 
+    density = search("gtm density landscape skill")
+    density_ids = [item.id for item in density.results]
+    assert "skill:gtm-density-landscape" in density_ids
+
+    fetched_density = fetch("skill:gtm-density-landscape")
+    assert fetched_density.title == "Skill: GTM density landscape"
+    assert fetched_density.metadata["kind"] == "skill"
+    assert "gtm_save_density_plot" in fetched_density.text
+    assert "# GTM Density Landscape" in fetched_density.text
+
 
 def test_fetch_skill_catalog(isolated_session):
     fetched = fetch("catalog:skills")

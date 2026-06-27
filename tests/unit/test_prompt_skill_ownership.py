@@ -40,10 +40,16 @@ def test_high_risk_procedures_live_in_skills():
             "target specificity",
             "standardization report paths",
         ],
+        "gtm-density-landscape": [
+            "chemspace_plan_analysis",
+            "gtm_save_density_plot",
+            "gtm_get_density_summary",
+            "density analysis",
+        ],
         "gtm-activity-landscape": [
             "chemspace_plan_analysis",
             "gtm_create_activity_landscapes",
-            "gtm_save_density_plot",
+            "gtm-density-landscape",
             "Default",
         ],
         "report-generation": [

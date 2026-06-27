@@ -20,6 +20,7 @@ def test_default_registry_loads_workflow_catalog():
 
     assert {
         "chembl-target-retrieval",
+        "gtm-density-landscape",
         "gtm-activity-landscape",
         "chembl-to-gtm-report",
         "candidate-design-to-gtm",
@@ -37,6 +38,9 @@ def test_default_registry_loads_workflow_catalog():
 def test_default_registry_searches_metadata_and_tools():
     results = search_workflows("gtm activity")
     assert results[0].slug in {"gtm-activity-landscape", "chembl-to-gtm-report"}
+
+    results = search_workflows("gtm density")
+    assert results[0].slug == "gtm-density-landscape"
 
     results = search_workflows("robustness_export_analysis_report")
     assert results[0].slug == "robustness-report"

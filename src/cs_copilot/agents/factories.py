@@ -533,7 +533,7 @@ class GTMAgentFactory(BaseAgentFactory):
     - optimize: Build and optimize new GTM maps
     - load: Load existing GTM models from S3/local/HuggingFace
     - density: Analyze compound distributions and neighborhood preservation
-    - activity: Create activity-density landscapes for SAR analysis
+    - activity: Create activity landscapes for SAR analysis
     - project: Project external datasets onto existing GTM maps
 
     Features smart caching to avoid redundant GTM loading across operations.
@@ -552,7 +552,7 @@ class GTMAgentFactory(BaseAgentFactory):
             - **Optimize**: Build and optimize new GTM maps from chemical datasets
             - **Load**: Retrieve existing GTM models from storage (S3, local, HuggingFace)
             - **Density**: Analyze compound distributions and neighborhood preservation on GTM maps
-            - **Activity**: Create activity-density landscapes for structure-activity relationship (SAR) exploration
+            - **Activity**: Create activity landscapes for structure-activity relationship (SAR) exploration
             - **Project**: Map external datasets onto existing GTM maps for comparative analysis
 
             Key Features:

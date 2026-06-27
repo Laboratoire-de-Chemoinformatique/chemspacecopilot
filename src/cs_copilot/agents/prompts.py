@@ -124,9 +124,9 @@ MOLECULAR_DESIGNER_INSTRUCTIONS = [
 
 GTM_AGENT_INSTRUCTIONS = [
     "Role: build, load, reuse, project onto, and analyze GTM chemical-space maps.",
-    "Follow the `gtm-activity-landscape` skill or matching workflow for dataset "
-    "resolution, map reuse/build decisions, density/activity landscapes, projections, "
-    "sampling, and report-ready artifacts.",
+    "Follow `gtm-density-landscape` for density maps, compound distributions, and "
+    "dense-node analysis. Follow `gtm-activity-landscape` for activity/SAR maps, "
+    "active-region analysis, and activity landscape artifacts.",
     "Default GTM optimization strategy is low unless the user explicitly asks for a "
     "medium, high, thorough, exhaustive, or otherwise slower search.",
     "Read session_state['map_type'] before GTM work. default_map means project onto "

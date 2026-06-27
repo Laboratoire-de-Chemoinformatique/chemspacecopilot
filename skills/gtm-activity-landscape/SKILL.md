@@ -1,6 +1,6 @@
 # GTM Activity Landscape
 
-Use this skill for GTM-based chemical-space analysis, density/activity maps, SAR inspection, and report-ready landscape outputs.
+Use this skill for GTM-based activity/SAR maps, active-region sampling, and report-ready activity landscape outputs. For density maps and compound-distribution analysis, use the `gtm-density-landscape` skill.
 
 ## Procedure
 
@@ -12,10 +12,9 @@ Use this skill for GTM-based chemical-space analysis, density/activity maps, SAR
 6. Build a new GTM only when no suitable map exists or the user asks for one. Default to a low optimization strategy unless the user explicitly requests medium/high/thorough search. If building, call `gtm_optimization`, then persist the model and projected data with `gtm_save_model_and_data`.
 7. If the user supplies new data or generated candidates for an existing map, materialize the candidate set if needed and use `gtm_project_data` before landscape analysis.
 8. Create activity landscapes with `gtm_create_activity_landscapes`. When both report-ready renderers are required, produce the discrete Altair landscape and the smooth Plotly landscape; if re-rendering saved landscape CSVs, use `gtm_save_landscape_plot` for the needed renderer outputs.
-9. Inspect the result with `gtm_get_activity_landscape_summary` and sample relevant nodes with `gtm_sample_activity_landscape_nodes`, `gtm_sample_dense_nodes`, or `gtm_sample_top_activity_molecules` only when sampling is part of the request.
-10. For density plots in MCP mode, use `gtm_save_density_plot`; `gtm_load_density_matrix` returns density tables but does not write plots.
-11. Never call compounds or nodes "top active", "most potent", or assign pIC50/pChEMBL ranks unless the claim is backed by loaded activity values from the landscape, DataFrame, or tool output.
-12. Save or reference static report figures when preparing a final report. Prefer artifact paths over inline tables for large results.
+9. Inspect the result with `gtm_get_activity_landscape_summary` and sample relevant nodes with `gtm_sample_activity_landscape_nodes` or `gtm_sample_top_activity_molecules` only when sampling is part of the request.
+10. Never call compounds or nodes "top active", "most potent", or assign pIC50/pChEMBL ranks unless the claim is backed by loaded activity values from the landscape, DataFrame, or tool output.
+11. Save or reference static report figures when preparing a final report. Prefer artifact paths over inline tables for large results.
 
 ## Expected Outputs
 

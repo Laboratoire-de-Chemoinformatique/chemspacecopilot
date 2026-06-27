@@ -47,6 +47,33 @@ def test_bootstrap_recommends_gtm_workflow_for_activity_landscape():
     assert result["action_plan"][1]["tool"] == "chemspace_plan_analysis"
 
 
+def test_bootstrap_recommends_gtm_density_workflow_for_density_landscape():
+    result = mcp_bootstrap_facade().bootstrap(
+        "Show the GTM density map for the current clean dataset"
+    )
+
+    assert result["recommended_workflow"] == "gtm-density-landscape"
+    assert "gtm-density-landscape" in result["relevant_skills"]
+    assert "gtm-activity-landscape" not in result["relevant_skills"]
+    assert "chemspace_plan_analysis" in result["preflight_tools"]
+    assert "gtm_save_density_plot" in result["recommended_next_tools"]
+    assert "workflow:gtm-density-landscape" in result["fetch_ids"]
+
+
+def test_bootstrap_combined_density_activity_fetches_both_gtm_skills():
+    result = mcp_bootstrap_facade().bootstrap(
+        "Show the density map and create an activity landscape"
+    )
+
+    assert result["recommended_workflow"] == "gtm-density-landscape"
+    assert result["relevant_skills"] == [
+        "gtm-density-landscape",
+        "gtm-activity-landscape",
+    ]
+    assert "skill:gtm-density-landscape" in result["fetch_ids"]
+    assert "skill:gtm-activity-landscape" in result["fetch_ids"]
+
+
 def test_bootstrap_recommends_peptide_skill_for_peptide_design():
     result = mcp_bootstrap_facade().bootstrap(
         "Design antimicrobial peptide candidates and rank them"
