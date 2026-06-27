@@ -1,6 +1,6 @@
 # GTM Activity Landscape
 
-Use this workflow for density/activity maps, SAR inspection, active-region sampling, and report-ready GTM artifacts.
+Use this workflow for activity/SAR maps, active-region sampling, and report-ready GTM activity artifacts. For density maps and compound-distribution analysis, use the `gtm-density-landscape` workflow.
 
 1. Run `chemspace_plan_analysis` with the request and session summary.
 2. Resolve the active clean dataset from session memory or an explicit path.

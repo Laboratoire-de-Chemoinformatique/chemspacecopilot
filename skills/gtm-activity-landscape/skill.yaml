@@ -1,6 +1,6 @@
 slug: gtm-activity-landscape
 title: GTM activity landscape
-summary: Build or reuse a GTM map, create activity landscapes, sample regions, and prepare results for interpretation or reporting.
+summary: Build or reuse a GTM map, create activity/SAR landscapes, sample active regions, and prepare activity results for interpretation or reporting.
 status: stable
 tags:
   - gtm
@@ -10,7 +10,9 @@ tags:
 keywords:
   - gtm
   - activity landscape
-  - density map
+  - activity map
+  - sar landscape
+  - active regions
   - project
   - projection
 required_tools:

@@ -16,6 +16,7 @@ def test_default_registry_loads_initial_skill_catalog():
 
     assert {
         "chembl-target-retrieval",
+        "gtm-density-landscape",
         "gtm-activity-landscape",
         "molecular-design",
         "peptide-design",
@@ -31,6 +32,10 @@ def test_default_registry_loads_initial_skill_catalog():
     gtm = get_skill("gtm-activity-landscape")
     assert "gtm_create_activity_landscapes" in gtm.required_tools
     assert "# GTM Activity Landscape" in gtm.skill_md
+
+    density = get_skill("gtm-density-landscape")
+    assert "gtm_save_density_plot" in density.required_tools
+    assert "# GTM Density Landscape" in density.skill_md
 
 
 def test_default_registry_searches_metadata_and_tools():

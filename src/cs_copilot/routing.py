@@ -47,6 +47,23 @@ class RoutingResult:
 _PROJECTION_TERMS = ("gtm", "project", "projection", "map", "landscape")
 _PROJECTION_GATED_WORKFLOWS = ("candidate-design-to-gtm",)
 
+_GTM_DENSITY_WORKFLOW = "gtm-density-landscape"
+_GTM_ACTIVITY_WORKFLOW = "gtm-activity-landscape"
+_GTM_DENSITY_TERMS = (
+    "density",
+    "density map",
+    "density landscape",
+    "compound distribution",
+    "densest nodes",
+    "dense nodes",
+)
+_GTM_ACTIVITY_TERMS = (
+    "activity landscape",
+    "activity map",
+    "sar landscape",
+    "active regions",
+)
+
 # Slug tokens too generic to signal relevance on their own (these caused the old
 # "for"-overlap mis-match in bootstrap).
 _SLUG_STOPWORDS = frozenset({"for", "to", "and", "the", "of", "a", "an", "on", "in"})
@@ -176,6 +193,13 @@ def _is_skill(slug: str) -> bool:
     return slug in _skill_slugs()
 
 
+def _get_workflow_or_none(slug: str) -> WorkflowSpec | None:
+    try:
+        return get_workflow(slug)
+    except KeyError:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Selection steps
 # ---------------------------------------------------------------------------
@@ -214,6 +238,12 @@ def _select_workflow(
     if not results:
         return None, None
     spec = results[0]
+    density_hit = _matches_any(text_lc, _GTM_DENSITY_TERMS)
+    activity_hit = _matches_any(text_lc, _GTM_ACTIVITY_TERMS)
+    if density_hit and not activity_hit:
+        spec = _get_workflow_or_none(_GTM_DENSITY_WORKFLOW) or spec
+    elif activity_hit and not density_hit:
+        spec = _get_workflow_or_none(_GTM_ACTIVITY_WORKFLOW) or spec
     if spec.slug in _PROJECTION_GATED_WORKFLOWS and not _matches_any(text_lc, _PROJECTION_TERMS):
         tie_breaks.append(f"suppressed {spec.slug} (no projection terms)")
         return None, None
@@ -243,6 +273,13 @@ def _select_skills(
     # The matched workflow's skill twin, when one exists, leads the list.
     if workflow and _is_skill(workflow.slug):
         slugs.append(workflow.slug)
+
+    # Density and activity GTM landscapes are separate catalog entries. When the
+    # request explicitly asks for both, fetch both skill procedures.
+    if _matches_any(text_lc, _GTM_DENSITY_TERMS) and _is_skill(_GTM_DENSITY_WORKFLOW):
+        slugs.append(_GTM_DENSITY_WORKFLOW)
+    if _matches_any(text_lc, _GTM_ACTIVITY_TERMS) and _is_skill(_GTM_ACTIVITY_WORKFLOW):
+        slugs.append(_GTM_ACTIVITY_WORKFLOW)
 
     # Concept domains (peptide XOR molecule, then report, then retrosynthesis),
     # with vocabulary read from each anchor skill's catalog keywords.
