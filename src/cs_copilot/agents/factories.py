@@ -23,6 +23,7 @@ from cs_copilot.tools import (
     PeptideDesignerToolkit,
     PointerPandasTools,
     SessionMemoryToolkit,
+    SkillToolkit,
     SynPlannerToolkit,
     # SessionToolkit,
     save_gtm_landscape_plot,
@@ -337,6 +338,7 @@ class ChEMBLDownloaderFactory(BaseAgentFactory):
             tools=[
                 ChemblToolkit(),
                 PointerPandasTools(),
+                SkillToolkit(),
                 # SessionToolkit(),
             ],
             instructions=CHEMBL_INSTRUCTIONS,
@@ -420,6 +422,7 @@ class ChemoinformaticianFactory(BaseAgentFactory):
                 ChemicalSimilarityToolkit(),
                 PointerPandasTools(),
                 GTMToolkit(),  # Enable GTM data access for downstream analysis
+                SkillToolkit(),
                 # Future: QSARToolkit, ClusteringToolkit, DescriptorToolkit
             ],
             instructions=CHEMOINFORMATICIAN_INSTRUCTIONS,
@@ -511,6 +514,7 @@ class MolecularDesignerFactory(BaseAgentFactory):
                 GTMToolkit(),
                 ChemicalSimilarityToolkit(),
                 PointerPandasTools(),
+                SkillToolkit(),
             ],
             instructions=MOLECULAR_DESIGNER_INSTRUCTIONS,
             session_state={
@@ -566,6 +570,7 @@ class GTMAgentFactory(BaseAgentFactory):
                 SessionMemoryToolkit(),
                 save_gtm_landscape_plot,
                 save_gtm_plot,
+                SkillToolkit(),
             ],
             instructions=GTM_AGENT_INSTRUCTIONS,
             session_state={
@@ -652,6 +657,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
                 save_gtm_plot,  # For GTM-specific visualizations
                 save_rich_report,  # Persists image-rich HTML/PDF reports
                 save_markdown_report,  # Persists the final markdown report
+                SkillToolkit(),
                 # Plotting libraries (matplotlib, seaborn) available via Python environment
             ],
             instructions=REPORT_GENERATOR_INSTRUCTIONS,
@@ -683,6 +689,7 @@ class RobustnessEvaluationFactory(BaseAgentFactory):
             tools=[
                 PointerPandasTools(),
                 RobustnessAnalysisToolkit(),
+                SkillToolkit(),
             ],
             instructions=ROBUSTNESS_EVALUATION_INSTRUCTIONS,
             session_state={
@@ -718,7 +725,10 @@ class SynPlannerFactory(BaseAgentFactory):
                 "engine, and present the best synthetic routes with step-by-step "
                 "descriptions and visualizations."
             ),
-            tools=[SynPlannerToolkit()],
+            tools=[
+                SynPlannerToolkit(),
+                SkillToolkit(),
+            ],
             instructions=SYNPLANNER_INSTRUCTIONS,
         )
 
@@ -798,6 +808,7 @@ class PeptideDesignerFactory(BaseAgentFactory):
                 PointerPandasTools(),
                 save_gtm_landscape_plot,
                 save_gtm_plot,
+                SkillToolkit(),
             ],
             instructions=PEPTIDE_DESIGNER_INSTRUCTIONS,
         )

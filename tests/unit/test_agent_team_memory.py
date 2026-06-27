@@ -5,6 +5,7 @@
 from agno.agent import Agent
 from agno.models.base import Model
 
+from cs_copilot.agents import factories as factory_module
 from cs_copilot.agents import teams
 from cs_copilot.agents.factories import AgentConfig, BaseAgentFactory
 
@@ -48,6 +49,28 @@ def _patch_lightweight_team_dependencies(monkeypatch):
     monkeypatch.setattr(teams, "analyze_resources", lambda: {"cpu": "test"})
 
 
+def _patch_lightweight_factory_toolkits(monkeypatch):
+    """Avoid model-backed toolkit initialization while inspecting factory configs."""
+
+    class _DummyToolkit:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    for name in (
+        "AutoencoderToolkit",
+        "ChemblToolkit",
+        "ChemicalSimilarityToolkit",
+        "GTMToolkit",
+        "MolecularDesignerToolkit",
+        "PeptideDesignerToolkit",
+        "PointerPandasTools",
+        "RobustnessAnalysisToolkit",
+        "SessionMemoryToolkit",
+        "SynPlannerToolkit",
+    ):
+        monkeypatch.setattr(factory_module, name, _DummyToolkit)
+
+
 def test_team_keeps_session_history_without_cross_session_memories(monkeypatch, tmp_path):
     """Default team memory should persist thread history without recalling user memories."""
     _patch_lightweight_team_dependencies(monkeypatch)
@@ -75,6 +98,30 @@ def test_team_keeps_session_history_without_cross_session_memories(monkeypatch, 
     assert all(member.session_state is team.session_state for member in team.members)
     assert team.session_state["resource_profile"] == {"cpu": "test"}
     assert team.session_state["agent_scratch"] == {}
+
+
+def test_specialist_factories_expose_skill_toolkit(monkeypatch):
+    """Specialist agents should be able to fetch procedural skills directly."""
+    _patch_lightweight_factory_toolkits(monkeypatch)
+
+    factory_classes = [
+        factory_module.ChEMBLDownloaderFactory,
+        factory_module.ChemoinformaticianFactory,
+        factory_module.MolecularDesignerFactory,
+        factory_module.GTMAgentFactory,
+        factory_module.ReportGeneratorFactory,
+        factory_module.RobustnessEvaluationFactory,
+        factory_module.SynPlannerFactory,
+        factory_module.PeptideDesignerFactory,
+    ]
+
+    missing = []
+    for factory_cls in factory_classes:
+        config = factory_cls().get_agent_config()
+        if not any(tool.__class__.__name__ == "SkillToolkit" for tool in config.tools):
+            missing.append(factory_cls.agent_type)
+
+    assert not missing
 
 
 def test_team_memory_disabled_removes_persistence(monkeypatch):
