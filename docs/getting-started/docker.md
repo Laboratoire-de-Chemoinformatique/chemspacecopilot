@@ -18,6 +18,17 @@ docker compose build chainlit-app
 cp .env.example .env && docker-compose up -d  # Edit .env first
 ```
 
+CPU mode is the default for direct Compose runs. `./docker-start.sh` auto-adds
+`docker-compose.gpu.yml` only when a working NVIDIA runtime is detected.
+
+```bash
+# Force CPU
+docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
+
+# Opt into NVIDIA GPU
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+```
+
 **Access:** [App](http://localhost:8000) | [MinIO Console](http://localhost:9001) (cs_copilot / chempwd123) | PostgreSQL: localhost:5432
 
 ## Services
@@ -92,6 +103,7 @@ docker-compose exec postgres psql -U postgres -d chainlit  # DB shell
 | Port conflict | Use `./docker-start.sh` (auto-detects free ports) |
 | DB error "relation User does not exist" | `docker-compose up -d chainlit-db-init && docker-compose restart chainlit-app` |
 | MinIO issues | `docker-compose logs minio-setup` |
+| `could not select device driver "nvidia"` | Run CPU mode or use `./docker-start.sh`; only use `docker-compose.gpu.yml` on hosts with NVIDIA Container Toolkit |
 | Out of memory | Docker Desktop > Settings > Resources > Memory >= 4 GB |
 | Disk space | `docker system prune` |
 

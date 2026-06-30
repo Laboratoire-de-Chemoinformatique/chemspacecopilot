@@ -226,13 +226,14 @@ echo ""
 echo "✅ Configuration validated"
 echo ""
 
-# Auto-detect GPU and pick compose override
+# Auto-detect GPU and pick compose override. The base compose file is CPU-safe;
+# NVIDIA devices are only requested through docker-compose.gpu.yml.
 GPU_OVERRIDE=""
 if docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi &>/dev/null 2>&1; then
     echo "🖥️  GPU detected — CUDA acceleration enabled"
+    GPU_OVERRIDE="-f docker-compose.gpu.yml"
 else
-    echo "⚠️  No GPU detected — falling back to CPU mode"
-    GPU_OVERRIDE="-f docker-compose.cpu.yml"
+    echo "⚠️  No GPU detected — using CPU mode"
 fi
 echo ""
 
