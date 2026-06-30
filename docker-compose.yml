@@ -54,9 +54,8 @@ services:
       - APP_AWS_SECRET_KEY=${MINIO_SECRET_KEY:-chempwd123}
       - DEV_AWS_ENDPOINT=${S3_ENDPOINT_URL:-http://minio:9000}
 
-      # GPU Configuration
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # GPU is opt-in via docker-compose.gpu.yml. Keep direct compose runs CPU-safe.
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-void}
     volumes:
       # Persistent storage for SQLite databases
       - ./data:/app/data
@@ -71,13 +70,6 @@ services:
         condition: service_completed_successfully
       chainlit-db-init:
         condition: service_completed_successfully
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     restart: unless-stopped
     networks:
       - cs_copilot-network
