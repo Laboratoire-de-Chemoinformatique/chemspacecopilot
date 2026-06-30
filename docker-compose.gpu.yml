@@ -1,0 +1,18 @@
+version: '3.8'
+
+# NVIDIA GPU override. Use only on hosts with a working NVIDIA Container
+# Toolkit installation.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+
+services:
+  chainlit-app:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
