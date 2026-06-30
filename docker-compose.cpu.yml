@@ -1,10 +1,10 @@
 version: '3.8'
 
-# CPU fallback override — use on machines without an NVIDIA GPU.
+# Explicit CPU override. The base compose file is already CPU-safe; use this
+# when you want to force CPU execution on a GPU-capable host.
 # Usage: docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
 #
 # This override:
-#   - Clears the GPU device reservation added in docker-compose.yml
 #   - Sets CUDA_VISIBLE_DEVICES=-1 so PyTorch reports no CUDA devices and
 #     gracefully falls back to CPU
 #   - Sets NVIDIA_VISIBLE_DEVICES=void so the NVIDIA Container Toolkit (if
@@ -12,8 +12,6 @@ version: '3.8'
 
 services:
   chainlit-app:
-    deploy:
-      resources: {}
     environment:
       - NVIDIA_VISIBLE_DEVICES=void
       - CUDA_VISIBLE_DEVICES=-1
