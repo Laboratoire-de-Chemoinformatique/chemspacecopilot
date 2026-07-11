@@ -1,3 +1,45 @@
+---
+name: chemoinformatics-analysis
+description: Scaffold/chemotype, clustering, SAR, and similarity/diversity analysis on prepared datasets or GTM node tables, producing structured outputs for the Report Generator.
+metadata:
+  title: Chemoinformatics analysis
+  status: stable
+  tags:
+    - chemoinformatics
+    - scaffold
+    - sar
+    - clustering
+    - similarity
+  keywords:
+    - scaffold
+    - chemotype
+    - sar
+    - activity cliff
+    - clustering
+    - matched molecular pair
+    - diversity
+    - structure-activity relationship
+  required_tools:
+    - chem_calculate_all_similarities
+    - chem_find_most_similar
+  optional_tools:
+    - chem_calculate_tanimoto_similarity
+    - chem_calculate_dice_similarity
+    - pandas_normalize_for_analysis
+    - pandas_load_dataframe_from_session
+    - pandas_run_operation
+    - session_list_loadable_session_data
+    - session_summarize_session_memory
+    - gtm_get_density_summary
+  artifact_outputs:
+    - chemotype_analysis
+    - clustering_results
+    - sar_analysis
+    - similarity_analysis
+  example_prompts:
+    - Cluster the dataset, analyze scaffolds per cluster, and find activity cliffs.
+---
+
 # Chemoinformatics Analysis
 
 Use this skill for chemoinformatics analysis on a prepared dataset, GTM node table, or user-provided molecular data: scaffold/chemotype profiling, clustering, structure-activity relationships (SAR), and similarity/diversity. This skill produces **structured analysis outputs** for the Report Generator — it does not make plots or write reports.

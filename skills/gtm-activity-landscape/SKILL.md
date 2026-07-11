@@ -1,3 +1,43 @@
+---
+name: gtm-activity-landscape
+description: Build or reuse a GTM map, create activity/SAR landscapes, sample active regions, and prepare activity results for interpretation or reporting.
+metadata:
+  title: GTM activity landscape
+  status: stable
+  tags:
+    - gtm
+    - chemography
+    - activity-landscape
+    - sar
+  keywords:
+    - gtm
+    - activity landscape
+    - activity map
+    - sar landscape
+    - active regions
+    - project
+    - projection
+  required_tools:
+    - chemspace_plan_analysis
+    - gtm_optimization
+    - gtm_save_model_and_data
+    - gtm_create_activity_landscapes
+    - gtm_get_activity_landscape_summary
+  optional_tools:
+    - gtm_load_model_only
+    - gtm_load_and_prep_data
+    - gtm_sample_activity_landscape_nodes
+    - gtm_project_data
+    - report_save_rich
+  artifact_outputs:
+    - gtm_model_path
+    - projected_dataset_path
+    - activity_landscape_csv
+    - landscape_plot_path
+  example_prompts:
+    - Build a GTM activity landscape for the current clean ChEMBL dataset and summarize the most active regions.
+---
+
 # GTM Activity Landscape
 
 Use this skill for GTM-based activity/SAR maps, active-region sampling, and report-ready activity landscape outputs. For density maps and compound-distribution analysis, use the `gtm-density-landscape` skill.

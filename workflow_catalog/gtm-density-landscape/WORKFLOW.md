@@ -1,3 +1,42 @@
+---
+name: gtm-density-landscape
+description: Build or reuse a GTM map, create density landscapes, inspect compound distributions, and prepare report-ready density outputs.
+metadata:
+  title: GTM density landscape
+  status: stable
+  tags:
+    - gtm
+    - density-landscape
+    - compound-distribution
+  keywords:
+    - gtm
+    - density
+    - density map
+    - density landscape
+    - compound distribution
+    - densest nodes
+  preflight_tools:
+    - chemspace_plan_analysis
+  required_tools:
+    - gtm_save_density_plot
+    - gtm_get_density_summary
+  optional_tools:
+    - gtm_optimization
+    - gtm_save_model_and_data
+    - gtm_load_density_matrix
+    - gtm_load_model_only
+    - gtm_load_and_prep_data
+    - gtm_sample_dense_nodes
+    - gtm_project_data
+    - report_save_rich
+  expected_artifacts:
+    - gtm_model_path
+    - projected_dataset_path
+    - density_matrix_path
+    - density_plot_path
+  recommended_prompt: gtm_agent
+---
+
 # GTM Density Landscape
 
 Use this workflow for density maps, compound-distribution inspection, dense-node sampling, and report-ready GTM density artifacts.

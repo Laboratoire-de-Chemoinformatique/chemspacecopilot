@@ -1,3 +1,33 @@
+---
+name: report-generation
+description: Turn session datasets, GTM results, generated candidates, synthesis plans, and plots into report artifacts.
+metadata:
+  title: Report generation
+  status: stable
+  tags:
+    - reporting
+    - artifacts
+    - html
+    - markdown
+  keywords:
+    - report
+    - summary
+  required_tools:
+    - report_save_markdown
+    - report_save_rich
+  optional_tools:
+    - session_list_session_objects
+    - session_list_loadable_session_data
+    - session_summarize_session_memory
+  artifact_outputs:
+    - markdown_report_path
+    - html_report_path
+    - pdf_report_path
+  example_prompts:
+    - Create an image-rich report summarizing the current ChEMBL retrieval and GTM activity landscape.
+    - Create an image-rich report summarizing the current GTM density landscape and densest nodes.
+---
+
 # Report Generation
 
 Use this skill when the user asks for a report, presentation artifact, or consolidated summary of a completed analysis.

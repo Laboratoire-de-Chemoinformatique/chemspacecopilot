@@ -9,17 +9,9 @@ from pathlib import Path
 from typing import Any, Sequence
 
 WORKFLOW_MD = "WORKFLOW.md"
-WORKFLOW_YAML = "workflow.yaml"
 WORKFLOWS_ENV = "CS_COPILOT_WORKFLOWS_DIR"
-_LIST_FIELDS = {
-    "tags",
-    "keywords",
-    "preflight_tools",
-    "required_tools",
-    "optional_tools",
-    "expected_artifacts",
-}
-_REQUIRED_FIELDS = {"slug", "title", "summary"}
+# Required top-level frontmatter fields (Agent-Skills style: name + description).
+_REQUIRED_FIELDS = {"name", "description"}
 
 
 @dataclass(frozen=True)
@@ -152,76 +144,115 @@ def _looks_like_workflow_root(path: Path) -> bool:
 
 
 def _load_workflow(path: Path) -> WorkflowSpec:
-    yaml_path = path / WORKFLOW_YAML
     md_path = path / WORKFLOW_MD
-    if not yaml_path.is_file():
-        raise FileNotFoundError(f"Missing {WORKFLOW_YAML}: {yaml_path}")
     if not md_path.is_file():
         raise FileNotFoundError(f"Missing {WORKFLOW_MD}: {md_path}")
 
-    data = _load_yaml(yaml_path)
+    front, body = _split_frontmatter(md_path.read_text(encoding="utf-8"), md_path)
+    data = _load_yaml(front, md_path)
+    metadata = data.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        raise ValueError(f"{md_path} frontmatter 'metadata' must be a mapping")
+
     missing = sorted(field for field in _REQUIRED_FIELDS if not data.get(field))
     if missing:
-        raise ValueError(f"{yaml_path} is missing required fields: {', '.join(missing)}")
+        raise ValueError(f"{md_path} frontmatter is missing required fields: {', '.join(missing)}")
 
-    slug = _normalize_slug(str(data["slug"]))
+    slug = _normalize_slug(str(data["name"]))
     if slug != path.name:
-        raise ValueError(f"{yaml_path} slug '{slug}' must match directory name '{path.name}'")
+        raise ValueError(f"{md_path} name '{slug}' must match directory name '{path.name}'")
 
-    recommended_prompt = data.get("recommended_prompt")
+    recommended_prompt = metadata.get("recommended_prompt")
     return WorkflowSpec(
         slug=slug,
-        title=str(data["title"]).strip(),
-        summary=str(data["summary"]).strip(),
-        status=str(data.get("status") or "stable").strip(),
-        tags=_as_tuple(data.get("tags")),
-        keywords=_as_tuple(data.get("keywords")),
-        preflight_tools=_as_tuple(data.get("preflight_tools")),
-        required_tools=_as_tuple(data.get("required_tools")),
-        optional_tools=_as_tuple(data.get("optional_tools")),
-        expected_artifacts=_as_tuple(data.get("expected_artifacts")),
+        title=str(metadata.get("title") or _title_from_slug(slug)).strip(),
+        summary=str(data["description"]).strip(),
+        status=str(metadata.get("status") or "stable").strip(),
+        tags=_as_tuple(metadata.get("tags")),
+        keywords=_as_tuple(metadata.get("keywords")),
+        preflight_tools=_as_tuple(metadata.get("preflight_tools")),
+        required_tools=_as_tuple(metadata.get("required_tools")),
+        optional_tools=_as_tuple(metadata.get("optional_tools")),
+        expected_artifacts=_as_tuple(metadata.get("expected_artifacts")),
         recommended_prompt=str(recommended_prompt).strip() if recommended_prompt else None,
-        workflow_md=md_path.read_text(encoding="utf-8").strip(),
+        workflow_md=body,
         path=path,
     )
 
 
-def _load_yaml(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
+def _split_frontmatter(text: str, path: Path) -> tuple[str, str]:
+    """Split leading ``---`` YAML frontmatter from the Markdown body."""
+    if not text.startswith("---"):
+        raise ValueError(f"{path} is missing YAML frontmatter (expected '---' on the first line)")
+    lines = text.splitlines()
+    end = next((idx for idx in range(1, len(lines)) if lines[idx].strip() == "---"), None)
+    if end is None:
+        raise ValueError(f"{path} frontmatter is not terminated with '---'")
+    return "\n".join(lines[1:end]), "\n".join(lines[end + 1 :]).strip()
+
+
+def _load_yaml(text: str, path: Path) -> dict[str, Any]:
     try:
         import yaml  # type: ignore
 
         loaded = yaml.safe_load(text)
-        if not isinstance(loaded, dict):
-            raise ValueError(f"{path} must contain a mapping")
-        return loaded
     except ModuleNotFoundError:
-        return _parse_simple_yaml(text, path)
+        return _parse_yaml_block(text.splitlines(), path)
+    if not isinstance(loaded, dict):
+        raise ValueError(f"{path} frontmatter must contain a mapping")
+    return loaded
 
 
-def _parse_simple_yaml(text: str, path: Path) -> dict[str, Any]:
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _parse_yaml_block(lines: Sequence[str], path: Path) -> dict[str, Any]:
+    """Indentation-aware YAML mapping parser (stdlib fallback, no PyYAML).
+
+    Supports scalars, ``- item`` lists, and nested mappings — enough for the
+    WORKFLOW.md frontmatter shape (``name``/``description`` plus a ``metadata:``
+    block). Not a general YAML parser.
+    """
+    rows = [ln for ln in lines if ln.strip() and not ln.strip().startswith("#")]
+    if not rows:
+        return {}
+    base = _indent(rows[0])
     data: dict[str, Any] = {}
-    current_key: str | None = None
-    for raw_line in text.splitlines():
-        line = raw_line.rstrip()
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if line.startswith((" ", "\t")):
-            if current_key is None or not stripped.startswith("- "):
-                raise ValueError(f"Unsupported YAML shape in {path}: {raw_line!r}")
-            data.setdefault(current_key, [])
-            data[current_key].append(_clean_scalar(stripped[2:]))
-            continue
-        key, sep, value = stripped.partition(":")
+    index = 0
+    while index < len(rows):
+        line = rows[index]
+        if _indent(line) != base:
+            raise ValueError(f"Unexpected indentation in {path}: {line!r}")
+        key, sep, value = line.strip().partition(":")
         if not sep:
-            raise ValueError(f"Unsupported YAML line in {path}: {raw_line!r}")
-        current_key = key.strip()
-        if current_key in _LIST_FIELDS and not value.strip():
-            data[current_key] = []
+            raise ValueError(f"Unsupported YAML line in {path}: {line!r}")
+        key = key.strip()
+        value = value.strip()
+        nxt = index + 1
+        while nxt < len(rows) and _indent(rows[nxt]) > base:
+            nxt += 1
+        block = rows[index + 1 : nxt]
+        if value:
+            data[key] = _clean_scalar(value)
+        elif block and block[0].strip().startswith("- "):
+            items: list[str] = []
+            for item in block:
+                stripped = item.strip()
+                if not stripped.startswith("- "):
+                    raise ValueError(f"Unsupported list item in {path}: {item!r}")
+                items.append(_clean_scalar(stripped[2:]))
+            data[key] = items
+        elif block:
+            data[key] = _parse_yaml_block(block, path)
         else:
-            data[current_key] = _clean_scalar(value.strip())
+            data[key] = ""
+        index = nxt
     return data
+
+
+def _title_from_slug(slug: str) -> str:
+    return slug.replace("-", " ").replace("_", " ").strip().title()
 
 
 def _clean_scalar(value: str) -> str:

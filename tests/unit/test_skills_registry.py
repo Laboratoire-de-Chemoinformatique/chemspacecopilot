@@ -80,27 +80,51 @@ def test_updated_mcp_skills_reference_current_direct_tools():
 
 
 def test_custom_registry_rejects_missing_skill_md(tmp_path: Path):
-    skill_dir = tmp_path / "broken"
-    skill_dir.mkdir()
-    (skill_dir / "skill.yaml").write_text(
-        "slug: broken\ntitle: Broken\nsummary: Broken skill\n",
-        encoding="utf-8",
-    )
+    (tmp_path / "broken").mkdir()
 
     registry = SkillRegistry(tmp_path)
     with pytest.raises(FileNotFoundError, match="SKILL.md"):
         registry.list_skills()
 
 
+def test_custom_registry_rejects_skill_md_without_frontmatter(tmp_path: Path):
+    skill_dir = tmp_path / "plain"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# Plain\n", encoding="utf-8")
+
+    registry = SkillRegistry(tmp_path)
+    with pytest.raises(ValueError, match="frontmatter"):
+        registry.list_skills()
+
+
 def test_custom_registry_rejects_slug_directory_mismatch(tmp_path: Path):
     skill_dir = tmp_path / "actual"
     skill_dir.mkdir()
-    (skill_dir / "skill.yaml").write_text(
-        "slug: other\ntitle: Other\nsummary: Other skill\n",
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: other\ndescription: Other skill\n---\n\n# Other\n",
         encoding="utf-8",
     )
-    (skill_dir / "SKILL.md").write_text("# Other\n", encoding="utf-8")
 
     registry = SkillRegistry(tmp_path)
     with pytest.raises(ValueError, match="must match directory"):
         registry.list_skills()
+
+
+def test_stdlib_yaml_fallback_parses_nested_frontmatter():
+    """The no-PyYAML fallback must read the name/description + metadata shape."""
+    from cs_copilot.skills.registry import _parse_yaml_block
+
+    text = (
+        "name: demo\n"
+        "description: Demo skill\n"
+        "metadata:\n"
+        "  title: Demo\n"
+        "  keywords:\n"
+        "    - alpha\n"
+        "    - beta gamma\n"
+    )
+    data = _parse_yaml_block(text.splitlines(), Path("demo"))
+    assert data["name"] == "demo"
+    assert data["description"] == "Demo skill"
+    assert data["metadata"]["title"] == "Demo"
+    assert data["metadata"]["keywords"] == ["alpha", "beta gamma"]
