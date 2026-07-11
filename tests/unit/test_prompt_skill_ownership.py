@@ -17,19 +17,19 @@ from __future__ import annotations
 
 import re
 
-from cs_copilot.agents import prompts
+from cs_copilot.agents import instructions
 from cs_copilot.skills import get_skill
 
 PROMPT_CONSTANTS = (
-    prompts.CHEMBL_INSTRUCTIONS,
-    prompts.CHEMOINFORMATICIAN_INSTRUCTIONS,
-    prompts.MOLECULAR_DESIGNER_INSTRUCTIONS,
-    prompts.GTM_AGENT_INSTRUCTIONS,
-    prompts.REPORT_GENERATOR_INSTRUCTIONS,
-    prompts.AGENT_TEAM_INSTRUCTIONS,
-    prompts.SYNPLANNER_INSTRUCTIONS,
-    prompts.PEPTIDE_DESIGNER_INSTRUCTIONS,
-    prompts.ROBUSTNESS_EVALUATION_INSTRUCTIONS,
+    instructions.CHEMBL_INSTRUCTIONS,
+    instructions.CHEMOINFORMATICIAN_INSTRUCTIONS,
+    instructions.MOLECULAR_DESIGNER_INSTRUCTIONS,
+    instructions.GTM_AGENT_INSTRUCTIONS,
+    instructions.REPORT_GENERATOR_INSTRUCTIONS,
+    instructions.AGENT_TEAM_INSTRUCTIONS,
+    instructions.SYNPLANNER_INSTRUCTIONS,
+    instructions.PEPTIDE_DESIGNER_INSTRUCTIONS,
+    instructions.ROBUSTNESS_EVALUATION_INSTRUCTIONS,
 )
 
 

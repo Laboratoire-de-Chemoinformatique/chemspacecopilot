@@ -17,7 +17,7 @@ from cs_copilot.utils.resources import analyze_resources
 
 from .config import CS_COPILOT_MEMORY_DB  # optional now; kept for compatibility
 from .factories import AgentCreationError
-from .prompts import AGENT_TEAM_INSTRUCTIONS
+from .instructions import AGENT_TEAM_INSTRUCTIONS
 from .registry import create_agent
 
 

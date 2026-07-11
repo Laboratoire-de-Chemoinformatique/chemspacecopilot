@@ -1,10 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""High-level agent role prompts for cs_copilot.
+"""Agent behavioral instructions for cs_copilot.
 
-Mutable workflow procedures live in the skill and workflow catalogs. These
-prompts intentionally keep only role identity, routing policy, shared safety
-rules, and session/artifact conventions.
+These lists answer *how each agent behaves* — the rules, policies, and
+conventions that Agno injects into the system message via
+``Agent(instructions=...)``. They are deliberately kept separate from the
+persona identities in ``descriptions.py`` (Agno's ``description=``) and from
+the mutable multi-tool procedures in the skill/workflow catalogs. Each agent's
+instructions point at the catalog and expect the agent to fetch and follow the
+procedure there rather than embedding step-by-step tool sequences here.
 """
 
 # Agent Instructions

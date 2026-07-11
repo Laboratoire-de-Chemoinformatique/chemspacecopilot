@@ -363,7 +363,7 @@ the current set of direct cs_copilot tools plus the read-only `search` /
 ### Prompts
 
 The MCP server exposes a native external-client orchestration prompt plus the
-agent and team instruction sets from `cs_copilot.agents.prompts`:
+agent and team instruction sets from `cs_copilot.agents.instructions`:
 
 | Prompt | Role |
 |--------|------|

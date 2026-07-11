@@ -1,7 +1,7 @@
 """Registry mapping cs_copilot prompt constants to MCP prompts.
 
 Each entry exposes one of the curated agent / team instruction lists in
-``src/cs_copilot/agents/prompts.py`` (pure string content, no Agno team
+``src/cs_copilot/agents/instructions.py`` (pure string content, no Agno team
 imports) plus the two ChEMBL LLM-as-judge prompt templates so that an
 external reasoner can recreate the in-process filtering itself.
 
@@ -30,7 +30,7 @@ def _join_instructions(instructions: Sequence[str]) -> str:
 
 def _agent_prompt(constant_name: str, mcp_name: str, summary: str) -> PromptSpec:
     def _render() -> str:
-        from cs_copilot.agents import prompts as _prompts
+        from cs_copilot.agents import instructions as _prompts
 
         value = getattr(_prompts, constant_name)
         return _join_instructions(value)
@@ -147,7 +147,7 @@ _AGENT_PROMPTS: List[PromptSpec] = [
 
 
 def _load_prompts():
-    from cs_copilot.agents import prompts as _prompts
+    from cs_copilot.agents import instructions as _prompts
 
     return _prompts
 

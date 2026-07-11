@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from cs_copilot.agents import prompts as agent_prompts
+from cs_copilot.agents import instructions as agent_prompts
 from cs_copilot.mcp.prompts_registry import all_specs
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
