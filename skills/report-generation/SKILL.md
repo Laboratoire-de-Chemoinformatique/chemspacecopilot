@@ -5,11 +5,11 @@ Use this skill when the user asks for a report, presentation artifact, or consol
 ## Procedure
 
 1. Inspect session memory with `session_list_session_objects`, `session_list_loadable_session_data`, and/or `session_summarize_session_memory` to identify available datasets, GTM maps, landscapes, candidate sets, synthesis plans, and figures.
-2. Choose the report type from the available session objects and the user request. Common types include chemotype, GTM density, GTM activity, analog generation, molecular designer, synthesis, combined, and custom.
+2. Choose the report type from the available session objects and the user request. Detect from session_state keys: `chemotype_analysis` → chemotype; `analysis_results.density_csv` → GTM density; `analysis_results.activity_csv` or `landscape_files` → GTM activity; molecular-designer/analog outputs → analog generation; `synplanner_plan` → synthesis; multiple present → combined. Common types: chemotype, GTM density, GTM activity, analog generation, molecular designer, synthesis, combined, custom.
 3. Load relevant CSV/DataFrame artifacts rather than inferring facts from chat. Use clean datasets for downstream summaries and include raw dataset provenance when present.
 4. Create or collect visualizations section by section. For activity landscape reports, include only figures that directly support the surrounding interpretation and mark discussed GTM nodes when possible.
 5. Include provenance paths for raw data, clean data, descriptor Parquet, standardization reports, GTM models, landscape CSVs, plots, generated candidates, and synthesis artifacts when present.
-6. For synthesis reports, verify that the report has real synthesis content: target SMILES plus route details, attempt summaries, visualization paths, or an explicitly labeled LLM fallback. Do not save an empty synthesis report.
+6. For synthesis reports, source content in order: `session_state['synplanner_plan']` → prior tool/member `synthesis_report_data` → the visible SynPlanner response; do not regenerate routes. Verify real synthesis content (target SMILES plus route details, attempt summaries, visualization paths, or an explicitly labeled LLM fallback). Do not save an empty synthesis report.
 7. Prefer `report_save_rich` for image-rich HTML/PDF outputs and `report_save_markdown` for lightweight text reports. Leave filename unset unless the user requested a specific name.
 8. Store report paths in session state and return artifact paths to the user with `<file>...</file>` tags when they should render as downloadable files.
 
@@ -42,8 +42,14 @@ Use this skill when the user asks for a report, presentation artifact, or consol
 - Scaffold inventory tables should use Scaffold ID / Scaffold / SMILES / Name / Node / Description. Molecule inventory tables should use Molecule ID / Molecule / SMILES / Name / Node / Description.
 - Scaffold inventory table rows with scaffold SMILES are appropriate when the user needs an inventory. Do not render every valid SMILES as a separate figure.
 
+## Report-type figures
+
+- **Chemotype**: scaffold-frequency bar charts per cluster (top-10 scaffolds), scaffold–scaffold Tanimoto similarity heatmap, cluster-distribution plot (molecules per cluster).
+- **GTM density**: density overlay on the map (`gtm_save_density_plot`, with `mark_nodes`), neighborhood-preservation heatmap, density histogram.
+- **GTM activity**: activity-landscape heatmap (Altair, `mark_nodes`, with overlay when projected/generated candidates exist), compass-annotated plot labeling the top-5 active/inactive regions, activity-distribution histogram.
+
 ## Required Report Structures
 
-- GTM analysis report required structure: User Request and Data Source, Retrieved and Standardized Data, Descriptors, GTM Construction or Loading, and Map Analysis.
+- GTM analysis report required structure: User Request and Data Source, Retrieved and Standardized Data (rows before/after cleaning, unique compounds, raw-to-final SMILES collapse examples, duplicate counts), Descriptors (Parquet path + family: Morgan / autoencoder-default-map / precomputed), GTM Construction or Loading (optimized/loaded/reused state, strategy low/medium/high, combinations/trials, best entropy), and Map Analysis.
 - Analog generation report required structure: User Request and Workflow, Reference Maps, Generated Compound Analysis, validation/ranking summary, and downstream recommendations.
 - Synthesis reports should include SynPlanner Routes and Attempts plus Route Analysis, with LLM fallbacks explicitly separated from SynPlanner-validated routes.

@@ -17,3 +17,13 @@ Use this skill when the user wants a compact report from robustness test outputs
 - Robustness analysis report.
 - Failing prompt summary.
 - Score distribution and trend summary when available.
+
+## Details
+
+- **Rating bands**: Excellent ≥0.90, Good ≥0.80, Acceptable ≥0.70, Concerning <0.70. Also report the success rate from total/passed/failed.
+- **Failing-prompt threshold**: 0.70. Group failures by type (timeouts, validation errors, tool errors, low scores) and surface the most critical first.
+- **Component metrics** (identify the lowest as the biggest weakness and prioritize accordingly): `data_similarity` (data fetch/filter inconsistency), `semantic_similarity` (LLM response variation), `process_consistency` (tool-call sequence variation), `visual_similarity` (plotting parameter variation).
+- **Clarification vs immediate**: split by the `requires_clarification` column and report a significant gap (>10% success-rate difference).
+- **Temporal trends**: improvement = score increase >0.05, regression = decrease >0.05; overall trend Improving / Declining / Stable; emphasize regressions as critical.
+- For data-focused tests (e.g. chembl_download), check dataset-name / row-count consistency across prompt variations, and compare tool-call patterns between successful and failed runs.
+- **Recommendation priorities**: Critical (score <0.70) / Important (regressions) / Nice-to-have (improvements); keep recommendations specific and actionable, linked to the weakest component.

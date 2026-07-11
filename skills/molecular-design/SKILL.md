@@ -7,7 +7,7 @@ Use this skill when the user wants small-molecule analogs, scaffold variants, or
 1. Confirm the task is small-molecule design, not peptide design.
 2. Resolve the seed compound from the user prompt or session memory. For "top candidates", "generated compounds", "latest designs", or similar follow-ups, resolve the active candidate set before choosing a seed.
 3. Inspect available engines with `mol_list_design_engines`.
-4. In default MCP, use `engine="autoencoder"` for generation. `engine="llm"` is unavailable because `MCPAgentContext.model` is `None` unless trusted `agno_team_run` delegation is explicitly enabled.
+4. Choose the engine. `engine="autoencoder"` runs in-process. `engine="llm"` is **delegated to the LLM**, not blocked: under the default MCP `llm_policy="external"`, `mol_design_molecules` / `mol_generate_analogs` return a `needs_external_llm` task that you (the outer agent) complete via `llm_get_task` / `llm_submit_task_result`; `llm_policy="agno-model"` uses a configured server-side model; in the Agno team the engine uses the team's own model inline. Only `llm_policy="disabled"` rejects it — then fall back to `engine="autoencoder"`.
 5. Use `mol_generate_analogs` for seed analogs, `mol_design_molecules` for objective-driven generation or sampling, and `mol_interpolate_molecules` for endpoint interpolation.
 6. For LLM-backed Agno flows, validate and rank all proposed SMILES; if final candidates were produced outside `mol_design_molecules`, call `mol_register_design_candidates` before downstream GTM, SynPlanner, or reporting.
 7. Validate generated or user-provided structures with `mol_validate_design_candidates` before presenting structures as final. Deduplicate and standardize before ranking.
@@ -21,3 +21,10 @@ Use this skill when the user wants small-molecule analogs, scaffold variants, or
 - Candidate artifact with full generated/validated structures.
 - Optional CSV materialization for projection, reporting, or synthesis planning.
 - Validation and ranking summary.
+
+## Details
+
+- **Analog similarity control (`noise_scale`)**: 0.05–0.15 = close analogs (high similarity), 0.2–0.4 = moderate diversity, 0.5+ = high diversity/novelty. Default to `noise_scale=0.1` and `n_neighbors=10` for analog generation unless the user specifies otherwise; sort reported analogs by Tanimoto similarity to the seed (highest first).
+- **GTM-guided design**: when designing from map regions, sample seeds with the `gtm_sample_*` tools (e.g. `gtm_sample_dense_nodes` for well-explored regions, `gtm_sample_activity_landscape_nodes` for high-scoring activity nodes, `gtm_sample_top_activity_molecules` for top measured compounds, `gtm_sample_by_coordinates` for specific map regions) using `return_format="smiles"`, then encode and explore their latent neighborhood to generate. Report the source GTM region / coordinates / node IDs for each generated molecule.
+- **Large result handling**: generation defaults to `n_samples=5000` with `filter_valid_unique=True` and `return_format="summary"`; the full list is saved as a candidate-set artifact and referenced by `registered_candidate_set_id` / `artifact_path` / `session_key`. Reference sets by those IDs downstream — do not re-emit full SMILES lists inline.
+- **Evidence discipline**: treat generated/LLM-proposed structures as proposed candidates only; never imply their activity, potency, safety, or synthesizability has been experimentally verified.

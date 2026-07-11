@@ -36,6 +36,9 @@ DATASET_ARTIFACT_CONTRACT = [
     "Claims about potency, top actives, pIC50/pChEMBL rankings, or SAR drivers "
     "require measured activity values loaded from a table or returned by a tool. "
     "Scaffold patterns and GTM node density alone are not potency evidence.",
+    "DataFrame hygiene: modify DataFrames with in-place operations and never print "
+    "whole DataFrames to the console; reference large tables by path or session key "
+    "to protect the context window.",
 ]
 
 SESSION_MEMORY_INSTRUCTIONS = [

@@ -23,3 +23,11 @@ Use this skill for GTM-based activity/SAR maps, active-region sampling, and repo
 - Activity landscape CSV.
 - Static or interactive plot artifacts.
 - Summary of regions, nodes, and activity patterns suitable for downstream report generation.
+
+## Details
+
+- **Landscape analysis**: load the landscape CSV and analyze `filtered_reg_density` — global max / min / mean / median, and the top-5 active and top-5 inactive nodes.
+- **Cross-layer check**: compare against density — do density hotspots coincide with potent areas? Flag anomalies (dense but low-activity, sparse but high-activity) and unreliable regions (zero density, NaNs).
+- Describe spatial trends in compass terms and close with a 3-bullet SAR takeaway with actionable recommendations.
+- **Evidence rule**: density is not activity. Dense nodes, scaffold-rich nodes, and compounds sampled from dense nodes are structural observations only unless a loaded activity column is cited.
+- **Optimization strategy** (when building): low (~9 combinations) / medium (~108) / high (Bayesian ~50 trials); always low by default, and >5,000 molecules always low. State which strategy ran, the combinations/trials evaluated, and the best entropy score; after a low run, offer to re-optimize with a more thorough search.

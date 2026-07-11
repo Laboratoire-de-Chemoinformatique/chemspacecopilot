@@ -15,3 +15,9 @@ Use this skill when uploaded or session-resident tabular data must be prepared f
 - Analysis-ready normalized dataset.
 - Identified SMILES, activity, and optional cluster columns.
 - Downstream path or registry name.
+
+## Details
+
+- **Input resolution order**: session GTM `source_mols` (use its `node_index` as `cluster_id`) → `clean_dataset_path` → `dataset_path` (legacy clean alias) → ask the user for a path.
+- **Activity-column detection**: raw potency with units (IC50, EC50, Ki, Kd, MIC), p-scale potency (pIC50, pKi, pChEMBL), or labels (activity, label, class). Normalization records `activity_mapping` (source column) and `final_activity_mapping` (final merged activity); preserve both for downstream SAR.
+- **Required column**: a SMILES column (`smiles` / `SMILES` / `canonical_smiles`); `cluster_id` and an activity column are optional but enable clustering and SAR downstream.
