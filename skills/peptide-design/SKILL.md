@@ -1,3 +1,42 @@
+---
+name: peptide-design
+description: Generate, validate, rank, and analyze peptide candidates, including antimicrobial peptide workflows and latent-space GTM analysis.
+metadata:
+  title: Peptide design
+  status: agno_available
+  tags:
+    - peptide
+    - antimicrobial-peptide
+    - latent-space
+    - design
+  keywords:
+    - peptide
+    - amp
+    - antimicrobial
+    - amino acid
+    - dbaasp
+  required_tools:
+    - peptide_list_design_engines
+    - peptide_validate_design_candidates
+    - peptide_rank_design_candidates
+    - session_materialize_candidate_set_dataset
+  optional_tools:
+    - peptide_validate_model_loaded
+    - peptide_get_model_info
+    - peptide_design_peptides
+    - peptide_generate_analogs
+    - peptide_design_interpolation
+    - peptide_load_design_candidates
+    - gtm_train_on_latent_space
+    - gtm_create_peptide_activity_landscapes
+  artifact_outputs:
+    - peptide_candidate_artifact
+    - peptide_dataset_csv
+    - peptide_landscape_csv
+  example_prompts:
+    - Design antimicrobial peptide candidates and prepare the validated set for latent-space GTM analysis.
+---
+
 # Peptide Design
 
 Use this skill for amino-acid sequence generation, antimicrobial peptide workflows, peptide analogs, and peptide latent-space analysis.

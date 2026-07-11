@@ -1,3 +1,36 @@
+---
+name: chembl-target-retrieval
+description: Retrieve, validate, standardize, and persist ChEMBL bioactivity data for a specific biological target.
+metadata:
+  title: ChEMBL target retrieval
+  status: stable
+  tags:
+    - chembl
+    - bioactivity
+    - retrieval
+    - standardization
+  keywords:
+    - chembl
+    - bioactivity
+    - assay
+    - activity data
+  required_tools:
+    - chembl_prepare_retrieval
+    - chembl_convert_to_chembl_query
+    - chembl_fetch_compounds
+    - chembl_describe_dataset
+  optional_tools:
+    - session_list_session_objects
+    - session_summarize_session_memory
+  artifact_outputs:
+    - raw_dataset_path
+    - clean_dataset_path
+    - descriptor_parquet_path
+    - standardization_report_path
+  example_prompts:
+    - Retrieve human CDK2 inhibitor binding data from ChEMBL and prepare it for downstream GTM analysis.
+---
+
 # ChEMBL Target Retrieval
 
 Use this skill when the user needs ChEMBL bioactivity data for a target, organism, assay type, and optional mechanism filter.

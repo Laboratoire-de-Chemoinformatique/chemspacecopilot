@@ -1,3 +1,36 @@
+---
+name: retrosynthesis-planning
+description: Resolve a target molecule, run SynPlanner retrosynthesis, persist route artifacts, and prepare synthesis summaries.
+metadata:
+  title: Retrosynthesis planning
+  status: optional_backend
+  tags:
+    - retrosynthesis
+    - synplanner
+    - synthesis
+    - route-planning
+  keywords:
+    - retrosynthesis
+    - synthesis
+    - synthetic route
+    - retrosynthetic
+  required_tools:
+    - session_resolve_session_reference
+    - synplanner_identify_input
+    - synplanner_plan_synthesis
+    - synplanner_describe_plan
+  optional_tools:
+    - synplanner_convert_name_to_smiles
+    - synplanner_get_route_visualizations
+    - report_save_rich
+  artifact_outputs:
+    - synthesis_plan_json
+    - route_visualization_svg
+    - route_visualization_png
+  example_prompts:
+    - Plan a synthesis route for the current selected generated compound and save route visualizations.
+---
+
 # Retrosynthesis Planning
 
 Use this skill when the user asks how to synthesize a target molecule, generated candidate, or named compound.

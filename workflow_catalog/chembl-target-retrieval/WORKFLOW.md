@@ -1,3 +1,34 @@
+---
+name: chembl-target-retrieval
+description: Retrieve, validate, standardize, and persist ChEMBL bioactivity data for a specific biological target.
+metadata:
+  title: ChEMBL target retrieval
+  status: stable
+  tags:
+    - chembl
+    - bioactivity
+    - retrieval
+  keywords:
+    - chembl
+    - bioactivity
+    - assay
+    - activity data
+  preflight_tools:
+    - chembl_prepare_retrieval
+  required_tools:
+    - chembl_convert_to_chembl_query
+    - chembl_fetch_compounds
+    - chembl_describe_dataset
+  optional_tools:
+    - session_summarize_session_memory
+  expected_artifacts:
+    - raw_dataset_path
+    - clean_dataset_path
+    - descriptor_parquet_path
+    - standardization_report_path
+  recommended_prompt: chembl_agent
+---
+
 # ChEMBL Target Retrieval
 
 Use this workflow when the user needs ChEMBL bioactivity data for a specific target, organism, assay type, and mechanism preference.

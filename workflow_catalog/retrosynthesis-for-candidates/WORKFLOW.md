@@ -1,3 +1,34 @@
+---
+name: retrosynthesis-for-candidates
+description: Resolve a generated candidate or named target and create SynPlanner route artifacts.
+metadata:
+  title: Retrosynthesis for candidates
+  status: optional_backend
+  tags:
+    - retrosynthesis
+    - synplanner
+    - candidates
+  keywords:
+    - retrosynthesis
+    - synthesis
+    - synthetic route
+    - retrosynthetic
+  required_tools:
+    - session_resolve_session_reference
+    - synplanner_identify_input
+    - synplanner_plan_synthesis
+    - synplanner_describe_plan
+  optional_tools:
+    - synplanner_convert_name_to_smiles
+    - synplanner_get_route_visualizations
+    - report_save_rich
+  expected_artifacts:
+    - synthesis_plan_json
+    - route_visualization_svg
+    - route_visualization_png
+  recommended_prompt: synplanner_agent
+---
+
 # Retrosynthesis For Candidates
 
 Use this workflow when the user asks how to synthesize a generated candidate, selected session molecule, SMILES string, or named compound.

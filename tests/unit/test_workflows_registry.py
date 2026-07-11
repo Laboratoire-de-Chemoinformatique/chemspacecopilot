@@ -75,26 +75,30 @@ def test_workflow_as_dict_can_include_content():
 
 
 def test_custom_registry_rejects_missing_workflow_md(tmp_path: Path):
-    workflow_dir = tmp_path / "broken"
-    workflow_dir.mkdir()
-    (workflow_dir / "workflow.yaml").write_text(
-        "slug: broken\ntitle: Broken\nsummary: Broken workflow\n",
-        encoding="utf-8",
-    )
+    (tmp_path / "broken").mkdir()
 
     registry = WorkflowRegistry(tmp_path)
     with pytest.raises(FileNotFoundError, match="WORKFLOW.md"):
         registry.list_workflows()
 
 
+def test_custom_registry_rejects_workflow_md_without_frontmatter(tmp_path: Path):
+    workflow_dir = tmp_path / "plain"
+    workflow_dir.mkdir()
+    (workflow_dir / "WORKFLOW.md").write_text("# Plain\n", encoding="utf-8")
+
+    registry = WorkflowRegistry(tmp_path)
+    with pytest.raises(ValueError, match="frontmatter"):
+        registry.list_workflows()
+
+
 def test_custom_registry_rejects_slug_directory_mismatch(tmp_path: Path):
     workflow_dir = tmp_path / "actual"
     workflow_dir.mkdir()
-    (workflow_dir / "workflow.yaml").write_text(
-        "slug: other\ntitle: Other\nsummary: Other workflow\n",
+    (workflow_dir / "WORKFLOW.md").write_text(
+        "---\nname: other\ndescription: Other workflow\n---\n\n# Other\n",
         encoding="utf-8",
     )
-    (workflow_dir / "WORKFLOW.md").write_text("# Other\n", encoding="utf-8")
 
     registry = WorkflowRegistry(tmp_path)
     with pytest.raises(ValueError, match="must match directory"):

@@ -1,3 +1,47 @@
+---
+name: chembl-to-gtm-report
+description: Retrieve ChEMBL data, build or reuse GTM density/activity landscapes, and save a report artifact.
+metadata:
+  title: ChEMBL to GTM report
+  status: stable
+  tags:
+    - chembl
+    - gtm
+    - report
+  keywords:
+    - chembl
+    - gtm
+    - report
+    - landscape
+  required_tools:
+    - chembl_prepare_retrieval
+    - chembl_convert_to_chembl_query
+    - chembl_fetch_compounds
+    - chembl_describe_dataset
+    - chemspace_plan_analysis
+    - gtm_optimization
+    - gtm_save_model_and_data
+    - gtm_save_density_plot
+    - gtm_create_activity_landscapes
+    - gtm_get_density_summary
+    - gtm_get_activity_landscape_summary
+    - report_save_rich
+  optional_tools:
+    - gtm_load_model_only
+    - gtm_load_and_prep_data
+    - gtm_sample_activity_landscape_nodes
+    - gtm_sample_dense_nodes
+    - report_save_markdown
+  artifact_outputs:
+    - clean_dataset_path
+    - gtm_model_path
+    - density_plot_path
+    - activity_landscape_csv
+    - html_report_path
+  example_prompts:
+    - Retrieve human CDK2 binding data, create a GTM activity landscape, and save a rich report.
+---
+
 # ChEMBL To GTM Report
 
 Use this skill when the user wants a complete ChEMBL retrieval, GTM density/activity landscape analysis, and report artifact.
