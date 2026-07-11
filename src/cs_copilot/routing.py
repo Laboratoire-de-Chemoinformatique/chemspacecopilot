@@ -146,6 +146,12 @@ _ROUTING_DOMAINS = (
         exclusive_with=("peptide-design",),
     ),
     _RoutingDomain(
+        label="chemoinformatics",
+        agent="Chemoinformatician",
+        anchor_skill="chemoinformatics-analysis",
+        note="(scaffold / SAR / clustering / similarity analysis)",
+    ),
+    _RoutingDomain(
         label="report",
         agent="Report Generator",
         anchor_skill="report-generation",

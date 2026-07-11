@@ -23,3 +23,11 @@ Use this skill for GTM density maps, compound distribution analysis, dense-node 
 - Density matrix or density summary table.
 - Static density plot artifact.
 - Summary of dense regions and compound distributions suitable for downstream report generation.
+
+## Details
+
+- **Density table** columns are `x`, `y`, `nodes`, `filtered_density`. Report global stats (max / min / mean / median density) and identify the top-5 densest and top-5 sparsest nodes.
+- **Neighborhood-preservation table** columns are `x`, `y`, `nodes`, `density`, `neighborhood score`; report preservation quality and flag well-preserved vs poorly-preserved regions.
+- Describe spatial patterns in compass/quadrant terms (e.g. "dense band across the center", "sparse south-west corner").
+- Close with a 3-bullet executive summary of the density structure.
+- **Optimization strategy** (when building): `gtm_optimization(strategy=...)` levels are low (fast heuristic, ~9 combinations), medium (~108 combinations), high (Bayesian, ~50 trials). Always low by default; for datasets >5,000 molecules always low and tell the user medium/high are available.

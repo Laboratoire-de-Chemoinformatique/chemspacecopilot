@@ -10,7 +10,7 @@ Use this skill when the user asks how to synthesize a target molecule, generated
 4. Use `synplanner_identify_input` to classify the query. If the target is a name, use `synplanner_convert_name_to_smiles` before planning. If name resolution fails, ask for a SMILES string.
 5. Run `synplanner_plan_synthesis` for the canonical target. The tool may retry documented search profiles when the standard search finds no route.
 6. Summarize the latest plan with `synplanner_describe_plan`, including route count, route depth, building blocks, and failed search profiles if relevant.
-7. Generate route visualizations with `synplanner_get_route_visualizations` when the user asks for figures or report-ready artifacts. Present route images in order with route index and useful caption metadata.
+7. Generate route visualizations with `synplanner_get_route_visualizations` when the user asks for figures or report-ready artifacts. Present route images in order (Route 0, Route 1, …) using markdown image syntax `![Route {route_index} - {caption}](png_path)`, with the route index plus node_id/score in the caption, before the detailed prose analysis.
 8. If no route is found and an LLM fallback is allowed, label it explicitly as not SynPlanner-validated and keep it separate from SynPlanner route results.
 9. Persist route plans and visualizations as artifacts for downstream report generation.
 
