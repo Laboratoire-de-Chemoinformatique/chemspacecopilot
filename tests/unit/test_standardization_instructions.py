@@ -2,7 +2,7 @@
 # coding: utf-8
 """Tests for agent instructions around standardized dataset artifacts."""
 
-from cs_copilot.agents.prompts import (
+from cs_copilot.agents.instructions import (
     AGENT_TEAM_INSTRUCTIONS,
     CHEMBL_INSTRUCTIONS,
     CHEMOINFORMATICIAN_INSTRUCTIONS,

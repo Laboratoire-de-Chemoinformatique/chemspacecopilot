@@ -28,10 +28,13 @@ The team coordinator also has a read-only Skills toolkit (`list_skills`, `search
 
 ## Prompt / Skill Ownership
 
-Agent prompts in `src/cs_copilot/agents/prompts.py` define role identity,
-global routing policy, clarification rules, evidence standards, session-memory
-conventions, and artifact formatting. They should not contain long mutable
-tool sequences.
+The prompt layer is split to mirror Agno's own `description` / `instructions`
+separation. Agent personas in `src/cs_copilot/agents/descriptions.py` define
+*who each agent is* (identity/role, fed to `Agent(description=...)`). Agent
+instructions in `src/cs_copilot/agents/instructions.py` define *how it behaves*
+(global routing policy, clarification rules, evidence standards, session-memory
+conventions, and artifact formatting, fed to `Agent(instructions=...)`).
+Neither should contain long mutable tool sequences.
 
 Reusable task procedures live in `skills/<slug>/SKILL.md`. MCP-facing workflow
 contracts live in `workflow_catalog/<slug>/WORKFLOW.md` and define preflight
