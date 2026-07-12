@@ -65,6 +65,12 @@ uv run python tests/robustness/robustness_minimal_example.py --test chembl_downl
 # Enable debug mode
 uv run python tests/robustness/robustness_minimal_example.py --debug
 
+# Multi-agent vs single-agent comparison (runs both arms + writes a comparison)
+uv run python tests/robustness/robustness_minimal_example.py --system both
+
+# Run only the single-agent baseline
+uv run python tests/robustness/robustness_minimal_example.py --system single_agent
+
 # List available tests
 uv run python tests/robustness/robustness_minimal_example.py --list-tests
 
@@ -90,15 +96,69 @@ uv run pytest tests/robustness/ --cov=src/cs_copilot --cov-report=html
 
 ### 5. View Reports
 
-Reports are generated in `tests/robustness/reports/<timestamp>/`:
+Reports are generated in `tests/robustness/reports/<timestamp>_<system>/` (the
+`<system>` suffix is `team` or `single_agent`):
 - `report.md` - Comprehensive markdown robustness report
-- `summary.json` - JSON summary for programmatic access
+- `summary.json` - JSON summary for programmatic access (includes `system_under_test`)
 - `<test_name>/` - Per-test artifacts and detailed results
+
+For `--system both`, a cross-arm comparison is also written to
+`reports/<timestamp>_comparison/` (`comparison.md` + `comparison.json`).
 
 **NEW:** Test results are also automatically saved to S3 (when enabled):
 - See [S3 Results Integration](S3_RESULTS_INTEGRATION.md) for full details
 - Results saved in multiple formats (JSON, CSV, TXT) under session-scoped paths
 - Example: `s3://{bucket}/sessions/{session_id}/robustness_tests/chembl_interactivity/{timestamp}/`
+
+## Multi-agent vs single-agent comparison (paper ablation)
+
+The `--system` flag turns the runner into an A/B harness for the reviewer-requested
+multi-agent-vs-single-agent comparison. It is a **controlled ablation**: both arms
+hold the **model, tools, task set, and harness constant** and vary **only the
+agentic structure**.
+
+- **Arm `team`** — the 7-member Agno `Team` (`get_cs_copilot_agent_team`): a
+  coordinator routing to specialists, each with its own context window, focused
+  instructions, and a subset of tools.
+- **Arm `single_agent`** — one flat Agno agent
+  (`get_cs_copilot_single_agent`) holding the **union of all specialist toolkits**
+  with no coordinator, no routing, and no per-specialist context isolation.
+
+Controls and caveats to state in the methods section:
+
+- **Model held constant.** `--system both` builds the model once and reuses the
+  same instance for both arms.
+- **Same tasks/metrics.** Both arms run the identical prompt set
+  (`fixtures/prompt_templates.yaml`) and the identical metric stack
+  (`metrics.py` / `comparators.py` / `tool_tracker.py`). The tool-call-sequence
+  similarity is the signal that most distinguishes a coordinating team from a flat
+  agent.
+- **Tool-namespace caveat.** Agno registers toolkit methods by name and keeps the
+  first on a clash. The molecular and peptide design toolkits share ~9 method
+  names; the single agent lists the molecular/autoencoder toolkits first, so the
+  small-molecule design tools win. The current task set contains no peptide-design
+  prompts, so this preserves capability parity for every measured task. (The team
+  avoids the clash entirely because each specialist is its own context — a genuine
+  advantage of the multi-agent design.)
+- **Not** the same as pointing an external agent (Codex/Claude over MCP) at the
+  tools: that confounds architecture with base-model identity and a proprietary
+  harness. Keep that only as a secondary "vs general-purpose agent" note.
+
+Recommended runbook (N seeds for significance):
+
+```bash
+# One task, one variation — smoke both arms
+CS_COPILOT_PROMPT_TEMPLATES=tests/robustness/fixtures/prompt_templates_short.yaml \
+  uv run python tests/robustness/robustness_minimal_example.py \
+  --system both --test chembl_download --n-variations 1
+
+# Full comparison with MLflow A/B (repeat per seed)
+uv run python tests/robustness/robustness_minimal_example.py --system both --mlflow
+```
+
+Per-arm and per-test scores land in `reports/<timestamp>_comparison/comparison.md`;
+with `--mlflow`, each suite run is tagged `system_under_test` so
+`mlflow_reporter.compare_runs` gives the A/B dashboard.
 
 ## Session Isolation
 

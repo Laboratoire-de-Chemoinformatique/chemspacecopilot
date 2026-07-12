@@ -94,6 +94,7 @@ class MLflowRobustnessRunner(RobustnessRunner):
                     "debug_mode": self.config.debug_mode,
                     "s3_session_isolation": self.config.s3_session_isolation,
                     "pass_threshold": self.config.pass_threshold,
+                    "system_under_test": self.system,
                 }
             )
 
@@ -104,6 +105,8 @@ class MLflowRobustnessRunner(RobustnessRunner):
                     "suite_id": self.test_run_id,
                     "test_count": len(enabled_tests),
                     "enabled_tests": ",".join(enabled_tests),
+                    # Enables A/B via mlflow_reporter.compare_runs across arms.
+                    "system_under_test": self.system,
                 }
             )
 

@@ -66,6 +66,10 @@ class RobustnessConfig:
     save_artifacts: bool = True
     s3_session_isolation: bool = True
 
+    # System under test: "team" (multi-agent) or "single_agent" (flat baseline).
+    # Driven by the --system CLI flag; both arms use the same model/tasks/metrics.
+    system: str = "team"
+
     # Model settings
     model_provider: str = "deepseek"
     model_id: str = "deepseek-chat"
@@ -171,10 +175,13 @@ class RobustnessRunner:
         """Initialize runner with configuration."""
         self.config = config
         self.test_run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.system = getattr(config, "system", "team")
         self.results: Dict[str, Dict] = {}
 
-        # Setup output directory
-        self.output_dir = Path(__file__).parent / config.output_dir / self.test_run_id
+        # Setup output directory (per-arm so team vs single_agent don't collide)
+        self.output_dir = (
+            Path(__file__).parent / config.output_dir / f"{self.test_run_id}_{self.system}"
+        )
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize components lazily
@@ -347,6 +354,32 @@ class RobustnessRunner:
 
         return unique_smiles
 
+    def _build_system(self):
+        """Build the system under test for the current arm.
+
+        Both arms use the same model instance and keep memory disabled, so the
+        only difference is the agentic structure: the multi-agent ``team`` vs the
+        ``single_agent`` flat baseline. Both expose ``.run(prompt, stream=False)``
+        and ``.get_session_state()``, so the rest of the runner is arm-agnostic.
+        """
+        model = self._get_model()
+        if self.system == "single_agent":
+            from cs_copilot.agents import get_cs_copilot_single_agent
+
+            return get_cs_copilot_single_agent(
+                model=model,
+                debug_mode=self.config.debug_mode,
+            )
+
+        from cs_copilot.agents import get_cs_copilot_agent_team
+
+        return get_cs_copilot_agent_team(
+            model=model,
+            debug_mode=self.config.debug_mode,
+            show_members_responses=False,
+            enable_memory=False,  # Disable memory for session isolation
+        )
+
     def _run_single_variation(
         self, prompt: str, test_name: str, run_id: int, s3_prefix: Optional[str] = None
     ) -> Dict:
@@ -356,7 +389,6 @@ class RobustnessRunner:
         Note: s3_prefix parameter is deprecated. S3 session isolation is now
         handled by the context manager in run_test().
         """
-        from cs_copilot.agents import get_cs_copilot_agent_team
         from cs_copilot.storage import S3
 
         # S3 prefix is now handled by context manager in run_test()
@@ -369,14 +401,9 @@ class RobustnessRunner:
         logger.debug(f"Prompt: {prompt[:100]}...")
 
         try:
-            # Create fresh agent with memory disabled for complete isolation
-            model = self._get_model()
-            agent = get_cs_copilot_agent_team(
-                model=model,
-                debug_mode=self.config.debug_mode,
-                show_members_responses=False,
-                enable_memory=False,  # Disable memory for session isolation
-            )
+            # Build the system under test (multi-agent team or single-agent
+            # baseline); memory disabled for isolation, same model for both arms.
+            agent = self._build_system()
 
             # Run the agent
             result = agent.run(prompt, stream=False)
@@ -434,6 +461,7 @@ class RobustnessRunner:
                 "s3_prefix": s3_prefix,
                 "timestamp": datetime.now().isoformat(),
                 "status": "success",
+                "system_under_test": self.system,
             }
 
         except KeyboardInterrupt:
@@ -444,6 +472,7 @@ class RobustnessRunner:
                 "session_id": session_id,
                 "status": "interrupted",
                 "timestamp": datetime.now().isoformat(),
+                "system_under_test": self.system,
             }
 
         except Exception as e:
@@ -455,6 +484,7 @@ class RobustnessRunner:
                 "status": "failed",
                 "error": str(e),
                 "timestamp": datetime.now().isoformat(),
+                "system_under_test": self.system,
             }
 
     def _compare_outputs(self, outputs: List[Dict], test_name: str) -> Dict:
@@ -682,6 +712,7 @@ class RobustnessRunner:
 
         summary = {
             "test_run_id": self.test_run_id,
+            "system_under_test": self.system,
             "timestamp": datetime.now().isoformat(),
             "total_tests": total_tests,
             "passed": passed_tests,
@@ -836,6 +867,17 @@ Examples:
     )
 
     parser.add_argument(
+        "--system",
+        choices=["team", "single_agent", "both"],
+        default="team",
+        help=(
+            "System under test: 'team' (multi-agent, default), 'single_agent' "
+            "(flat baseline), or 'both' to run each arm and write a comparison. "
+            "Both arms share the same model, tasks, and metrics."
+        ),
+    )
+
+    parser.add_argument(
         "--list-tests",
         action="store_true",
         help="List available tests and exit",
@@ -861,6 +903,90 @@ Examples:
     )
 
     return parser.parse_args()
+
+
+def _make_runner(config: RobustnessConfig, args) -> "RobustnessRunner":
+    """Build a runner for one arm, MLflow-enhanced when requested."""
+    if args.mlflow:
+        try:
+            from mlflow_runner import MLflowRobustnessRunner
+
+            logger.info(f"Creating MLflow-enhanced runner (experiment: {args.mlflow_experiment})")
+            return MLflowRobustnessRunner(
+                config, experiment_name=args.mlflow_experiment, enable_mlflow=True
+            )
+        except ImportError as e:
+            logger.warning(f"MLflow dependencies not available: {e}. Using standard runner.")
+    return RobustnessRunner(config)
+
+
+def compare_systems(summaries: Dict[str, Dict], output_dir: Path) -> Path:
+    """Write a side-by-side comparison of two system arms (team vs single_agent).
+
+    Reuses the per-arm suite summaries produced by ``run_all_tests`` (same tasks,
+    same model, same metrics) and emits ``comparison.json`` + ``comparison.md``
+    with a per-arm top line and per-test robustness scores.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    arms = list(summaries)
+
+    per_arm = {
+        arm: {
+            "total_tests": summary.get("total_tests", 0),
+            "passed": summary.get("passed", 0),
+            "pass_rate": summary.get("pass_rate", 0),
+            "average_robustness_score": summary.get("average_robustness_score", 0),
+            "overall_rating": summary.get("overall_rating", "N/A"),
+        }
+        for arm, summary in summaries.items()
+    }
+
+    test_names = sorted({t for s in summaries.values() for t in (s.get("results") or {})})
+    per_test = {
+        test: {
+            arm: (summaries[arm].get("results", {}).get(test, {}) or {}).get("robustness_score")
+            for arm in arms
+        }
+        for test in test_names
+    }
+
+    comparison = {"arms": arms, "per_arm": per_arm, "per_test": per_test}
+    (output_dir / "comparison.json").write_text(json.dumps(comparison, indent=2, default=str))
+
+    lines = [
+        "# Multi-agent vs Single-agent Comparison",
+        "",
+        "Same model, tasks, and metrics; the only difference is the agentic structure.",
+        "",
+        "## Per-arm summary",
+        "",
+        "| Arm | Tests | Passed | Pass rate | Avg score | Rating |",
+        "|-----|-------|--------|-----------|-----------|--------|",
+    ]
+    for arm in arms:
+        a = per_arm[arm]
+        lines.append(
+            f"| {arm} | {a['total_tests']} | {a['passed']} | "
+            f"{a['pass_rate']:.1%} | {a['average_robustness_score']:.3f} | {a['overall_rating']} |"
+        )
+    lines += [
+        "",
+        "## Per-test robustness score",
+        "",
+        "| Test | " + " | ".join(arms) + " |",
+        "|------|" + "|".join(["------"] * len(arms)) + "|",
+    ]
+    for test in test_names:
+        row = per_test[test]
+        cells = " | ".join(
+            f"{row[arm]:.3f}" if isinstance(row[arm], (int, float)) else "n/a" for arm in arms
+        )
+        lines.append(f"| {test} | {cells} |")
+
+    comparison_md = output_dir / "comparison.md"
+    comparison_md.write_text("\n".join(lines) + "\n")
+    logger.info(f"Comparison written to {comparison_md}")
+    return comparison_md
 
 
 def main():
@@ -904,38 +1030,50 @@ def main():
         for test_name in config.tests:
             config.tests[test_name].enabled = test_name in args.tests
 
-    # Create runner (MLflow-enhanced if requested)
-    if args.mlflow:
-        try:
-            from mlflow_runner import MLflowRobustnessRunner
+    # One or both arms of the multi-agent-vs-single-agent comparison.
+    arms = ["team", "single_agent"] if args.system == "both" else [args.system]
 
-            logger.info(f"Creating MLflow-enhanced runner (experiment: {args.mlflow_experiment})")
-            runner = MLflowRobustnessRunner(
-                config, experiment_name=args.mlflow_experiment, enable_mlflow=True
-            )
-        except ImportError as e:
-            logger.warning(f"MLflow dependencies not available: {e}. Using standard runner.")
-            runner = RobustnessRunner(config)
-    else:
-        runner = RobustnessRunner(config)
-
+    summaries: Dict[str, Dict] = {}
+    shared_model = None
+    first_run_id: Optional[str] = None
     try:
-        summary = runner.run_all_tests()
+        for arm in arms:
+            config.system = arm
+            runner = _make_runner(config, args)
+            if first_run_id is None:
+                first_run_id = runner.test_run_id
+            # Hold the model constant across arms: reuse the first arm's model
+            # instance so the only variable is the agentic structure.
+            if shared_model is not None:
+                runner._model = shared_model
 
-        # Print final summary
-        print(f"\n{'=' * 60}")
-        print("ROBUSTNESS TEST SUITE COMPLETED")
-        print(f"{'=' * 60}")
-        print(f"Total Tests: {summary.get('total_tests', 0)}")
-        print(f"Passed: {summary.get('passed', 0)}")
-        print(f"Failed: {summary.get('failed', 0)}")
-        print(f"Average Score: {summary.get('average_robustness_score', 0):.3f}")
-        print(f"Overall Rating: {summary.get('overall_rating', 'N/A')}")
-        print(f"\nReports saved to: {runner.output_dir}")
-        print(f"{'=' * 60}")
+            logger.info(f"\n{'#' * 60}\nSYSTEM UNDER TEST: {arm}\n{'#' * 60}")
+            summary = runner.run_all_tests()
+            summaries[arm] = summary
+            shared_model = runner._get_model()
 
-        # Exit with appropriate code
-        if summary.get("failed", 0) > 0:
+            # Print per-arm summary
+            print(f"\n{'=' * 60}")
+            print(f"ROBUSTNESS SUITE COMPLETED — system: {arm}")
+            print(f"{'=' * 60}")
+            print(f"Total Tests: {summary.get('total_tests', 0)}")
+            print(f"Passed: {summary.get('passed', 0)}")
+            print(f"Failed: {summary.get('failed', 0)}")
+            print(f"Average Score: {summary.get('average_robustness_score', 0):.3f}")
+            print(f"Overall Rating: {summary.get('overall_rating', 'N/A')}")
+            print(f"Reports saved to: {runner.output_dir}")
+            print(f"{'=' * 60}")
+
+        # Cross-arm comparison artifact (only meaningful for --system both)
+        if len(summaries) > 1:
+            comparison_dir = (
+                Path(__file__).parent / config.output_dir / f"{first_run_id}_comparison"
+            )
+            comparison_md = compare_systems(summaries, comparison_dir)
+            print(f"\nMulti-agent vs single-agent comparison written to: {comparison_md}")
+
+        # Exit non-zero if any arm reported failing tests.
+        if any(summary.get("failed", 0) > 0 for summary in summaries.values()):
             sys.exit(1)
 
     except KeyboardInterrupt:
