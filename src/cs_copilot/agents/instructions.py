@@ -233,3 +233,46 @@ ROBUSTNESS_EVALUATION_INSTRUCTIONS = [
     *OUTPUT_FORMATTING_INSTRUCTIONS,
     *HANDLING_NEW_FILES_INSTRUCTIONS,
 ]
+
+
+def _dedup_preserve_order(*instruction_lists: list[str]) -> list[str]:
+    """Merge instruction lists, dropping exact-duplicate lines but keeping order.
+
+    The specialist instruction lists all splice in the same shared policy blocks
+    (dataset-artifact contract, session-memory, output-formatting, catalog-first),
+    which are the same string objects; deduping collapses each shared line to its
+    first occurrence so the single agent gets one clean union of role knowledge.
+    """
+    seen: set[str] = set()
+    merged: list[str] = []
+    for instruction_list in instruction_lists:
+        for line in instruction_list:
+            if line not in seen:
+                seen.add(line)
+                merged.append(line)
+    return merged
+
+
+# Single-agent baseline: the deduped union of the seven team specialists' role
+# knowledge, with a preamble that neutralizes the team-only "hand off / route to
+# another agent" lines (there is no team to route to). Same knowledge as the
+# team, minus the coordinator's routing prose and per-specialist isolation.
+SINGLE_AGENT_INSTRUCTIONS = [
+    "You are a single generalist agent with no team and no specialist agents to "
+    "delegate to. Perform every step yourself: ChEMBL retrieval, GTM mapping, "
+    "chemoinformatics/SAR analysis, molecular and peptide design, retrosynthesis, "
+    "and report generation.",
+    "The role guidance below is aggregated from the specialist roles. Wherever a "
+    "line says to 'return control', 'route to', or 'hand off to' another agent "
+    "(e.g. the Peptide Designer or Report Generator), disregard the handoff and do "
+    "that work yourself with the corresponding tools.",
+    *_dedup_preserve_order(
+        CHEMBL_INSTRUCTIONS,
+        GTM_AGENT_INSTRUCTIONS,
+        CHEMOINFORMATICIAN_INSTRUCTIONS,
+        REPORT_GENERATOR_INSTRUCTIONS,
+        MOLECULAR_DESIGNER_INSTRUCTIONS,
+        PEPTIDE_DESIGNER_INSTRUCTIONS,
+        SYNPLANNER_INSTRUCTIONS,
+    ),
+]

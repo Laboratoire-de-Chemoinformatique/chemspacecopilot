@@ -47,6 +47,7 @@ Agent Capabilities Breakdown:
 
 from .factories import AgentConfig, AgentCreationError, BaseAgentFactory
 from .registry import create_agent, get_registry, list_available_agent_types
+from .single_agent import get_cs_copilot_single_agent
 from .teams import get_cs_copilot_agent_team
 from .utils import get_last_agent_reply
 
@@ -57,6 +58,8 @@ __all__ = [
     "get_registry",
     # Team coordination
     "get_cs_copilot_agent_team",
+    # Single-agent baseline (multi-agent-vs-single-agent ablation)
+    "get_cs_copilot_single_agent",
     # Utilities
     "get_last_agent_reply",
     # Configuration and exceptions

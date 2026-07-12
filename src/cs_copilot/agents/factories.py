@@ -41,6 +41,7 @@ from .descriptions import (
     PEPTIDE_DESIGNER_DESCRIPTION,
     REPORT_GENERATOR_DESCRIPTION,
     ROBUSTNESS_EVALUATION_DESCRIPTION,
+    SINGLE_AGENT_DESCRIPTION,
     SYNPLANNER_DESCRIPTION,
 )
 from .instructions import (
@@ -51,6 +52,7 @@ from .instructions import (
     PEPTIDE_DESIGNER_INSTRUCTIONS,  # Peptide Designer for amino acid sequence generation
     REPORT_GENERATOR_INSTRUCTIONS,  # Universal presentation layer
     ROBUSTNESS_EVALUATION_INSTRUCTIONS,
+    SINGLE_AGENT_INSTRUCTIONS,  # Single-agent baseline (union of specialist knowledge)
     SYNPLANNER_INSTRUCTIONS,
 )
 
@@ -667,4 +669,134 @@ class PeptideDesignerFactory(BaseAgentFactory):
                 SkillToolkit(),
             ],
             instructions=PEPTIDE_DESIGNER_INSTRUCTIONS,
+        )
+
+
+class SingleAgentFactory(BaseAgentFactory):
+    """Factory for the single-agent baseline used in the multi-agent ablation.
+
+    One flat Agno ``Agent`` that holds the UNION of the seven team specialists'
+    toolkits (ChEMBL, GTM, chemoinformatics, molecular + peptide design,
+    retrosynthesis, reporting) with no coordinator, no routing, and no
+    per-specialist context isolation. It is deliberately NOT added to the runtime
+    team (``teams.py`` stays 7 members); it is constructed separately for the
+    robustness comparison so the only variable vs the team is the agentic
+    structure (same model, same tools, same tasks).
+
+    Tool ordering matters: Agno registers toolkit methods by name and keeps the
+    first-registered on a name clash (later duplicates are silently dropped). The
+    molecular / autoencoder design toolkits are listed BEFORE the peptide toolkit
+    so the ~9 shared design method names (``validate_design_candidates``,
+    ``decode_latent``, ``list_design_engines``, ...) resolve to the small-molecule
+    implementations. The current comparison task set contains no peptide-design
+    prompts, so this preserves full capability parity for every measured task.
+    """
+
+    agent_type = "single_agent"
+
+    def get_agent_config(self) -> AgentConfig:
+        autoencoder_toolkit = AutoencoderToolkit()
+        return AgentConfig(
+            name="single_agent",
+            description=SINGLE_AGENT_DESCRIPTION,
+            tools=[
+                # Data + space
+                ChemblToolkit(),
+                GTMToolkit(),
+                ChemicalSimilarityToolkit(),
+                # Design engines: molecular/autoencoder first so they win the
+                # name-dedupe against the peptide toolkit's shared method names.
+                MolecularDesignerToolkit(autoencoder_toolkit=autoencoder_toolkit),
+                autoencoder_toolkit,
+                PeptideDesignerToolkit(),
+                SynPlannerToolkit(),
+                # Shared infrastructure (one instance each).
+                SessionMemoryToolkit(),
+                PointerPandasTools(),
+                SkillToolkit(),
+                # Plot / report callables.
+                save_gtm_landscape_plot,
+                save_gtm_plot,
+                save_rich_report,
+                save_markdown_report,
+            ],
+            instructions=SINGLE_AGENT_INSTRUCTIONS,
+            # Union of the team members' session_state defaults so the flat agent
+            # carries the same artifact/analysis slots the team accumulates. Keys
+            # mirror ChEMBL/MolecularDesigner (data_file_paths), Chemoinformatician
+            # (analysis_input, chemotype_analysis, clustering_results, sar_analysis,
+            # similarity_analysis, analysis_outputs), GTM (gtm_cache, gtm_file_paths,
+            # analysis_results, landscape_files), and Report (report_outputs).
+            # A drift guard in tests/unit/test_single_agent_factory.py checks these
+            # stay in sync with the member factories.
+            session_state={
+                "data_file_paths": {
+                    "dataset_path": None,  # Backward-compatible alias for clean_dataset_path.
+                    "raw_dataset_path": None,
+                    "clean_dataset_path": None,
+                    "filtered_dataset_path": None,
+                    "descriptor_parquet_path": None,
+                    "standardization_report_path": None,
+                },
+                "analysis_input": None,
+                "chemotype_analysis": {
+                    "scaffolds_per_cluster": None,
+                    "similarity_matrix": None,
+                    "summary_stats": None,
+                    "metadata": {},
+                    "output_paths": {
+                        "scaffolds_csv": None,
+                        "similarity_csv": None,
+                    },
+                },
+                "clustering_results": {
+                    "cluster_assignments": None,
+                    "cluster_metrics": None,
+                    "cluster_centroids": None,
+                    "method": None,
+                },
+                "sar_analysis": {
+                    "activity_cliffs": None,
+                    "mmps": None,
+                    "series_analysis": None,
+                    "potency_trends": None,
+                },
+                "similarity_analysis": {
+                    "similarity_matrix": None,
+                    "diversity_metrics": None,
+                    "nearest_neighbors": None,
+                },
+                "gtm_cache": {
+                    "model": None,
+                    "dataset": None,
+                    "metadata": {
+                        "optimization_strategy": None,
+                    },
+                },
+                "gtm_file_paths": {
+                    "gtm_path": None,
+                    "dataset_path": None,
+                    "gtm_plot_path": None,
+                },
+                "analysis_results": {
+                    "density_csv": None,
+                    "activity_csv": None,
+                    "projection_csv": None,
+                    "plots": [],
+                },
+                "landscape_files": {
+                    "landscape_data_csv": None,
+                    "landscape_plot": None,
+                },
+                "report_outputs": {
+                    "report_path": None,
+                    "report_paths": {},
+                    "plots": [],
+                    "report_type": None,
+                },
+                "analysis_outputs": {
+                    "primary_data_csv": None,
+                    "supplementary_data": [],
+                },
+            },
         )
