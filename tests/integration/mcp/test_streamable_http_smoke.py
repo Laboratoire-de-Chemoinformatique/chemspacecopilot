@@ -113,8 +113,6 @@ async def _run_streamable_http_smoke(tmp_path: Path) -> None:
         "streamable-http",
         "--session-id",
         "http-smoke",
-        "--workflow-slug",
-        "smoke",
         "--host",
         "127.0.0.1",
         "--port",

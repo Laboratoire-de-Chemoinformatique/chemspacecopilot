@@ -43,3 +43,38 @@ with S3.open("output.csv", "w") as f:
 with open("/tmp/output.csv", "w") as f:
     df.to_csv(f)
 ```
+
+## Incomplete multipart upload lifecycle
+
+Invocation cleanup removes staged objects after ordinary failures, but a
+process or host can terminate while an S3 multipart upload is still in
+progress. In that case, uploaded parts continue to consume storage until the
+upload is completed or explicitly aborted. Object-expiration rules do not
+replace multipart-upload cleanup.
+
+Configure every production S3 or MinIO bucket used by ChemSpace Copilot with an
+`AbortIncompleteMultipartUpload` lifecycle action. One day after initiation is
+the recommended default:
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "abort-incomplete-multipart-uploads",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "sessions/"
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    }
+  ]
+}
+```
+
+Adjust the prefix if the deployment uses a different storage layout. Keep the
+rule even when application-level cleanup is enabled: it is the recovery path
+for termination that application code cannot observe. See the
+[AWS S3 lifecycle documentation](https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpu-abort-incomplete-mpu-lifecycle-config.html)
+for the action semantics and provider-specific deployment examples.

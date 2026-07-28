@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 from typing import Any, List
 
 from .common import backend_unavailable, ensure_llm_engine_available
@@ -459,6 +458,5 @@ class PeptideDesignerFacade:
         return self._toolkit().get_model_info()
 
 
-@functools.lru_cache(maxsize=1)
 def peptide_designer_facade() -> PeptideDesignerFacade:
     return PeptideDesignerFacade()

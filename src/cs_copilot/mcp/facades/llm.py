@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 from typing import Any
 
 from ..errors import MCPToolError
@@ -81,6 +80,5 @@ class LLMFacade:
         return _broker(agent).cancel_task(task_id=task_id, reason=reason)
 
 
-@functools.lru_cache(maxsize=1)
 def llm_facade() -> LLMFacade:
     return LLMFacade()

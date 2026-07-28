@@ -4,6 +4,31 @@ description: Generate, validate, rank, and analyze peptide candidates, including
 metadata:
   title: Peptide design
   status: agno_available
+  version: 2.0.0
+  depends_on: []
+  profiles:
+    - peptide-design
+  permissions:
+    - model:execute
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: peptide_design_request
+      kind: request
+      required: true
+  output_artifacts:
+    - name: peptide_candidate_artifact
+      kind: candidate-set
+      required: true
+    - name: peptide_dataset_csv
+      kind: dataset
+      required: true
+    - name: validation_summary
+      kind: validation-summary
+      required: true
+    - name: peptide_landscape_csv
+      kind: analysis-table
+      required: false
   tags:
     - peptide
     - antimicrobial-peptide
@@ -29,10 +54,6 @@ metadata:
     - peptide_load_design_candidates
     - gtm_train_on_latent_space
     - gtm_create_peptide_activity_landscapes
-  artifact_outputs:
-    - peptide_candidate_artifact
-    - peptide_dataset_csv
-    - peptide_landscape_csv
   example_prompts:
     - Design antimicrobial peptide candidates and prepare the validated set for latent-space GTM analysis.
 ---

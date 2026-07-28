@@ -33,7 +33,7 @@ imported when you run the server.
 Before wiring ChatGPT or a tunnel, run the local preflight check:
 
 ```sh
-cscopilot-mcp-check
+cscopilot-mcp-check --profile standard
 ```
 
 The check starts a temporary streamable HTTP server, connects with the MCP
@@ -64,19 +64,33 @@ The package installs a `cscopilot-mcp` console script. By default it speaks
 stdio for local MCP clients:
 
 ```sh
-cscopilot-mcp --session-id my-session --workflow-slug chemical_space
+cscopilot-mcp --profile gtm-analysis --session-id my-session \
+  --workflow-slug gtm-density-landscape
+```
+
+Starting with a catalog workflow validates that every required tool is
+available in the selected profile before a run is created. To resume the exact
+event-backed run later, keep the same session and pass its run id:
+
+```sh
+cscopilot-mcp --profile gtm-analysis --session-id my-session \
+  --run-id <run-id>
 ```
 
 For remote MCP clients such as ChatGPT apps, use streamable HTTP or SSE:
 
 ```sh
 # Streamable HTTP (recommended default for remote clients)
-cscopilot-mcp-serve --session-id demo --workflow-slug chemical_space --host 127.0.0.1 --port 8000
+cscopilot-mcp-serve --profile gtm-analysis --session-id demo \
+  --workflow-slug gtm-density-landscape --host 127.0.0.1 --port 8000
 # Equivalent explicit form:
-cscopilot-mcp --transport streamable-http --session-id demo --workflow-slug chemical_space --host 127.0.0.1 --port 8000
+cscopilot-mcp --transport streamable-http --profile gtm-analysis \
+  --session-id demo --workflow-slug gtm-density-landscape \
+  --host 127.0.0.1 --port 8000
 
 # SSE fallback for clients that still require it:
-cscopilot-mcp --transport sse --session-id demo --workflow-slug chemical_space --host 127.0.0.1 --port 8000
+cscopilot-mcp --transport sse --profile gtm-analysis --session-id demo \
+  --workflow-slug gtm-density-landscape --host 127.0.0.1 --port 8000
 ```
 
 The default streamable HTTP URL is `http://127.0.0.1:8000/mcp`. The default
@@ -120,7 +134,9 @@ Flags:
 | `--auth-issuer-url` | endpoint URL | Issuer URL advertised in MCP protected-resource metadata. |
 | `--auth-resource-url` | endpoint URL | Public MCP resource URL advertised in auth metadata. Set this to the HTTPS URL seen by remote clients. |
 | `--session-id` | auto-generated | Storage prefix used as the session root. |
-| `--workflow-slug` | `workflow` | Workflow folder inside the session output layout. This labels artifacts/manifests; it does not fetch, inject, or execute a workflow contract. |
+| `--run-id` | new run | Resume an existing v2 run in the selected session. Its stored workflow must be compatible with the selected profile. |
+| `--profile` | `standard` | Strict tool discovery and invocation allowlist. `standard` is the all-capabilities profile; domain profiles are least-privilege surfaces. Can also be set with `CS_COPILOT_MCP_PROFILE`. |
+| `--workflow-slug` | ad hoc `mcp-session` | Select and validate a catalog workflow contract for the new run. |
 | `--log-level` | `info` | Logger level (logs to stderr). |
 | `--llm-policy` | `external` | LLM behavior for MCP tools: `external` stores pending `llm_*` tasks for the client, `agno-model` loads only the configured Agno model for toolkit LLM calls, and `disabled` rejects LLM-dependent work. Can also be set with `CS_COPILOT_MCP_LLM_POLICY`. |
 | `--no-tools` | False | Skip MCP tool registration. |
@@ -129,7 +145,7 @@ Flags:
 | `--no-resources` | False | Skip session-artifact resources. |
 
 The `cscopilot-mcp-check` command accepts `--url`, `--host`, `--port`,
-`--path`, `--session-id`, `--workflow-slug`, `--timeout`, `--log-level`,
+`--path`, `--session-id`, `--profile`, `--workflow-slug`, `--timeout`, `--log-level`,
 `--use-s3`, `--json`, `--auth-token-env`, `--auth-token`,
 `--auth-client-id`, repeatable `--auth-scope`, and repeatable
 `--required-tool` flags for preflight checks.
@@ -137,6 +153,30 @@ If a bearer token is configured, the check protects the temporary server and
 connects with `Authorization: Bearer <token>`.
 
 You can also run the package directly: `python -m cs_copilot.mcp …`.
+
+## Capability profiles
+
+Profiles are server-side allowlists: tools outside the selected profile are
+neither discoverable nor invocable. Catalog workflows declare their
+least-privilege profile, while `standard` is the deliberate all-capabilities
+superset.
+
+| Profile | Intended surface |
+|---------|------------------|
+| `bootstrap` | Read-only `mcp_bootstrap` and catalog discovery, plus write-capable ChEMBL/GTM preflights that record plan artifacts |
+| `standard` | Every stable catalog tool |
+| `chembl-retrieval` | ChEMBL retrieval, judging, and run artifacts |
+| `gtm-analysis` | GTM, tabular preparation, and reports |
+| `chemoinformatics` | Similarity/chemotype analysis, tables, and reports |
+| `reporting` | Run inspection and report generation |
+| `molecular-design` | Small-molecule design, validation, GTM, and reports |
+| `peptide-design` | Peptide design, validation, GTM, and reports |
+| `retrosynthesis` | Candidate resolution and SynPlanner routes |
+| `robustness` | Robustness analysis and report export |
+
+The same role names and profile assignments are used by the in-process agent
+factories. Factory construction fails when a role is configured with a
+toolkit outside its allowlist.
 
 ## Claude Code config
 
@@ -148,7 +188,11 @@ depending on your Claude Code version):
   "mcpServers": {
     "cs_copilot": {
       "command": "cscopilot-mcp",
-      "args": ["--session-id", "demo", "--workflow-slug", "chemical_space"],
+      "args": [
+        "--profile", "gtm-analysis",
+        "--session-id", "demo",
+        "--workflow-slug", "gtm-density-landscape"
+      ],
       "env": { "SESSION_ID": "demo", "USE_S3": "false" }
     }
   }
@@ -164,7 +208,11 @@ Codex reads `~/.codex/config.toml`. Add a server entry like this:
 ```toml
 [mcp_servers.cs_copilot]
 command = "cscopilot-mcp"
-args = ["--session-id", "demo", "--workflow-slug", "chemical_space"]
+args = [
+  "--profile", "gtm-analysis",
+  "--session-id", "demo",
+  "--workflow-slug", "gtm-density-landscape",
+]
 
 [mcp_servers.cs_copilot.env]
 SESSION_ID = "demo"
@@ -259,7 +307,7 @@ mcp_bootstrap(user_request="<the user's request>")
 
 The read-only bootstrap tool is an organization step. It returns the
 MCP-native prompt to use, matched workflow and skill documents to fetch,
-read-only preflight tools to run, and an ordered action plan. It is advisory
+declared scientific preflight tools to run, and an ordered action plan. It is advisory
 only: it does not mutate session state, execute a workflow, or call the Agno
 team.
 
@@ -280,16 +328,124 @@ team through its read-only Skills toolkit.
 The MCP server also exposes reusable workflow contracts. Use
 `fetch("catalog:workflows")` or the direct read-only `workflow_list`,
 `workflow_search`, and `workflow_fetch` tools to discover workflow metadata,
-preflight tools, required tools, expected artifacts, and the recommended MCP
-prompt. Workflow contracts are orchestration guidance for the external MCP
-client; they do not execute the Agno team or replace the existing Chainlit
-runtime.
+semantic version, dependencies, profiles, permissions, task DAG, artifact
+contracts, preflight tools, required tools, and the recommended MCP prompt.
+Workflow contracts guide the external MCP client; they do not execute the
+Agno team or replace the Chainlit runtime.
 
-Every MCP toolkit call made after normal MCP bootstrap writes a compact JSON
-run manifest under `workflows/<workflow_id>/manifests/mcp/`. Manifests record
-the runtime, tool name, redacted public arguments, server-forced arguments,
-status, duration, and output summary. They are visible through the existing
-`cscopilot://session/` resource listing.
+Every server process creates or resumes an explicit v2 run identified by
+`session_id`, `run_id`, and `workflow_slug`. `workflow_start_run` replaces the
+untouched startup placeholder with the selected catalog run, pins the selected
+workflow plus its transitive dependency contracts, and materializes any task
+DAG declared by those contracts. Required request-like `workflow_inputs` are
+serialized as checksummed, run-scoped JSON artifacts. File-backed inputs must
+first be registered inside the run and then referenced as
+`{"artifact_id": "<id>"}`. On an active run, omit `constraints`, `budget`, and
+`workflow_inputs` to reuse their pinned values; explicit empty mappings request
+an actual change and conflict with non-empty pinned values.
+
+Strict persisted task-DAG and task-contract enforcement is currently the
+`chembl-to-gtm-report` pilot. Other catalog workflows remain taskless/legacy:
+they still receive durable run, event, artifact, and pinned workflow contracts,
+but clients must not invent task records or task handoffs that the fetched
+contract does not declare.
+
+The run's authoritative state is an immutable sequence of `events/*.jsonl`;
+`manifest.json` and `artifacts/index.json` are rebuildable snapshots. Tool calls
+append redacted observations with timing, attempts, idempotency/cache metadata,
+active task/role, and output summaries. Registered artifacts carry SHA-256,
+size, media type, producer, trust, and provenance. Paths returned by tools are
+registered automatically when they resolve to an existing file inside the
+active run root.
+
+Use `workflow_start_run`, `workflow_get_run`, `workflow_add_task`, `workflow_transition_run`,
+`workflow_transition_task`, `workflow_record_handoff`,
+`workflow_register_artifact`, `workflow_verify_artifact`, and
+`workflow_complete_run` to drive the explicit lifecycle. Completion becomes
+`partial` when required catalog tasks, root inputs, or output artifacts are
+missing. In a workflow with a declared DAG, each task requires a structured,
+bounded handoff before it can run; a failed retry requires a fresh handoff.
+Domain calls require an active running task and are checked against that
+task's exact pinned handoff, role, profile, selected input artifacts, and tool
+allowlist. Selected inputs are checksum-verified again before every domain
+call. Explicit and automatic artifact producer ids must match that
+authoritative active `RUNNING` task. Lifecycle transitions, including
+transitions to `failed`, are rejected while a domain call is in flight; cancel
+or await the call first so publication and registration reach a durable
+terminal state.
+
+`workflow_abandon_tool_invocation` is an explicit high-risk, supervisor
+crash-recovery operation, not a normal timeout or cancellation path. Use it
+only for a durable invocation left in flight after a process crash, and only
+after independently verifying that no live server or worker still owns the
+span. The caller must then set `confirm_not_running=true`; the operation
+refuses spans that are still active in the current server process and appends
+an `abandoned` event when accepted. Afterwards, transition the affected task
+to `failed` or `cancelled`. Retry it only with a fresh handoff.
+
+Every direct tool returns the same schema-v2 envelope:
+
+```json
+{
+  "schema_version": 2,
+  "status": "success",
+  "data": {},
+  "artifact_ids": [],
+  "warnings": [],
+  "error": null,
+  "metrics": {
+    "duration_ms": 12.3,
+    "attempts": 1,
+    "retries": 0,
+    "cached": false,
+    "output_bytes": 42
+  },
+  "trace": {
+    "run_id": "<run-id>",
+    "trace_id": "<trace-id>",
+    "span_id": "<span-id>",
+    "parent_span_id": null
+  }
+}
+```
+
+Errors use stable codes: `invalid_input`, `permission_denied`,
+`transient_external`, `timeout`, `resource_limit`,
+`scientific_validation`, and `internal`. Only idempotent, retryable calls are
+retried. Idempotent tools accept an optional `idempotency_key`; repeated calls
+with the same task-scoped key and arguments during the server process coalesce
+or return the cached successful envelope; reusing a key with different
+arguments is rejected. Async tools and subprocess workers may declare
+cancellable timeouts. In-process synchronous tools intentionally do not claim
+a cancellable deadline, and caller cancellation waits for their worker thread
+to finish so a mutation cannot outlive its envelope. The remaining catalog
+handoff deadline bounds async calls and subprocess workers while they run. A
+synchronous overrun is reported only after its worker thread has safely
+finished; it is never abandoned in the background. The server also enforces
+the handoff's observable tool-call budget, while its token budget is enforced
+by the external reasoning client. The default one-megabyte inline output cap
+keeps responses bounded; larger scientific outputs should be persisted and
+returned as artifact ids.
+
+For every tool with `write_scope="session"`, client-selected output paths are
+confined to the active run. The storage client rechecks the boundary at the
+actual local write with descriptor-relative, no-follow opens. Absolute and
+`file://` paths, parent traversal, symlink swaps, runtime-metadata aliases,
+encoded traversal, foreign S3 buckets/sessions/runs, Python-literal parameter
+bag escapes, unsafe pandas constructors, and unsupported open-ended
+serializers are rejected. Files already registered in the run's artifact
+ledger are protected from later domain-tool writes. Scoped writes are
+create-only and invocation-transactional. Worker processes publish first to a
+job-specific staging prefix; the parent promotes checksum-bound bytes only
+after accepting the result. If required artifact registration fails, newly
+published but unregistered bytes are released without deleting files already
+bound by an artifact event.
+
+OS-level termination can interrupt a worker while an S3 multipart upload is in
+progress, before the invocation cleanup path can run. Production S3 and MinIO
+buckets therefore need a lifecycle rule that aborts incomplete multipart
+uploads; this repository recommends one day. See
+[Incomplete multipart upload lifecycle](architecture/storage.md#incomplete-multipart-upload-lifecycle).
 
 ## LLM policy
 
@@ -331,23 +487,37 @@ tools, namespaced by toolkit or workflow (`chembl_*`, `chemspace_*`, `gtm_*`,
 the toolkit method signatures, with the `agent` / `session_state` parameters
 injected by the server and hidden from the public schema.
 
-For vague ChEMBL or chemical-space requests, call the read-only preflight
-tools before mutating execution tools:
+Each tool declares whether it may use the network (for example, ChEMBL or
+PubChem access and Hugging Face model fallback). This contract is included in
+ChatGPT-compatible tool documentation; a locally cached model can avoid an
+actual request without changing the tool's network-capable classification.
+
+For vague ChEMBL or chemical-space requests, call the preflight tools before
+the longer-running execution tools. `mcp_bootstrap` itself is read-only.
+`chembl_prepare_retrieval` and `chemspace_plan_analysis` persist validated plan
+artifacts in the active run, so they are write-capable. Consequently, the
+`bootstrap` profile as a whole must not be treated as read-only.
 
 | Tool | Purpose |
 |------|---------|
 | `mcp_bootstrap` | Recommend the MCP-native prompt, workflow contract, skills, preflight tools, and ordered action plan for a user request. |
-| `chembl_prepare_retrieval` | Validate target, organism, assay type, and mechanism requirements before `chembl_fetch_compounds`. |
-| `chemspace_plan_analysis` | Classify broad chemical-space intent and identify missing dataset/workflow details before ChEMBL, GTM, SAR, or report tools. |
+| `chembl_prepare_retrieval` | Validate retrieval requirements and persist the plan before `chembl_fetch_compounds`. |
+| `chemspace_plan_analysis` | Classify chemical-space intent, identify missing details, and persist the plan before execution tools. |
 
 The server attaches MCP tool annotations for ChatGPT / Apps approval UX:
 `readOnlyHint=True` is used only for strict lookup, retrieval, listing, or
 pure computation tools. Tools that fetch-and-store data, load mutable GTM
 state, sample/register zones, update session memory, train models, or save
 reports are advertised as write actions with `readOnlyHint=False`.
-`destructiveHint` and `openWorldHint` are currently `False` for every tool
-because cs_copilot writes are scoped to private session storage and do not
-delete data or publish to public internet state.
+`destructiveHint` remains `False` for ordinary create-only workflow tools.
+The explicit `workflow_abandon_tool_invocation` recovery action advertises
+`destructiveHint=True` because it releases an in-flight lifecycle guard and
+must receive deliberate approval, even though it does not delete an artifact.
+Tools that may contact ChEMBL, PubChem, Hugging Face, or another external
+service advertise `openWorldHint=True` and high risk even when a local cache
+can satisfy a particular invocation.
+`idempotentHint` is derived from the same execution contract used by retries
+and idempotency-key handling.
 
 The server also exposes two read-only ChatGPT compatibility tools:
 
@@ -383,13 +553,17 @@ agent and team instruction sets from `cs_copilot.agents.instructions`:
 
 ### Resources
 
-Session artifacts (datasets, plots, reports written by tools) are listed and
-read via the `cscopilot://session/<rel_path>` URI scheme. Local and S3
-backends are surfaced identically — the server delegates reads to
-`cs_copilot.storage.S3`.
+Only v2 run state and registered artifacts are exposed. Local and S3 backends
+use the same canonical URIs:
 
-The synthetic `cscopilot://session/manifest.json` resource always exists and
-describes the active session prefix and workflow layout version.
+- `cscopilot://runs/<run-id>/manifest.json`
+- `cscopilot://runs/<run-id>/events/<event-id>.jsonl`
+- `cscopilot://runs/<run-id>/artifacts/<artifact-id>`
+
+Artifact URIs resolve through the artifact index and verify checksum and size
+before returning content. Arbitrary session files are not resources. A new run
+therefore exposes its manifest and events immediately, while artifact
+resources appear only after registration.
 
 ## ChEMBL LLM-as-judge in MCP mode
 
@@ -425,6 +599,9 @@ The MCP package is intentionally isolated from the Agno team:
 - The MCP server runs as one OS process per stdio session. Concurrent
   launches are independent — each one has its own `SESSION_ID`, S3 prefix,
   and shared `session_state`.
+- Toolkit specifications backed by the same factory share one instance inside
+  a server, while separate server constructions receive separate instances.
+  Factory functions therefore do not retain process-global mutable toolkits.
 
 A guard test (`tests/unit/mcp/test_no_team_imports.py`) AST-walks the package
 and fails CI if any of the forbidden imports reappear.

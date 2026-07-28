@@ -26,6 +26,20 @@ The system uses a **Factory Pattern + Registry** for agent creation.
 
 The team coordinator also has a read-only Skills toolkit (`list_skills`, `search_skills`, `fetch_skill`) so it can consult the same reusable workflow procedures exposed through MCP.
 
+## Handoff durability boundary
+
+The Agno delegation guard always validates the structured handoff schema,
+receiver role, private-context exclusions, and declared budget limits. Agent
+factories independently enforce each role's toolkit allowlist.
+
+Durable validation is opt-in at team construction. When a caller supplies a v2
+`RunContext`, the guard records the handoff through that runtime, which checks
+it against the pinned task contract and event stream. The current Chainlit and
+CLI team entry points construct an ad-hoc team without a `RunContext`; their
+handoff identities and counters are process-local and are not persisted as v2
+workflow events. Strict persisted task-DAG enforcement is currently the
+`chembl-to-gtm-report` MCP pilot.
+
 ## Prompt / Skill Ownership
 
 The prompt layer is split to mirror Agno's own `description` / `instructions`

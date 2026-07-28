@@ -4,6 +4,31 @@ description: Scaffold/chemotype, clustering, SAR, and similarity/diversity analy
 metadata:
   title: Chemoinformatics analysis
   status: stable
+  version: 2.0.0
+  depends_on: []
+  profiles:
+    - chemoinformatics
+  permissions:
+    - compute:execute
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: analysis_dataset
+      kind: dataset
+      required: true
+  output_artifacts:
+    - name: chemotype_analysis
+      kind: analysis-result
+      required: false
+    - name: clustering_results
+      kind: analysis-result
+      required: false
+    - name: sar_analysis
+      kind: analysis-result
+      required: false
+    - name: similarity_analysis
+      kind: analysis-result
+      required: false
   tags:
     - chemoinformatics
     - scaffold
@@ -31,11 +56,6 @@ metadata:
     - session_list_loadable_session_data
     - session_summarize_session_memory
     - gtm_get_density_summary
-  artifact_outputs:
-    - chemotype_analysis
-    - clustering_results
-    - sar_analysis
-    - similarity_analysis
   example_prompts:
     - Cluster the dataset, analyze scaffolds per cluster, and find activity cliffs.
 ---

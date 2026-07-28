@@ -2,7 +2,7 @@
 
 Run local stdio clients with::
 
-    cscopilot-mcp [--session-id SID] [--workflow-slug SLUG]
+    cscopilot-mcp [--profile PROFILE] [--session-id SID] [--workflow-slug SLUG]
 
 Run a remote HTTP endpoint for ChatGPT / browser-hosted MCP clients with::
 
@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 
 from .auth import DEFAULT_AUTH_CLIENT_ID, DEFAULT_AUTH_TOKEN_ENV
 from .lazy import require_mcp
+from .profiles import profile_names
 from .session import BootstrapConfig, apply_session_id, bootstrap, configure_logging
 
 _TRANSPORTS = ("stdio", "sse", "streamable-http")
@@ -37,7 +38,7 @@ def _parse_args(
         prog=prog,
         description=(
             "cs_copilot MCP server. Exposes cs_copilot toolkits, "
-            "prompts, and session artifacts to external MCP clients over "
+            "prompts, and run-scoped artifacts to external MCP clients over "
             "stdio, SSE, or streamable HTTP."
         ),
     )
@@ -163,11 +164,25 @@ def _parse_args(
         "env var if set, otherwise auto-generated.",
     )
     parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Resume an existing v2 workflow run instead of creating a new run.",
+    )
+    parser.add_argument(
+        "--profile",
+        default=os.getenv("CS_COPILOT_MCP_PROFILE", "standard"),
+        choices=profile_names(),
+        help=(
+            "Strict MCP tool allowlist. The standard profile exposes all stable "
+            "workflow tools; domain profiles expose narrower surfaces."
+        ),
+    )
+    parser.add_argument(
         "--workflow-slug",
         default=None,
         help=(
-            "Workflow slug used only to label the session output layout. It "
-            "does not fetch, inject, or execute a workflow contract."
+            "Workflow contract selected for this run. Startup fails when it is "
+            "unknown or incompatible with --profile."
         ),
     )
     parser.add_argument(
@@ -232,7 +247,9 @@ def main(
 
     config = BootstrapConfig(
         session_id=args.session_id,
+        run_id=args.run_id,
         workflow_slug=args.workflow_slug,
+        profile=args.profile,
         log_level=args.log_level,
         llm_policy=args.llm_policy,
     )
@@ -250,6 +267,8 @@ def main(
 
     server = build_server(
         ctx,
+        profile=args.profile,
+        workflow_slug=args.workflow_slug,
         include_tools=not args.no_tools,
         include_chatgpt_compat=not args.no_chatgpt_compat,
         include_prompts=not args.no_prompts,

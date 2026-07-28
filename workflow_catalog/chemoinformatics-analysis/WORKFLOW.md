@@ -4,6 +4,31 @@ description: Run scaffold/chemotype, clustering, SAR, and similarity/diversity a
 metadata:
   title: Chemoinformatics analysis
   status: stable
+  version: 2.0.0
+  depends_on: []
+  profiles:
+    - chemoinformatics
+  permissions:
+    - compute:execute
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: analysis_dataset
+      kind: dataset
+      required: true
+  output_artifacts:
+    - name: chemotype_analysis
+      kind: analysis-result
+      required: false
+    - name: clustering_results
+      kind: analysis-result
+      required: false
+    - name: sar_analysis
+      kind: analysis-result
+      required: false
+    - name: similarity_analysis
+      kind: analysis-result
+      required: false
   tags:
     - chemoinformatics
     - scaffold
@@ -30,11 +55,6 @@ metadata:
     - pandas_run_operation
     - session_summarize_session_memory
     - report_save_rich
-  expected_artifacts:
-    - chemotype_analysis
-    - clustering_results
-    - sar_analysis
-    - similarity_analysis
   recommended_prompt: chemoinformatician_agent
 ---
 

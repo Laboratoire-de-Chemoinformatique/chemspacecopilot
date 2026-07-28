@@ -58,7 +58,8 @@ ChemSpace Copilot is a multi-agent system powered by the [Agno](https://docs.agn
 - **Molecular and Peptide Generation** — Molecular Designer small-molecule generation with autoencoder and LLM engines plus Peptide Designer generation with WAE and LLM engines, interpolation, and GTM-guided targeting
 - **S3/MinIO Integration** — Session-scoped cloud storage with local filesystem fallback
 - **Chainlit Interface** — WebSocket-based real-time chat with password authentication, file upload, and inline molecule rendering
-- **Agentic Memory** — SQLite-backed agentic state and recent session history shared across agent workflows
+- **Artifact-backed Runs** — Event-sourced workflow state, checksummed artifacts, and
+  session-local chat context; cross-session agent memory is disabled
 - **Robustness Testing** — Framework for validating prompt variation handling with semantic similarity scoring
 
 ## Quick Start
@@ -202,14 +203,16 @@ uv sync --extra mcp
 cscopilot-mcp-check
 
 # Local stdio MCP clients (Codex, Claude Code)
-cscopilot-mcp --session-id demo --workflow-slug chemical_space
+cscopilot-mcp --profile gtm-analysis --session-id demo --workflow-slug gtm-density-landscape
 
 # Remote MCP clients (ChatGPT apps, browser-hosted clients)
-cscopilot-mcp-serve --session-id demo --workflow-slug chemical_space --host 127.0.0.1 --port 8000
+cscopilot-mcp-serve --profile gtm-analysis --session-id demo --workflow-slug gtm-density-landscape --host 127.0.0.1 --port 8000
 # Add --allowed-host <your-host> when a reverse proxy preserves the public Host header.
 
 # Optional bearer-token protection for HTTP clients/proxies that send Authorization
-CS_COPILOT_MCP_AUTH_TOKEN=change-me cscopilot-mcp-serve --session-id demo --workflow-slug chemical_space --host 127.0.0.1 --port 8000 --allowed-host <your-host>
+CS_COPILOT_MCP_AUTH_TOKEN=change-me cscopilot-mcp-serve --profile standard \
+  --session-id demo --workflow-slug chembl-to-gtm-report \
+  --host 127.0.0.1 --port 8000 --allowed-host <your-host>
 ```
 
 For ChatGPT, expose the streamable HTTP endpoint (`/mcp`) through a reachable
@@ -219,7 +222,11 @@ server includes read-only
 `search` / `fetch` tools for ChatGPT data-only/deep-research compatibility,
 plus the full cs_copilot tool catalog for full MCP developer-mode clients. Tool
 descriptors include MCP `readOnlyHint` annotations so ChatGPT can distinguish
-pure lookup tools from state-changing cs_copilot workflows.
+pure lookup tools from state-changing cs_copilot workflows; network-capable
+tools also advertise `openWorldHint` for approval policy. The selected
+startup profile is a strict discovery/invocation boundary; narrower profiles
+include `chembl-retrieval`, `gtm-analysis`, `chemoinformatics`, `reporting`,
+`molecular-design`, `peptide-design`, `retrosynthesis`, and `robustness`.
 By default, LLM-dependent MCP tool paths create `llm_*` tasks for the external
 client to complete. Trusted private deployments can pass
 `--llm-policy agno-model` to load only the configured Agno model for toolkit
@@ -230,6 +237,18 @@ Example client configs ship under `examples/mcp/`
 `codex_subscription_smoke.md`, `secure_mcp_tunnel.md`). See `docs/mcp.md`
 for the full tool / prompt / resource catalog and the ChEMBL LLM-as-judge
 gating contract.
+
+The repository also contains a Codex plugin under
+`plugins/chemspace-copilot/`. It packages the standard MCP profile and a thin
+bootstrap skill; scientific procedures remain in `skills/` and
+`workflow_catalog/`, not in the plugin. This is intentionally a repo-local
+marketplace delivery surface (`.agents/plugins/marketplace.json`), not Python
+wheel content. Before installing it in Codex, install the MCP extra
+(`uv sync --extra mcp`, or `pip install "cs_copilot[mcp]"`) and ensure
+`cscopilot-mcp` is on the environment's `PATH`. Then open that marketplace
+file in Codex using its absolute checkout path and install
+`chemspace-copilot`; a portable deep link cannot be committed because every
+clone has a different local path.
 
 ## Architecture
 
@@ -254,7 +273,14 @@ The system uses a **Factory Pattern + Registry** for agent creation. The default
 | **Robustness Evaluation** | Analyzes robustness test runs, score distributions, failures, and trends |
 
 
-Agents share state via `session_state` and persist memory in SQLite. All file I/O goes through a unified S3/local storage abstraction.
+Agents share within-session state via `session_state` and can persist bounded
+conversation history in SQLite. Cross-session user and agentic memories are
+disabled. The default Chainlit and CLI team uses structured but process-local
+ad-hoc handoffs. When a v2 `RunContext` is supplied—or an MCP client drives the
+v2 lifecycle—scientific run state is stored as replayable events and
+checksummed artifacts through the unified S3/local storage abstraction. Strict
+persisted task-DAG enforcement is currently the `chembl-to-gtm-report` MCP
+pilot; other catalog workflows remain taskless/legacy.
 
 For full architectural details, see the [documentation](https://laboratoire-de-chemoinformatique.github.io/chemspacecopilot/).
 

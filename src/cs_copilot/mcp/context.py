@@ -52,6 +52,76 @@ _CTX: contextvars.ContextVar[Optional[MCPAgentContext]] = contextvars.ContextVar
     "cs_copilot_mcp_agent_context",
     default=None,
 )
+_ACTIVE_TASK_KEYS = (
+    "active_task_id",
+    "active_role",
+    "active_profile",
+    "active_task_attempt",
+    "active_handoff_id",
+)
+
+
+def bind_active_task_scope(
+    session_state: Dict[str, Any],
+    task: Any,
+    *,
+    run: Any | None = None,
+) -> None:
+    """Bind one authoritative running task as the MCP execution scope."""
+
+    session_state["active_task_id"] = str(task.task_id)
+    session_state["active_role"] = str(task.role)
+    session_state["active_profile"] = str(task.profile)
+    session_state["active_task_attempt"] = int(task.attempts)
+    handoff = next(
+        (
+            item
+            for item in reversed(getattr(run, "handoffs", ()) or ())
+            if item.task_id == task.task_id and item.task_attempt == max(0, int(task.attempts) - 1)
+        ),
+        None,
+    )
+    if handoff is None:
+        session_state.pop("active_handoff_id", None)
+    else:
+        session_state["active_handoff_id"] = str(handoff.handoff_id)
+
+
+def clear_active_task_scope(
+    session_state: Dict[str, Any],
+    *,
+    task_id: str | None = None,
+) -> bool:
+    """Clear the execution scope, optionally only when it names ``task_id``."""
+
+    if task_id is not None and session_state.get("active_task_id") != task_id:
+        return False
+    for key in _ACTIVE_TASK_KEYS:
+        session_state.pop(key, None)
+    return True
+
+
+def restore_active_task_scope(session_state: Dict[str, Any], run: Any) -> Any | None:
+    """Restore a valid scope, auto-selecting only an unambiguous running task."""
+
+    tasks = getattr(run, "tasks", {}) or {}
+    current_id = session_state.get("active_task_id")
+    current = tasks.get(current_id) if current_id is not None else None
+    if current is not None and _task_is_running(current):
+        bind_active_task_scope(session_state, current, run=run)
+        return current
+
+    running = [task for task in tasks.values() if _task_is_running(task)]
+    clear_active_task_scope(session_state)
+    if len(running) == 1:
+        bind_active_task_scope(session_state, running[0], run=run)
+        return running[0]
+    return None
+
+
+def _task_is_running(task: Any) -> bool:
+    status = getattr(task, "status", None)
+    return getattr(status, "value", status) == "running"
 
 
 def set_current_context(ctx: MCPAgentContext) -> None:

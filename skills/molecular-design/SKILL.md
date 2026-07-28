@@ -4,6 +4,31 @@ description: Generate, validate, rank, and persist small-molecule candidates, op
 metadata:
   title: Molecular design
   status: agno_available
+  version: 2.0.0
+  depends_on: []
+  profiles:
+    - molecular-design
+  permissions:
+    - model:execute
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: molecular_design_request
+      kind: request
+      required: true
+    - name: seed_molecule
+      kind: molecule
+      required: false
+  output_artifacts:
+    - name: candidate_set_artifact
+      kind: candidate-set
+      required: true
+    - name: candidate_dataset_csv
+      kind: dataset
+      required: true
+    - name: validation_summary
+      kind: validation-summary
+      required: true
   tags:
     - molecular-design
     - small-molecule
@@ -30,10 +55,6 @@ metadata:
     - mol_interpolate_molecules
     - chem_find_most_similar
     - gtm_project_data
-  artifact_outputs:
-    - candidate_set_artifact
-    - candidate_dataset_csv
-    - validation_summary
   example_prompts:
     - Generate validated analogs for this seed molecule and register the candidate set for downstream GTM projection.
 ---

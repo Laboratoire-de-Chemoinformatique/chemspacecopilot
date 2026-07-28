@@ -98,6 +98,7 @@ def prepare_clean_dataset(
     descriptor_type: Optional[str] = None,
     remove_stereochemistry: bool = True,
     save_raw: bool = True,
+    report_appendix: Optional[str] = None,
     session_state: Optional[dict[str, Any]] = None,
 ) -> CleanDatasetResult:
     """Prepare raw, clean, descriptor, and report artifacts for a molecular dataset.
@@ -198,6 +199,7 @@ def prepare_clean_dataset(
             "standardization",
             session_state=session_state,
         ),
+        appendix=report_appendix,
     )
     standardization_summary["standardization_report_path"] = report_path
 
@@ -553,8 +555,15 @@ def _write_parquet(df: pd.DataFrame, filename: str) -> str:
     return S3.path(filename)
 
 
-def _write_report(summary: dict[str, Any], filename: str) -> str:
+def _write_report(
+    summary: dict[str, Any],
+    filename: str,
+    *,
+    appendix: Optional[str] = None,
+) -> str:
     report = _format_report(summary)
+    if appendix and appendix.strip():
+        report = f"{report.rstrip()}\n\n{appendix.strip()}\n"
     with S3.open(filename, "w") as handle:
         handle.write(report)
     return S3.path(filename)

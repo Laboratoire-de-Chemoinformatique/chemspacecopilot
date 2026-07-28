@@ -4,6 +4,34 @@ description: Build or reuse a GTM map, create density landscapes, inspect compou
 metadata:
   title: GTM density landscape
   status: stable
+  version: 2.0.0
+  depends_on: []
+  profiles:
+    - gtm-analysis
+  permissions:
+    - compute:execute
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: clean_dataset_path
+      kind: dataset
+      required: true
+    - name: gtm_model_path
+      kind: model
+      required: false
+  output_artifacts:
+    - name: gtm_model_path
+      kind: model
+      required: true
+    - name: projected_dataset_path
+      kind: dataset
+      required: true
+    - name: density_matrix_path
+      kind: analysis-table
+      required: false
+    - name: density_plot_path
+      kind: visualization
+      required: true
   tags:
     - gtm
     - chemography
@@ -29,11 +57,6 @@ metadata:
     - gtm_sample_dense_nodes
     - gtm_project_data
     - report_save_rich
-  artifact_outputs:
-    - gtm_model_path
-    - projected_dataset_path
-    - density_matrix_path
-    - density_plot_path
   example_prompts:
     - Show the GTM density landscape for the current clean dataset and summarize the densest nodes.
 ---

@@ -98,7 +98,14 @@ def _preview(df: pd.DataFrame) -> str:
 
 def _normalize_csv(params: dict) -> dict:
     """Map legacy aliases -> path_or_buf."""
-    for old in ("path", "filepath_or_buffer", "file_path", "filename"):
+    for old in (
+        "path",
+        "path_or_buffer",
+        "filepath",
+        "filepath_or_buffer",
+        "file_path",
+        "filename",
+    ):
         if old in params:
             params["path_or_buf"] = params.pop(old)
     return params
@@ -349,6 +356,10 @@ class PointerPandasTools(PandasTools):
         if not create_using_function:
             raise ValueError("create_using_function cannot be empty")
 
+        create_using_function = create_using_function.strip()
+        if create_using_function.startswith("pd."):
+            create_using_function = create_using_function[3:]
+
         function_parameters = _coerce_parameter_mapping(function_parameters, "function_parameters")
 
         # Normalize CSV params early for common cases
@@ -410,9 +421,11 @@ class PointerPandasTools(PandasTools):
             except Exception as e:
                 logger.error(f"Error loading file from {s3_path}: {e}")
                 raise
-        elif create_using_function == "from_file" or dataframe_name.endswith(".csv"):
+        elif create_using_function == "from_file":
             # Handle direct file loading (S3 or local)
-            file_path = function_parameters.get("file_path", dataframe_name)
+            file_path = function_parameters.get("file_path")
+            if not file_path:
+                raise ValueError("file_path is required for from_file")
             try:
                 # Use S3.open which now supports s3://, local absolute, and relative
                 with S3.open(file_path, "r") as f:
@@ -422,6 +435,14 @@ class PointerPandasTools(PandasTools):
                 return {"dataframe_name": dataframe_name, "preview": _preview(df)}
             except Exception as e:
                 logger.error(f"Error loading file from {file_path}: {e}")
+                raise
+        elif create_using_function == "DataFrame":
+            try:
+                df = pd.DataFrame(**function_parameters)
+                self.dataframes[dataframe_name] = df
+                return {"dataframe_name": dataframe_name, "preview": _preview(df)}
+            except Exception as e:
+                logger.error(f"Error creating DataFrame directly: {e}")
                 raise
 
         # Map bare DataFrame class method names to full form

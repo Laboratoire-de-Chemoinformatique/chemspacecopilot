@@ -25,7 +25,6 @@ from cs_copilot.tools import (
     SessionMemoryToolkit,
     SkillToolkit,
     SynPlannerToolkit,
-    # SessionToolkit,
     save_gtm_landscape_plot,
     save_gtm_plot,
     save_markdown_report,
@@ -33,6 +32,7 @@ from cs_copilot.tools import (
 )
 from cs_copilot.tools.analysis import RobustnessAnalysisToolkit
 
+from .contracts import ROLE_POLICIES, RolePolicy, validate_role_tools
 from .descriptions import (
     CHEMBL_DESCRIPTION,
     CHEMOINFORMATICIAN_DESCRIPTION,
@@ -46,13 +46,13 @@ from .descriptions import (
 )
 from .instructions import (
     CHEMBL_INSTRUCTIONS,
-    CHEMOINFORMATICIAN_INSTRUCTIONS,  # Comprehensive chemoinformatics analysis
-    GTM_AGENT_INSTRUCTIONS,  # Unified GTM agent (all GTM operations)
+    CHEMOINFORMATICIAN_INSTRUCTIONS,
+    GTM_AGENT_INSTRUCTIONS,
     MOLECULAR_DESIGNER_INSTRUCTIONS,
-    PEPTIDE_DESIGNER_INSTRUCTIONS,  # Peptide Designer for amino acid sequence generation
-    REPORT_GENERATOR_INSTRUCTIONS,  # Universal presentation layer
+    PEPTIDE_DESIGNER_INSTRUCTIONS,
+    REPORT_GENERATOR_INSTRUCTIONS,
     ROBUSTNESS_EVALUATION_INSTRUCTIONS,
-    SINGLE_AGENT_INSTRUCTIONS,  # Single-agent baseline (union of specialist knowledge)
+    SINGLE_AGENT_INSTRUCTIONS,
     SYNPLANNER_INSTRUCTIONS,
 )
 
@@ -66,6 +66,7 @@ class AgentConfig:
     tools: List[Any] = field(default_factory=list)
     instructions: List[str] = field(default_factory=list)
     session_state: Dict[str, Any] = field(default_factory=dict)
+    role_policy: Optional[RolePolicy] = None
 
     def validate(self) -> None:
         """Validate the agent configuration."""
@@ -77,6 +78,8 @@ class AgentConfig:
             raise TypeError("Tools must be a list")
         if not isinstance(self.instructions, list):
             raise TypeError("Instructions must be a list")
+        if self.role_policy is not None:
+            validate_role_tools(self.role_policy, self.tools)
 
 
 class AgentCreationError(Exception):
@@ -128,6 +131,14 @@ class BaseAgentFactory(ABC):
         """
         try:
             config = self.get_agent_config()
+            agent_type = getattr(self.__class__, "agent_type", None)
+            declared_policy = ROLE_POLICIES.get(agent_type)
+            if config.role_policy is None:
+                config.role_policy = declared_policy
+            elif declared_policy is not None and config.role_policy != declared_policy:
+                raise ValueError(
+                    f"Factory role policy for '{agent_type}' differs from the canonical allowlist"
+                )
             config.validate()
             provided_session_state = kwargs.pop("session_state", None)
 
@@ -160,6 +171,10 @@ class BaseAgentFactory(ABC):
             agent_kwargs.update(kwargs)
 
             agent = Agent(**agent_kwargs)
+            if config.role_policy is not None:
+                # Keep the enforced policy inspectable without placing it in the
+                # shared session state (where one member could overwrite another).
+                agent.role_policy = config.role_policy
 
             # Wrap agent methods with MLflow tracking if enabled
             if enable_mlflow_tracking:

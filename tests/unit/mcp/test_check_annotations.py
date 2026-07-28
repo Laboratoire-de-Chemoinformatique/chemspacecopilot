@@ -10,6 +10,7 @@ from cs_copilot.mcp.check import (
     CheckError,
     CheckReport,
     _report_payload,
+    _required_tools_for_profile,
     _validate_server_instructions,
     _validate_tool_annotations,
 )
@@ -32,8 +33,8 @@ def test_validate_tool_annotations_counts_read_and_write_tools():
         [
             _tool("search", read_only=True),
             _tool("fetch", read_only=True),
-            _tool("chembl_fetch_compounds", read_only=False),
-            _tool("gtm_optimization", read_only=False),
+            _tool("chembl_fetch_compounds", read_only=False, open_world=True),
+            _tool("gtm_optimization", read_only=False, open_world=True),
             _tool("report_save_markdown", read_only=False),
         ]
     )
@@ -41,6 +42,25 @@ def test_validate_tool_annotations_counts_read_and_write_tools():
     assert total == 5
     assert read_only == 2
     assert write == 3
+
+
+def test_required_tools_follow_the_selected_profile():
+    standard = _required_tools_for_profile("standard")
+    bootstrap = _required_tools_for_profile("bootstrap")
+    reporting = _required_tools_for_profile("reporting")
+
+    assert "chembl_fetch_compounds" in standard
+    assert "chembl_fetch_compounds" not in bootstrap
+    assert "gtm_optimization" not in bootstrap
+    assert "report_save_markdown" in reporting
+    assert {"search", "fetch", "mcp_bootstrap"} <= set(bootstrap)
+
+
+def test_explicit_required_tool_is_never_silently_filtered():
+    assert "site_specific_probe" in _required_tools_for_profile(
+        "bootstrap",
+        ("site_specific_probe",),
+    )
 
 
 def test_validate_tool_annotations_rejects_missing_annotations():
@@ -77,12 +97,39 @@ def test_validate_tool_annotations_rejects_core_hint_mismatch():
         )
 
 
-def test_validate_tool_annotations_rejects_destructive_or_open_world_tools():
-    with pytest.raises(CheckError, match="unexpected destructive"):
+def test_validate_tool_annotations_rejects_destructive_hint_mismatch():
+    with pytest.raises(CheckError, match="incorrect destructiveHint"):
         _validate_tool_annotations([_tool("search", read_only=True, destructive=True)])
 
-    with pytest.raises(CheckError, match="unexpected open-world"):
-        _validate_tool_annotations([_tool("search", read_only=True, open_world=True)])
+
+def test_validate_tool_annotations_accepts_declared_destructive_recovery_tool():
+    assert _validate_tool_annotations(
+        [
+            _tool(
+                "workflow_abandon_tool_invocation",
+                read_only=False,
+                destructive=True,
+            )
+        ]
+    ) == (1, 0, 1)
+
+
+def test_validate_tool_annotations_accepts_declared_open_world_tool():
+    assert _validate_tool_annotations(
+        [_tool("chembl_fetch_compounds", read_only=False, open_world=True)]
+    ) == (1, 0, 1)
+
+
+def test_validate_tool_annotations_rejects_open_world_hint_mismatch():
+    with pytest.raises(CheckError, match="incorrect openWorldHint"):
+        _validate_tool_annotations(
+            [_tool("chembl_fetch_compounds", read_only=False, open_world=False)]
+        )
+
+    missing_hint = _tool("site_specific_probe", read_only=True)
+    missing_hint.annotations.openWorldHint = None
+    with pytest.raises(CheckError, match="without boolean openWorldHint"):
+        _validate_tool_annotations([missing_hint])
 
 
 def test_validate_server_instructions_accepts_contract():

@@ -758,13 +758,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 clean_filename=f"chembl_{query_slug}_clean.csv",
                 descriptor_filename=f"chembl_{query_slug}_descriptors.parquet",
                 report_filename=f"chembl_{query_slug}_standardization_report.md",
+                report_appendix=self._retrieval_filtering_report_appendix(filtering.summary),
                 session_state=session_for_artifacts,
             )
             prepared.standardization_summary["chembl_retrieval_filtering"] = filtering.summary
-            self._append_retrieval_filtering_report(
-                prepared.standardization_report_path,
-                filtering.summary,
-            )
             total_assays = len(all_assay_ids)
             clean_df = prepared.clean_df
             activity_mapping = prepared.activity_mapping.to_dict()
@@ -1404,15 +1401,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
         report_path: str,
         filtering_summary: Dict[str, Any],
     ) -> None:
-        if not filtering_summary:
+        section = self._retrieval_filtering_report_appendix(filtering_summary)
+        if section is None:
             return
-        if (
-            filtering_summary.get("suspicious_row_count", 0) == 0
-            and filtering_summary.get("metadata_judge_row_count", 0) == 0
-            and filtering_summary.get("filtered_row_count", 0) == 0
-        ):
-            return
-        section = self._format_retrieval_filtering_report_section(filtering_summary)
         try:
             if self._is_remote_or_explicit_path(report_path):
                 try:
@@ -1430,6 +1421,22 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 path.write_text(existing.rstrip() + "\n\n" + section)
         except Exception as exc:
             logger.warning("Could not append ChEMBL retrieval filtering report: %s", exc)
+
+    def _retrieval_filtering_report_appendix(
+        self,
+        filtering_summary: Dict[str, Any],
+    ) -> Optional[str]:
+        """Return the ChEMBL provenance section for single-pass report creation."""
+
+        if not filtering_summary:
+            return None
+        if (
+            filtering_summary.get("suspicious_row_count", 0) == 0
+            and filtering_summary.get("metadata_judge_row_count", 0) == 0
+            and filtering_summary.get("filtered_row_count", 0) == 0
+        ):
+            return None
+        return self._format_retrieval_filtering_report_section(filtering_summary)
 
     def _write_retrieval_filtering_only_report(
         self,

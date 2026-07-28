@@ -4,6 +4,25 @@ description: Load uploaded or session tabular data, normalize it for analysis, a
 metadata:
   title: Dataset normalization
   status: stable
+  version: 2.0.0
+  depends_on: []
+  profiles:
+    - chemoinformatics
+  permissions:
+    - compute:execute
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: source_dataset
+      kind: dataset
+      required: true
+  output_artifacts:
+    - name: normalized_dataset_path
+      kind: dataset
+      required: true
+    - name: analysis_ready_dataframe
+      kind: dataframe
+      required: true
   tags:
     - dataset
     - pandas
@@ -22,9 +41,6 @@ metadata:
     - pandas_run_operation
     - session_list_loadable_session_data
     - session_summarize_session_memory
-  expected_artifacts:
-    - normalized_dataset_path
-    - analysis_ready_dataframe
   recommended_prompt: chemoinformatician_agent
 ---
 

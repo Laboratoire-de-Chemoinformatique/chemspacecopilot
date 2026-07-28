@@ -1,0 +1,4 @@
+interface:
+  display_name: "ChemSpace Orchestrate"
+  short_description: "Run reproducible chemical-space workflows"
+  default_prompt: "Use $chemspace-orchestrate to plan and run a chemical-space analysis."

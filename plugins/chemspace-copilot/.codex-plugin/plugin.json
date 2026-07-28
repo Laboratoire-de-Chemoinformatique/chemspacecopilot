@@ -1,0 +1,30 @@
+{
+  "name": "chemspace-copilot",
+  "version": "0.2.0",
+  "description": "Reproducible agentic chemical-space workflows through the ChemSpace Copilot MCP server.",
+  "author": {
+    "name": "Alexey Orlov",
+    "email": "data2scale@gmail.com",
+    "url": "https://github.com/Laboratoire-de-Chemoinformatique"
+  },
+  "homepage": "https://github.com/Laboratoire-de-Chemoinformatique/chemspacecopilot",
+  "repository": "https://github.com/Laboratoire-de-Chemoinformatique/chemspacecopilot",
+  "license": "MIT",
+  "keywords": ["chemistry", "cheminformatics", "mcp", "agents"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "ChemSpace Copilot",
+    "shortDescription": "Agentic chemical-space analysis in Codex.",
+    "longDescription": "Plan and execute reproducible ChEMBL, GTM, chemoinformatics, molecular-design, peptide-design, and reporting workflows through a profile-restricted MCP server.",
+    "developerName": "Laboratoire de Chemoinformatique",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://github.com/Laboratoire-de-Chemoinformatique/chemspacecopilot",
+    "defaultPrompt": [
+      "Build a ChEMBL-to-GTM report for my target.",
+      "Analyze this molecular dataset in chemical space.",
+      "Design and assess candidate molecules."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

@@ -15,6 +15,7 @@ _MOLECULAR_METHODS = [
         "List available molecular design engines and supported generation modes.",
         True,
         {},
+        False,
     ),
     (
         "mol_design_molecules",
@@ -22,6 +23,7 @@ _MOLECULAR_METHODS = [
         "Design small-molecule candidates with a selected molecular design engine.",
         False,
         {"_source_tool": "design_molecules"},
+        True,
     ),
     (
         "mol_generate_analogs",
@@ -29,6 +31,7 @@ _MOLECULAR_METHODS = [
         "Generate small-molecule analogs around a seed SMILES.",
         False,
         {},
+        True,
     ),
     (
         "mol_interpolate_molecules",
@@ -36,6 +39,7 @@ _MOLECULAR_METHODS = [
         "Interpolate between two molecules using the molecular autoencoder engine.",
         False,
         {},
+        True,
     ),
     (
         "mol_validate_design_candidates",
@@ -43,6 +47,7 @@ _MOLECULAR_METHODS = [
         "Validate, standardize, and annotate proposed molecular design candidates.",
         True,
         {},
+        False,
     ),
     (
         "mol_rank_design_candidates",
@@ -50,6 +55,7 @@ _MOLECULAR_METHODS = [
         "Rank validated molecular design candidates by seed similarity and quality.",
         True,
         {},
+        False,
     ),
     (
         "mol_register_design_candidates",
@@ -57,6 +63,7 @@ _MOLECULAR_METHODS = [
         "Persist final molecular design candidates as a generated candidate set.",
         False,
         {},
+        True,
     ),
 ]
 
@@ -68,8 +75,9 @@ MOLECULAR_SPECS: List[ToolSpec] = [
         summary=summary,
         forces=forces,
         read_only=read_only,
+        requires_network=requires_network,
     )
-    for mcp_name, method, summary, read_only, forces in _MOLECULAR_METHODS
+    for mcp_name, method, summary, read_only, forces, requires_network in _MOLECULAR_METHODS
 ]
 
 _PEPTIDE_METHODS = [
@@ -79,6 +87,7 @@ _PEPTIDE_METHODS = [
         "List available peptide design engines and supported generation modes.",
         True,
         {},
+        False,
     ),
     (
         "peptide_design_peptides",
@@ -86,6 +95,7 @@ _PEPTIDE_METHODS = [
         "Design peptide candidates with a selected peptide design engine.",
         False,
         {"_source_tool": "design_peptides"},
+        True,
     ),
     (
         "peptide_generate_analogs",
@@ -93,6 +103,7 @@ _PEPTIDE_METHODS = [
         "Generate peptide analogs around a seed sequence.",
         False,
         {},
+        True,
     ),
     (
         "peptide_design_interpolation",
@@ -100,6 +111,7 @@ _PEPTIDE_METHODS = [
         "Interpolate between two peptide sequences using the WAE engine.",
         False,
         {},
+        True,
     ),
     (
         "peptide_validate_design_candidates",
@@ -107,6 +119,7 @@ _PEPTIDE_METHODS = [
         "Validate, normalize, and annotate proposed peptide design candidates.",
         True,
         {},
+        False,
     ),
     (
         "peptide_rank_design_candidates",
@@ -114,6 +127,7 @@ _PEPTIDE_METHODS = [
         "Rank validated peptide design candidates by seed similarity and quality.",
         True,
         {},
+        False,
     ),
     (
         "peptide_load_design_candidates",
@@ -121,6 +135,7 @@ _PEPTIDE_METHODS = [
         "Load peptide design candidates from a session pointer or artifact path.",
         True,
         {},
+        False,
     ),
     (
         "peptide_validate_model_loaded",
@@ -128,6 +143,7 @@ _PEPTIDE_METHODS = [
         "Check whether the Peptide WAE model is loaded and usable.",
         True,
         {},
+        True,
     ),
     (
         "peptide_get_latent_dimension",
@@ -135,6 +151,7 @@ _PEPTIDE_METHODS = [
         "Return the Peptide WAE latent dimension.",
         True,
         {},
+        True,
     ),
     (
         "peptide_encode_peptides",
@@ -142,6 +159,7 @@ _PEPTIDE_METHODS = [
         "Encode peptide sequences to latent vectors.",
         True,
         {},
+        True,
     ),
     (
         "peptide_decode_latent",
@@ -149,6 +167,7 @@ _PEPTIDE_METHODS = [
         "Decode latent vectors to peptide sequences.",
         True,
         {},
+        True,
     ),
     (
         "peptide_sample_peptides",
@@ -156,6 +175,7 @@ _PEPTIDE_METHODS = [
         "Sample new peptides from the WAE latent space.",
         False,
         {},
+        True,
     ),
     (
         "peptide_interpolate_peptides",
@@ -163,6 +183,7 @@ _PEPTIDE_METHODS = [
         "Interpolate between two peptides in WAE latent space.",
         True,
         {},
+        True,
     ),
     (
         "peptide_reconstruct_sequence",
@@ -170,6 +191,7 @@ _PEPTIDE_METHODS = [
         "Reconstruct a peptide sequence by encoding and decoding it.",
         True,
         {},
+        True,
     ),
     (
         "peptide_explore_latent_neighborhood",
@@ -177,6 +199,7 @@ _PEPTIDE_METHODS = [
         "Explore the WAE latent neighborhood around a peptide sequence.",
         True,
         {},
+        True,
     ),
     (
         "peptide_get_model_info",
@@ -184,6 +207,7 @@ _PEPTIDE_METHODS = [
         "Return metadata about the loaded Peptide WAE model.",
         True,
         {},
+        True,
     ),
 ]
 
@@ -195,6 +219,7 @@ PEPTIDE_SPECS: List[ToolSpec] = [
         summary=summary,
         forces=forces,
         read_only=read_only,
+        requires_network=requires_network,
     )
-    for mcp_name, method, summary, read_only, forces in _PEPTIDE_METHODS
+    for mcp_name, method, summary, read_only, forces, requires_network in _PEPTIDE_METHODS
 ]

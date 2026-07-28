@@ -7,6 +7,7 @@ import json
 import logging
 import sys
 import traceback
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -84,11 +85,54 @@ def run_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("Worker payload field 'kwargs' must be an object.")
 
     ctx = _build_context(payload)
-    result = dispatch(kwargs, ctx)
+    write_boundary = payload.get("write_boundary")
+    verified_payload = payload.get("verified_artifact_reads", {})
+    if not isinstance(verified_payload, dict):
+        raise ValueError("Worker verified_artifact_reads must be an object.")
+    verified_reads: dict[str, tuple[str, int]] = {}
+    for path, metadata in verified_payload.items():
+        if (
+            not isinstance(path, str)
+            or not isinstance(metadata, list)
+            or len(metadata) != 2
+            or not isinstance(metadata[0], str)
+            or not isinstance(metadata[1], int)
+        ):
+            raise ValueError("Worker verified artifact metadata is malformed.")
+        verified_reads[path] = (metadata[0], metadata[1])
+
+    publications: dict[str, dict[str, Any]] = {}
+    staging_id = payload.get("staging_id")
+    with ExitStack() as staging_stack:
+        if staging_id is not None:
+            if not isinstance(staging_id, str):
+                raise ValueError("Worker staging_id must be a string.")
+            staging_stack.enter_context(S3.stage_publications(staging_id))
+        with ExitStack() as execution_stack:
+            if verified_reads:
+                execution_stack.enter_context(S3.confine_artifact_reads(verified_reads))
+            if isinstance(write_boundary, str):
+                protected_paths = payload.get("write_protected_paths", [])
+                if not isinstance(protected_paths, list) or any(
+                    not isinstance(path, str) for path in protected_paths
+                ):
+                    raise ValueError(
+                        "Worker payload field 'write_protected_paths' " "must be a string list."
+                    )
+                execution_stack.enter_context(
+                    S3.confine_writes(
+                        write_boundary,
+                        protected_paths=protected_paths,
+                    )
+                )
+            result = dispatch(kwargs, ctx)
+        if staging_id is not None:
+            publications = S3.staged_publication_metadata()
     return {
         "ok": True,
         "result": result,
         "session_state": ctx.session_state,
+        "staged_publications": publications,
     }
 
 
@@ -115,14 +159,28 @@ def main(argv: list[str] | None = None) -> int:
     _configure_logging()
     args = _parse_args(argv)
     result_path = Path(args.result)
+    tool_name: str | None = None
 
     try:
         payload = _read_json(Path(args.job))
+        if isinstance(payload, Mapping):
+            tool_name = str(payload.get("tool_name") or "") or None
         result = run_payload(payload)
     except Exception as exc:  # noqa: BLE001
+        from .errors import normalize_error
+
+        normalized = normalize_error(
+            exc,
+            tool_name=tool_name,
+            # Preserve intrinsic transient/timeout retryability in the worker
+            # payload. The parent adapter applies the ToolSpec idempotence gate.
+            idempotent=True,
+        )
         result = {
             "ok": False,
-            "error": str(exc),
+            "error": normalized.message,
+            "error_code": normalized.code,
+            "retryable": normalized.retryable,
             "traceback": traceback.format_exc(),
             "session_state": {},
         }
