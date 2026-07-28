@@ -22,8 +22,9 @@ connection, use the full runbook in `examples/mcp/secure_mcp_tunnel.md`.
 
 ```sh
 USE_S3=false cscopilot-mcp-serve \
+  --profile standard \
   --session-id demo \
-  --workflow-slug chemical_space \
+  --workflow-slug chembl-to-gtm-report \
   --host 127.0.0.1 \
   --port 8000 \
   --allowed-host <your-host> \
@@ -58,8 +59,9 @@ a static bearer token:
 export CS_COPILOT_MCP_AUTH_TOKEN=change-me
 cscopilot-mcp-check --auth-scope mcp:read
 USE_S3=false cscopilot-mcp-serve \
+  --profile standard \
   --session-id demo \
-  --workflow-slug chemical_space \
+  --workflow-slug chembl-to-gtm-report \
   --host 127.0.0.1 \
   --port 8000 \
   --allowed-host <your-host> \
@@ -77,8 +79,9 @@ header when you enable this static-token mode.
 ```sh
 USE_S3=false cscopilot-mcp \
   --transport sse \
+  --profile standard \
   --session-id demo \
-  --workflow-slug chemical_space \
+  --workflow-slug chembl-to-gtm-report \
   --host 127.0.0.1 \
   --port 8000
 ```
@@ -92,4 +95,4 @@ The remote server registers:
 - `search` and `fetch` for ChatGPT data-only apps, company knowledge, and deep research.
 - The full cs_copilot `chembl_*`, `gtm_*`, `chem_*`, `session_*`, `report_*`, and `robustness_*` tools for full MCP developer-mode clients.
 - MCP tool annotations: pure lookup/computation tools advertise `readOnlyHint=True`; cs_copilot workflows that store data, update session state, train, sample, or save reports advertise `readOnlyHint=False`.
-- cs_copilot workflow prompts and session artifact resources.
+- cs_copilot workflow prompts and run-scoped, checksum-verified artifact resources.

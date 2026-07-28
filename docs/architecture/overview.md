@@ -60,15 +60,27 @@ The `get_cs_copilot_agent_team()` function in `teams.py` creates a coordinated t
 team = get_cs_copilot_agent_team(model)
 # Creates Team with:
 # - 7 runtime agents
-# - Shared SqliteDb for memory persistence
-# - Context management (num_history_runs=5)
-# - Member interaction sharing
+# - SQLite persistence for session-local chat history
+# - Bounded context management (num_history_runs=5)
+# - Structured, artifact-referenced member handoffs
+# - No cross-session user/agent memory
 # - Streaming event propagation
 ```
 
 Capabilities:
 
-- **Multi-Agent Memory**: Session history persisted in SQLite
-- **Context Sharing**: Agents access each other's outputs via `session_state`
+- **Session History**: Recent history can be persisted in SQLite and reused
+  only inside the active session
+- **Context Sharing**: Specialists receive explicit handoff facts and
+  artifact references; coordinator state and full transcripts are not injected
+  into member prompts
+- **Bounded Handoffs**: Member transcripts are not broadcast; specialists
+  receive structured task facts, artifact ids, acceptance criteria, and budgets
 - **Streaming**: Real-time event propagation from member agents to UI
-- **Agentic State**: SQLite-backed memory and recent session history for coordinated workflows
+- **Scientific State**: V2 workflow events and checksummed artifacts, rather
+  than agent memory, are the replayable source of truth
+
+The default Chainlit and CLI team runs in ad-hoc handoff mode: its structured
+handoffs are schema-, role-, and budget-validated, but remain process-local.
+Callers that explicitly construct the team with a v2 `RunContext` additionally
+receive durable, pinned task-contract validation and handoff events.

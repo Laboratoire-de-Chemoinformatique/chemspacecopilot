@@ -17,7 +17,11 @@ uv sync --extra mcp
 USE_S3=false cscopilot-mcp-check
 ```
 
-Expected output includes `90` tools, `12` prompts, `server_instructions: ok`, `tool_annotations: ok`, `workflow_prompt: ok`, and `search_fetch: ok`. The default tool count is 88 direct cs_copilot tools plus the read-only `search` / `fetch` compatibility tools. Add `--json` when you want a machine-readable proof for setup logs, connector metadata, the first ChatGPT smoke prompt, and expected evidence.
+Expected output includes the required core tools and prompts plus
+`server_instructions: ok`, `tool_annotations: ok`, `workflow_prompt: ok`, and
+`search_fetch: ok`. Add `--json` when you want a machine-readable proof for
+setup logs, connector metadata, the first ChatGPT smoke prompt, and expected
+evidence.
 
 ## 2. Install tunnel-client
 
@@ -57,7 +61,7 @@ tunnel-client init \
   --sample sample_mcp_stdio_local \
   --profile cs_copilot-stdio \
   --tunnel-id "$OPENAI_MCP_TUNNEL_ID" \
-  --mcp-command "env USE_S3=false AGNO_TELEMETRY=false $CS_COPILOT_ROOT/.venv/bin/cscopilot-mcp --session-id chatgpt-demo --workflow-slug chemical_space --log-level warning"
+  --mcp-command "env USE_S3=false AGNO_TELEMETRY=false $CS_COPILOT_ROOT/.venv/bin/cscopilot-mcp --profile standard --session-id chatgpt-demo --workflow-slug chembl-to-gtm-report --log-level warning"
 
 tunnel-client doctor --profile cs_copilot-stdio --explain
 tunnel-client run --profile cs_copilot-stdio
@@ -72,8 +76,9 @@ Use this only when `cscopilot-mcp-serve` is already reachable by
 
 ```sh
 USE_S3=false cscopilot-mcp-serve \
+  --profile standard \
   --session-id chatgpt-demo \
-  --workflow-slug chemical_space \
+  --workflow-slug chembl-to-gtm-report \
   --host 127.0.0.1 \
   --port 8000 \
   --allowed-host mcp.internal.example.com \

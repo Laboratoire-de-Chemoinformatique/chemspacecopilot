@@ -49,9 +49,13 @@ def _render_mcp_workflow_prompt() -> str:
             "For each new user request, call mcp_bootstrap first with the user request "
             "and optional workflow_slug if one is known.",
             "Treat mcp_bootstrap as an organization step: fetch its recommended prompt, "
-            "workflow, and skill documents, then run its listed read-only preflight tools.",
+            "workflow, and skill documents, then run its listed preflight tools while "
+            "respecting their declared permissions.",
             "Follow fetched skill/workflow procedures for tool order, required artifacts, "
             "and report handoffs.",
+            "Use workflow_* lifecycle tools to create the declared tasks, record structured "
+            "handoffs, transition run/task status, and request completion only after "
+            "required artifacts are registered.",
             "Use chembl_prepare_retrieval before ChEMBL retrieval and "
             "chemspace_plan_analysis before broad chemical-space or GTM work.",
             "If bootstrap itself returns bootstrap_questions, ask them before continuing.",
@@ -62,8 +66,9 @@ def _render_mcp_workflow_prompt() -> str:
             "Call MCP tools directly by name; the agent-style prompts are role guidance, "
             "not separate workers in default MCP mode.",
             "Use llm_* task tools when a tool returns status needs_external_llm.",
-            "Treat cscopilot://session resources and session_* tools as the source of "
-            "truth for prior artifacts, datasets, candidates, GTM maps, reports, and "
+            "Treat the active cscopilot://runs/<run-id>/manifest.json resource, its "
+            "immutable events, registered artifact resources, and session_* tools as "
+            "the source of truth for datasets, candidates, GTM maps, reports, and "
             "synthesis plans.",
             "Review write actions before running them and report saved artifact paths back "
             "to the user.",

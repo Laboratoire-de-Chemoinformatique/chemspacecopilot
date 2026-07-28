@@ -13,6 +13,7 @@ from typing import Sequence
 
 from .auth import DEFAULT_AUTH_CLIENT_ID, DEFAULT_AUTH_TOKEN_ENV
 from .lazy import require_mcp
+from .profiles import profile_names
 
 DEFAULT_REQUIRED_TOOLS = (
     "search",
@@ -31,27 +32,11 @@ DEFAULT_REQUIRED_TOOLS = (
     "synplanner_identify_input",
 )
 
-EXPECTED_READ_ONLY_HINTS = {
-    "search": True,
-    "fetch": True,
-    "mcp_bootstrap": True,
-    "chembl_prepare_retrieval": True,
-    "chembl_fetch_compounds": False,
-    "chemspace_plan_analysis": True,
-    "gtm_optimization": False,
-    "report_save_markdown": False,
-    "skill_list": True,
-    "workflow_list": True,
-    "pandas_create_dataframe": False,
-    "mol_validate_design_candidates": True,
-    "peptide_validate_design_candidates": True,
-    "synplanner_identify_input": True,
-}
-
 EXPECTED_INSTRUCTION_SNIPPETS = (
     "external MCP client is the reasoning layer",
     "Do not invoke the Agno team",
     "mcp_bootstrap",
+    "workflow_start_run",
     "cs_copilot_mcp_workflow",
     "cs_copilot_workflow",
     "chembl_prepare_retrieval",
@@ -169,9 +154,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Session id for the temporary server.",
     )
     parser.add_argument(
+        "--profile",
+        default="standard",
+        choices=profile_names(),
+        help="Strict MCP tool profile for the temporary server.",
+    )
+    parser.add_argument(
         "--workflow-slug",
-        default="smoke",
-        help="Workflow slug for the temporary server.",
+        default=None,
+        help="Optional workflow contract for the temporary server.",
     )
     parser.add_argument(
         "--timeout",
@@ -252,6 +243,19 @@ def _resolve_auth_token(args: argparse.Namespace) -> str | None:
     return args.auth_token or os.getenv(args.auth_token_env)
 
 
+def _required_tools_for_profile(
+    profile: str,
+    additional: Sequence[str] = (),
+) -> tuple[str, ...]:
+    """Select readiness probes that are actually exposed by ``profile``."""
+
+    from .tools_registry import all_specs
+
+    exposed = {spec.mcp_name for spec in all_specs(profile)}
+    baseline = ("search", "fetch", *(name for name in DEFAULT_REQUIRED_TOOLS if name in exposed))
+    return tuple(dict.fromkeys((*baseline, *additional)))
+
+
 def _server_env(*, use_s3: bool, auth_token_env: str, auth_token: str | None) -> dict[str, str]:
     env = dict(os.environ)
     env.setdefault("AGNO_TELEMETRY", "false")
@@ -278,7 +282,6 @@ async def _open_streamable_http_client(endpoint_url: str, auth_token: str | None
     from contextlib import AsyncExitStack
 
     import httpx
-
     from mcp.client.streamable_http import streamable_http_client
 
     stack = AsyncExitStack()
@@ -347,9 +350,9 @@ def _validate_tool_annotations(tools: Sequence[object]) -> tuple[int, int, int]:
         else:
             bad_read_only.append(name)
 
-        if _annotation_value(tool, "destructiveHint") is not False:
+        if not isinstance(_annotation_value(tool, "destructiveHint"), bool):
             bad_destructive.append(name)
-        if _annotation_value(tool, "openWorldHint") is not False:
+        if not isinstance(_annotation_value(tool, "openWorldHint"), bool):
             bad_open_world.append(name)
 
     if bad_read_only:
@@ -359,25 +362,67 @@ def _validate_tool_annotations(tools: Sequence[object]) -> tuple[int, int, int]:
         )
     if bad_destructive:
         raise CheckError(
-            "MCP endpoint exposed unexpected destructive tools: "
+            "MCP endpoint exposed tools without boolean destructiveHint: "
             + ", ".join(sorted(bad_destructive))
         )
     if bad_open_world:
         raise CheckError(
-            "MCP endpoint exposed unexpected open-world tools: " + ", ".join(sorted(bad_open_world))
+            "MCP endpoint exposed tools without boolean openWorldHint: "
+            + ", ".join(sorted(bad_open_world))
         )
 
-    mismatched = []
-    for name, expected in EXPECTED_READ_ONLY_HINTS.items():
+    from .tools_registry import all_specs
+
+    expected_read_only = {
+        "search": True,
+        "fetch": True,
+        **{spec.mcp_name: spec.read_only for spec in all_specs()},
+    }
+    expected_open_world = {
+        "search": False,
+        "fetch": False,
+        **{spec.mcp_name: spec.open_world for spec in all_specs()},
+    }
+    expected_destructive = {
+        "search": False,
+        "fetch": False,
+        **{spec.mcp_name: spec.destructive for spec in all_specs()},
+    }
+    mismatched_read_only = []
+    mismatched_destructive = []
+    mismatched_open_world = []
+    for name, expected in expected_read_only.items():
         tool = tools_by_name.get(name)
         if tool is None:
             continue
         actual = _annotation_value(tool, "readOnlyHint")
         if actual is not expected:
-            mismatched.append(f"{name}={actual!r}, expected {expected!r}")
-    if mismatched:
+            mismatched_read_only.append(f"{name}={actual!r}, expected {expected!r}")
+    for name, expected in expected_open_world.items():
+        tool = tools_by_name.get(name)
+        if tool is None:
+            continue
+        actual = _annotation_value(tool, "openWorldHint")
+        if actual is not expected:
+            mismatched_open_world.append(f"{name}={actual!r}, expected {expected!r}")
+    for name, tool in tools_by_name.items():
+        expected = expected_destructive.get(name, False)
+        actual = _annotation_value(tool, "destructiveHint")
+        if actual is not expected:
+            mismatched_destructive.append(f"{name}={actual!r}, expected {expected!r}")
+    if mismatched_read_only:
         raise CheckError(
-            "MCP endpoint exposed incorrect readOnlyHint values: " + "; ".join(mismatched)
+            "MCP endpoint exposed incorrect readOnlyHint values: " + "; ".join(mismatched_read_only)
+        )
+    if mismatched_open_world:
+        raise CheckError(
+            "MCP endpoint exposed incorrect openWorldHint values: "
+            + "; ".join(mismatched_open_world)
+        )
+    if mismatched_destructive:
+        raise CheckError(
+            "MCP endpoint exposed incorrect destructiveHint values: "
+            + "; ".join(mismatched_destructive)
         )
 
     return len(tools), read_only, write
@@ -458,15 +503,25 @@ async def _probe_server(
                     prompts = await session.list_prompts()
                     resources = await session.list_resources()
                     resource_uris = {str(resource.uri) for resource in resources.resources}
-                    if "cscopilot://session/manifest.json" not in resource_uris:
-                        raise CheckError("session manifest resource was not exposed")
+                    if not any(
+                        uri.startswith("cscopilot://runs/") and uri.endswith("/manifest.json")
+                        for uri in resource_uris
+                    ):
+                        raise CheckError("workflow-run manifest resource was not exposed")
 
                     fetch_id = await _verify_search_fetch(
                         session,
-                        query="chembl fetch compounds",
-                        expected_id="tool:chembl_fetch_compounds",
-                        required_text=("Tool: chembl_fetch_compounds", "LLM-as-judge"),
+                        query="mcp bootstrap",
+                        expected_id="tool:mcp_bootstrap",
+                        required_text=("Tool: mcp_bootstrap",),
                     )
+                    if "chembl_fetch_compounds" in tool_names:
+                        fetch_id = await _verify_search_fetch(
+                            session,
+                            query="chembl fetch compounds",
+                            expected_id="tool:chembl_fetch_compounds",
+                            required_text=("Tool: chembl_fetch_compounds", "LLM-as-judge"),
+                        )
                     workflow_prompt_id = await _verify_search_fetch(
                         session,
                         query="mcp workflow prompt",
@@ -499,24 +554,28 @@ async def _probe_server(
                             "Required tools",
                         ),
                     )
-                    await _verify_search_fetch(
-                        session,
-                        query="molecular design",
-                        expected_id="tool:mol_validate_design_candidates",
-                        required_text=("Tool: mol_validate_design_candidates",),
+                    optional_search_checks = (
+                        (
+                            "mol_validate_design_candidates",
+                            "molecular design",
+                        ),
+                        (
+                            "peptide_validate_design_candidates",
+                            "peptide design",
+                        ),
+                        (
+                            "synplanner_identify_input",
+                            "synplanner",
+                        ),
                     )
-                    await _verify_search_fetch(
-                        session,
-                        query="peptide design",
-                        expected_id="tool:peptide_validate_design_candidates",
-                        required_text=("Tool: peptide_validate_design_candidates",),
-                    )
-                    await _verify_search_fetch(
-                        session,
-                        query="synplanner",
-                        expected_id="tool:synplanner_identify_input",
-                        required_text=("Tool: synplanner_identify_input",),
-                    )
+                    for tool_name, query in optional_search_checks:
+                        if tool_name in tool_names:
+                            await _verify_search_fetch(
+                                session,
+                                query=query,
+                                expected_id=f"tool:{tool_name}",
+                                required_text=(f"Tool: {tool_name}",),
+                            )
 
                     return CheckReport(
                         endpoint_url=endpoint_url,
@@ -551,7 +610,7 @@ async def run_check(args: argparse.Namespace) -> CheckReport:
 
     require_mcp()
 
-    required_tools = tuple(dict.fromkeys((*DEFAULT_REQUIRED_TOOLS, *args.required_tool)))
+    required_tools = _required_tools_for_profile(args.profile, args.required_tool)
     auth_token = _resolve_auth_token(args)
 
     if args.url:
@@ -575,8 +634,8 @@ async def run_check(args: argparse.Namespace) -> CheckReport:
         "streamable-http",
         "--session-id",
         args.session_id,
-        "--workflow-slug",
-        args.workflow_slug,
+        "--profile",
+        args.profile,
         "--host",
         args.host,
         "--port",
@@ -586,6 +645,8 @@ async def run_check(args: argparse.Namespace) -> CheckReport:
         "--log-level",
         args.log_level,
     ]
+    if args.workflow_slug:
+        server_args.extend(["--workflow-slug", args.workflow_slug])
     if auth_token:
         server_args.extend(
             [

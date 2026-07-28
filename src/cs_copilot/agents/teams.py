@@ -5,17 +5,32 @@ Team coordination functionality for multi-agent workflows.
 """
 
 import logging
-from typing import List, Tuple
+import uuid
+from typing import Any, List, Tuple
 
 from agno.db.sqlite import SqliteDb  # ✅ v2.1.x style DB import
 from agno.models.base import Model  # Agno v2 base class
 from agno.team import Team
+from agno.utils.team import get_member_id
 
 from cs_copilot.routing import render_routing_rules
 from cs_copilot.tools import SessionMemoryToolkit, SkillToolkit
 from cs_copilot.utils.resources import analyze_resources
 
 from .config import CS_COPILOT_MEMORY_DB  # optional now; kept for compatibility
+from .context import DEFAULT_CONTEXT_BUDGET
+from .contracts import (
+    HANDOFF_SCHEMA_VERSION,
+    ROLE_POLICIES,
+    get_role_policy,
+    validate_role_tools,
+)
+from .delegation import (
+    COORDINATOR_ROLE,
+    DEFAULT_DELEGATION_LIMITS,
+    StructuredDelegationGuard,
+    StructuredHandoffTeam,
+)
 from .factories import AgentCreationError
 from .instructions import AGENT_TEAM_INSTRUCTIONS
 from .registry import create_agent
@@ -30,6 +45,7 @@ def get_cs_copilot_agent_team(
     enable_memory: bool = True,
     db_file: str = None,
     enable_mlflow_tracking: bool = True,
+    run_context: Any = None,
 ) -> Team:
     """
     Create a coordinated team of cs_copilot agents using Agno.
@@ -45,6 +61,8 @@ def get_cs_copilot_agent_team(
                 Use unique paths for session isolation in testing.
         enable_mlflow_tracking: Enable MLflow tracking for agents (default: True).
                                Set to False to disable tracking.
+        run_context: Optional v2 workflow ``RunContext`` used to record validated
+                     specialist handoffs.
 
     Returns:
         Team: Configured Cs_copilot team
@@ -70,9 +88,38 @@ def get_cs_copilot_agent_team(
     # Probe runtime environment (GPU, CPU, RAM, databases, cached models)
     resource_profile = analyze_resources()
     logger.info("Resource profile: %s", resource_profile)
+    coordinator_tools = [SessionMemoryToolkit(), SkillToolkit()]
+    validate_role_tools(get_role_policy(COORDINATOR_ROLE), coordinator_tools)
+    agentic_contracts = {
+        "handoff_schema_version": HANDOFF_SCHEMA_VERSION,
+        "context_budget": DEFAULT_CONTEXT_BUDGET.as_dict(),
+        "delegation_limits": DEFAULT_DELEGATION_LIMITS.as_dict(),
+        "handoff_transport": "delegate_task_to_member.task_description JSON",
+        "role_profiles": {
+            role: policy.profile for role, policy in ROLE_POLICIES.items() if role != "single_agent"
+        },
+    }
+    active_workflow_run = getattr(run_context, "run", None)
+    if active_workflow_run is not None:
+        active_run = {
+            "run_id": active_workflow_run.run_id,
+            "workflow_slug": active_workflow_run.workflow_slug,
+            "trace_id": active_workflow_run.trace_id,
+        }
+    else:
+        # Even ad-hoc Agno sessions need canonical handoff identity. This is
+        # deliberately process-local unless a durable RunContext is supplied.
+        active_run = {
+            "run_id": f"agno-{uuid.uuid4().hex[:12]}",
+            "workflow_slug": "ad-hoc",
+            "trace_id": uuid.uuid4().hex,
+        }
+    agentic_contracts["active_run"] = active_run
     shared_session_state = {
         "resource_profile": resource_profile,
         "agent_scratch": {},
+        "agentic_contracts": agentic_contracts,
+        "current_run_id": active_run["run_id"],
     }
 
     # Common agent parameters supplied by the factory
@@ -119,6 +166,7 @@ def get_cs_copilot_agent_team(
         try:
             logger.info("Creating %s agent", agent_name)
             agent = create_agent(agent_type, model=model, **agent_params)
+            agent.agentic_role = agent_type
             agents.append(agent)
             logger.info("Successfully created %s agent", agent_name)
         except Exception as e:
@@ -129,10 +177,16 @@ def get_cs_copilot_agent_team(
         msg = "Agent initialization failures:\n  - " + "\n  - ".join(failures)
         raise AgentCreationError(msg)
 
-    team = Team(
+    agentic_contracts["member_roles"] = {
+        get_member_id(agent): agent.agentic_role for agent in agents
+    }
+    delegation_guard = StructuredDelegationGuard()
+    team = StructuredHandoffTeam(
         name="Cs_copilot Team",
         members=agents,
         model=model,
+        run_context=run_context,
+        delegation_guard=delegation_guard,
         # ✅ Attach DB directly to the team (persists sessions/history)
         # If enable_memory=False, db=None prevents any persistence
         db=db,
@@ -144,7 +198,9 @@ def get_cs_copilot_agent_team(
         add_memories_to_context=False,
         add_history_to_context=enable_memory,  # include recent history in prompts
         num_history_runs=5 if enable_memory else 0,  # 🔧 LIMIT context to last 5 runs
-        share_member_interactions=True,  # share member messages across team
+        # The coordinator passes bounded handoff envelopes; member transcripts
+        # are not broadcast to peers as an implicit second context channel.
+        share_member_interactions=False,
         store_history_messages=enable_memory,  # persist message history to DB
         store_tool_messages=enable_memory,  # persist tool results
         store_media=enable_memory,  # persist any media if used
@@ -152,7 +208,7 @@ def get_cs_copilot_agent_team(
         session_state=shared_session_state,
         add_session_state_to_context=True,
         enable_agentic_state=True,
-        tools=[SessionMemoryToolkit(), SkillToolkit()],
+        tools=coordinator_tools,
         # Prompting
         description=(
             "You are an intelligent coordinator orchestrating a team of specialized cheminformatics agents. "
@@ -180,6 +236,19 @@ def get_cs_copilot_agent_team(
                 "(`list_skills`, `search_skills`, `fetch_skill`) before routing "
                 "specialized agents so the team follows reusable ChemSpace procedures."
             ),
+            (
+                "When calling `delegate_task_to_member`, `task_description` MUST be exactly "
+                "one JSON object with schema_version, run_id, workflow_slug, task_id, "
+                "sender_role, receiver_role, objective, constraints, required_capabilities, "
+                "input_artifact_ids, expected_output_artifacts, expected_output_schema, "
+                "acceptance_criteria, context_summary, budget (max_tokens, max_tool_calls, "
+                "timeout_seconds), trace_id, span_id, and optional parent_span_id. Use the "
+                "run_id, workflow_slug, and trace_id from agentic_contracts.active_run. Use the "
+                "selected member's canonical role from agentic_contracts.member_roles as "
+                "receiver_role. Never include private reasoning, scratchpads, messages, or "
+                "conversation history. The delegation guard derives expected_output from "
+                "this object and rejects unstructured, oversized, repeated, or looping calls."
+            ),
         ],
         # UX & observability
         markdown=markdown,
@@ -187,6 +256,5 @@ def get_cs_copilot_agent_team(
         stream_member_events=True,  # stream events from members (Team API)
         show_members_responses=show_members_responses,
     )
-
     logger.info("Successfully created Cs_copilot Agent Team")
     return team

@@ -4,6 +4,30 @@ description: Resolve a candidate or named target, run SynPlanner retrosynthesis,
 metadata:
   title: Retrosynthesis for candidates
   status: optional_backend
+  version: 2.0.0
+  depends_on:
+    - retrosynthesis-planning
+  profiles:
+    - retrosynthesis
+  permissions:
+    - network:read
+    - model:execute
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: candidate_reference
+      kind: molecule
+      required: true
+  output_artifacts:
+    - name: synthesis_plan_json
+      kind: route-plan
+      required: true
+    - name: route_visualization_svg
+      kind: visualization
+      required: false
+    - name: route_visualization_png
+      kind: visualization
+      required: false
   tags:
     - retrosynthesis
     - synplanner
@@ -22,10 +46,6 @@ metadata:
     - synplanner_convert_name_to_smiles
     - synplanner_get_route_visualizations
     - report_save_rich
-  artifact_outputs:
-    - synthesis_plan_json
-    - route_visualization_svg
-    - route_visualization_png
   example_prompts:
     - Run retrosynthesis for the selected generated candidate and save route visualizations.
 ---

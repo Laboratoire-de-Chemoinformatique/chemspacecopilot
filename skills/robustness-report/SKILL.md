@@ -4,6 +4,27 @@ description: Load robustness results, identify failures and trends, and persist 
 metadata:
   title: Robustness report
   status: stable
+  version: 2.0.0
+  depends_on: []
+  profiles:
+    - robustness
+  permissions:
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: robustness_results
+      kind: evaluation-results
+      required: true
+  output_artifacts:
+    - name: robustness_report_path
+      kind: report
+      required: true
+    - name: failing_prompts_summary
+      kind: evaluation-summary
+      required: true
+    - name: score_distribution_summary
+      kind: evaluation-summary
+      required: true
   tags:
     - robustness
     - evaluation
@@ -22,10 +43,6 @@ metadata:
     - robustness_load_test_summary_csv
     - robustness_compare_test_runs
     - robustness_analyze_temporal_trends
-  artifact_outputs:
-    - robustness_report_path
-    - failing_prompts_summary
-    - score_distribution_summary
   example_prompts:
     - Analyze the latest robustness run, list failing prompts, and save a report.
 ---

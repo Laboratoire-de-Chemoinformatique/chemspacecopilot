@@ -4,6 +4,33 @@ description: Retrieve, validate, standardize, and persist ChEMBL bioactivity dat
 metadata:
   title: ChEMBL target retrieval
   status: stable
+  version: 2.0.0
+  depends_on: []
+  profiles:
+    - chembl-retrieval
+  permissions:
+    - network:read
+    - artifact:write
+  input_artifacts:
+    - name: retrieval_request
+      kind: request
+      required: true
+  output_artifacts:
+    - name: raw_dataset_path
+      kind: dataset
+      required: true
+    - name: clean_dataset_path
+      kind: dataset
+      required: true
+    - name: descriptor_parquet_path
+      kind: descriptor-table
+      required: false
+    - name: filtered_rows_path
+      kind: dataset
+      required: false
+    - name: standardization_report_path
+      kind: report
+      required: true
   tags:
     - chembl
     - bioactivity
@@ -20,13 +47,12 @@ metadata:
     - chembl_fetch_compounds
     - chembl_describe_dataset
   optional_tools:
+    - chembl_create_external_judge_task
+    - chembl_submit_external_judge_result
+    - llm_get_task
+    - llm_submit_task_result
     - session_list_session_objects
     - session_summarize_session_memory
-  artifact_outputs:
-    - raw_dataset_path
-    - clean_dataset_path
-    - descriptor_parquet_path
-    - standardization_report_path
   example_prompts:
     - Retrieve human CDK2 inhibitor binding data from ChEMBL and prepare it for downstream GTM analysis.
 ---

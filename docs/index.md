@@ -11,7 +11,8 @@ ChemSpace Copilot is a multi-agent system powered by the [Agno](https://docs.agn
 - **Molecular and Peptide Generation** — Molecular Designer small-molecule generation with autoencoder and LLM engines plus Peptide Designer generation with WAE and LLM engines, interpolation, and GTM-guided targeting
 - **S3/MinIO Integration** — Session-scoped cloud storage with local filesystem fallback
 - **Chainlit Interface** — WebSocket-based real-time chat with password authentication, file upload, and inline molecule rendering
-- **Agentic Memory** — SQLite-backed agentic state and recent session history shared across agent workflows
+- **Artifact-backed Runs** — Event-sourced workflow state, checksummed artifacts, and
+  session-local chat context; cross-session agent memory is disabled
 - **Robustness Testing** — Framework for validating prompt variation handling with semantic similarity scoring
 
 ## Architecture

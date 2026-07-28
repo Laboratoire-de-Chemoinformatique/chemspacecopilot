@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 from typing import Any, List
 
 
@@ -36,6 +35,5 @@ class SkillFacade:
         return get_skill(slug).as_dict(include_content=include_content)
 
 
-@functools.lru_cache(maxsize=1)
 def skill_facade() -> SkillFacade:
     return SkillFacade()

@@ -2,11 +2,14 @@
 # coding: utf-8
 """Unit tests for team memory/session isolation configuration."""
 
+from types import SimpleNamespace
+
 from agno.agent import Agent
 from agno.models.base import Model
 
 from cs_copilot.agents import factories as factory_module
 from cs_copilot.agents import teams
+from cs_copilot.agents.delegation import StructuredDelegationGuard, StructuredHandoffTeam
 from cs_copilot.agents.factories import AgentConfig, BaseAgentFactory
 
 
@@ -75,11 +78,19 @@ def test_team_keeps_session_history_without_cross_session_memories(monkeypatch, 
     """Default team memory should persist thread history without recalling user memories."""
     _patch_lightweight_team_dependencies(monkeypatch)
     model = _ConstructionModel(id="test-model", provider="test")
+    run_context = SimpleNamespace(
+        run=SimpleNamespace(
+            run_id="workflow-run-001",
+            workflow_slug="chembl-to-gtm-report",
+            trace_id="trace-001",
+        )
+    )
 
     team = teams.get_cs_copilot_agent_team(
         model,
         db_file=str(tmp_path / "session-history.db"),
         enable_mlflow_tracking=False,
+        run_context=run_context,
     )
 
     assert team.db is not None
@@ -94,10 +105,43 @@ def test_team_keeps_session_history_without_cross_session_memories(monkeypatch, 
     assert team.enable_agentic_memory is False
     assert team.enable_user_memories is False
     assert team.add_memories_to_context is False
+    assert team.share_member_interactions is False
     assert team.memory_manager is None
+    assert isinstance(team, StructuredHandoffTeam)
+    assert isinstance(team.delegation_guard, StructuredDelegationGuard)
+    assert team.run_context is run_context
+    assert team.tool_hooks is None
     assert all(member.session_state is team.session_state for member in team.members)
+    assert [member.agentic_role for member in team.members] == [
+        "chembl_downloader",
+        "gtm_agent",
+        "chemoinformatician",
+        "report_generator",
+        "molecular_designer",
+        "peptide_designer",
+        "synplanner",
+    ]
+    assert all(member.add_history_to_context is False for member in team.members)
+    assert all(member.add_session_state_to_context is False for member in team.members)
+    assert all(member.add_dependencies_to_context is False for member in team.members)
     assert team.session_state["resource_profile"] == {"cpu": "test"}
     assert team.session_state["agent_scratch"] == {}
+    assert team.session_state["agentic_contracts"]["handoff_schema_version"] == 2
+    assert team.session_state["agentic_contracts"]["role_profiles"]["coordinator"] == "standard"
+    assert team.session_state["agentic_contracts"]["role_profiles"]["gtm_agent"] == ("gtm-analysis")
+    assert (
+        team.session_state["agentic_contracts"]["delegation_limits"]["max_delegations_per_run"]
+        == 12
+    )
+    assert team.session_state["agentic_contracts"]["active_run"] == {
+        "run_id": "workflow-run-001",
+        "workflow_slug": "chembl-to-gtm-report",
+        "trace_id": "trace-001",
+    }
+    assert team.session_state["current_run_id"] == "workflow-run-001"
+    assert team.session_state["agentic_contracts"]["member_roles"]["chembl-downloader-agent"] == (
+        "chembl_downloader"
+    )
 
 
 def test_specialist_factories_expose_skill_toolkit(monkeypatch):
@@ -145,6 +189,11 @@ def test_team_memory_disabled_removes_persistence(monkeypatch):
     assert team.enable_agentic_memory is False
     assert team.enable_user_memories is False
     assert team.add_memories_to_context is False
+    active_run = team.session_state["agentic_contracts"]["active_run"]
+    assert active_run["run_id"].startswith("agno-")
+    assert active_run["workflow_slug"] == "ad-hoc"
+    assert len(active_run["trace_id"]) == 32
+    assert team.session_state["current_run_id"] == active_run["run_id"]
 
 
 def test_agent_factory_merges_defaults_into_shared_session_state():

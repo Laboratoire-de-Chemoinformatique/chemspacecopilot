@@ -1,6 +1,6 @@
 [project]
 name = "cs_copilot"
-version = "0.1.0"
+version = "0.2.0"
 description = "LLM-powered agent system for GTM-based chemical space analysis"
 authors = [
     {name = "Alexey Orlov",email = "data2scale@gmail.com"},
@@ -56,7 +56,7 @@ readme = "README.md"
 license = {text = "MIT"}
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.25,<2"]
 build-backend = "hatchling.build"
 
 [tool.hatch.metadata]
@@ -68,6 +68,97 @@ packages = ["src/cs_copilot"]
 [tool.hatch.build.targets.wheel.force-include]
 "skills" = "cs_copilot/skills/catalog"
 "workflow_catalog" = "cs_copilot/workflows/catalog"
+
+[tool.hatch.build.targets.sdist]
+only-include = [
+    ".agents",
+    ".chainlitignore",
+    ".dockerignore",
+    ".env.example",
+    ".github",
+    ".modelconf",
+    ".pre-commit-config.yaml",
+    "Dockerfile",
+    "LICENSE",
+    "README.md",
+    "chainlit.md",
+    "chainlit.toml",
+    "chainlit_app.py",
+    "docker-compose.cpu.yml",
+    "docker-compose.dev.yml",
+    "docker-compose.yml",
+    "docker-entrypoint.sh",
+    "docker-start.sh",
+    "docs",
+    "examples",
+    "mkdocs.yml",
+    "models",
+    "package.json",
+    "plugins",
+    "prisma",
+    "public",
+    "pyproject.toml",
+    "scripts",
+    "skills",
+    "src",
+    "tests",
+    "uv.lock",
+    "workflow_catalog",
+]
+skip-excluded-dirs = true
+exclude = [
+    "/.claude",
+    "/.codex",
+    "/.env",
+    "/.env.*",
+    "/.venv",
+    "/.vscode",
+    "/*.db",
+    "/**/*.db",
+    "/*.sqlite",
+    "/**/*.sqlite",
+    "/*.sqlite3",
+    "/**/*.sqlite3",
+    "/data",
+    "/dist",
+    "/site",
+    "/synplan_data",
+    "/synplan_preset",
+    "/_panviro_gtm_ws",
+    "/**/.cache",
+    "/**/.cache/**",
+    "/**/.env",
+    "/**/.env.*",
+    "/**/.pytest_cache",
+    "/**/.pytest_cache/**",
+    "/**/.vscode",
+    "/**/.vscode/**",
+    "/**/__pycache__",
+    "/**/__pycache__/**",
+    "/**/*.db-journal",
+    "/**/*.db-shm",
+    "/**/*.db-wal",
+    "/**/*.pem",
+    "/**/*.key",
+    "/**/*.sqlite-journal",
+    "/**/*.sqlite-shm",
+    "/**/*.sqlite-wal",
+    "/**/*.sqlite3-journal",
+    "/**/*.sqlite3-shm",
+    "/**/*.sqlite3-wal",
+    "/**/*client-secret*.json",
+    "/**/*credentials*.json",
+    "/**/.staging",
+    "/**/.staging/**",
+    "/**/artifacts",
+    "/**/artifacts/**",
+    "/**/events",
+    "/**/events/**",
+    "/**/runs",
+    "/**/runs/**",
+    "/**/sessions",
+    "/**/sessions/**",
+]
 
 [project.scripts]
 cscopilot = "cs_copilot.cli:main"
@@ -124,6 +215,7 @@ extend-exclude = '''
 profile = "black"
 line_length = 100
 skip_gitignore = true
+known_third_party = ["mcp"]
 
 [tool.ruff]
 line-length = 100
@@ -150,6 +242,9 @@ ignore = [
     "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
 ]
+
+[tool.ruff.lint.isort]
+known-third-party = ["mcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

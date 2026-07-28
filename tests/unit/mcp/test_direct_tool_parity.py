@@ -4,16 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import json
-
-import pytest
 
 from cs_copilot.mcp.context import MCPAgentContext
-from cs_copilot.mcp.errors import MCPToolError
 from cs_copilot.mcp.llm import LLMBroker
 from cs_copilot.mcp.tool_adapter import build_tool
 from cs_copilot.mcp.tools_registry import all_specs
-from cs_copilot.storage import S3, ensure_output_context
+from cs_copilot.storage import S3
+from cs_copilot.workflows import RunContext
 
 
 def _spec(name: str):
@@ -80,10 +77,12 @@ def test_llm_design_engines_create_external_tasks_in_default_mcp():
     mol_result = asyncio.run(mol_tool(goal="design molecules", engine="llm"))
     pep_result = asyncio.run(pep_tool(goal="design peptides", engine="llm"))
 
-    assert mol_result["status"] == "needs_external_llm"
-    assert mol_result["task_type"] == "molecular.design"
-    assert pep_result["status"] == "needs_external_llm"
-    assert pep_result["task_type"] == "peptide.design"
+    assert mol_result["status"] == "success"
+    assert mol_result["data"]["status"] == "needs_external_llm"
+    assert mol_result["data"]["task_type"] == "molecular.design"
+    assert pep_result["status"] == "success"
+    assert pep_result["data"]["status"] == "needs_external_llm"
+    assert pep_result["data"]["task_type"] == "peptide.design"
     pending = ctx.llm.list_tasks()
     assert [task["task_type"] for task in pending] == [
         "molecular.design",
@@ -97,8 +96,9 @@ def test_llm_design_engines_fail_when_llm_policy_is_disabled():
     mol_spec = _spec("mol_design_molecules")
     mol_tool = build_tool(mol_spec, mol_spec.toolkit_factory(), ctx)
 
-    with pytest.raises(MCPToolError, match="llm_policy='disabled'"):
-        asyncio.run(mol_tool(goal="design molecules", engine="llm"))
+    result = asyncio.run(mol_tool(goal="design molecules", engine="llm"))
+    assert result["status"] == "error"
+    assert "llm_policy='disabled'" in result["error"]["message"]
 
 
 def test_llm_lifecycle_tools_work_directly():
@@ -116,11 +116,13 @@ def test_llm_lifecycle_tools_work_directly():
         create_tool(task_type="unit.test", prompt_text="Return JSON.", consumer_tool="unit")
     )
     pending = asyncio.run(list_tool())
-    completed = asyncio.run(submit_tool(task_id=created["task_id"], result={"answer": "ok"}))
+    completed = asyncio.run(
+        submit_tool(task_id=created["data"]["task_id"], result={"answer": "ok"})
+    )
 
-    assert pending[0]["task_id"] == created["task_id"]
-    assert completed["status"] == "completed"
-    assert completed["result"] == {"answer": "ok"}
+    assert pending["data"][0]["task_id"] == created["data"]["task_id"]
+    assert completed["data"]["status"] == "completed"
+    assert completed["data"]["result"] == {"answer": "ok"}
 
 
 def test_chembl_external_judge_task_and_submit_work_without_backend_probe():
@@ -235,39 +237,33 @@ def test_synplanner_identify_input_handles_smiles_and_fallback_names():
     assert aspirin["smiles"]
 
 
-def _manifest_payloads(tmp_path, session_name: str):
-    manifest_root = (
-        tmp_path
-        / "data"
-        / "sessions"
-        / session_name
-        / "workflows"
-        / session_name
-        / "manifests"
-        / "mcp"
-    )
-    return [json.loads(path.read_text(encoding="utf-8")) for path in manifest_root.glob("*.json")]
-
-
-def test_new_direct_tools_write_mcp_manifests(tmp_path, monkeypatch):
+def test_new_direct_tools_write_mcp_events(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     session_name = "direct-tool-manifest"
     S3.set_session_prefix(f"sessions/{session_name}")
     ctx = MCPAgentContext()
-    ensure_output_context(ctx.session_state, workflow_slug="smoke")
+    ctx.run_context = RunContext.create(
+        "mcp-session",
+        session_state=ctx.session_state,
+        run_id=session_name,
+    )
     spec = _spec("skill_fetch")
     tool = build_tool(spec, spec.toolkit_factory(), ctx)
 
     result = asyncio.run(tool(slug="molecular-design", include_content=False))
 
-    assert result["slug"] == "molecular-design"
-    payloads = _manifest_payloads(tmp_path, session_name)
+    assert result["data"]["slug"] == "molecular-design"
+    payloads = [
+        event.payload
+        for event in ctx.run_context.events
+        if event.event_type == "tool_call_recorded"
+    ]
     assert len(payloads) == 1
     assert payloads[0]["tool_name"] == "skill_fetch"
     assert payloads[0]["status"] == "success"
 
 
-def test_synplanner_backend_failure_surfaces_as_call_time_tool_error(monkeypatch):
+def test_synplanner_backend_failure_surfaces_as_error_envelope(monkeypatch):
     from cs_copilot.tools.chemistry.synplanner_toolkit import SynPlannerError
 
     spec = _spec("synplanner_plan_synthesis")
@@ -279,5 +275,6 @@ def test_synplanner_backend_failure_surfaces_as_call_time_tool_error(monkeypatch
     monkeypatch.setattr(instance, "_load_synplanner_components", fail_backend)
     tool = build_tool(spec, instance, MCPAgentContext())
 
-    with pytest.raises(MCPToolError, match="SynPlanner backend missing"):
-        asyncio.run(tool(query="CCO"))
+    result = asyncio.run(tool(query="CCO"))
+    assert result["status"] == "error"
+    assert "SynPlanner backend missing" in result["error"]["message"]

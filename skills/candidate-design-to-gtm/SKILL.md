@@ -4,6 +4,31 @@ description: Generate validated molecule or peptide candidates, materialize them
 metadata:
   title: Candidate design to GTM
   status: stable
+  version: 2.0.0
+  depends_on: []
+  profiles:
+    - standard
+  permissions:
+    - model:execute
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: design_request
+      kind: request
+      required: true
+    - name: seed_candidates
+      kind: candidate-set
+      required: false
+  output_artifacts:
+    - name: candidate_set_artifact
+      kind: candidate-set
+      required: true
+    - name: candidate_dataset_csv
+      kind: dataset
+      required: true
+    - name: projected_dataset_path
+      kind: dataset
+      required: false
   tags:
     - design
     - candidates
@@ -26,10 +51,6 @@ metadata:
     - peptide_validate_design_candidates
     - peptide_rank_design_candidates
     - gtm_project_data
-  artifact_outputs:
-    - candidate_set_artifact
-    - candidate_dataset_csv
-    - projected_dataset_path
   example_prompts:
     - Generate analogs for the current seed molecule and project the validated candidate set onto the active GTM map.
 ---

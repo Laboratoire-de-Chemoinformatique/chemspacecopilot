@@ -4,6 +4,34 @@ description: Build or reuse a GTM map, create activity/SAR landscapes, sample ac
 metadata:
   title: GTM activity landscape
   status: stable
+  version: 2.0.0
+  depends_on: []
+  profiles:
+    - gtm-analysis
+  permissions:
+    - compute:execute
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: clean_dataset_path
+      kind: dataset
+      required: true
+    - name: gtm_model_path
+      kind: model
+      required: false
+  output_artifacts:
+    - name: gtm_model_path
+      kind: model
+      required: true
+    - name: projected_dataset_path
+      kind: dataset
+      required: true
+    - name: activity_landscape_csv
+      kind: analysis-table
+      required: true
+    - name: landscape_plot_path
+      kind: visualization
+      required: false
   tags:
     - gtm
     - chemography
@@ -29,11 +57,6 @@ metadata:
     - gtm_sample_activity_landscape_nodes
     - gtm_project_data
     - report_save_rich
-  artifact_outputs:
-    - gtm_model_path
-    - projected_dataset_path
-    - activity_landscape_csv
-    - landscape_plot_path
   example_prompts:
     - Build a GTM activity landscape for the current clean ChEMBL dataset and summarize the most active regions.
 ---

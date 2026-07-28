@@ -37,8 +37,13 @@ from .layout import (
     OutputOperation,
     current_output_layout,
     ensure_output_context,
+    normalize_run_relative_path,
+    open_local_run_artifact,
     operation_rel_path,
+    sanitize_workflow_slug,
     scoped_artifact_path,
+    set_output_context,
+    validate_identifier,
 )
 
 __all__ = [
@@ -54,6 +59,11 @@ __all__ = [
     "ensure_output_context",
     "get_s3_config",
     "is_s3_enabled",
+    "normalize_run_relative_path",
+    "open_local_run_artifact",
     "operation_rel_path",
+    "sanitize_workflow_slug",
     "scoped_artifact_path",
+    "set_output_context",
+    "validate_identifier",
 ]

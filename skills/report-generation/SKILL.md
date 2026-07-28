@@ -4,6 +4,27 @@ description: Turn session datasets, GTM results, generated candidates, synthesis
 metadata:
   title: Report generation
   status: stable
+  version: 2.0.0
+  depends_on: []
+  profiles:
+    - reporting
+  permissions:
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: report_sources
+      kind: artifact-set
+      required: true
+  output_artifacts:
+    - name: markdown_report_path
+      kind: report
+      required: false
+    - name: html_report_path
+      kind: report
+      required: false
+    - name: pdf_report_path
+      kind: report
+      required: false
   tags:
     - reporting
     - artifacts
@@ -19,10 +40,6 @@ metadata:
     - session_list_session_objects
     - session_list_loadable_session_data
     - session_summarize_session_memory
-  artifact_outputs:
-    - markdown_report_path
-    - html_report_path
-    - pdf_report_path
   example_prompts:
     - Create an image-rich report summarizing the current ChEMBL retrieval and GTM activity landscape.
     - Create an image-rich report summarizing the current GTM density landscape and densest nodes.

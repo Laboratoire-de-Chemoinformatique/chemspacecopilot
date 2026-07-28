@@ -4,6 +4,51 @@ description: Retrieve ChEMBL data, build or reuse GTM density/activity landscape
 metadata:
   title: ChEMBL to GTM report
   status: stable
+  version: 2.0.0
+  depends_on:
+    - chembl-target-retrieval
+    - gtm-density-landscape
+    - gtm-activity-landscape
+    - report-generation
+  profiles:
+    - standard
+  permissions:
+    - network:read
+    - compute:execute
+    - artifact:read
+    - artifact:write
+  input_artifacts:
+    - name: retrieval_request
+      kind: request
+      required: true
+  output_artifacts:
+    - name: clean_dataset_path
+      kind: dataset
+      required: true
+    - name: gtm_model_path
+      kind: model
+      required: true
+    - name: filtered_rows_path
+      kind: dataset
+      required: false
+    - name: density_plot_path
+      kind: visualization
+      required: false
+    - name: activity_landscape_csv
+      kind: analysis-table
+      required: false
+    - name: activity_plot_path
+      kind: visualization
+      required: false
+    - name: html_report_path
+      kind: report
+      required: true
+    - name: pdf_report_path
+      kind: report
+      required: false
+    - name: markdown_report_path
+      kind: report
+      required: false
   tags:
     - chembl
     - gtm
@@ -27,17 +72,15 @@ metadata:
     - gtm_get_activity_landscape_summary
     - report_save_rich
   optional_tools:
+    - chembl_create_external_judge_task
+    - chembl_submit_external_judge_result
+    - llm_get_task
+    - llm_submit_task_result
     - gtm_load_model_only
     - gtm_load_and_prep_data
     - gtm_sample_activity_landscape_nodes
     - gtm_sample_dense_nodes
     - report_save_markdown
-  artifact_outputs:
-    - clean_dataset_path
-    - gtm_model_path
-    - density_plot_path
-    - activity_landscape_csv
-    - html_report_path
   example_prompts:
     - Retrieve human CDK2 binding data, create a GTM activity landscape, and save a rich report.
 ---
@@ -61,5 +104,5 @@ Use this skill when the user wants a complete ChEMBL retrieval, GTM density/acti
 
 - Clean ChEMBL dataset path.
 - GTM model and projected dataset artifacts.
-- Density plot and/or activity landscape CSV artifacts.
-- Rich report path.
+- Density plot and/or activity landscape CSV/plot artifacts.
+- Rich HTML report path, plus PDF/Markdown companions when requested.

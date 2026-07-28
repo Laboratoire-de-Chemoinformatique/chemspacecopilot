@@ -64,6 +64,7 @@ nav:
       - Agents: architecture/agents.md
       - Tools: architecture/tools.md
       - Storage: architecture/storage.md
+      - Agentic Runtime v2: architecture/agentic-runtime-v2.md
   - API Reference:
       - Agents: api/agents.md
       - Tools: api/tools.md

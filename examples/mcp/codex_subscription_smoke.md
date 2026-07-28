@@ -28,7 +28,7 @@ codex -a never exec \
   --sandbox read-only \
   -C /path/to/chemspacecopilot \
   -c 'mcp_servers.cs_copilot.command="/path/to/chemspacecopilot/.venv/bin/cscopilot-mcp"' \
-  -c 'mcp_servers.cs_copilot.args=["--session-id","codex-subscription-smoke","--workflow-slug","chemical_space","--log-level","error"]' \
+  -c 'mcp_servers.cs_copilot.args=["--profile","standard","--session-id","codex-subscription-smoke","--workflow-slug","chembl-to-gtm-report","--log-level","error"]' \
   -c 'mcp_servers.cs_copilot.cwd="/path/to/chemspacecopilot"' \
   -c 'mcp_servers.cs_copilot.env={USE_S3="false", SESSION_ID="codex-subscription-smoke", AGNO_TELEMETRY="false"}' \
   'Use only the configured cs_copilot MCP server named cs_copilot. Do not run shell commands, inspect files, edit files, or use web search. Use the MCP search tool to search the cs_copilot MCP catalog for ChEMBL retrieval tools. Then use the MCP fetch tool to fetch prompt:cs_copilot_workflow. Answer with whether the MCP server was usable and which cs_copilot tool should fetch CDK2 inhibitor activity data.'
@@ -56,8 +56,9 @@ Start the server in one terminal:
 ```sh
 env USE_S3=false AGNO_TELEMETRY=false SESSION_ID=codex-http-smoke \
   /path/to/chemspacecopilot/.venv/bin/cscopilot-mcp-serve \
+  --profile standard \
   --session-id codex-http-smoke \
-  --workflow-slug chemical_space \
+  --workflow-slug chembl-to-gtm-report \
   --host 127.0.0.1 \
   --port 8765 \
   --log-level error
