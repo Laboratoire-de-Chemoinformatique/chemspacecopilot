@@ -87,7 +87,9 @@ DEFAULT_GTM_MODEL_PATH = os.path.expanduser("~/.cache/cs_copilot/models/gtm")
 HUGGINGFACE_GTM_REPO = "axelrolov/chemspacecopilot-gtm"
 
 # DBAASP antimicrobial peptide data
-DEFAULT_DBAASP_DATA_PATH = os.path.expanduser("~/.cache/cs_copilot/data/dbaasp_data.csv")
+DEFAULT_DBAASP_DATA_PATH = os.path.expanduser(
+    os.getenv("DBAASP_DATA_PATH", "~/.cache/cs_copilot/data/dbaasp_data.csv")
+)
 
 # Standard peptide sequence column name
 SEQUENCE_COLUMN = "SEQUENCE"

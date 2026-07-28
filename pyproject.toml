@@ -174,8 +174,14 @@ mcp = [
     "mcp>=1.2,<2",
 ]
 synplanner = [
+    "CGRtools==4.1.35",
     "SynPlanner>=1.2.1",
 ]
+
+[tool.uv]
+# CGRtools' legacy setup.py requests an unconstrained Cython. Its extension
+# does not compile with Cython 3; this only constrains builds that request it.
+build-constraint-dependencies = ["cython<3"]
 
 [dependency-groups]
 dev = [

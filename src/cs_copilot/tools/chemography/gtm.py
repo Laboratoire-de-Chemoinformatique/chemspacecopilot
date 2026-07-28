@@ -87,6 +87,7 @@ class GTMToolkit(BaseDRToolkit):
         """Initialize the GTMDimensionalityReductionToolkit."""
         super().__init__("gtm_dimensionality_reduction")
         # Register GTM-specific tools
+        self.register(self.plan_analysis)
         self.register(self.gtm_optimization)
         # self.register(self.calculate_map_ruggedness)
         self.register(self.save_gtm_and_data)
@@ -115,6 +116,26 @@ class GTMToolkit(BaseDRToolkit):
 
         # Initialize data storage for chemotype analysis
         self._gtm_data = None
+
+    def plan_analysis(
+        self,
+        analysis_intents: Optional[List[str]] = None,
+        dataset_source: Optional[str] = None,
+        notes: Optional[str] = None,
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Validate the requested GTM analyses and dataset source before computation."""
+        from cs_copilot.workflows import plan_chemical_space_analysis
+
+        decision = plan_chemical_space_analysis(
+            analysis_intents=analysis_intents,
+            dataset_source=dataset_source,
+            notes=notes,
+        )
+        for state in update_state_targets(agent, session_state):
+            state["chemical_space_preflight"] = decision
+        return decision
 
     def _current_or_new_map_id(
         self,

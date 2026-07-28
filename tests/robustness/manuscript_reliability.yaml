@@ -51,13 +51,24 @@ tests:
     steps:
       - name: "case_1_seh_analysis"
         validator: "seh_analysis"
-        prompt: "Analyze chemical space of sEH."
+        prompt: >-
+          Analyze the chemical space of human soluble epoxide hydrolase
+          (sEH/EPHX2). Use Homo sapiens binding and functional assays from ChEMBL
+          with no mechanism-of-action filter. Complete the retrieval preflight,
+          retrieve and describe the clean dataset, use the cached default GTM map,
+          and use descriptor_type=autoencoder for all GTM loading, projection, and
+          activity operations. Create and summarize density and activity landscapes,
+          identify prominent scaffolds or chemotypes, compare active and inactive
+          compounds, summarize assay coverage, and save a grounded report.
       - name: "case_2_seh_generation"
         validator: "molecular_generation"
         prompt: >-
           Using the sEH activity landscape and compounds from this session, generate
-          analogues of the highly active compound CHEMBL3327073 with the autoencoder.
-          Return the valid generated structures and retain their parent provenance.
+          10 analogues of the highly active compound CHEMBL3327073 with the
+          autoencoder. Its seed SMILES is
+          CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
+          Return the valid generated structures and retain CHEMBL3327073 and the
+          seed SMILES as parent provenance.
       - name: "case_3_retrosynthesis"
         validator: "retrosynthesis"
         prompt: >-
@@ -70,6 +81,10 @@ tests:
     tier: "live"
     validator: "peptide_design"
     description: "Independent replay of manuscript Case 4"
+    required_files:
+      - name: "DBAASP antimicrobial activity dataset"
+        env: "DBAASP_DATA_PATH"
+        default_path: "~/.cache/cs_copilot/data/dbaasp_data.csv"
     prompt_variants:
       - >-
         Analyze the antimicrobial peptide activity landscape for Escherichia coli,

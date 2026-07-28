@@ -698,13 +698,10 @@ class SingleAgentFactory(BaseAgentFactory):
     robustness comparison so the only variable vs the team is the agentic
     structure (same model, same tools, same tasks).
 
-    Tool ordering matters: Agno registers toolkit methods by name and keeps the
-    first-registered on a name clash (later duplicates are silently dropped). The
-    molecular / autoencoder design toolkits are listed BEFORE the peptide toolkit
-    so the ~9 shared design method names (``validate_design_candidates``,
-    ``decode_latent``, ``list_design_engines``, ...) resolve to the small-molecule
-    implementations. The current comparison task set contains no peptide-design
-    prompts, so this preserves full capability parity for every measured task.
+    Agno registers toolkit methods by name and keeps the first-registered on a
+    clash. The peptide toolkit is therefore registered under its MCP-style
+    ``peptide_*`` namespace in this flat context. Specialist agents retain their
+    native unprefixed names because their tool contexts are already isolated.
     """
 
     agent_type = "single_agent"
@@ -719,11 +716,11 @@ class SingleAgentFactory(BaseAgentFactory):
                 ChemblToolkit(),
                 GTMToolkit(),
                 ChemicalSimilarityToolkit(),
-                # Design engines: molecular/autoencoder first so they win the
-                # name-dedupe against the peptide toolkit's shared method names.
+                # Design engines. The peptide namespace prevents its chemically
+                # distinct methods from colliding with the molecular toolkits.
                 MolecularDesignerToolkit(autoencoder_toolkit=autoencoder_toolkit),
                 autoencoder_toolkit,
-                PeptideDesignerToolkit(),
+                PeptideDesignerToolkit(tool_name_prefix="peptide_"),
                 SynPlannerToolkit(),
                 # Shared infrastructure (one instance each).
                 SessionMemoryToolkit(),

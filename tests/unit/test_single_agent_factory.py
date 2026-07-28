@@ -75,7 +75,11 @@ class _ConstructionModel(Model):
 
 def _named_dummy(name: str):
     """A no-op class whose ``__name__`` matches the real toolkit it replaces."""
-    return type(name, (), {"__init__": lambda self, *args, **kwargs: None})
+    return type(
+        name,
+        (),
+        {"__init__": lambda self, *args, **kwargs: setattr(self, "_construction_kwargs", kwargs)},
+    )
 
 
 def _patch_named_dummy_toolkits(monkeypatch):
@@ -131,6 +135,10 @@ def test_single_agent_unions_specialist_toolkits(monkeypatch):
     # (validate_design_candidates, decode_latent, list_design_engines, ...).
     assert toolkits.index("MolecularDesignerToolkit") < toolkits.index("PeptideDesignerToolkit")
     assert toolkits.index("AutoencoderToolkit") < toolkits.index("PeptideDesignerToolkit")
+    peptide_toolkit = next(
+        tool for tool in config.tools if tool.__class__.__name__ == "PeptideDesignerToolkit"
+    )
+    assert peptide_toolkit._construction_kwargs == {"tool_name_prefix": "peptide_"}
 
 
 def test_single_agent_session_state_covers_members(monkeypatch):

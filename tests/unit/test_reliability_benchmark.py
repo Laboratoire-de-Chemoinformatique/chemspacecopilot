@@ -24,7 +24,9 @@ from reliability.human_review import (  # noqa: E402
 )
 from reliability.reporting import (  # noqa: E402
     build_environment_manifest,
+    build_system_comparison,
     save_reliability_bundle,
+    save_system_comparison,
     summarize_records,
     wilson_interval,
 )
@@ -34,6 +36,7 @@ from robustness_minimal_example import (  # noqa: E402
     FixtureLoadError,
     RobustnessConfig,
     RobustnessRunner,
+    parse_args,
 )
 from robustness_minimal_example import TestConfig as RunnerTestConfig  # noqa: E402
 
@@ -240,19 +243,27 @@ def _record(
     sequence: tuple[str, ...],
     failed_tools: int = 0,
     categories: list[str] | None = None,
+    case_name: str = "case_1",
+    prompt_variant: int = 0,
+    repetition: int | None = None,
+    wall_time_seconds: float | None = None,
+    total_tokens: int | None = None,
+    estimated_cost: float | None = None,
 ) -> dict:
+    run_number = int(run_id)
     return {
         "benchmark_run_id": "benchmark",
-        "case_name": "case_1",
+        "case_name": case_name,
         "run_id": run_id,
         "prompt": "Analyze chemical space.",
-        "prompt_variant": 0,
-        "repetition": int(run_id),
+        "prompt_variant": prompt_variant,
+        "repetition": run_number if repetition is None else repetition,
+        "tier": "frozen",
         "task_success": success,
         "execution_status": "success",
-        "wall_time_seconds": 1.0 + int(run_id),
-        "total_tokens": 100 + int(run_id),
-        "estimated_cost": None,
+        "wall_time_seconds": (1.0 + run_number if wall_time_seconds is None else wall_time_seconds),
+        "total_tokens": 100 + run_number if total_tokens is None else total_tokens,
+        "estimated_cost": estimated_cost,
         "tool_call_count": len(sequence),
         "failed_tool_call_count": failed_tools,
         "tool_calls": [
@@ -261,7 +272,7 @@ def _record(
         ],
         "validations": [{"name": "execution_completed", "passed": True}],
         "failure_categories": categories or [],
-        "response_path": f"case_1/run_{run_id}/response.txt",
+        "response_path": f"{case_name}/run_{run_id}/response.txt",
     }
 
 
@@ -338,6 +349,178 @@ def test_report_bundle_writes_normalized_and_blinded_artifacts(tmp_path):
     assert "Grounded response" in packet_text
 
 
+def test_system_comparison_pairs_runs_and_reports_objective_deltas(tmp_path):
+    records_by_arm = {
+        "team": [
+            _record(
+                "0",
+                success=True,
+                sequence=("delegate", "gtm"),
+                case_name="seh_analysis",
+                repetition=0,
+                wall_time_seconds=4,
+                total_tokens=200,
+            ),
+            _record(
+                "1",
+                success=True,
+                sequence=("delegate", "design"),
+                case_name="molecular_generation",
+                repetition=0,
+                wall_time_seconds=6,
+                total_tokens=300,
+            ),
+            _record(
+                "2",
+                success=True,
+                sequence=("delegate", "report"),
+                case_name="team_only_unmatched",
+                repetition=0,
+                wall_time_seconds=8,
+                total_tokens=400,
+            ),
+        ],
+        "single_agent": [
+            _record(
+                "0",
+                success=True,
+                sequence=("gtm",),
+                case_name="seh_analysis",
+                repetition=0,
+                wall_time_seconds=3,
+                total_tokens=150,
+            ),
+            _record(
+                "1",
+                success=False,
+                sequence=("wrong_tool",),
+                failed_tools=1,
+                categories=["incorrect_tool_selection"],
+                case_name="molecular_generation",
+                repetition=0,
+                wall_time_seconds=5,
+                total_tokens=250,
+            ),
+        ],
+    }
+    robustness_summaries = {
+        "team": {
+            "total_tests": 2,
+            "passed": 2,
+            "pass_rate": 1.0,
+            "average_robustness_score": 0.9,
+            "overall_rating": "Excellent",
+            "results": {},
+        },
+        "single_agent": {
+            "total_tests": 2,
+            "passed": 1,
+            "pass_rate": 0.5,
+            "average_robustness_score": 0.7,
+            "overall_rating": "Acceptable",
+            "results": {},
+        },
+    }
+
+    comparison = build_system_comparison(
+        records_by_arm,
+        robustness_summaries=robustness_summaries,
+    )
+
+    assert comparison["pairing"]["paired_runs"] == 2
+    assert comparison["pairing"]["outcomes"] == {
+        "both_success": 1,
+        "team_only_success": 1,
+        "single_agent_only_success": 0,
+        "both_failed": 0,
+    }
+    assert comparison["per_arm"]["team"]["success_rate"] == 1
+    assert comparison["per_arm"]["single_agent"]["success_rate"] == 0.5
+    assert comparison["delta"]["success_rate"] == pytest.approx(0.5)
+    assert comparison["delta"]["wall_time_seconds_median"] == pytest.approx(1)
+    assert comparison["warnings"]
+    assert len(comparison["pairing"]["unmatched_runs"]["team"]) == 1
+
+    comparison_md = save_system_comparison(
+        tmp_path,
+        records_by_arm,
+        robustness_summaries=robustness_summaries,
+    )
+    persisted = json.loads((tmp_path / "comparison.json").read_text())
+    report = comparison_md.read_text()
+
+    assert persisted["pairing"]["paired_runs"] == 2
+    assert "Objective task success is the primary outcome" in report
+    assert "Results by representative case" in report
+    assert "Secondary prompt-robustness results" in report
+    assert "n/a" in report
+
+
+def test_system_comparison_rejects_duplicate_pairing_keys():
+    duplicate = _record("0", success=True, sequence=("gtm",), repetition=0)
+
+    with pytest.raises(ValueError, match="Duplicate comparison record"):
+        build_system_comparison(
+            {
+                "team": [duplicate, dict(duplicate, run_id="another")],
+                "single_agent": [duplicate],
+            }
+        )
+
+
+def test_system_comparison_excludes_common_prerequisite_failures(tmp_path):
+    team_success = _record("0", success=True, sequence=("delegate", "gtm"))
+    single_success = _record("0", success=True, sequence=("gtm",))
+    team_blocked = _record(
+        "1",
+        success=False,
+        sequence=(),
+        case_name="peptide_design",
+        repetition=0,
+    )
+    single_blocked = dict(team_blocked)
+    team_blocked["execution_status"] = "prerequisite_error"
+    single_blocked["execution_status"] = "prerequisite_error"
+
+    records = {
+        "team": [team_success, team_blocked],
+        "single_agent": [single_success, single_blocked],
+    }
+    comparison = build_system_comparison(records)
+
+    assert comparison["per_arm"]["team"]["runs"] == 1
+    assert comparison["per_arm"]["single_agent"]["runs"] == 1
+    assert comparison["pairing"]["paired_runs"] == 1
+    assert comparison["pairing"]["outcomes"]["both_success"] == 1
+    assert comparison["pairing"]["excluded_runs"]["team"] == [
+        {
+            "tier": "frozen",
+            "case_name": "peptide_design",
+            "prompt_variant": 0,
+            "repetition": 0,
+            "execution_status": "prerequisite_error",
+        }
+    ]
+
+    report_path = save_system_comparison(tmp_path, records)
+    report = report_path.read_text()
+    assert "Not evaluated" in report
+    assert "peptide_design" in report
+
+
+def test_ablation_arm_order_cli_option(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["robustness_minimal_example.py", "--system", "both", "--arm-order", "single-agent-first"],
+    )
+
+    args = parse_args()
+
+    assert args.system == "both"
+    assert args.arm_order == "single-agent-first"
+
+
 def test_human_review_aggregation_reports_ordinal_agreement(tmp_path):
     sheets = []
     for reviewer, scores in (
@@ -409,6 +592,13 @@ def _valid_config() -> dict:
                 "prompt_variants": ["one", "two"],
                 "validator": "execution_only",
                 "tier": "frozen",
+                "required_files": [
+                    {
+                        "name": "example input",
+                        "env": "EXAMPLE_INPUT_PATH",
+                        "default_path": "fixtures/example.csv",
+                    }
+                ],
             },
             "chain": {
                 "enabled": True,
@@ -431,6 +621,7 @@ def test_config_schema_accepts_explicit_prompts_and_chains(tmp_path):
 
     assert loaded["general"]["repetitions"] == 2
     assert loaded["tests"]["chain"]["steps"][1]["name"] == "second"
+    assert loaded["tests"]["explicit_prompts"]["required_files"][0]["env"] == ("EXAMPLE_INPUT_PATH")
 
 
 def test_config_schema_reads_nested_legacy_prompt_catalog(tmp_path):
@@ -482,6 +673,109 @@ def test_fixture_loader_verifies_hash_and_fails_closed(tmp_path):
                 "sha256": "0" * 64,
             }
         )
+
+
+def test_completed_run_uses_in_memory_state_without_persisted_session(tmp_path):
+    class MemoryDisabledAgent:
+        def __init__(self):
+            self.session_state = {"marker": "in-memory"}
+
+        def run(self, prompt, stream=False):  # noqa: ARG002
+            return FakeOutput(
+                content="completed",
+                metrics=FakeMetrics(input_tokens=3, output_tokens=2, total_tokens=5),
+            )
+
+        def get_session_state(self):
+            raise RuntimeError("Session not found")
+
+    runner = RobustnessRunner(
+        RobustnessConfig(
+            output_dir=str(tmp_path / "reports"),
+            s3_session_isolation=False,
+        )
+    )
+
+    output = runner._run_single_variation(
+        prompt="run",
+        test_name="memory_disabled",
+        run_id=0,
+        agent=MemoryDisabledAgent(),
+    )
+
+    assert output["status"] == "success"
+    assert output["response"] == "completed"
+    assert output["session_state"] == {"marker": "in-memory"}
+    assert output["telemetry"]["total_tokens"] == 5
+
+
+def test_missing_required_file_fails_before_building_agent(monkeypatch, tmp_path):
+    runner = RobustnessRunner(
+        RobustnessConfig(
+            output_dir=str(tmp_path / "reports"),
+            s3_session_isolation=False,
+        )
+    )
+    monkeypatch.setattr(
+        runner,
+        "_build_system",
+        lambda: pytest.fail("prerequisite failure must not build or call an agent"),
+    )
+
+    output = runner._run_single_variation(
+        prompt="run",
+        test_name="missing_input",
+        run_id=0,
+        required_files=[
+            {
+                "name": "DBAASP dataset",
+                "env": "TEST_DBAASP_DATA_PATH",
+                "default_path": str(tmp_path / "missing.csv"),
+            }
+        ],
+    )
+
+    assert output["status"] == "prerequisite_error"
+    assert "DBAASP dataset" in output["error"]
+    assert "prerequisite_failure" in output["validation"]["failure_categories"]
+
+
+def test_runner_retains_records_when_optional_comparison_fails(monkeypatch, tmp_path):
+    class FakeAgent:
+        def __init__(self):
+            self.session_state = {}
+
+        def run(self, prompt, stream=False):  # noqa: ARG002
+            return FakeOutput(content="completed")
+
+    runner = RobustnessRunner(
+        RobustnessConfig(
+            n_variations=1,
+            repetitions=1,
+            output_dir=str(tmp_path / "reports"),
+            s3_session_isolation=False,
+            reliability_enabled=True,
+        )
+    )
+    monkeypatch.setattr(runner, "_build_system", FakeAgent)
+    monkeypatch.setattr(
+        runner,
+        "_compare_outputs",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ImportError("optional comparator")),
+    )
+    test_config = RunnerTestConfig(
+        name="comparison_failure",
+        enabled=True,
+        prompt_key="",
+        prompt_variants=["run"],
+    )
+
+    result = runner.run_test(test_config)
+
+    assert result["n_runs"] == 1
+    assert result["comparison"]["error"].endswith("optional comparator")
+    assert len(runner.reliability_records) == 1
+    assert runner.reliability_records[0]["execution_status"] == "success"
 
 
 def test_runner_repeats_explicit_prompts(monkeypatch, tmp_path):
@@ -579,3 +873,32 @@ def test_runner_counts_missing_required_fixture_without_live_fallback(
     assert all(
         "fixture_failure" in record["failure_categories"] for record in runner.reliability_records
     )
+
+
+def test_runner_summary_serializes_non_json_session_keys(tmp_path):
+    runner = RobustnessRunner(
+        RobustnessConfig(
+            output_dir=str(tmp_path / "reports"),
+            generate_markdown=False,
+        )
+    )
+    summary = {
+        "test_run_id": "tuple-state",
+        "results": {
+            "case": {
+                "outputs": [
+                    {
+                        "session_state": {
+                            ("autoencoder", 256): {"api_key": "must-not-leak"},
+                        }
+                    }
+                ]
+            }
+        },
+    }
+
+    runner._save_reports(summary)
+
+    saved = json.loads((runner.output_dir / "summary.json").read_text())
+    state = saved["results"]["case"]["outputs"][0]["session_state"]
+    assert state["('autoencoder', 256)"]["api_key"] == "[REDACTED]"

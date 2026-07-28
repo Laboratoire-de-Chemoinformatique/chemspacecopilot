@@ -103,7 +103,11 @@ def _execution_checks(output: Mapping[str, Any]) -> List[ValidationResult]:
                 else (
                     "fixture_failure"
                     if status == "fixture_error"
-                    else "agent_exception" if status == "failed" else "execution_failure"
+                    else (
+                        "prerequisite_failure"
+                        if status == "prerequisite_error"
+                        else "agent_exception" if status == "failed" else "execution_failure"
+                    )
                 )
             ),
         )

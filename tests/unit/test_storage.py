@@ -139,6 +139,22 @@ def test_relative_local_paths_are_session_scoped(
         assert handle.read() == "value\n1\n"
 
 
+def test_session_qualified_local_paths_are_idempotent(
+    clean_storage_env, fixed_session_prefix, monkeypatch, tmp_path
+):
+    """Pointers returned by S3.path must remain readable through S3.open."""
+    monkeypatch.chdir(tmp_path)
+    qualified_path = S3.path("nested/output.csv")
+
+    assert S3.path(qualified_path) == qualified_path
+    with S3.open(qualified_path, "w") as handle:
+        handle.write("value\n1\n")
+    with S3.open(qualified_path, "r") as handle:
+        assert handle.read() == "value\n1\n"
+
+    assert not (tmp_path / "data/sessions/test-session/data").exists()
+
+
 def test_confined_local_writes_are_descriptor_safe_and_context_local(
     clean_storage_env, fixed_session_prefix, monkeypatch, tmp_path
 ):

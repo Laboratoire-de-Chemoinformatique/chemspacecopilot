@@ -47,6 +47,7 @@ from reliability import (  # noqa: E402
     evaluate_run,
     normalize_agno_output,
     save_reliability_bundle,
+    save_system_comparison,
 )
 from test_utils import ResponseParser, S3SessionManager  # noqa: E402
 from tool_tracker import ToolSequenceComparator  # noqa: E402
@@ -61,6 +62,10 @@ class ReliabilityTimeoutError(TimeoutError):
 
 class FixtureLoadError(RuntimeError):
     """Raised when a required frozen benchmark fixture cannot be loaded."""
+
+
+class PrerequisiteError(RuntimeError):
+    """Raised when a live benchmark input is unavailable."""
 
 
 @contextmanager
@@ -98,6 +103,7 @@ class TestConfig:
     validator: str = "execution_only"
     tier: str = "both"
     fixture: Dict[str, Any] = field(default_factory=dict)
+    required_files: List[Dict[str, Any]] = field(default_factory=list)
     steps: List[Dict[str, Any]] = field(default_factory=list)
 
 
@@ -191,6 +197,7 @@ def load_config(config_path: Path) -> RobustnessConfig:
                 validator=test_data.get("validator", "execution_only"),
                 tier=test_data.get("tier", "both"),
                 fixture=test_data.get("fixture", {}),
+                required_files=test_data.get("required_files", []),
                 steps=test_data.get("steps", []),
             )
 
@@ -207,6 +214,7 @@ def load_config(config_path: Path) -> RobustnessConfig:
                 validator=test_data.get("validator", "execution_only"),
                 tier=test_data.get("tier", "both"),
                 fixture=test_data.get("fixture", {}),
+                required_files=test_data.get("required_files", []),
             )
 
     return RobustnessConfig(
@@ -649,6 +657,72 @@ class RobustnessRunner:
         for state in states:
             self._merge_state(state, fixture_state)
 
+    def _validate_required_files(self, requirements: List[Dict[str, Any]]) -> None:
+        """Fail before agent construction when a required benchmark input is absent."""
+        for requirement in requirements:
+            name = str(requirement.get("name") or "required input")
+            env_name = str(requirement.get("env") or "").strip()
+            raw_path = os.environ.get(env_name, "").strip() if env_name else ""
+            if not raw_path:
+                raw_path = str(
+                    requirement.get("path") or requirement.get("default_path") or ""
+                ).strip()
+            if not raw_path:
+                source = f" environment variable {env_name}" if env_name else ""
+                raise PrerequisiteError(f"{name} has no configured path.{source}")
+
+            expanded_path = os.path.expandvars(raw_path)
+            if "$" in expanded_path:
+                raise PrerequisiteError(
+                    f"{name} path contains an unresolved environment variable: {raw_path}"
+                )
+            required_path = Path(expanded_path).expanduser()
+            if not required_path.is_absolute():
+                config_dir = (
+                    self.config.config_path.parent if self.config.config_path else Path.cwd()
+                )
+                required_path = config_dir / required_path
+            if not required_path.is_file():
+                override = f" Set {env_name} to override this path." if env_name else ""
+                raise PrerequisiteError(
+                    f"Required benchmark input is missing: {name} ({required_path}).{override}"
+                )
+            logger.info("Benchmark prerequisite available: %s (%s)", name, required_path)
+
+    @staticmethod
+    def _snapshot_session_state(agent: Any) -> Dict[str, Any]:
+        """Capture in-memory state without requiring a persistent Agno session."""
+        session_state = getattr(agent, "session_state", None)
+        if not isinstance(session_state, dict):
+            member_states = [
+                getattr(member, "session_state", None)
+                for member in (getattr(agent, "members", None) or [])
+            ]
+            session_state = next(
+                (state for state in member_states if isinstance(state, dict)),
+                None,
+            )
+
+        if not isinstance(session_state, dict):
+            getter = getattr(agent, "get_session_state", None)
+            if callable(getter):
+                try:
+                    loaded_state = getter()
+                    session_state = loaded_state if isinstance(loaded_state, dict) else {}
+                except Exception as exc:
+                    logger.warning(
+                        "Could not load persisted session state; retaining completed run: %s",
+                        exc,
+                    )
+                    session_state = {}
+            else:
+                session_state = {}
+
+        try:
+            return copy.deepcopy(session_state)
+        except Exception:
+            return dict(session_state)
+
     def _failure_output(
         self,
         *,
@@ -705,6 +779,7 @@ class RobustnessRunner:
         *,
         agent: Any = None,
         fixture: Optional[Dict[str, Any]] = None,
+        required_files: Optional[List[Dict[str, Any]]] = None,
         validator_name: str = "execution_only",
         prompt_variant: int = 0,
         repetition: int = 0,
@@ -733,6 +808,8 @@ class RobustnessRunner:
         logger.debug(f"Prompt: {prompt[:100]}...")
 
         try:
+            self._validate_required_files(required_files or [])
+
             # Build the system under test (multi-agent team or single-agent
             # baseline); memory disabled for isolation, same model for both arms.
             if agent is None:
@@ -745,16 +822,14 @@ class RobustnessRunner:
             started_timer = time.perf_counter()
             with run_timeout(self.config.timeout_seconds):
                 result = agent.run(prompt, stream=False)
-            session_state = agent.get_session_state()
-            session_state = session_state if isinstance(session_state, dict) else {}
-            try:
-                session_state_snapshot = copy.deepcopy(session_state)
-            except Exception:
-                session_state_snapshot = dict(session_state)
-            telemetry = normalize_agno_output(result, pricing=self.config.pricing)
 
-            # Extract response content
+            # Capture the completed model output before any optional state
+            # inspection. Memory-disabled Agno systems have no persisted session,
+            # but their in-memory ``session_state`` remains authoritative.
+            telemetry = normalize_agno_output(result, pricing=self.config.pricing)
             response_text = str(result.content) if result.content else ""
+            session_state_snapshot = self._snapshot_session_state(agent)
+            session_state = session_state_snapshot
 
             # Collect generated files
             generated_files = {}
@@ -848,7 +923,11 @@ class RobustnessRunner:
 
         except Exception as e:
             logger.error(f"Run {run_id + 1} failed: {e}")
-            status = "fixture_error" if isinstance(e, FixtureLoadError) else "failed"
+            status = (
+                "fixture_error"
+                if isinstance(e, FixtureLoadError)
+                else "prerequisite_error" if isinstance(e, PrerequisiteError) else "failed"
+            )
             return self._failure_output(
                 prompt=prompt,
                 test_name=test_name,
@@ -1055,6 +1134,7 @@ class RobustnessRunner:
                         test_name=test_config.name,
                         run_id=run_id,
                         fixture=test_config.fixture,
+                        required_files=test_config.required_files,
                         validator_name=test_config.validator,
                         prompt_variant=prompt_idx,
                         repetition=repetition,
@@ -1076,6 +1156,7 @@ class RobustnessRunner:
                 agent = None
                 preparation_error = None
                 try:
+                    self._validate_required_files(test_config.required_files)
                     fixture_state = self._load_fixture_state(test_config.fixture)
                     agent = self._build_system()
                     self._apply_fixture_state(agent, fixture_state)
@@ -1094,7 +1175,15 @@ class RobustnessRunner:
                         status = (
                             "fixture_error"
                             if isinstance(preparation_error, FixtureLoadError)
-                            else "failed" if preparation_error is not None else "blocked"
+                            else (
+                                (
+                                    "prerequisite_error"
+                                    if isinstance(preparation_error, PrerequisiteError)
+                                    else "failed"
+                                )
+                                if preparation_error is not None
+                                else "blocked"
+                            )
                         )
                         error = (
                             str(preparation_error)
@@ -1168,16 +1257,27 @@ class RobustnessRunner:
             status = "✅" if output.get("validation", {}).get("task_success") else "❌"
             logger.info(f"  Run {index + 1}/{len(outputs)}: {status}")
 
-        # Compare outputs
-        comparison = self._compare_outputs(outputs, test_config.name)
+        # Preserve completed executions before optional comparison/scoring work.
+        # Missing visualization or embedding dependencies must not erase costly
+        # live model outputs and telemetry.
+        reliability_records = [self._to_reliability_record(output) for output in outputs]
+        self.reliability_records.extend(reliability_records)
+
+        try:
+            comparison = self._compare_outputs(outputs, test_config.name)
+        except Exception as exc:
+            logger.warning(
+                "Optional output comparison failed for %s; retaining run records: %s",
+                test_config.name,
+                exc,
+            )
+            comparison = {"error": f"Output comparison unavailable: {exc}"}
 
         # Calculate robustness score
         score = self.metrics_calculator.calculate_robustness_score(comparison)
 
         # Save artifacts
         self._save_artifacts(test_config.name, outputs, comparison, score)
-        reliability_records = [self._to_reliability_record(output) for output in outputs]
-        self.reliability_records.extend(reliability_records)
 
         successful_tasks = sum(record["task_success"] for record in reliability_records)
         task_success_rate = (
@@ -1322,7 +1422,10 @@ class RobustnessRunner:
         if self.config.generate_json:
             json_path = self.output_dir / "summary.json"
             with open(json_path, "w") as f:
-                json.dump(summary, f, indent=2, default=str)
+                # Session state can contain tuple keys (for example cached
+                # descriptor/model pairs). ``default=str`` only handles values;
+                # JSON rejects non-primitive dictionary keys before consulting it.
+                json.dump(self._json_safe_state(summary), f, indent=2)
             logger.info(f"JSON summary saved to {json_path}")
 
         # Generate and save markdown report
@@ -1488,6 +1591,16 @@ Examples:
     )
 
     parser.add_argument(
+        "--arm-order",
+        choices=["team-first", "single-agent-first"],
+        default="team-first",
+        help=(
+            "Execution order when --system both is selected. Alternate this across "
+            "independent benchmark batches to reduce temporal service bias."
+        ),
+    )
+
+    parser.add_argument(
         "--list-tests",
         action="store_true",
         help="List available tests and exit",
@@ -1530,71 +1643,17 @@ def _make_runner(config: RobustnessConfig, args) -> "RobustnessRunner":
     return RobustnessRunner(config)
 
 
-def compare_systems(summaries: Dict[str, Dict], output_dir: Path) -> Path:
-    """Write a side-by-side comparison of two system arms (team vs single_agent).
-
-    Reuses the per-arm suite summaries produced by ``run_all_tests`` (same tasks,
-    same model, same metrics) and emits ``comparison.json`` + ``comparison.md``
-    with a per-arm top line and per-test robustness scores.
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
-    arms = list(summaries)
-
-    per_arm = {
-        arm: {
-            "total_tests": summary.get("total_tests", 0),
-            "passed": summary.get("passed", 0),
-            "pass_rate": summary.get("pass_rate", 0),
-            "average_robustness_score": summary.get("average_robustness_score", 0),
-            "overall_rating": summary.get("overall_rating", "N/A"),
-        }
-        for arm, summary in summaries.items()
-    }
-
-    test_names = sorted({t for s in summaries.values() for t in (s.get("results") or {})})
-    per_test = {
-        test: {
-            arm: (summaries[arm].get("results", {}).get(test, {}) or {}).get("robustness_score")
-            for arm in arms
-        }
-        for test in test_names
-    }
-
-    comparison = {"arms": arms, "per_arm": per_arm, "per_test": per_test}
-    (output_dir / "comparison.json").write_text(json.dumps(comparison, indent=2, default=str))
-
-    lines = [
-        "# Multi-agent vs Single-agent Comparison",
-        "",
-        "Same model, tasks, and metrics; the only difference is the agentic structure.",
-        "",
-        "## Per-arm summary",
-        "",
-        "| Arm | Tests | Passed | Pass rate | Avg score | Rating |",
-        "|-----|-------|--------|-----------|-----------|--------|",
-    ]
-    for arm in arms:
-        a = per_arm[arm]
-        lines.append(
-            f"| {arm} | {a['total_tests']} | {a['passed']} | "
-            f"{a['pass_rate']:.1%} | {a['average_robustness_score']:.3f} | {a['overall_rating']} |"
-        )
-    lines += [
-        "",
-        "## Per-test robustness score",
-        "",
-        "| Test | " + " | ".join(arms) + " |",
-        "|------|" + "|".join(["------"] * len(arms)) + "|",
-    ]
-    for test in test_names:
-        row = per_test[test]
-        cells = " | ".join(
-            f"{row[arm]:.3f}" if isinstance(row[arm], (int, float)) else "n/a" for arm in arms
-        )
-        lines.append(f"| {test} | {cells} |")
-
-    comparison_md = output_dir / "comparison.md"
-    comparison_md.write_text("\n".join(lines) + "\n")
+def compare_systems(
+    summaries: Dict[str, Dict],
+    records_by_arm: Dict[str, List[Dict[str, Any]]],
+    output_dir: Path,
+) -> Path:
+    """Write paired reliability and secondary robustness comparison artifacts."""
+    comparison_md = save_system_comparison(
+        output_dir,
+        records_by_arm,
+        robustness_summaries=summaries,
+    )
     logger.info(f"Comparison written to {comparison_md}")
     return comparison_md
 
@@ -1654,9 +1713,15 @@ def main():
             config.tests[test_name].enabled = test_name in args.tests
 
     # One or both arms of the multi-agent-vs-single-agent comparison.
-    arms = ["team", "single_agent"] if args.system == "both" else [args.system]
+    if args.system == "both":
+        arms = (
+            ["team", "single_agent"] if args.arm_order == "team-first" else ["single_agent", "team"]
+        )
+    else:
+        arms = [args.system]
 
     summaries: Dict[str, Dict] = {}
+    records_by_arm: Dict[str, List[Dict[str, Any]]] = {}
     shared_model = None
     first_run_id: Optional[str] = None
     try:
@@ -1673,6 +1738,7 @@ def main():
             logger.info(f"\n{'#' * 60}\nSYSTEM UNDER TEST: {arm}\n{'#' * 60}")
             summary = runner.run_all_tests()
             summaries[arm] = summary
+            records_by_arm[arm] = list(runner.reliability_records)
             shared_model = runner._get_model()
 
             # Print per-arm summary
@@ -1692,7 +1758,7 @@ def main():
             comparison_dir = (
                 Path(__file__).parent / config.output_dir / f"{first_run_id}_comparison"
             )
-            comparison_md = compare_systems(summaries, comparison_dir)
+            comparison_md = compare_systems(summaries, records_by_arm, comparison_dir)
             print(f"\nMulti-agent vs single-agent comparison written to: {comparison_md}")
 
         # Exit non-zero if any arm reported failing tests.

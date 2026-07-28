@@ -26,6 +26,49 @@ The system uses a **Factory Pattern + Registry** for agent creation.
 
 The team coordinator also has a read-only Skills toolkit (`list_skills`, `search_skills`, `fetch_skill`) so it can consult the same reusable workflow procedures exposed through MCP.
 
+## Why use specialized agents?
+
+The agents do not replace deterministic scientific computation. Descriptor
+calculation, standardization, GTM fitting and projection, similarity, generative
+model inference, and retrosynthetic search remain ordinary toolkit calls. The
+language model layer decides what the user means, which validated procedure and
+tools apply, how outputs from one domain become inputs to another, and what
+evidence must be returned.
+
+Specialization is useful for open-ended or cross-domain requests because it:
+
+- gives each role a smaller, chemically coherent tool schema and instruction set;
+- isolates domain context instead of placing every tool result and instruction in
+  one expanding context window;
+- enforces role-specific tool allowlists and typed, artifact-referenced handoffs;
+- composes retrieval, mapping, analysis, design, synthesis, and reporting only
+  when the request requires them; and
+- avoids same-named molecular and peptide operations competing in one tool
+  namespace.
+
+These benefits are not free. Coordination adds model calls, tokens, latency, and
+another possible routing failure. The repository therefore includes a controlled
+flat-agent ablation that holds the model, prompts, tools, fixtures, validators,
+and inference settings constant and varies only coordinator/specialist
+separation. See [Robustness Tests](../testing/robustness.md) for the runbook and
+reported outcomes.
+
+## Fixed workflows versus agentic routing
+
+A fixed workflow is preferable when inputs, tool order, branching, and acceptance
+criteria are completely specified and stable. Such procedures are easier to
+replay, audit, and operate without repeated routing decisions. ChemSpace Copilot
+represents these procedures in `workflow_catalog/`; the v2 runtime can pin task
+contracts, record immutable events, and verify checksummed artifacts.
+
+Agentic routing is intended for requests that are ambiguous, combine domains in
+unanticipated ways, or require choosing among several valid analyses. The usual
+deployment is hybrid: a coordinator selects an applicable catalog procedure,
+specialists execute bounded domain steps, and deterministic tools perform the
+scientific computation. The strict persisted task-DAG implementation is currently
+limited to the `chembl-to-gtm-report` MCP pilot, so it should not be described as
+a general deterministic executor for every catalog entry.
+
 ## Handoff durability boundary
 
 The Agno delegation guard always validates the structured handoff schema,

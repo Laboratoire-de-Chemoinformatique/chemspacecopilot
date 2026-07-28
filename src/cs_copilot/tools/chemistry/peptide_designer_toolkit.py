@@ -510,7 +510,12 @@ class PeptideDesignerToolkit(Toolkit):
     Example: "M L L L L L A L A L L A L L L A L L L"
     """
 
-    def __init__(self, model_path: Optional[str] = None, device: Optional[str] = None):
+    def __init__(
+        self,
+        model_path: Optional[str] = None,
+        device: Optional[str] = None,
+        tool_name_prefix: Optional[str] = None,
+    ):
         """
         Initialize the PeptideDesignerToolkit.
 
@@ -518,8 +523,15 @@ class PeptideDesignerToolkit(Toolkit):
             model_path: Path to the trained WAE model directory.
                        If None, uses default path or downloads from HuggingFace.
             device: Device to run the model on ('cuda', 'cpu', or None for auto-detect)
+            tool_name_prefix: Optional prefix applied to registered Agno tool names.
+                The specialist agent leaves this unset. The flat ablation baseline
+                uses ``"peptide_"`` so peptide and small-molecule tools with the
+                same native method names remain independently callable.
         """
         super().__init__("peptide_designer")
+        if tool_name_prefix is not None and not isinstance(tool_name_prefix, str):
+            raise TypeError("tool_name_prefix must be a string or None")
+        self.tool_name_prefix = tool_name_prefix or ""
 
         # Set up device
         if device is None:
@@ -550,25 +562,32 @@ class PeptideDesignerToolkit(Toolkit):
 
         self.wae_engine = WAEPeptideDesignEngine(self)
 
-        # Register peptide design facade tools
-        self.register(self.list_design_engines)
-        self.register(self.design_peptides)
-        self.register(self.generate_peptide_analogs)
-        self.register(self.design_peptide_interpolation)
-        self.register(self.validate_design_candidates)
-        self.register(self.rank_design_candidates)
-        self.register(self.load_peptide_design_candidates)
-
-        # Register low-level peptide design tools
-        self.register(self.encode_peptides)
-        self.register(self.decode_latent)
-        self.register(self.sample_peptides)
-        self.register(self.interpolate_peptides)
-        self.register(self.reconstruct_sequence)
-        self.register(self.get_latent_dimension)
-        self.register(self.validate_model_loaded)
-        self.register(self.explore_latent_neighborhood)
-        self.register(self.get_model_info)
+        # Register peptide tools with an optional namespace. Agno otherwise
+        # silently keeps the first function when multiple toolkits expose the
+        # same name, which would make part of the peptide API unavailable to the
+        # flat all-tools baseline.
+        facade_tools = (
+            self.list_design_engines,
+            self.design_peptides,
+            self.generate_peptide_analogs,
+            self.design_peptide_interpolation,
+            self.validate_design_candidates,
+            self.rank_design_candidates,
+            self.load_peptide_design_candidates,
+        )
+        low_level_tools = (
+            self.encode_peptides,
+            self.decode_latent,
+            self.sample_peptides,
+            self.interpolate_peptides,
+            self.reconstruct_sequence,
+            self.get_latent_dimension,
+            self.validate_model_loaded,
+            self.explore_latent_neighborhood,
+            self.get_model_info,
+        )
+        for function in (*facade_tools, *low_level_tools):
+            self.register(function, name=f"{self.tool_name_prefix}{function.__name__}")
 
     def list_design_engines(self) -> Dict[str, Any]:
         """

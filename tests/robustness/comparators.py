@@ -9,10 +9,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-import imagehash
 import numpy as np
 import pandas as pd
-from PIL import Image
 from scipy import stats
 from sentence_transformers import SentenceTransformer, util
 
@@ -393,6 +391,9 @@ class OutputComparator:
     def _phash_similarity(self, image_paths: List[Path]) -> float:
         """Calculate perceptual hash similarity."""
         try:
+            import imagehash
+            from PIL import Image
+
             hashes = [imagehash.phash(Image.open(path)) for path in image_paths]
 
             similarities = []

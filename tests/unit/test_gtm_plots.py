@@ -48,6 +48,21 @@ def _tool_names(toolkit: GTMToolkit) -> list[str]:
     return [name for name in names if name]
 
 
+def test_plan_analysis_records_preflight():
+    toolkit = GTMToolkit()
+    state = {}
+
+    decision = toolkit.plan_analysis(
+        analysis_intents=["density_landscape", "activity_landscape"],
+        dataset_source="session_clean_dataset",
+        session_state=state,
+    )
+
+    assert decision["can_proceed"] is True
+    assert "gtm_save_density_plot" in decision["recommended_next_tools"]
+    assert state["chemical_space_preflight"] == decision
+
+
 def test_save_gtm_plot_supports_large_point_datasets(monkeypatch, tmp_path):
     """Large GTM point layers should export without Altair's default 5k row failure."""
 
@@ -1021,6 +1036,7 @@ def test_resolve_gtm_model_path_uses_default_when_default_map_session_has_no_cur
     default_model = default_dir / "default.pkl.gz"
     default_model.write_text("placeholder")
     monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_MODEL_PATH", str(default_dir))
+    monkeypatch.setattr(gtm_operations, "load_gtm_model", lambda _path: object())
 
     agent = SimpleNamespace(
         session_state={gtm_operations.SESSION_MAP_TYPE_KEY: gtm_operations.DEFAULT_MAP_VALUE}
@@ -1029,6 +1045,36 @@ def test_resolve_gtm_model_path_uses_default_when_default_map_session_has_no_cur
     resolved = gtm_operations.resolve_gtm_model_path(agent=agent)
 
     assert resolved == str(default_model)
+
+
+def test_resolve_gtm_model_path_skips_corrupt_cached_model(monkeypatch, tmp_path):
+    """A corrupt cache entry must not shadow a loadable downloaded model."""
+
+    default_dir = tmp_path / "gtm_cache"
+    default_dir.mkdir()
+    corrupt_model = default_dir / "corrupt.pkl"
+    corrupt_model.write_text("not a pickle")
+    downloaded_model = default_dir / "downloaded.pkl.gz"
+    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_MODEL_PATH", str(default_dir))
+
+    def _load_model(path):
+        if Path(path) == corrupt_model:
+            raise ValueError("invalid pickle")
+        return object()
+
+    monkeypatch.setattr(gtm_operations, "load_gtm_model", _load_model)
+    fake_hf = ModuleType("huggingface_hub")
+
+    def _download(**_kwargs):
+        downloaded_model.write_bytes(b"valid fixture")
+        return str(default_dir)
+
+    fake_hf.snapshot_download = _download
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hf)
+
+    resolved = gtm_operations.resolve_gtm_model_path(use_default=True)
+
+    assert resolved == str(downloaded_model)
 
 
 def test_load_gtm_model_only_prefers_current_session_model_over_use_default(monkeypatch):
