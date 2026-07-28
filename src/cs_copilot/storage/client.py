@@ -1399,7 +1399,13 @@ class S3(metaclass=_S3Meta):
 
     @classmethod
     def _local_session_path(cls, rel: str) -> Path:
-        return LOCAL_STORAGE_ROOT / Path(cls.current_prefix().strip("/")) / Path(rel)
+        session_root = LOCAL_STORAGE_ROOT / Path(cls.current_prefix().strip("/"))
+        candidate = Path(rel)
+        try:
+            candidate.relative_to(session_root)
+        except ValueError:
+            return session_root / candidate
+        return candidate
 
     @staticmethod
     def _is_write_mode(mode: str) -> bool:

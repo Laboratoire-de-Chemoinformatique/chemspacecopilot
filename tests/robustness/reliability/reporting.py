@@ -19,6 +19,9 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from .models import RELIABILITY_SCHEMA_VERSION
 
+SYSTEM_COMPARISON_SCHEMA_VERSION = "1.0"
+NON_EVALUABLE_EXECUTION_STATUSES = frozenset({"fixture_error", "prerequisite_error"})
+
 
 def wilson_interval(
     successes: int, total: int, z: float = 1.959963984540054
@@ -160,6 +163,276 @@ def summarize_records(records: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         "failure_categories": dict(categories),
         "by_case": by_case,
         "repeatability": _repeatability(records),
+    }
+
+
+def _comparison_key(record: Mapping[str, Any]) -> Tuple[str, str, int, int]:
+    return (
+        str(record.get("tier") or "both"),
+        str(record.get("case_name") or "unknown"),
+        int(record.get("prompt_variant") or 0),
+        int(record.get("repetition") or 0),
+    )
+
+
+def _serialized_comparison_key(key: Tuple[str, str, int, int]) -> Dict[str, Any]:
+    tier, case_name, prompt_variant, repetition = key
+    return {
+        "tier": tier,
+        "case_name": case_name,
+        "prompt_variant": prompt_variant,
+        "repetition": repetition,
+    }
+
+
+def _index_comparison_records(
+    records: Sequence[Mapping[str, Any]],
+    *,
+    arm: str,
+) -> Dict[Tuple[str, str, int, int], Mapping[str, Any]]:
+    indexed: Dict[Tuple[str, str, int, int], Mapping[str, Any]] = {}
+    for record in records:
+        key = _comparison_key(record)
+        if key in indexed:
+            raise ValueError(
+                "Duplicate comparison record for "
+                f"arm={arm!r}, tier={key[0]!r}, case={key[1]!r}, "
+                f"prompt_variant={key[2]}, repetition={key[3]}"
+            )
+        indexed[key] = record
+    return indexed
+
+
+def _is_architecture_evaluable(record: Mapping[str, Any]) -> bool:
+    """Return whether a run actually exercised an agentic architecture."""
+    return str(record.get("execution_status") or "unknown") not in NON_EVALUABLE_EXECUTION_STATUSES
+
+
+def _excluded_comparison_runs(
+    records: Sequence[Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Describe runs blocked by inputs common to both architecture arms."""
+    excluded = []
+    for record in records:
+        if _is_architecture_evaluable(record):
+            continue
+        excluded.append(
+            {
+                **_serialized_comparison_key(_comparison_key(record)),
+                "execution_status": str(record.get("execution_status") or "unknown"),
+            }
+        )
+    return excluded
+
+
+def _median(summary: Mapping[str, Any], key: str) -> float | None:
+    distribution = summary.get(key)
+    if not isinstance(distribution, Mapping):
+        return None
+    value = distribution.get("median")
+    return float(value) if value is not None else None
+
+
+def _comparison_deltas(
+    left: Mapping[str, Any],
+    right: Mapping[str, Any],
+) -> Dict[str, float | None]:
+    metric_names = (
+        "success_rate",
+        "wall_time_seconds_median",
+        "total_tokens_median",
+        "tool_calls_per_run_median",
+        "failed_tool_calls_per_100",
+        "incorrect_tool_selection_runs_per_100",
+        "estimated_cost_median",
+    )
+    if not left.get("runs") or not right.get("runs"):
+        return dict.fromkeys(metric_names)
+
+    def subtract(left_value: Any, right_value: Any) -> float | None:
+        if left_value is None or right_value is None:
+            return None
+        return float(left_value) - float(right_value)
+
+    return {
+        "success_rate": subtract(left.get("success_rate"), right.get("success_rate")),
+        "wall_time_seconds_median": subtract(
+            _median(left, "wall_time_seconds"),
+            _median(right, "wall_time_seconds"),
+        ),
+        "total_tokens_median": subtract(
+            _median(left, "total_tokens"),
+            _median(right, "total_tokens"),
+        ),
+        "tool_calls_per_run_median": subtract(
+            _median(left, "tool_calls_per_run"),
+            _median(right, "tool_calls_per_run"),
+        ),
+        "failed_tool_calls_per_100": subtract(
+            left.get("failed_tool_calls_per_100"),
+            right.get("failed_tool_calls_per_100"),
+        ),
+        "incorrect_tool_selection_runs_per_100": subtract(
+            left.get("incorrect_tool_selection_runs_per_100"),
+            right.get("incorrect_tool_selection_runs_per_100"),
+        ),
+        "estimated_cost_median": subtract(
+            _median(left, "estimated_cost"),
+            _median(right, "estimated_cost"),
+        ),
+    }
+
+
+def build_system_comparison(
+    records_by_arm: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    robustness_summaries: Mapping[str, Mapping[str, Any]] | None = None,
+) -> Dict[str, Any]:
+    """Build a paired, publication-facing comparison of agentic architectures."""
+    arms = list(records_by_arm)
+    if len(arms) != 2:
+        raise ValueError("System comparison requires exactly two arms")
+    if set(arms) == {"team", "single_agent"}:
+        # Keep publication tables and deltas stable even when execution order is
+        # alternated to reduce temporal service bias.
+        arms = ["team", "single_agent"]
+
+    evaluable_records = {
+        arm: [record for record in records_by_arm[arm] if _is_architecture_evaluable(record)]
+        for arm in arms
+    }
+    excluded_runs = {arm: _excluded_comparison_runs(list(records_by_arm[arm])) for arm in arms}
+    indexed = {arm: _index_comparison_records(evaluable_records[arm], arm=arm) for arm in arms}
+    left_arm, right_arm = arms
+    left_keys = set(indexed[left_arm])
+    right_keys = set(indexed[right_arm])
+    paired_keys = sorted(left_keys & right_keys)
+    unmatched = {
+        left_arm: [_serialized_comparison_key(key) for key in sorted(left_keys - right_keys)],
+        right_arm: [_serialized_comparison_key(key) for key in sorted(right_keys - left_keys)],
+    }
+    warnings = []
+    if unmatched[left_arm] or unmatched[right_arm]:
+        warnings.append(
+            "Some runs could not be paired by tier, case, prompt variant, and repetition; "
+            "aggregate arm summaries include them, but paired outcomes do not."
+        )
+    if any(excluded_runs.values()):
+        warnings.append(
+            "Runs blocked by missing fixtures or prerequisites were not evaluated and are "
+            "excluded from architecture success, efficiency, and pairing metrics."
+        )
+
+    per_arm = {arm: summarize_records(evaluable_records[arm]) for arm in arms}
+    paired_per_arm = {
+        arm: summarize_records([indexed[arm][key] for key in paired_keys]) for arm in arms
+    }
+    case_names = sorted(
+        {
+            str(record.get("case_name") or "unknown")
+            for records in evaluable_records.values()
+            for record in records
+        }
+    )
+    per_case: Dict[str, Any] = {}
+    for case_name in case_names:
+        case_paired_keys = [key for key in paired_keys if key[1] == case_name]
+        arm_summaries = {
+            arm: summarize_records(
+                [
+                    record
+                    for record in evaluable_records[arm]
+                    if str(record.get("case_name") or "unknown") == case_name
+                ]
+            )
+            for arm in arms
+        }
+        paired_arm_summaries = {
+            arm: summarize_records([indexed[arm][key] for key in case_paired_keys]) for arm in arms
+        }
+        per_case[case_name] = {
+            "per_arm": arm_summaries,
+            "paired_runs": len(case_paired_keys),
+            "delta": {
+                "left_arm": left_arm,
+                "right_arm": right_arm,
+                **_comparison_deltas(
+                    paired_arm_summaries[left_arm],
+                    paired_arm_summaries[right_arm],
+                ),
+            },
+        }
+
+    paired_outcomes = {
+        "both_success": 0,
+        f"{left_arm}_only_success": 0,
+        f"{right_arm}_only_success": 0,
+        "both_failed": 0,
+    }
+    for key in paired_keys:
+        left_success = bool(indexed[left_arm][key].get("task_success"))
+        right_success = bool(indexed[right_arm][key].get("task_success"))
+        if left_success and right_success:
+            paired_outcomes["both_success"] += 1
+        elif left_success:
+            paired_outcomes[f"{left_arm}_only_success"] += 1
+        elif right_success:
+            paired_outcomes[f"{right_arm}_only_success"] += 1
+        else:
+            paired_outcomes["both_failed"] += 1
+
+    secondary: Dict[str, Any] = {"per_arm": {}, "per_test": {}}
+    if robustness_summaries:
+        secondary["per_arm"] = {
+            arm: {
+                "tests": summary.get("total_tests", 0),
+                "passed": summary.get("passed", 0),
+                "pass_rate": summary.get("pass_rate", 0),
+                "average_robustness_score": summary.get("average_robustness_score", 0),
+                "overall_rating": summary.get("overall_rating", "N/A"),
+            }
+            for arm, summary in robustness_summaries.items()
+        }
+        test_names = sorted(
+            {
+                test_name
+                for summary in robustness_summaries.values()
+                for test_name in (summary.get("results") or {})
+            }
+        )
+        secondary["per_test"] = {
+            test_name: {
+                arm: (
+                    (robustness_summaries[arm].get("results") or {}).get(test_name, {}) or {}
+                ).get("robustness_score")
+                for arm in arms
+            }
+            for test_name in test_names
+        }
+
+    return {
+        "schema_version": SYSTEM_COMPARISON_SCHEMA_VERSION,
+        "arms": arms,
+        "pairing": {
+            "key_fields": ["tier", "case_name", "prompt_variant", "repetition"],
+            "paired_runs": len(paired_keys),
+            "unmatched_runs": unmatched,
+            "excluded_runs": excluded_runs,
+            "outcomes": paired_outcomes,
+        },
+        "per_arm": per_arm,
+        "paired_per_arm": paired_per_arm,
+        "delta": {
+            "left_arm": left_arm,
+            "right_arm": right_arm,
+            **_comparison_deltas(
+                paired_per_arm[left_arm],
+                paired_per_arm[right_arm],
+            ),
+        },
+        "per_case": per_case,
+        "secondary_robustness": secondary,
+        "warnings": warnings,
     }
 
 
@@ -343,6 +616,192 @@ def _markdown_report(summary: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _format_distribution(summary: Mapping[str, Any], key: str, digits: int = 2) -> str:
+    distribution = summary.get(key)
+    if not isinstance(distribution, Mapping) or distribution.get("median") is None:
+        return "n/a"
+    template = f"{{:.{digits}f}}"
+    return (
+        f"{template.format(float(distribution['median']))} "
+        f"({template.format(float(distribution['q1']))}–"
+        f"{template.format(float(distribution['q3']))})"
+    )
+
+
+def _format_delta(value: Any, *, percent: bool = False, digits: int = 2) -> str:
+    if value is None:
+        return "n/a"
+    numeric = float(value)
+    if percent:
+        return f"{numeric:+.1%}"
+    return f"{numeric:+.{digits}f}"
+
+
+def _markdown_system_comparison(comparison: Mapping[str, Any]) -> str:
+    arms = list(comparison.get("arms") or [])
+    left_arm, right_arm = arms
+    per_arm = comparison.get("per_arm") or {}
+    pairing = comparison.get("pairing") or {}
+    lines = [
+        "# Multi-agent vs Single-agent Ablation",
+        "",
+        "Both arms use the same model configuration, prompts, fixtures, scientific "
+        "tools, objective validators, and execution harness. The independent variable "
+        "is the agentic structure: coordinator plus specialists versus one flat "
+        "tool-calling agent.",
+        "",
+        "Objective task success is the primary outcome. Prompt-robustness similarity "
+        "is reported separately as a secondary descriptive metric.",
+        "",
+        "Runs blocked before either architecture executes because a common fixture or "
+        "prerequisite is unavailable are listed as not evaluated and excluded from "
+        "success and efficiency metrics.",
+        "",
+        "## Overall objective results",
+        "",
+        "| Arm | Runs | Successful | Success rate (Wilson 95% CI) | "
+        "Wall time median (IQR), s | Tokens median (IQR) | "
+        "Tool calls median (IQR) | Failed calls / 100 | "
+        "Incorrect selection runs / 100 | Cost median (IQR) |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for arm in arms:
+        summary = per_arm[arm]
+        interval = summary.get("wilson_95") or [0, 0]
+        lines.append(
+            f"| {arm} | {summary.get('runs', 0)} | {summary.get('successful', 0)} | "
+            f"{summary.get('success_rate', 0):.1%} "
+            f"({interval[0]:.1%}–{interval[1]:.1%}) | "
+            f"{_format_distribution(summary, 'wall_time_seconds')} | "
+            f"{_format_distribution(summary, 'total_tokens', digits=0)} | "
+            f"{_format_distribution(summary, 'tool_calls_per_run')} | "
+            f"{summary.get('failed_tool_calls_per_100', 0):.2f} | "
+            f"{summary.get('incorrect_tool_selection_runs_per_100', 0):.2f} | "
+            f"{_format_distribution(summary, 'estimated_cost', digits=6)} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Paired outcomes",
+            "",
+            (
+                f"Runs are paired by tier, case, prompt variant, and repetition. "
+                f"Matched pairs: {pairing.get('paired_runs', 0)}."
+            ),
+            "",
+            "| Outcome | Pairs |",
+            "|---|---:|",
+        ]
+    )
+    for outcome, count in (pairing.get("outcomes") or {}).items():
+        lines.append(f"| {outcome.replace('_', ' ')} | {count} |")
+
+    excluded_runs = pairing.get("excluded_runs") or {}
+    if any(excluded_runs.values()):
+        lines.extend(
+            [
+                "",
+                "## Not evaluated",
+                "",
+                "| Arm | Case | Status |",
+                "|---|---|---|",
+            ]
+        )
+        for arm in arms:
+            for excluded in excluded_runs.get(arm) or []:
+                lines.append(
+                    f"| {arm} | {excluded.get('case_name', 'unknown')} | "
+                    f"{excluded.get('execution_status', 'unknown')} |"
+                )
+
+    lines.extend(
+        [
+            "",
+            f"## Paired overall deltas ({left_arm} − {right_arm})",
+            "",
+            "| Metric | Delta |",
+            "|---|---:|",
+        ]
+    )
+    delta = comparison.get("delta") or {}
+    delta_rows = (
+        ("Success rate", "success_rate", True, 2),
+        ("Median wall time (s)", "wall_time_seconds_median", False, 2),
+        ("Median total tokens", "total_tokens_median", False, 0),
+        ("Median tool calls", "tool_calls_per_run_median", False, 2),
+        ("Failed tool calls per 100", "failed_tool_calls_per_100", False, 2),
+        (
+            "Incorrect-selection runs per 100",
+            "incorrect_tool_selection_runs_per_100",
+            False,
+            2,
+        ),
+        ("Median estimated cost", "estimated_cost_median", False, 6),
+    )
+    for label, key, percent, digits in delta_rows:
+        lines.append(
+            f"| {label} | {_format_delta(delta.get(key), percent=percent, digits=digits)} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Results by representative case",
+            "",
+            "| Case | Arm | Runs | Success rate (Wilson 95% CI) | "
+            "Wall time median (IQR), s | Tokens median (IQR) | Tool calls median (IQR) |",
+            "|---|---|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for case_name, case_result in (comparison.get("per_case") or {}).items():
+        for arm in arms:
+            summary = case_result["per_arm"][arm]
+            interval = summary.get("wilson_95") or [0, 0]
+            lines.append(
+                f"| {case_name} | {arm} | {summary.get('runs', 0)} | "
+                f"{summary.get('success_rate', 0):.1%} "
+                f"({interval[0]:.1%}–{interval[1]:.1%}) | "
+                f"{_format_distribution(summary, 'wall_time_seconds')} | "
+                f"{_format_distribution(summary, 'total_tokens', digits=0)} | "
+                f"{_format_distribution(summary, 'tool_calls_per_run')} |"
+            )
+
+    secondary = comparison.get("secondary_robustness") or {}
+    if secondary.get("per_arm"):
+        lines.extend(
+            [
+                "",
+                "## Secondary prompt-robustness results",
+                "",
+                "| Arm | Tests | Passed | Pass rate | Average robustness score | Rating |",
+                "|---|---:|---:|---:|---:|---|",
+            ]
+        )
+        for arm in arms:
+            summary = secondary["per_arm"][arm]
+            lines.append(
+                f"| {arm} | {summary.get('tests', 0)} | {summary.get('passed', 0)} | "
+                f"{summary.get('pass_rate', 0):.1%} | "
+                f"{summary.get('average_robustness_score', 0):.3f} | "
+                f"{summary.get('overall_rating', 'N/A')} |"
+            )
+
+    warnings = list(comparison.get("warnings") or [])
+    if warnings:
+        lines.extend(["", "## Pairing warnings", ""])
+        lines.extend(f"- {warning}" for warning in warnings)
+
+    lines.extend(
+        [
+            "",
+            "These results are descriptive. Interpret any architectural advantage "
+            "together with confidence intervals, efficiency costs, and observed failure modes.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
 def _write_jsonl(path: Path, rows: Iterable[Mapping[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
@@ -461,3 +920,27 @@ def save_reliability_bundle(
     )
     _write_human_review(output_dir / "human_review.csv", records_list)
     return summary
+
+
+def save_system_comparison(
+    output_dir: Path,
+    records_by_arm: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    robustness_summaries: Mapping[str, Mapping[str, Any]] | None = None,
+) -> Path:
+    """Write paired JSON and manuscript-ready Markdown comparison artifacts."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    comparison = build_system_comparison(
+        records_by_arm,
+        robustness_summaries=robustness_summaries,
+    )
+    (output_dir / "comparison.json").write_text(
+        json.dumps(comparison, indent=2, sort_keys=True, default=str),
+        encoding="utf-8",
+    )
+    comparison_md = output_dir / "comparison.md"
+    comparison_md.write_text(
+        _markdown_system_comparison(comparison),
+        encoding="utf-8",
+    )
+    return comparison_md

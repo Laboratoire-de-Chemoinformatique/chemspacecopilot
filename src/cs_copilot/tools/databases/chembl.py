@@ -277,9 +277,36 @@ class ChemblToolkit(BaseDatabaseToolkit):
         self._client = None  # Will be initialized lazily
         self._client_init_error = None  # Store initialization error if any
         self._fetcher = fetcher
+        self.register(self.prepare_retrieval)
         self.register(self.fetch_compounds)
         self.register(self.describe_dataset)
         self.register(self.convert_to_chembl_query)
+
+    def prepare_retrieval(
+        self,
+        target: Optional[str] = None,
+        target_type: Optional[str] = None,
+        organism: Optional[str] = None,
+        assay_types: Optional[Sequence[str]] = None,
+        mechanism: Optional[str] = None,
+        notes: Optional[str] = None,
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Validate target, organism, assay, and mechanism choices before retrieval."""
+        from cs_copilot.workflows import prepare_chembl_retrieval
+
+        decision = prepare_chembl_retrieval(
+            target=target,
+            target_type=target_type,
+            organism=organism,
+            assay_types=assay_types,
+            mechanism=mechanism,
+            notes=notes,
+        )
+        for state in update_state_targets(agent, session_state):
+            state["chembl_retrieval_preflight"] = decision
+        return decision
 
     def _ensure_client(self):
         """Lazy initialization of ChEMBL client."""

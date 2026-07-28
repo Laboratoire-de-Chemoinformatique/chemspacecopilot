@@ -53,6 +53,37 @@ checksum variables. Publication-facing reports are written below the run's
 `reliability/` directory as normalized JSONL, a statistical summary with Wilson
 intervals, an environment manifest, and a blinded human-review sheet.
 
+### Multi-agent Architecture Ablation
+
+Run the four frozen manuscript cases through both the seven-specialist team and
+the flat all-tools agent:
+
+```bash
+uv run python tests/robustness/robustness_minimal_example.py \
+  --config tests/robustness/manuscript_reliability.yaml \
+  --tier frozen --system both --arm-order team-first \
+  --n-variations 3 --repetitions 10 \
+  --test frozen_case_1_seh_analysis \
+  --test frozen_case_2_seh_generation \
+  --test frozen_case_3_retrosynthesis \
+  --test frozen_case_4_peptide_design
+```
+
+Repeat independent batches with `--arm-order single-agent-first` to reduce
+temporal service bias. The cross-arm `comparison.md` and `comparison.json` pair
+runs by case, prompt variant, and repetition. They report objective success with
+Wilson 95% intervals, latency, tokens, tool use and errors, incorrect selection,
+optional estimated cost, and the older prompt-robustness score as a secondary
+metric.
+
+The comparison isolates agentic structure, not scientific algorithms: both arms
+use the same model configuration, prompts, frozen inputs, tool implementations,
+and validators. The flat agent namespaces peptide tools as `peptide_*` so
+same-named molecular and peptide methods remain available in one context.
+Runs blocked before either arm executes by a missing common fixture or
+prerequisite are listed as not evaluated and excluded from architecture success,
+latency, token, and pairing metrics.
+
 ## Session Isolation
 
 Each prompt variation runs in complete isolation:

@@ -886,13 +886,19 @@ def resolve_gtm_model_path(
         # Look for model files in the default directory
         for suffix in GTM_MODEL_SUFFIXES:
             pattern = f"*{suffix}"
-            matches = list(default_path.glob(pattern))
-            if matches:
-                model_path = str(matches[0])
+            for candidate in sorted(default_path.glob(pattern)):
+                model_path = str(candidate)
+                try:
+                    load_gtm_model(model_path)
+                except Exception as exc:
+                    logger.warning("Ignoring invalid cached GTM model %s: %s", model_path, exc)
+                    tried.append(f"default cache file {model_path} (invalid: {exc})")
+                    continue
                 logger.info(f"Found default GTM model at: {model_path}")
                 return model_path
         tried.append(
-            f"default cache {default_path} " f"(no files matching {list(GTM_MODEL_SUFFIXES)})"
+            f"default cache {default_path} "
+            f"(no loadable files matching {list(GTM_MODEL_SUFFIXES)})"
         )
     else:
         tried.append(f"default cache {default_path} (directory does not exist)")
@@ -913,9 +919,14 @@ def resolve_gtm_model_path(
         # Find the model file in the downloaded directory
         for suffix in GTM_MODEL_SUFFIXES:
             pattern = f"*{suffix}"
-            matches = list(Path(downloaded_path).glob(pattern))
-            if matches:
-                model_path = str(matches[0])
+            for candidate in sorted(Path(downloaded_path).glob(pattern)):
+                model_path = str(candidate)
+                try:
+                    load_gtm_model(model_path)
+                except Exception as exc:
+                    logger.warning("Ignoring invalid downloaded GTM model %s: %s", model_path, exc)
+                    tried.append(f"HuggingFace download file {model_path} (invalid: {exc})")
+                    continue
                 logger.info(f"Downloaded GTM model to: {model_path}")
                 return model_path
 

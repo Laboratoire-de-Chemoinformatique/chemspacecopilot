@@ -194,37 +194,50 @@ Controls and caveats to state in the methods section:
 
 - **Model held constant.** `--system both` builds the model once and reuses the
   same instance for both arms.
-- **Same tasks/metrics.** Both arms run the identical prompt set
-  (`fixtures/prompt_templates.yaml`) and the identical metric stack
-  (`metrics.py` / `comparators.py` / `tool_tracker.py`). The tool-call-sequence
-  similarity is the signal that most distinguishes a coordinating team from a flat
-  agent.
-- **Tool-namespace caveat.** Agno registers toolkit methods by name and keeps the
-  first on a clash. The molecular and peptide design toolkits share ~9 method
-  names; the single agent lists the molecular/autoencoder toolkits first, so the
-  small-molecule design tools win. The current task set contains no peptide-design
-  prompts, so this preserves capability parity for every measured task. (The team
-  avoids the clash entirely because each specialist is its own context — a genuine
-  advantage of the multi-agent design.)
+- **Same tasks and primary metrics.** Both arms run identical prompts, fixtures,
+  objective validators, and telemetry collection. The comparison reports task
+  success with Wilson 95% intervals, wall time, tokens, tool calls and failures,
+  incorrect tool selection, and optional estimated cost.
+- **Secondary robustness metric.** Semantic/data/process/visual similarity remains
+  available for prompt-variation analysis, but it does not determine the
+  publication-facing task-success result.
+- **Complete flat tool namespace.** Agno keeps the first tool when names collide.
+  The flat baseline registers peptide operations under their MCP-style
+  `peptide_*` names, retaining both peptide and small-molecule capabilities. The
+  production peptide specialist keeps its native unprefixed names.
+- **Order control.** Use `--arm-order team-first` and
+  `--arm-order single-agent-first` in alternating independent batches to reduce
+  temporal model/API service bias. Comparison tables always report the canonical
+  team-minus-single-agent delta.
 - **Not** the same as pointing an external agent (Codex/Claude over MCP) at the
   tools: that confounds architecture with base-model identity and a proprietary
   harness. Keep that only as a secondary "vs general-purpose agent" note.
 
-Recommended runbook (N seeds for significance):
+Recommended four-case manuscript run:
 
 ```bash
-# One task, one variation — smoke both arms
-CS_COPILOT_PROMPT_TEMPLATES=tests/robustness/fixtures/prompt_templates_short.yaml \
-  uv run python tests/robustness/robustness_minimal_example.py \
-  --system both --test chembl_download --n-variations 1
-
-# Full comparison with MLflow A/B (repeat per seed)
-uv run python tests/robustness/robustness_minimal_example.py --system both --mlflow
+uv run python tests/robustness/robustness_minimal_example.py \
+  --config tests/robustness/manuscript_reliability.yaml \
+  --tier frozen --system both --arm-order team-first \
+  --n-variations 3 --repetitions 10 \
+  --test frozen_case_1_seh_analysis \
+  --test frozen_case_2_seh_generation \
+  --test frozen_case_3_retrosynthesis \
+  --test frozen_case_4_peptide_design
 ```
 
-Per-arm and per-test scores land in `reports/<timestamp>_comparison/comparison.md`;
-with `--mlflow`, each suite run is tagged `system_under_test` so
-`mlflow_reporter.compare_runs` gives the A/B dashboard.
+The comparison directory contains paired `comparison.md` and `comparison.json`
+artifacts with overall and per-case outcomes. Unmatched runs are retained in arm
+summaries but listed as pairing warnings. With `--mlflow`, each suite run is
+tagged `system_under_test` so `mlflow_reporter.compare_runs` provides the A/B
+dashboard.
+
+The architectural interpretation is deliberately bounded: deterministic
+scientific operations remain toolkit functions. Specialized agents are intended
+to reduce tool-schema and context complexity, enforce role boundaries, and
+compose open-ended cross-domain requests. Fixed workflows remain preferable for
+fully specified, stable recipes and are represented separately in
+`workflow_catalog/`.
 
 ## Session Isolation
 

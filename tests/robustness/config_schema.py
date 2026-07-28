@@ -166,6 +166,7 @@ class TestConfigSchema:
     validator: str = "execution_only"
     tier: str = "both"
     fixture: Dict[str, Any] = field(default_factory=dict)
+    required_files: List[Dict[str, Any]] = field(default_factory=list)
     steps: List[Dict[str, Any]] = field(default_factory=list)
 
     def validate(self, available_prompt_keys: Optional[List[str]] = None):
@@ -213,6 +214,19 @@ class TestConfigSchema:
             if not self.fixture.get("sha256"):
                 raise ValueError("required fixture must define sha256")
 
+        if not isinstance(self.required_files, list):
+            raise ValueError("required_files must be a list")
+        for index, requirement in enumerate(self.required_files):
+            if not isinstance(requirement, dict):
+                raise ValueError(f"required_files[{index}] must be a dictionary")
+            if not any(requirement.get(key) for key in ("env", "path", "default_path")):
+                raise ValueError(f"required_files[{index}] must define env, path, or default_path")
+            if requirement.get("env") is not None and not isinstance(requirement["env"], str):
+                raise ValueError(f"required_files[{index}].env must be a string")
+            for key in ("name", "path", "default_path"):
+                if requirement.get(key) is not None and not isinstance(requirement[key], str):
+                    raise ValueError(f"required_files[{index}].{key} must be a string")
+
         if not isinstance(self.steps, list):
             raise ValueError("steps must be a list")
         for index, step in enumerate(self.steps):
@@ -238,6 +252,7 @@ class TestConfigSchema:
             validator=data.get("validator", "execution_only"),
             tier=data.get("tier", "both"),
             fixture=data.get("fixture", {}),
+            required_files=data.get("required_files", []),
             steps=data.get("steps", []),
         )
 
