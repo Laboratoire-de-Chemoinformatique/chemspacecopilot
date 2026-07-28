@@ -16,6 +16,18 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+RELIABILITY_VALIDATORS = {
+    "execution_only",
+    "seh_analysis",
+    "molecular_generation",
+    "retrosynthesis",
+    "peptide_design",
+    "clarification",
+    "missing_gtm",
+    "missing_design_seed",
+    "invalid_retrosynthesis",
+}
+
 
 @dataclass
 class ModelConfigSchema:
@@ -24,10 +36,12 @@ class ModelConfigSchema:
     provider: str
     model_id: str
     api_key_env: str
+    pricing: Dict[str, float] = field(default_factory=dict)
+    inference_settings: Dict[str, Any] = field(default_factory=dict)
 
     def validate(self):
         """Validate model configuration."""
-        valid_providers = ["deepseek", "openai", "anthropic", "ollama"]
+        valid_providers = ["deepseek", "openai", "anthropic", "ollama", "openrouter"]
         if self.provider not in valid_providers:
             raise ValueError(f"Invalid provider: {self.provider}. Must be one of {valid_providers}")
 
@@ -43,6 +57,22 @@ class ModelConfigSchema:
         # Validate model_id format (basic check)
         if not self.model_id or len(self.model_id) < 3:
             raise ValueError(f"Invalid model_id: {self.model_id}")
+        if not isinstance(self.pricing, dict):
+            raise ValueError("pricing must be a dictionary")
+        for key in ("input_per_million", "output_per_million"):
+            value = self.pricing.get(key)
+            if value is not None and (
+                not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0
+            ):
+                raise ValueError(f"pricing.{key} must be a non-negative number")
+        if not isinstance(self.inference_settings, dict):
+            raise ValueError("inference_settings must be a dictionary")
+        if any(
+            token in str(key).lower()
+            for key in self.inference_settings
+            for token in ("api_key", "password", "secret", "credential")
+        ):
+            raise ValueError("inference_settings must not contain credentials")
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> ModelConfigSchema:
@@ -51,6 +81,8 @@ class ModelConfigSchema:
             provider=data.get("provider", "deepseek"),
             model_id=data.get("model_id", "deepseek-chat"),
             api_key_env=data.get("api_key_env", "DEEPSEEK_API_KEY"),
+            pricing=data.get("pricing", {}),
+            inference_settings=data.get("inference_settings", {}),
         )
 
 
@@ -130,6 +162,11 @@ class TestConfigSchema:
     description: str = ""
     depends_on: List[str] = field(default_factory=list)
     params: Dict[str, Any] = field(default_factory=dict)
+    prompt_variants: List[str] = field(default_factory=list)
+    validator: str = "execution_only"
+    tier: str = "both"
+    fixture: Dict[str, Any] = field(default_factory=dict)
+    steps: List[Dict[str, Any]] = field(default_factory=list)
 
     def validate(self, available_prompt_keys: Optional[List[str]] = None):
         """Validate test configuration."""
@@ -140,11 +177,52 @@ class TestConfigSchema:
             )
 
         # Validate prompt_key exists if list provided
-        if available_prompt_keys and self.prompt_key not in available_prompt_keys:
+        if self.tier not in {"live", "frozen", "both"}:
+            raise ValueError("tier must be one of: live, frozen, both")
+
+        if not self.prompt_key and not self.prompt_variants and not self.steps:
+            raise ValueError("Provide prompt_key, prompt_variants, or steps")
+
+        if (
+            available_prompt_keys
+            and self.prompt_key
+            and self.prompt_key not in available_prompt_keys
+        ):
             raise ValueError(
                 f"Test '{self.name}' references undefined prompt_key: {self.prompt_key}. "
                 f"Available keys: {', '.join(available_prompt_keys)}"
             )
+
+        if not isinstance(self.prompt_variants, list):
+            raise ValueError("prompt_variants must be a list")
+        if any(
+            not isinstance(prompt, str) or not prompt.strip() for prompt in self.prompt_variants
+        ):
+            raise ValueError("prompt_variants must contain non-empty strings")
+
+        if self.validator not in RELIABILITY_VALIDATORS:
+            raise ValueError(
+                f"Unknown validator '{self.validator}'. "
+                f"Available: {', '.join(sorted(RELIABILITY_VALIDATORS))}"
+            )
+        if not isinstance(self.fixture, dict):
+            raise ValueError("fixture must be a dictionary")
+        if self.fixture.get("required"):
+            if not self.fixture.get("session_state_path"):
+                raise ValueError("required fixture must define session_state_path")
+            if not self.fixture.get("sha256"):
+                raise ValueError("required fixture must define sha256")
+
+        if not isinstance(self.steps, list):
+            raise ValueError("steps must be a list")
+        for index, step in enumerate(self.steps):
+            if not isinstance(step, dict):
+                raise ValueError(f"steps[{index}] must be a dictionary")
+            if not isinstance(step.get("prompt"), str) or not step["prompt"].strip():
+                raise ValueError(f"steps[{index}].prompt must be a non-empty string")
+            validator = step.get("validator", self.validator)
+            if validator not in RELIABILITY_VALIDATORS:
+                raise ValueError(f"steps[{index}] has unknown validator '{validator}'")
 
     @classmethod
     def from_dict(cls, name: str, data: Dict[str, Any]) -> TestConfigSchema:
@@ -156,6 +234,11 @@ class TestConfigSchema:
             description=data.get("description", ""),
             depends_on=data.get("depends_on", []),
             params=data.get("params", {}),
+            prompt_variants=data.get("prompt_variants", []),
+            validator=data.get("validator", "execution_only"),
+            tier=data.get("tier", "both"),
+            fixture=data.get("fixture", {}),
+            steps=data.get("steps", []),
         )
 
 
@@ -168,6 +251,11 @@ class GeneralConfigSchema:
     output_dir: str = "reports"
     save_artifacts: bool = True
     s3_session_isolation: bool = True
+    repetitions: int = 1
+    reliability_enabled: bool = False
+    tier: str = "both"
+    timeout_seconds: int = 0
+    reliability_min_success_rate: float = 0.8
 
     def validate(self):
         """Validate general configuration."""
@@ -176,6 +264,14 @@ class GeneralConfigSchema:
 
         if not self.output_dir:
             raise ValueError("output_dir cannot be empty")
+        if self.repetitions < 1 or self.repetitions > 100:
+            raise ValueError(f"repetitions must be between 1 and 100, got {self.repetitions}")
+        if self.tier not in {"live", "frozen", "both"}:
+            raise ValueError("tier must be one of: live, frozen, both")
+        if self.timeout_seconds < 0:
+            raise ValueError("timeout_seconds must be zero or positive")
+        if not 0 <= self.reliability_min_success_rate <= 1:
+            raise ValueError("reliability_min_success_rate must be between 0 and 1")
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> GeneralConfigSchema:
@@ -186,6 +282,11 @@ class GeneralConfigSchema:
             output_dir=data.get("output_dir", "reports"),
             save_artifacts=data.get("save_artifacts", True),
             s3_session_isolation=data.get("s3_session_isolation", True),
+            repetitions=data.get("repetitions", 1),
+            reliability_enabled=data.get("reliability_enabled", False),
+            tier=data.get("tier", "both"),
+            timeout_seconds=data.get("timeout_seconds", 0),
+            reliability_min_success_rate=data.get("reliability_min_success_rate", 0.8),
         )
 
 
@@ -312,6 +413,9 @@ class ConfigValidator:
             with open(fixtures_path, "r") as f:
                 templates = yaml.safe_load(f)
             if isinstance(templates, dict):
+                prompts = templates.get("prompts")
+                if isinstance(prompts, dict):
+                    return list(prompts.keys())
                 return list(templates.keys())
         except Exception:
             pass

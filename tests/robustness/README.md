@@ -110,6 +110,72 @@ For `--system both`, a cross-arm comparison is also written to
 - Results saved in multiple formats (JSON, CSV, TXT) under session-scoped paths
 - Example: `s3://{bucket}/sessions/{session_id}/robustness_tests/chembl_interactivity/{timestamp}/`
 
+## Manuscript reliability benchmark
+
+`manuscript_reliability.yaml` implements the quantitative evaluation requested
+for the ChemSpace Copilot manuscript. It separates two sources of variability:
+
+- The `live` tier repeats the connected sEH Cases 1-3 in one shared session and
+  runs the peptide case independently. It measures the complete deployed system,
+  including external data and model dependencies.
+- The `frozen` tier starts each case from a checksum-verified session-state
+  fixture. It measures orchestration and tool use against stable scientific
+  inputs. Required fixtures fail closed and never fall back to live data.
+
+Each execution records objective task success, structured failed tool calls,
+wall time, Agno token metrics, optional estimated cost, artifact pointers, and
+case-specific acceptance evidence. The legacy semantic robustness score remains
+a secondary descriptive metric; it does not determine reliability pass/fail.
+Wall time covers the synchronous `agent.run(...)` call from submitted prompt to
+returned result; one-time team/model initialization is excluded.
+
+Configure the fixture variables documented in
+`fixtures/manuscript/README.md`, then run:
+
+```bash
+# Small live study: 4 manuscript cases × 3 repeated workflows
+uv run python tests/robustness/robustness_minimal_example.py \
+  --config tests/robustness/manuscript_reliability.yaml \
+  --tier live --repetitions 3
+
+# Larger fixture-backed study with three prompt phrasings × ten repetitions
+uv run python tests/robustness/robustness_minimal_example.py \
+  --config tests/robustness/manuscript_reliability.yaml \
+  --tier frozen --n-variations 3 --repetitions 10
+```
+
+The `reliability/` output directory contains:
+
+- `runs.jsonl`: one normalized, schema-versioned record per execution.
+- `tool_calls.jsonl`: ordered calls with redacted arguments, duration, error
+  flag, bounded result preview, and result hash.
+- `validations.jsonl`: machine-verifiable acceptance checks and evidence.
+- `reliability_summary.json` and `reliability_report.md`: success rates with
+  Wilson 95% intervals, failed calls per 100 calls, runtime/token/cost
+  distributions, and failure categories.
+- `environment_manifest.json`: Git state, exact configured model identifier,
+  configuration hash, Python/platform, and relevant package versions.
+- `human_review.csv`: anonymized, blinded response list for two independent
+  reviewers to score factual grounding and task fulfillment.
+
+Give separate copies of `human_review.csv` and `human_review_packets/` to at
+least two reviewers. Packets contain the task prompt, response, and artifact
+references but hide the system arm, repetition, machine validation, and outcome.
+For the first three dimensions, `0` means absent/poor and `2` means fully
+satisfied. For `unsupported_claims_0_2`, `0` means none, `1` minor, and `2`
+major. Reviewers must fill `reviewer_id` and should not see each other's ratings.
+Aggregate completed sheets with:
+
+```bash
+uv run python tests/robustness/reliability/human_review.py \
+  reviewer_a.csv reviewer_b.csv \
+  --output-dir human_review_results
+```
+
+The aggregate includes dimension means, exact agreement, and pairwise
+quadratic-weighted Cohen's kappa. Resolve material disagreements by a third,
+independent adjudicator and retain both original scores.
+
 ## Multi-agent vs single-agent comparison (paper ablation)
 
 The `--system` flag turns the runner into an A/B harness for the reviewer-requested
