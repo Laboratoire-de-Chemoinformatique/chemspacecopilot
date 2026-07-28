@@ -37,6 +37,22 @@ uv run python tests/robustness/robustness_minimal_example.py \
 uv run python tests/robustness/robustness_minimal_example.py --list-tests
 ```
 
+### Manuscript Reliability Mode
+
+```bash
+uv run python tests/robustness/robustness_minimal_example.py \
+  --config tests/robustness/manuscript_reliability.yaml \
+  --tier live --repetitions 3
+```
+
+This suite validates the four manuscript cases using explicit artifact and
+tool-call acceptance criteria. A fixture-backed `frozen` tier is available for
+larger repeatability runs; see
+`tests/robustness/fixtures/manuscript/README.md` for its required snapshot and
+checksum variables. Publication-facing reports are written below the run's
+`reliability/` directory as normalized JSONL, a statistical summary with Wilson
+intervals, an environment manifest, and a blinded human-review sheet.
+
 ## Session Isolation
 
 Each prompt variation runs in complete isolation:

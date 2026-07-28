@@ -1,0 +1,203 @@
+# Reviewer 1, item 1: small, manuscript-aligned reliability benchmark.
+#
+# Live tier:
+#   Replays the connected sEH Cases 1-3 in one session and Case 4 independently.
+# Frozen tier:
+#   Uses versioned session-state snapshots to isolate orchestration/tool reliability
+#   from changing ChEMBL/model artifacts. Required fixtures never fall back to live data.
+general:
+  n_variations: 3
+  repetitions: 3
+  debug_mode: false
+  output_dir: "reports/manuscript_reliability"
+  save_artifacts: true
+  s3_session_isolation: false
+  reliability_enabled: true
+  tier: "both"
+  timeout_seconds: 1800
+  reliability_min_success_rate: 0.80
+
+model:
+  provider: "deepseek"
+  model_id: "deepseek-chat"
+  api_key_env: "DEEPSEEK_API_KEY"
+  inference_settings:
+    temperature: 0.0
+    max_tokens: 8192
+  # Optional USD rates; when omitted, cost is reported as unavailable.
+  # pricing:
+  #   input_per_million: 0.0
+  #   output_per_million: 0.0
+
+metrics:
+  # Legacy prompt-robustness score is retained as a descriptive secondary metric.
+  # Publication-facing pass/fail uses each case's objective validator.
+  weights:
+    data_similarity: 0.4
+    semantic_similarity: 0.3
+    process_consistency: 0.2
+    visual_similarity: 0.1
+  thresholds:
+    excellent: 0.90
+    good: 0.80
+    acceptable: 0.70
+  pass_threshold: 0.75
+
+tests:
+  live_seh_workflow:
+    enabled: true
+    tier: "live"
+    description: "Sequential replay of manuscript Cases 1-3 in a shared session"
+    steps:
+      - name: "case_1_seh_analysis"
+        validator: "seh_analysis"
+        prompt: "Analyze chemical space of sEH."
+      - name: "case_2_seh_generation"
+        validator: "molecular_generation"
+        prompt: >-
+          Using the sEH activity landscape and compounds from this session, generate
+          analogues of the highly active compound CHEMBL3327073 with the autoencoder.
+          Return the valid generated structures and retain their parent provenance.
+      - name: "case_3_retrosynthesis"
+        validator: "retrosynthesis"
+        prompt: >-
+          Select the first valid sEH analogue generated in the preceding step and run
+          SynPlanner retrosynthetic planning for it. Report whether a route was found,
+          the number of routes, and the route length when available.
+
+  live_peptide_design:
+    enabled: true
+    tier: "live"
+    validator: "peptide_design"
+    description: "Independent replay of manuscript Case 4"
+    prompt_variants:
+      - >-
+        Analyze the antimicrobial peptide activity landscape for Escherichia coli,
+        select enriched active regions, generate new peptide sequences from those
+        regions, assess their similarity and uniqueness, create sequence logos, and
+        prepare a report.
+
+  frozen_case_1_seh_analysis:
+    enabled: true
+    tier: "frozen"
+    validator: "seh_analysis"
+    description: "Case 1 against a frozen, curated sEH input snapshot"
+    fixture:
+      required: true
+      session_state_path: "${CS_COPILOT_SEH_INPUT_FIXTURE}"
+      sha256: "${CS_COPILOT_SEH_INPUT_SHA256}"
+    prompt_variants:
+      - >-
+        Analyze the chemical space of the sEH compounds already loaded in this
+        session. Build and interpret density and activity landscapes, identify
+        chemotypes in dense nodes, summarize assays, and compare active and inactive
+        compounds.
+      - >-
+        Using the preloaded soluble epoxide hydrolase dataset, perform the complete
+        GTM chemical-space analysis: density, activity, dense-node scaffolds or
+        chemotypes, assay distribution, active/inactive separation, and a report.
+      - >-
+        Explore the current session's sEH inhibitor data with GTM. Produce the map
+        artifacts and a grounded report covering density, activity, prominent
+        chemotypes, assays, and class separation.
+
+  frozen_case_2_seh_generation:
+    enabled: true
+    tier: "frozen"
+    validator: "molecular_generation"
+    description: "Case 2 against a frozen post-analysis sEH snapshot"
+    fixture:
+      required: true
+      session_state_path: "${CS_COPILOT_SEH_ANALYSIS_FIXTURE}"
+      sha256: "${CS_COPILOT_SEH_ANALYSIS_SHA256}"
+    prompt_variants:
+      - >-
+        Generate autoencoder analogues of CHEMBL3327073, guided by the preloaded sEH
+        activity landscape. Return valid structures and preserve parent provenance.
+      - >-
+        From the current sEH GTM analysis, design valid analogues around the highly
+        active compound CHEMBL3327073 and register the resulting candidate set.
+      - >-
+        Use the session's sEH activity map to sample candidate analogues of
+        CHEMBL3327073. Report the valid generated molecules and their source compound.
+
+  frozen_case_3_retrosynthesis:
+    enabled: true
+    tier: "frozen"
+    validator: "retrosynthesis"
+    description: "Case 3 against a frozen candidate-set snapshot"
+    fixture:
+      required: true
+      session_state_path: "${CS_COPILOT_SEH_CANDIDATES_FIXTURE}"
+      sha256: "${CS_COPILOT_SEH_CANDIDATES_SHA256}"
+    prompt_variants:
+      - >-
+        Run SynPlanner retrosynthetic planning for the first valid generated sEH
+        analogue in the current candidate set and report the route outcome.
+      - >-
+        Select one valid designed sEH candidate from this session and propose
+        retrosynthetic routes, including route count and route length when available.
+      - >-
+        Evaluate synthetic planning for the current selected generated sEH analogue
+        with SynPlanner. Clearly report success or a no-route result.
+
+  frozen_case_4_peptide_design:
+    enabled: true
+    tier: "frozen"
+    validator: "peptide_design"
+    description: "Case 4 against frozen DBAASP, WAE, and GTM pointers"
+    fixture:
+      required: true
+      session_state_path: "${CS_COPILOT_PEPTIDE_INPUT_FIXTURE}"
+      sha256: "${CS_COPILOT_PEPTIDE_INPUT_SHA256}"
+    prompt_variants:
+      - >-
+        Use the preloaded anti-E. coli peptide activity landscape to select enriched
+        nodes, generate peptides, evaluate similarity and uniqueness, create sequence
+        logos, and prepare a report.
+      - >-
+        Design antimicrobial peptide candidates for Escherichia coli from active
+        regions of the current GTM landscape. Compare sequences, assess uniqueness,
+        generate logos, and summarize the analysis.
+      - >-
+        Explore the session's E. coli AMP landscape, sample new sequences from
+        activity-enriched regions, project and compare them, evaluate novelty by
+        uniqueness, produce sequence logos, and report the results.
+
+  recovery_ambiguous_scope:
+    enabled: true
+    tier: "frozen"
+    validator: "clarification"
+    description: "Ambiguous opening prompt should elicit clarification without work"
+    prompt_variants:
+      - "Explore a chemical space for me."
+
+  recovery_missing_gtm:
+    enabled: true
+    tier: "frozen"
+    validator: "missing_gtm"
+    description: "Missing map prerequisite should be identified without fabrication"
+    prompt_variants:
+      - "Create and interpret an activity landscape for the current dataset."
+
+  recovery_missing_design_seed:
+    enabled: true
+    tier: "frozen"
+    validator: "missing_design_seed"
+    description: "Missing molecular design seed should trigger a targeted question"
+    prompt_variants:
+      - "Generate analogues for me."
+
+  recovery_invalid_retrosynthesis:
+    enabled: true
+    tier: "frozen"
+    validator: "invalid_retrosynthesis"
+    description: "Invalid chemical input should be rejected before SynPlanner"
+    prompt_variants:
+      - "Plan a synthesis for the SMILES string this-is-not-a-smiles."
+
+reporting:
+  generate_markdown: true
+  generate_json: true
+  include_run_details: true
+  include_recommendations: false

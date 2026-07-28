@@ -15,13 +15,18 @@ Usage:
 """
 
 import argparse
+import copy
+import hashlib
 import json
 import os
 import re
+import signal
 import sys
+import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -36,11 +41,46 @@ from cs_copilot.utils.logging import get_logger  # noqa: E402
 # Import shared test utilities
 sys.path.insert(0, str(Path(__file__).parent))
 from config_schema import ConfigValidator  # noqa: E402
+from reliability import (  # noqa: E402
+    ReliabilityRunRecord,
+    build_environment_manifest,
+    evaluate_run,
+    normalize_agno_output,
+    save_reliability_bundle,
+)
 from test_utils import ResponseParser, S3SessionManager  # noqa: E402
 from tool_tracker import ToolSequenceComparator  # noqa: E402
 
 logger = get_logger(__name__)
 load_dotenv()
+
+
+class ReliabilityTimeoutError(TimeoutError):
+    """Raised when one benchmark execution exceeds its configured wall time."""
+
+
+class FixtureLoadError(RuntimeError):
+    """Raised when a required frozen benchmark fixture cannot be loaded."""
+
+
+@contextmanager
+def run_timeout(seconds: int):
+    """Interrupt a run after ``seconds`` on POSIX main-thread executions."""
+    if seconds <= 0 or not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    def _raise_timeout(signum, frame):  # noqa: ARG001
+        raise ReliabilityTimeoutError(f"Run exceeded the {seconds}-second timeout")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 @dataclass
@@ -54,6 +94,11 @@ class TestConfig:
     depends_on: List[str] = field(default_factory=list)
     params: Dict[str, Any] = field(default_factory=dict)
     custom_prompt: Optional[str] = None
+    prompt_variants: List[str] = field(default_factory=list)
+    validator: str = "execution_only"
+    tier: str = "both"
+    fixture: Dict[str, Any] = field(default_factory=dict)
+    steps: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -65,6 +110,14 @@ class RobustnessConfig:
     output_dir: str = "reports"
     save_artifacts: bool = True
     s3_session_isolation: bool = True
+    repetitions: int = 1
+    reliability_enabled: bool = False
+    tier: str = "both"
+    timeout_seconds: int = 0
+    reliability_min_success_rate: float = 0.8
+    pricing: Dict[str, float] = field(default_factory=dict)
+    inference_settings: Dict[str, Any] = field(default_factory=dict)
+    config_path: Optional[Path] = None
 
     # System under test: "team" (multi-agent) or "single_agent" (flat baseline).
     # Driven by the --system CLI flag; both arms use the same model/tasks/metrics.
@@ -134,6 +187,11 @@ def load_config(config_path: Path) -> RobustnessConfig:
                 description=test_data.get("description", ""),
                 depends_on=test_data.get("depends_on", []),
                 params=test_data.get("params", {}),
+                prompt_variants=test_data.get("prompt_variants", []),
+                validator=test_data.get("validator", "execution_only"),
+                tier=test_data.get("tier", "both"),
+                fixture=test_data.get("fixture", {}),
+                steps=test_data.get("steps", []),
             )
 
     # Parse custom tests
@@ -146,6 +204,9 @@ def load_config(config_path: Path) -> RobustnessConfig:
                 prompt_key="",
                 description=test_data.get("description", ""),
                 custom_prompt=test_data.get("prompt", ""),
+                validator=test_data.get("validator", "execution_only"),
+                tier=test_data.get("tier", "both"),
+                fixture=test_data.get("fixture", {}),
             )
 
     return RobustnessConfig(
@@ -154,6 +215,14 @@ def load_config(config_path: Path) -> RobustnessConfig:
         output_dir=general.get("output_dir", "reports"),
         save_artifacts=general.get("save_artifacts", True),
         s3_session_isolation=general.get("s3_session_isolation", True),
+        repetitions=general.get("repetitions", 1),
+        reliability_enabled=general.get("reliability_enabled", False),
+        tier=general.get("tier", "both"),
+        timeout_seconds=general.get("timeout_seconds", 0),
+        reliability_min_success_rate=general.get("reliability_min_success_rate", 0.8),
+        pricing=model.get("pricing", {}),
+        inference_settings=model.get("inference_settings", {}),
+        config_path=config_path,
         model_provider=model.get("provider", "deepseek"),
         model_id=model.get("model_id", "deepseek-chat"),
         api_key_env=model.get("api_key_env", "DEEPSEEK_API_KEY"),
@@ -190,6 +259,7 @@ class RobustnessRunner:
         self._metrics_calculator = None
         self._model = None
         self._s3_config = None
+        self.reliability_records: List[Dict[str, Any]] = []
 
         # Use shared S3SessionManager for safe session isolation
         self._s3_session_manager = S3SessionManager()
@@ -233,7 +303,11 @@ class RobustnessRunner:
             from agno.models.ollama import Ollama
 
             host = os.environ.get("OLLAMA_HOST")
-            self._model = Ollama(id=self.config.model_id, host=host)
+            self._model = Ollama(
+                id=self.config.model_id,
+                host=host,
+                **self.config.inference_settings,
+            )
         else:
             api_key = os.environ.get(self.config.api_key_env)
             if not api_key:
@@ -244,15 +318,37 @@ class RobustnessRunner:
             if self.config.model_provider == "deepseek":
                 from agno.models.deepseek import DeepSeek
 
-                self._model = DeepSeek(id=self.config.model_id, api_key=api_key)
+                self._model = DeepSeek(
+                    id=self.config.model_id,
+                    api_key=api_key,
+                    **self.config.inference_settings,
+                )
             elif self.config.model_provider == "openai":
-                from agno.models.openai import OpenAI
+                from agno.models.openai import OpenAIChat
 
-                self._model = OpenAI(id=self.config.model_id, api_key=api_key)
+                self._model = OpenAIChat(
+                    id=self.config.model_id,
+                    api_key=api_key,
+                    **self.config.inference_settings,
+                )
             elif self.config.model_provider == "anthropic":
-                from agno.models.anthropic import Anthropic
+                from agno.models.anthropic import Claude
 
-                self._model = Anthropic(id=self.config.model_id, api_key=api_key)
+                self._model = Claude(
+                    id=self.config.model_id,
+                    api_key=api_key,
+                    **self.config.inference_settings,
+                )
+            elif self.config.model_provider == "openrouter":
+                from agno.models.openrouter import OpenRouter
+
+                self._model = OpenRouter(
+                    id=self.config.model_id,
+                    api_key=api_key,
+                    **self.config.inference_settings,
+                )
+                if self.config.model_id.lower().startswith("deepseek/"):
+                    self._model.supports_native_structured_outputs = False
             else:
                 raise ValueError(f"Unknown model provider: {self.config.model_provider}")
 
@@ -297,6 +393,9 @@ class RobustnessRunner:
 
     def _get_prompts(self, test_config: TestConfig) -> List[str]:
         """Get prompt variations for a test."""
+        if test_config.prompt_variants:
+            return test_config.prompt_variants[: self.config.n_variations]
+
         if test_config.custom_prompt:
             # For custom prompts, just use the single prompt
             return [test_config.custom_prompt]
@@ -354,6 +453,58 @@ class RobustnessRunner:
 
         return unique_smiles
 
+    def _collect_state_files(self, session_state: Dict[str, Any]) -> Dict[str, str]:
+        """Collect nested artifact pointers from structured session state."""
+        from cs_copilot.storage import S3
+
+        files: Dict[str, str] = {}
+        artifact_suffixes = (
+            ".csv",
+            ".csv.gz",
+            ".parquet",
+            ".json",
+            ".html",
+            ".md",
+            ".txt",
+            ".png",
+            ".svg",
+            ".pdf",
+            ".pkl",
+            ".pkl.gz",
+            ".sdf",
+            ".fasta",
+        )
+
+        def visit(value: Any, path: str, depth: int = 0) -> None:
+            if depth > 8:
+                return
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    visit(item, f"{path}.{key}" if path else str(key), depth + 1)
+                return
+            if isinstance(value, (list, tuple)):
+                for index, item in enumerate(value):
+                    visit(item, f"{path}[{index}]", depth + 1)
+                return
+            if not isinstance(value, str) or not value:
+                return
+            value_lower = value.lower().split("?", 1)[0]
+            key_lower = path.lower()
+            looks_like_pointer = (
+                value.startswith("s3://")
+                or value_lower.endswith(artifact_suffixes)
+                or key_lower.endswith(("_path", ".path", "_uri", ".uri"))
+            )
+            if not looks_like_pointer or value.startswith(("http://", "https://")):
+                return
+            if value.startswith("s3://") or Path(value).is_absolute() or not self._s3_config:
+                files[f"state:{path}"] = value
+            else:
+                files[f"state:{path}"] = S3.path(value)
+
+        visit(session_state, "")
+        return files
+
     def _build_system(self):
         """Build the system under test for the current arm.
 
@@ -373,15 +524,192 @@ class RobustnessRunner:
 
         from cs_copilot.agents import get_cs_copilot_agent_team
 
-        return get_cs_copilot_agent_team(
+        team = get_cs_copilot_agent_team(
             model=model,
             debug_mode=self.config.debug_mode,
             show_members_responses=False,
             enable_memory=False,  # Disable memory for session isolation
         )
+        # Agno otherwise omits specialist RunOutputs from the coordinator result,
+        # which would undercount member tokens and hide domain-tool failures.
+        team.store_member_responses = True
+        return team
+
+    @staticmethod
+    def _merge_state(target: Dict[str, Any], updates: Dict[str, Any]) -> None:
+        """Deep-merge fixture state while retaining agent-required defaults."""
+        for key, value in updates.items():
+            if isinstance(value, dict) and isinstance(target.get(key), dict):
+                RobustnessRunner._merge_state(target[key], value)
+            else:
+                target[key] = value
+
+    @staticmethod
+    def _json_safe_state(value: Any, *, depth: int = 0) -> Any:
+        """Serialize pointer-based state while redacting credential-like keys."""
+        if depth > 20:
+            return str(value)
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, dict):
+            result = {}
+            for key, item in value.items():
+                key_text = str(key)
+                if re.search(
+                    r"(api[_-]?key|authorization|credential|password|secret|access[_-]?token)",
+                    key_text,
+                    re.IGNORECASE,
+                ):
+                    result[key_text] = "[REDACTED]"
+                else:
+                    result[key_text] = RobustnessRunner._json_safe_state(
+                        item,
+                        depth=depth + 1,
+                    )
+            return result
+        if isinstance(value, (list, tuple, set)):
+            return [RobustnessRunner._json_safe_state(item, depth=depth + 1) for item in value]
+        if hasattr(value, "item"):
+            try:
+                return value.item()
+            except Exception:
+                pass
+        return str(value)
+
+    def _load_fixture_state(self, fixture: Dict[str, Any]) -> Dict[str, Any]:
+        """Load and verify an optional frozen session-state fixture."""
+        if not fixture:
+            return {}
+
+        required = bool(fixture.get("required", False))
+        raw_path = fixture.get("session_state_path")
+        if not raw_path:
+            if required:
+                raise FixtureLoadError("Required fixture has no session_state_path")
+            return {}
+
+        expanded_path = os.path.expandvars(str(raw_path))
+        if "$" in expanded_path:
+            raise FixtureLoadError(
+                f"Fixture path contains an unresolved environment variable: {raw_path}"
+            )
+        fixture_path = Path(expanded_path).expanduser()
+        if not fixture_path.is_absolute():
+            config_dir = self.config.config_path.parent if self.config.config_path else Path.cwd()
+            fixture_path = config_dir / fixture_path
+        if not fixture_path.is_file():
+            message = f"Fixture file does not exist: {fixture_path}"
+            if required:
+                raise FixtureLoadError(message)
+            logger.warning(message)
+            return {}
+
+        payload = fixture_path.read_bytes()
+        expected_hash = os.path.expandvars(str(fixture.get("sha256") or "")).strip()
+        if "$" in expected_hash:
+            raise FixtureLoadError("Fixture SHA-256 contains an unresolved environment variable")
+        actual_hash = hashlib.sha256(payload).hexdigest()
+        if expected_hash and actual_hash.lower() != expected_hash.lower():
+            raise FixtureLoadError(
+                f"Fixture SHA-256 mismatch for {fixture_path}: "
+                f"expected {expected_hash}, got {actual_hash}"
+            )
+
+        try:
+            loaded = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise FixtureLoadError(f"Fixture is not valid JSON: {fixture_path}") from exc
+        if not isinstance(loaded, dict):
+            raise FixtureLoadError(f"Fixture must contain a JSON object: {fixture_path}")
+        state = loaded.get("session_state", loaded)
+        if not isinstance(state, dict):
+            raise FixtureLoadError("Fixture session_state must be a JSON object")
+        return state
+
+    def _apply_fixture(self, agent: Any, fixture: Dict[str, Any]) -> None:
+        fixture_state = self._load_fixture_state(fixture)
+        self._apply_fixture_state(agent, fixture_state)
+
+    def _apply_fixture_state(self, agent: Any, fixture_state: Dict[str, Any]) -> None:
+        if not fixture_state:
+            return
+
+        states: List[Dict[str, Any]] = []
+        root_state = getattr(agent, "session_state", None)
+        if isinstance(root_state, dict):
+            states.append(root_state)
+        for member in getattr(agent, "members", None) or []:
+            member_state = getattr(member, "session_state", None)
+            if isinstance(member_state, dict) and all(
+                member_state is not state for state in states
+            ):
+                states.append(member_state)
+        if not states:
+            raise FixtureLoadError("System under test does not expose mutable session state")
+        for state in states:
+            self._merge_state(state, fixture_state)
+
+    def _failure_output(
+        self,
+        *,
+        prompt: str,
+        test_name: str,
+        run_id: int,
+        session_id: str,
+        status: str,
+        error: str,
+        validator_name: str,
+        prompt_variant: int,
+        repetition: int,
+        stage_name: Optional[str],
+        tier: str,
+        started_at: datetime,
+        started_timer: float,
+    ) -> Dict[str, Any]:
+        finished_at = datetime.now(timezone.utc)
+        output: Dict[str, Any] = {
+            "run_id": run_id,
+            "prompt": prompt,
+            "session_id": session_id,
+            "response": "",
+            "response_truncated": "",
+            "session_state_keys": [],
+            "session_state": {},
+            "generated_files": {},
+            "s3_files": {},
+            "smiles_generated": [],
+            "n_molecules": 0,
+            "status": status,
+            "error": error,
+            "system_under_test": self.system,
+            "test_name": test_name,
+            "stage_name": stage_name,
+            "prompt_variant": prompt_variant,
+            "repetition": repetition,
+            "tier": tier,
+            "started_at": started_at.isoformat(),
+            "finished_at": finished_at.isoformat(),
+            "wall_time_seconds": max(0.0, time.perf_counter() - started_timer),
+            "timestamp": finished_at.isoformat(),
+            "telemetry": normalize_agno_output(None, pricing=self.config.pricing),
+        }
+        output["validation"] = evaluate_run(validator_name, output)
+        return output
 
     def _run_single_variation(
-        self, prompt: str, test_name: str, run_id: int, s3_prefix: Optional[str] = None
+        self,
+        prompt: str,
+        test_name: str,
+        run_id: int,
+        s3_prefix: Optional[str] = None,
+        *,
+        agent: Any = None,
+        fixture: Optional[Dict[str, Any]] = None,
+        validator_name: str = "execution_only",
+        prompt_variant: int = 0,
+        repetition: int = 0,
+        stage_name: Optional[str] = None,
+        tier: str = "both",
     ) -> Dict:
         """
         Run agent with a single prompt variation.
@@ -394,7 +722,11 @@ class RobustnessRunner:
         # S3 prefix is now handled by context manager in run_test()
         # No need to set it here
 
-        session_id = f"robustness_{self.test_run_id}_{test_name}_run{run_id}_{uuid.uuid4().hex[:8]}"
+        session_id = (
+            f"robustness_{self.test_run_id}_{test_name}_run{run_id}_" f"{uuid.uuid4().hex[:8]}"
+        )
+        started_at = datetime.now(timezone.utc)
+        started_timer = time.perf_counter()
 
         logger.info(f"Running {test_name} variation {run_id + 1}")
         logger.debug(f"Session ID: {session_id}")
@@ -403,14 +735,26 @@ class RobustnessRunner:
         try:
             # Build the system under test (multi-agent team or single-agent
             # baseline); memory disabled for isolation, same model for both arms.
-            agent = self._build_system()
+            if agent is None:
+                fixture_state = self._load_fixture_state(fixture or {})
+                agent = self._build_system()
+                self._apply_fixture_state(agent, fixture_state)
 
             # Run the agent
-            result = agent.run(prompt, stream=False)
+            started_at = datetime.now(timezone.utc)
+            started_timer = time.perf_counter()
+            with run_timeout(self.config.timeout_seconds):
+                result = agent.run(prompt, stream=False)
             session_state = agent.get_session_state()
+            session_state = session_state if isinstance(session_state, dict) else {}
+            try:
+                session_state_snapshot = copy.deepcopy(session_state)
+            except Exception:
+                session_state_snapshot = dict(session_state)
+            telemetry = normalize_agno_output(result, pricing=self.config.pricing)
 
             # Extract response content
-            response_text = result.content if result.content else ""
+            response_text = str(result.content) if result.content else ""
 
             # Collect generated files
             generated_files = {}
@@ -423,27 +767,18 @@ class RobustnessRunner:
                 generated_files[f"response:{filename}"] = s3_url
                 s3_files[f"response:{filename}"] = s3_url
 
-            # From session state
-            for key, value in session_state.items():
-                if isinstance(value, str) and value:
-                    if value.startswith("s3://"):
-                        s3_files[f"state:{key}"] = value
-                        generated_files[f"state:{key}"] = value
-                    elif not value.startswith(("http://", "https://", "/")) and "." in value:
-                        s3_url = S3.path(value) if self._s3_config else value
-                        s3_files[f"state:{key}"] = s3_url
-                        generated_files[f"state:{key}"] = s3_url
-                elif isinstance(value, dict):
-                    for subkey, subvalue in value.items():
-                        if isinstance(subvalue, str) and subvalue:
-                            if subvalue.startswith("s3://"):
-                                s3_files[f"state:{key}.{subkey}"] = subvalue
-                                generated_files[f"state:{key}.{subkey}"] = subvalue
+            # From nested, pointer-based session state.
+            state_files = self._collect_state_files(session_state)
+            generated_files.update(state_files)
+            s3_files.update(
+                {key: value for key, value in state_files.items() if value.startswith("s3://")}
+            )
 
             # Extract SMILES if applicable
             smiles_generated = self._extract_smiles_from_response(response_text)
 
-            return {
+            finished_at = datetime.now(timezone.utc)
+            output = {
                 "run_id": run_id,
                 "prompt": prompt,
                 "session_id": session_id,
@@ -452,40 +787,83 @@ class RobustnessRunner:
                 "response_truncated": (
                     response_text[:1000] if len(response_text) > 1000 else response_text
                 ),
-                "session_state_keys": list(session_state.keys()),
-                "session_state": session_state,
+                "session_state_keys": list(session_state_snapshot.keys()),
+                "session_state": session_state_snapshot,
                 "generated_files": generated_files,
                 "s3_files": s3_files,
                 "smiles_generated": smiles_generated,
                 "n_molecules": len(smiles_generated),
                 "s3_prefix": s3_prefix,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": finished_at.isoformat(),
                 "status": "success",
                 "system_under_test": self.system,
+                "test_name": test_name,
+                "stage_name": stage_name,
+                "prompt_variant": prompt_variant,
+                "repetition": repetition,
+                "tier": tier,
+                "started_at": started_at.isoformat(),
+                "finished_at": finished_at.isoformat(),
+                "wall_time_seconds": max(0.0, time.perf_counter() - started_timer),
+                "telemetry": telemetry,
             }
+            output["validation"] = evaluate_run(validator_name, output)
+            return output
 
         except KeyboardInterrupt:
             logger.warning(f"Run {run_id + 1} interrupted")
-            return {
-                "run_id": run_id,
-                "prompt": prompt,
-                "session_id": session_id,
-                "status": "interrupted",
-                "timestamp": datetime.now().isoformat(),
-                "system_under_test": self.system,
-            }
+            return self._failure_output(
+                prompt=prompt,
+                test_name=test_name,
+                run_id=run_id,
+                session_id=session_id,
+                status="interrupted",
+                error="Run interrupted",
+                validator_name=validator_name,
+                prompt_variant=prompt_variant,
+                repetition=repetition,
+                stage_name=stage_name,
+                tier=tier,
+                started_at=started_at,
+                started_timer=started_timer,
+            )
+
+        except ReliabilityTimeoutError as e:
+            logger.error(f"Run {run_id + 1} timed out: {e}")
+            return self._failure_output(
+                prompt=prompt,
+                test_name=test_name,
+                run_id=run_id,
+                session_id=session_id,
+                status="timeout",
+                error=str(e),
+                validator_name=validator_name,
+                prompt_variant=prompt_variant,
+                repetition=repetition,
+                stage_name=stage_name,
+                tier=tier,
+                started_at=started_at,
+                started_timer=started_timer,
+            )
 
         except Exception as e:
             logger.error(f"Run {run_id + 1} failed: {e}")
-            return {
-                "run_id": run_id,
-                "prompt": prompt,
-                "session_id": session_id,
-                "status": "failed",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat(),
-                "system_under_test": self.system,
-            }
+            status = "fixture_error" if isinstance(e, FixtureLoadError) else "failed"
+            return self._failure_output(
+                prompt=prompt,
+                test_name=test_name,
+                run_id=run_id,
+                session_id=session_id,
+                status=status,
+                error=str(e),
+                validator_name=validator_name,
+                prompt_variant=prompt_variant,
+                repetition=repetition,
+                stage_name=stage_name,
+                tier=tier,
+                started_at=started_at,
+                started_timer=started_timer,
+            )
 
     def _compare_outputs(self, outputs: List[Dict], test_name: str) -> Dict:
         """Compare outputs from multiple runs."""
@@ -567,11 +945,27 @@ class RobustnessRunner:
             (run_dir / "prompt.txt").write_text(output.get("prompt", ""))
 
             # Save response
-            (run_dir / "response.txt").write_text(output.get("response", ""))
+            response_path = run_dir / "response.txt"
+            response_path.write_text(output.get("response", ""))
+            output["response_path"] = str(response_path.relative_to(self.output_dir))
+
+            # Capture a reloadable state boundary for building reviewed frozen fixtures.
+            state_payload = json.dumps(
+                {"session_state": self._json_safe_state(output.get("session_state") or {})},
+                indent=2,
+                sort_keys=True,
+                default=str,
+            ).encode()
+            state_path = run_dir / "session_state.json"
+            state_path.write_bytes(state_payload)
+            output["session_state_fixture_path"] = str(state_path.relative_to(self.output_dir))
+            output["session_state_fixture_sha256"] = hashlib.sha256(state_payload).hexdigest()
 
             # Save run metadata
             metadata = {
-                k: v for k, v in output.items() if k not in ["prompt", "response", "session_state"]
+                k: v
+                for k, v in output.items()
+                if k not in ["prompt", "response", "response_object", "session_state"]
             }
             (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2, default=str))
 
@@ -585,54 +979,194 @@ class RobustnessRunner:
 
         logger.info(f"Artifacts saved to {artifacts_dir}")
 
+    def _to_reliability_record(self, output: Dict[str, Any]) -> Dict[str, Any]:
+        telemetry = output.get("telemetry")
+        telemetry = telemetry if isinstance(telemetry, dict) else {}
+        validation = output.get("validation")
+        validation = validation if isinstance(validation, dict) else {}
+        models = telemetry.get("models") or []
+        first_model = models[0] if models and isinstance(models[0], dict) else {}
+
+        record = ReliabilityRunRecord(
+            benchmark_run_id=self.test_run_id,
+            case_name=str(output.get("stage_name") or output.get("test_name") or "unknown"),
+            run_id=str(output.get("run_id")),
+            session_id=str(output.get("session_id") or ""),
+            system_under_test=self.system,
+            tier=str(output.get("tier") or "both"),
+            prompt_variant=int(output.get("prompt_variant") or 0),
+            repetition=int(output.get("repetition") or 0),
+            prompt=str(output.get("prompt") or ""),
+            response_path=output.get("response_path"),
+            execution_status=str(output.get("status") or "unknown"),
+            task_success=bool(validation.get("task_success")),
+            started_at=str(output.get("started_at") or output.get("timestamp") or ""),
+            finished_at=str(output.get("finished_at") or output.get("timestamp") or ""),
+            wall_time_seconds=float(output.get("wall_time_seconds") or 0),
+            model_provider=first_model.get("model_provider") or self.config.model_provider,
+            model_id=first_model.get("model_id") or self.config.model_id,
+            input_tokens=int(telemetry.get("input_tokens") or 0),
+            output_tokens=int(telemetry.get("output_tokens") or 0),
+            total_tokens=int(telemetry.get("total_tokens") or 0),
+            reasoning_tokens=int(telemetry.get("reasoning_tokens") or 0),
+            cache_read_tokens=int(telemetry.get("cache_read_tokens") or 0),
+            cache_write_tokens=int(telemetry.get("cache_write_tokens") or 0),
+            llm_duration_seconds=telemetry.get("llm_duration_seconds"),
+            estimated_cost=telemetry.get("estimated_cost"),
+            tool_call_count=int(telemetry.get("tool_call_count") or 0),
+            failed_tool_call_count=int(telemetry.get("failed_tool_call_count") or 0),
+            tool_calls=telemetry.get("tool_calls") or [],
+            validations=validation.get("checks") or [],
+            failure_categories=validation.get("failure_categories") or [],
+            generated_files=output.get("generated_files") or {},
+            scientific_outcome=validation.get("scientific_outcome") or {},
+            error=output.get("error"),
+        )
+        return record.to_dict()
+
+    @contextmanager
+    def _isolated_session(self, *, prompt_idx: int, repetition: int):
+        if self._s3_config and self.config.s3_session_isolation:
+            with self._s3_session_manager.create_isolated_session(
+                test_run_id=self.test_run_id,
+                prompt_idx=prompt_idx,
+                variation_idx=repetition,
+            ) as session_id:
+                logger.debug(f"Created isolated S3 session: {session_id}")
+                yield session_id
+        else:
+            yield None
+
+    def _run_independent_test(
+        self,
+        test_config: TestConfig,
+        prompts: List[str],
+    ) -> List[Dict[str, Any]]:
+        outputs: List[Dict[str, Any]] = []
+        run_id = 0
+        for prompt_idx, prompt in enumerate(prompts):
+            for repetition in range(self.config.repetitions):
+                with self._isolated_session(
+                    prompt_idx=prompt_idx,
+                    repetition=repetition,
+                ):
+                    output = self._run_single_variation(
+                        prompt=prompt,
+                        test_name=test_config.name,
+                        run_id=run_id,
+                        fixture=test_config.fixture,
+                        validator_name=test_config.validator,
+                        prompt_variant=prompt_idx,
+                        repetition=repetition,
+                        tier=test_config.tier,
+                    )
+                outputs.append(output)
+                run_id += 1
+        return outputs
+
+    def _run_chain_test(self, test_config: TestConfig) -> List[Dict[str, Any]]:
+        outputs: List[Dict[str, Any]] = []
+        run_id = 0
+        for repetition in range(self.config.repetitions):
+            with self._isolated_session(prompt_idx=0, repetition=repetition):
+                chain_session_id = (
+                    f"robustness_{self.test_run_id}_{test_config.name}_chain{repetition}_"
+                    f"{uuid.uuid4().hex[:8]}"
+                )
+                agent = None
+                preparation_error = None
+                try:
+                    fixture_state = self._load_fixture_state(test_config.fixture)
+                    agent = self._build_system()
+                    self._apply_fixture_state(agent, fixture_state)
+                except Exception as exc:
+                    preparation_error = exc
+
+                chain_blocked = False
+                for step_idx, step in enumerate(test_config.steps):
+                    prompt = str(step["prompt"])
+                    stage_name = str(step.get("name") or f"{test_config.name}_step_{step_idx + 1}")
+                    validator_name = str(step.get("validator") or test_config.validator)
+
+                    if preparation_error is not None or chain_blocked:
+                        started_at = datetime.now(timezone.utc)
+                        started_timer = time.perf_counter()
+                        status = (
+                            "fixture_error"
+                            if isinstance(preparation_error, FixtureLoadError)
+                            else "failed" if preparation_error is not None else "blocked"
+                        )
+                        error = (
+                            str(preparation_error)
+                            if preparation_error is not None
+                            else "A preceding stage failed; dependent stage was not executed"
+                        )
+                        output = self._failure_output(
+                            prompt=prompt,
+                            test_name=test_config.name,
+                            run_id=run_id,
+                            session_id=chain_session_id,
+                            status=status,
+                            error=error,
+                            validator_name=validator_name,
+                            prompt_variant=step_idx,
+                            repetition=repetition,
+                            stage_name=stage_name,
+                            tier=test_config.tier,
+                            started_at=started_at,
+                            started_timer=started_timer,
+                        )
+                    else:
+                        output = self._run_single_variation(
+                            prompt=prompt,
+                            test_name=test_config.name,
+                            run_id=run_id,
+                            agent=agent,
+                            validator_name=validator_name,
+                            prompt_variant=step_idx,
+                            repetition=repetition,
+                            stage_name=stage_name,
+                            tier=test_config.tier,
+                        )
+                        output["session_id"] = chain_session_id
+                        chain_blocked = output.get("status") != "success"
+
+                    outputs.append(output)
+                    run_id += 1
+        return outputs
+
     def run_test(self, test_config: TestConfig) -> Dict:
-        """Run a single robustness test with S3 session isolation."""
+        """Run a robustness/reliability test with repetition and isolation."""
         logger.info(f"\n{'=' * 60}")
         logger.info(f"Running test: {test_config.name}")
         logger.info(f"Description: {test_config.description}")
         logger.info(f"{'=' * 60}\n")
 
-        # Get prompts
-        prompts = self._get_prompts(test_config)
-        logger.info(f"Running {len(prompts)} prompt variations")
+        prompts = [] if test_config.steps else self._get_prompts(test_config)
+        expected_runs = (
+            len(test_config.steps) * self.config.repetitions
+            if test_config.steps
+            else len(prompts) * self.config.repetitions
+        )
+        logger.info(
+            f"Running {expected_runs} executions " f"({self.config.repetitions} repetition(s))"
+        )
 
-        # Setup S3 if needed
-        s3_config = self._setup_s3()
+        self._setup_s3()
 
-        # Run variations with guaranteed S3 cleanup via try-finally
-        outputs = []
         try:
-            for i, prompt in enumerate(prompts):
-                # Use context manager for each run to ensure S3 isolation and cleanup
-                if s3_config and self.config.s3_session_isolation:
-                    with self._s3_session_manager.create_isolated_session(
-                        test_run_id=self.test_run_id, prompt_idx=i, variation_idx=0
-                    ) as session_id:
-                        logger.debug(f"Created isolated S3 session: {session_id}")
-                        output = self._run_single_variation(
-                            prompt=prompt,
-                            test_name=test_config.name,
-                            run_id=i,
-                            s3_prefix=None,  # Prefix already set by context manager
-                        )
-                else:
-                    output = self._run_single_variation(
-                        prompt=prompt,
-                        test_name=test_config.name,
-                        run_id=i,
-                        s3_prefix=None,
-                    )
-
-                outputs.append(output)
-
-                # Log progress
-                status = "✅" if output.get("status") == "success" else "❌"
-                logger.info(f"  Run {i + 1}/{len(prompts)}: {status}")
-
+            outputs = (
+                self._run_chain_test(test_config)
+                if test_config.steps
+                else self._run_independent_test(test_config, prompts)
+            )
         finally:
-            # Ensure S3 prefix is restored even if test fails
             logger.debug("Ensuring S3 prefix restoration...")
             self._restore_s3_prefix()
+
+        for index, output in enumerate(outputs):
+            status = "✅" if output.get("validation", {}).get("task_success") else "❌"
+            logger.info(f"  Run {index + 1}/{len(outputs)}: {status}")
 
         # Compare outputs
         comparison = self._compare_outputs(outputs, test_config.name)
@@ -642,24 +1176,45 @@ class RobustnessRunner:
 
         # Save artifacts
         self._save_artifacts(test_config.name, outputs, comparison, score)
+        reliability_records = [self._to_reliability_record(output) for output in outputs]
+        self.reliability_records.extend(reliability_records)
+
+        successful_tasks = sum(record["task_success"] for record in reliability_records)
+        task_success_rate = (
+            successful_tasks / len(reliability_records) if reliability_records else 0
+        )
+        reliability_mode = (
+            self.config.reliability_enabled
+            or test_config.validator != "execution_only"
+            or bool(test_config.steps)
+        )
 
         # Prepare result
         result = {
             "test_name": test_config.name,
             "description": test_config.description,
             "n_variations": len(prompts),
+            "n_runs": len(outputs),
+            "repetitions": self.config.repetitions,
             "successful_runs": sum(1 for o in outputs if o.get("status") == "success"),
+            "successful_tasks": successful_tasks,
+            "task_success_rate": task_success_rate,
             "robustness_score": score,
             "rating": self.metrics_calculator.get_rating(score),
-            "passed": score >= self.config.pass_threshold,
+            "passed": (
+                task_success_rate >= self.config.reliability_min_success_rate
+                if reliability_mode
+                else score >= self.config.pass_threshold
+            ),
             "comparison": comparison,
             "outputs": outputs if self.config.include_run_details else None,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         logger.info(f"\nTest '{test_config.name}' completed:")
         logger.info(f"  Score: {score:.3f}")
         logger.info(f"  Rating: {result['rating']}")
+        logger.info(f"  Objective success rate: {task_success_rate:.1%}")
         logger.info(f"  Passed: {'✅' if result['passed'] else '❌'}")
 
         return result
@@ -671,12 +1226,31 @@ class RobustnessRunner:
         logger.info(f"Test Run ID: {self.test_run_id}")
         logger.info(f"{'#' * 60}\n")
 
-        # Get enabled tests
-        enabled_tests = [tc for tc in self.config.tests.values() if tc.enabled]
+        # Get enabled tests in the requested live/frozen tier.
+        enabled_tests = [
+            test_config
+            for test_config in self.config.tests.values()
+            if test_config.enabled
+            and (
+                self.config.tier == "both"
+                or test_config.tier == "both"
+                or test_config.tier == self.config.tier
+            )
+        ]
 
         if not enabled_tests:
-            logger.warning("No tests enabled in configuration!")
-            return {"error": "No tests enabled"}
+            message = f"No enabled tests match tier '{self.config.tier}'"
+            logger.warning(message)
+            return {
+                "error": message,
+                "total_tests": 0,
+                "passed": 0,
+                "failed": 1,
+                "pass_rate": 0,
+                "average_robustness_score": 0,
+                "overall_rating": "N/A",
+                "results": {},
+            }
 
         logger.info(f"Enabled tests: {[t.name for t in enabled_tests]}")
 
@@ -697,6 +1271,22 @@ class RobustnessRunner:
 
         # Generate summary
         summary = self._generate_summary(results)
+        if self.config.reliability_enabled:
+            config_path = self.config.config_path or Path(__file__)
+            environment_manifest = build_environment_manifest(
+                project_root=project_root,
+                model_provider=self.config.model_provider,
+                model_id=self.config.model_id,
+                config_path=config_path,
+                pricing=self.config.pricing,
+                inference_settings=self.config.inference_settings,
+            )
+            reliability_summary = save_reliability_bundle(
+                self.output_dir / "reliability",
+                self.reliability_records,
+                environment_manifest=environment_manifest,
+            )
+            summary["reliability"] = reliability_summary
         self._save_reports(summary)
 
         return summary
@@ -776,7 +1366,9 @@ class RobustnessRunner:
 - **Rating:** {rating}
 - **Description:** {result.get('description', 'N/A')}
 - **Variations:** {result.get('n_variations', 'N/A')}
+- **Executions:** {result.get('n_runs', 'N/A')}
 - **Successful Runs:** {result.get('successful_runs', 'N/A')}
+- **Objective Task Success:** {result.get('task_success_rate', 0):.1%}
 
 """
             # Include comparison details
@@ -858,6 +1450,24 @@ Examples:
         "--n-variations",
         type=int,
         help="Number of prompt variations to use (overrides config)",
+    )
+
+    parser.add_argument(
+        "--repetitions",
+        type=int,
+        help="Independent repetitions per prompt or workflow chain (overrides config)",
+    )
+
+    parser.add_argument(
+        "--tier",
+        choices=["live", "frozen", "both"],
+        help="Run live, frozen, or both benchmark tiers (overrides config)",
+    )
+
+    parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        help="Wall-time limit for each agent execution; zero disables it",
     )
 
     parser.add_argument(
@@ -1021,6 +1631,19 @@ def main():
     # Apply command line overrides
     if args.n_variations:
         config.n_variations = args.n_variations
+
+    if args.repetitions is not None:
+        if args.repetitions < 1:
+            raise ValueError("--repetitions must be positive")
+        config.repetitions = args.repetitions
+
+    if args.tier:
+        config.tier = args.tier
+
+    if args.timeout_seconds is not None:
+        if args.timeout_seconds < 0:
+            raise ValueError("--timeout-seconds must be zero or positive")
+        config.timeout_seconds = args.timeout_seconds
 
     if args.debug:
         config.debug_mode = True
