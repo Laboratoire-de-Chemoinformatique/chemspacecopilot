@@ -131,7 +131,7 @@ def get_cs_copilot_agent_team(
     }
 
     # ============================================================================
-    # 5-AGENT ARCHITECTURE
+    # 7-AGENT PRODUCTION TEAM
     # ============================================================================
     # Consolidation history:
     #   MERGED: GTM Optimization + Loading + Density + Activity → GTM Agent

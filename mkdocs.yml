@@ -62,11 +62,14 @@ nav:
   - Architecture:
       - Overview: architecture/overview.md
       - Agents: architecture/agents.md
+      - Skills and Workflows: architecture/catalogs.md
       - Tools: architecture/tools.md
       - Storage: architecture/storage.md
       - Agentic Runtime v2: architecture/agentic-runtime-v2.md
   - API Reference:
       - Agents: api/agents.md
+      - Skills: api/skills.md
+      - Workflows: api/workflows.md
       - Tools: api/tools.md
       - Storage: api/storage.md
   - Testing:

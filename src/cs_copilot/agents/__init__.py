@@ -1,48 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""
-Cs_copilot Agents Package
+"""Factories and team builders for ChemSpace Copilot agents.
 
-This package provides a comprehensive system for creating and managing
-AI agents specialized in cheminformatics tasks.
+The registry contains nine agent types. Seven are members of the production
+team: ChEMBL retrieval, GTM, chemoinformatics, reporting, molecular design,
+peptide design, and retrosynthesis. ``robustness_evaluation`` is a separate
+evaluation agent, while ``single_agent`` is the flat baseline used by
+architecture-ablation tests.
 
-Public API:
------------
-
-Agent Creation (Recommended):
-    create_agent(agent_type, model, **kwargs) - Create agents by type
-    list_available_agent_types() - List all available agent types
-
-Team Coordination:
-    get_cs_copilot_agent_team(model, **kwargs) - Multi-agent team with intelligent coordination
-
-Utilities:
-    get_last_agent_reply(agent) - Extract last message from agent
-
-Exceptions:
-    AgentCreationError - Raised when agent creation fails
-
-Available Agent Types (5-Agent Architecture):
-----------------------------------------------
-Core Agents:
-- "chembl_downloader" - Download and process bioactivity data from ChEMBL database
-- "gtm_agent" - Unified GTM operations (build, load, density, activity, project) with smart caching
-- "chemoinformatician" - Comprehensive chemoinformatics (chemotype, clustering, SAR, similarity, QSAR)
-- "report_generator" - Universal presentation layer for all analysis types
-- "molecular_designer" - Small-molecule design via autoencoder and LLM engines
-- "peptide_designer" - Peptide design via WAE and LLM engines plus latent-space GTM workflows
-
-Testing/Evaluation:
-- "robustness_evaluation" - Analyze robustness test results and metrics
-
-Agent Capabilities Breakdown:
------------------------------
-**Chemoinformatician** (Most Versatile):
-  - Chemotype/Scaffold Analysis: Extract and analyze molecular frameworks
-  - Clustering: Group molecules by structural similarity (k-means, hierarchical, DBSCAN)
-  - SAR Analysis: Structure-Activity Relationships, activity cliffs, matched molecular pairs
-  - Similarity/Diversity: Molecular similarity, diversity metrics, nearest neighbors
-  - QSAR Modeling: Extensible framework for predictive modeling (tools to be added)
+Use :func:`create_agent` to construct one registered type,
+:func:`get_cs_copilot_agent_team` for the production team, or
+:func:`get_cs_copilot_single_agent` for the controlled baseline.
 """
 
 from .factories import AgentConfig, AgentCreationError, BaseAgentFactory

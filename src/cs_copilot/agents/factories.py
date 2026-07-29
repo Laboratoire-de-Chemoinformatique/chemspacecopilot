@@ -115,7 +115,7 @@ class BaseAgentFactory(ABC):
         markdown: bool = True,
         debug_mode: bool = False,
         enable_mlflow_tracking: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> Agent:
         """Create an agent with error handling and validation.
 

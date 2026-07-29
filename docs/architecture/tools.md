@@ -1,75 +1,77 @@
 # Tools System
 
-Tools are organized as **Toolkit classes** that inherit from `Toolkit` (Agno framework).
+Deterministic Python functions and Agno `Toolkit` classes perform the scientific
+work. Language models select tools and interpret results; they do not replace
+descriptor calculation, database queries, GTM fitting, model inference, or
+retrosynthetic search.
 
-**Location**: `src/cs_copilot/tools/`
+## Scientific toolkits
 
-## Directory Structure
+The main packages under `src/cs_copilot/tools/` are:
 
-```
+```text
 tools/
-├── databases/          Database integrations
-│   ├── base.py        BaseDatabaseToolkit (abstract)
-│   ├── chembl.py      ChemblToolkit (REST API + MySQL backends)
-│   ├── chembl_fetcher.py  RestChemblFetcher / SqlChemblFetcher strategies
-│   └── types.py       Query types and configurations
-│
-├── chemography/       Dimensionality reduction
-│   ├── gtm.py         GTMToolkit (high-level interface)
-│   └── gtm_operations.py  Core GTM implementations
-│
-├── chemistry/         Molecular operations
-│   ├── similarity_toolkit.py      Similarity calculations
-│   ├── autoencoder_toolkit.py     LSTM autoencoder operations
-│   └── descriptors.py             Molecular descriptors
-│
-├── io/                I/O and formatting
-│   ├── pointer_pandas_tools.py   DataFrame ops + S3 integration
-│   └── formatting.py              SMILES → images, markdown
-│
-└── constants.py       Configuration constants
+├── databases/      ChEMBL REST and SQL backends
+├── chemography/    GTM construction, projection, landscapes, and sampling
+├── chemistry/      standardization, descriptors, similarity, design, retrosynthesis
+├── analysis/       robustness result analysis
+├── io/             DataFrame pointers, session memory, skills, and report export
+└── constants.py    shared tool configuration
 ```
 
-Each toolkit registers methods as tools via `self.register(method)`. Agents call these tools via the Agno tool-calling mechanism.
+Toolkit classes register selected methods with Agno. Method names, signatures,
+docstrings, and return values form part of the LLM-visible interface, so tool
+methods should remain deterministic, validate inputs, and return explicit
+artifact references where appropriate.
 
-## ChEMBL Backends
+## MCP exposure
 
-The `ChemblToolkit` supports two pluggable data backends via a strategy pattern (`chembl_fetcher.py`):
+MCP reuses the scientific implementations through an additional contract
+layer under `src/cs_copilot/mcp/`:
 
-| Backend | Trigger | Dependency | Use case |
-|---------|---------|------------|----------|
-| **REST API** | Default (no config needed) | `chembl_webresource_client` (included) | Quick setup, always-on access |
-| **MySQL** | Set `CHEMBL_MYSQL_HOST` env var | `pymysql` (included in `uv sync`) | Faster queries, offline use, full SQL |
+- tool specifications define public names, schemas, risk annotations, and
+  profile membership;
+- facades adapt session and workflow context to toolkit calls;
+- the tool adapter enforces profile, task, timeout, idempotency, and artifact
+  rules; and
+- the server publishes only the selected capability profile.
 
-Backend is auto-detected: MySQL when `CHEMBL_MYSQL_HOST` is present, REST otherwise. The REST API is always reported as available regardless of active backend.
+A toolkit method is not automatically public through MCP. It must have an MCP
+specification and belong to the selected profile. Conversely, narrowing an MCP
+profile does not change the tools assigned to an Agno specialist.
 
-Download the MySQL dump from the [ChEMBL downloads page](https://chembl.gitbook.io/chembl-interface-documentation/downloads) or the [EBI FTP](https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/latest/).
+## ChEMBL backends
 
-## Optional SynPlanner Backend
+`ChemblToolkit` supports REST, SQLite, PostgreSQL, and MySQL. With
+`backend="auto"`, configured local databases are tried before REST and a
+missing optional SQL driver falls through to the next candidate. REST requires
+no local database configuration.
 
-`SynPlannerToolkit` is part of the codebase, but the external `SynPlanner` package is an optional dependency because its `cgrtools-stable` dependency only ships wheels for selected platforms. Install it on supported systems with:
+Local SQL deployments are useful for high-volume or offline queries. Database
+connection settings are documented in the installation guide and `.env.example`.
+
+## Optional SynPlanner backend
+
+The `SynPlannerToolkit` wrapper is part of the base code, while the external
+SynPlanner/CGRtools stack is optional because wheel availability is
+platform-specific:
 
 ```bash
 uv sync --extra synplanner
 ```
 
-Without that extra, the SynPlanner agent/toolkit raises a clear install error when its backend is used; the rest of the ChemSpace tool stack and MCP server remain installable.
+Without the extra, the backend reports an installation error when invoked; the
+remaining agents, toolkits, and MCP profiles remain usable.
 
-## Adding a New Tool
+## Adding a tool
 
-1. Create a toolkit in `src/cs_copilot/tools/`:
-
-```python
-from agno import Toolkit
-
-class MyNewToolkit(Toolkit):
-    def __init__(self):
-        super().__init__(name="my_new_toolkit")
-        self.register(self.my_tool_function)
-
-    def my_tool_function(self, param: str) -> str:
-        """Tool description for LLM."""
-        return f"Result: {param}"
-```
-
-2. Import and pass to the agent factory's `tools` parameter
+1. Implement or extend a toolkit in the appropriate scientific package and
+   register only the methods intended for Agno.
+2. Add the toolkit to the owning agent factory and its canonical role
+   allowlist.
+3. If MCP should expose the operation, add its tool specification, facade or
+   adapter binding, annotations, and capability-profile membership.
+4. Update affected skills and workflow contracts when the operation changes a
+   procedure, permission, or artifact contract.
+5. Test deterministic behavior, role access, direct-tool/MCP parity, profile
+   filtering, and artifact registration as applicable.

@@ -218,7 +218,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         self,
         config: Optional[DBConfig] = None,
         backend: str = "auto",
-        **toolkit_kwargs,
+        **toolkit_kwargs: Any,
     ):
         """
         Initialize ChEMBL toolkit.

@@ -1116,7 +1116,7 @@ class S3(metaclass=_S3Meta):
         return f"s3://{config.bucket_name}/{key.as_posix()}"
 
     @classmethod
-    def open(cls, rel: str, mode: str = "rb"):
+    def open(cls, rel: str, mode: str = "rb") -> Any:
         """
         Open a file for reading or writing.
 

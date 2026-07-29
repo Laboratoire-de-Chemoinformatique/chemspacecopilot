@@ -37,23 +37,26 @@
 
 ## Overview
 
-ChemSpace Copilot is a multi-agent system powered by the [Agno](https://docs.agno.com/) framework. The default runtime team coordinates seven specialized AI agents for ChEMBL bioactivity download, unified GTM workflows, downstream chemoinformatics, report generation, small-molecule design, peptide generation, and retrosynthetic planning. A separate robustness evaluation agent is available for analyzing prompt-robustness test outputs. The GTM engine is provided by [chemographykit](https://www.piwheels.org/project/chemographykit/).
+ChemSpace Copilot combines language-model coordination with deterministic
+cheminformatics tools. The default [Agno](https://docs.agno.com/) team
+coordinates seven specialists for ChEMBL retrieval, GTM workflows, downstream
+analysis, reporting, molecular design, peptide design, and retrosynthesis. An
+optional MCP server exposes the same scientific core to external reasoning
+clients. A separate robustness agent and a single-agent ablation baseline are
+registered outside the production team. The GTM engine is provided by
+[chemographykit](https://www.piwheels.org/project/chemographykit/).
 
-```
-┌─────────────────────────────────────────┐
-│  UI Layer (Chainlit)                    │  Real-time chat interface
-├─────────────────────────────────────────┤
-│  Agent Orchestration (teams.py)         │  Multi-agent coordination
-├─────────────────────────────────────────┤
-│  Specialized Agents (factories.py)      │  7 runtime agents + 1 evaluation agent
-├─────────────────────────────────────────┤
-│  Tools + Storage (toolkits + S3)        │  Domain logic & persistence
-└─────────────────────────────────────────┘
+```text
+Chainlit / CLI ──► Agno coordinator ──► 7 specialists ──┐
+                                                       ├─► tools ─► events/artifacts
+External client ──► MCP profiles and adapters ─────────┘
+                         ▲                    ▲
+                         └── skills/workflows ┘
 ```
 
 ## Features
 
-- **7 Runtime Agents + 1 Evaluation Agent** — ChEMBL data download, unified GTM operations, chemoinformatics analysis, report generation, small-molecule design, peptide design workflows, retrosynthetic planning, and robustness evaluation
+- **7 Runtime Agents + Evaluation/Ablation Factories** — Seven production specialists, a separate robustness evaluator, and a controlled single-agent baseline
 - **Generative Topographic Mapping** — Dimensionality reduction and visualization of chemical space via [chemographykit](https://www.piwheels.org/project/chemographykit/)
 - **Molecular and Peptide Generation** — Molecular Designer small-molecule generation with autoencoder and LLM engines plus Peptide Designer generation with WAE and LLM engines, interpolation, and GTM-guided targeting
 - **S3/MinIO Integration** — Session-scoped cloud storage with local filesystem fallback
@@ -252,7 +255,10 @@ clone has a different local path.
 
 ## Architecture
 
-The system uses a **Factory Pattern + Registry** for agent creation. The default team orchestrator coordinates seven runtime agents, and an eighth agent is available separately for robustness analysis:
+The agent registry contains nine factories: seven production team members, a
+separate robustness evaluator, and a single-agent architecture-ablation
+baseline. The Chainlit/CLI path uses the Agno coordinator as its reasoning
+engine; in MCP mode, the external client supervises capability-filtered tools.
 
 ### Runtime Team
 
@@ -272,6 +278,12 @@ The system uses a **Factory Pattern + Registry** for agent creation. The default
 |-------|------|
 | **Robustness Evaluation** | Analyzes robustness test runs, score distributions, failures, and trends |
 
+### Single-Agent Baseline
+
+The `single_agent` factory combines the production tool surface into one flat
+agent for controlled multi-agent-versus-single-agent robustness experiments. It
+is not part of the production team.
+
 
 Agents share within-session state via `session_state` and can persist bounded
 conversation history in SQLite. Cross-session user and agentic memories are
@@ -282,7 +294,9 @@ checksummed artifacts through the unified S3/local storage abstraction. Strict
 persisted task-DAG enforcement is currently the `chembl-to-gtm-report` MCP
 pilot; other catalog workflows remain taskless/legacy.
 
-For full architectural details, see the [documentation](https://laboratoire-de-chemoinformatique.github.io/chemspacecopilot/).
+For full architectural details, see the
+[Architecture Overview](docs/architecture/overview.md) and
+[Skills and Workflows](docs/architecture/catalogs.md).
 
 ## License
 

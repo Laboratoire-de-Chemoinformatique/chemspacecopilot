@@ -1591,7 +1591,7 @@ def data_load_and_prep(
     *,
     descriptor_type: Optional[str] = None,
     agent: Optional[Agent] = None,
-):
+) -> tuple[Any, pd.DataFrame, np.ndarray, np.ndarray]:
     """
     Load GTM model and dataset from S3 storage, prepare descriptors and projections.
 
@@ -2009,7 +2009,7 @@ def create_activity_landscapes_plotly(
     node_threshold: float = 0.1,
     chart_width: int = DEFAULT_CHART_WIDTH,
     chart_height: int = DEFAULT_CHART_HEIGHT,
-):
+) -> Any:
     """
     Create a Plotly activity landscape (classification or regression, auto-detected).
 
@@ -2867,7 +2867,7 @@ def tri(grid: np.array) -> int:
     return float(tri_val[valid].mean()) * 100
 
 
-def calculate_map_ruggedness(df, gtm):
+def calculate_map_ruggedness(df: pd.DataFrame, gtm: Any) -> str:
     """
     Calculate the Topographic Ruggedness Index (TRI) for a GTM density map.
 
@@ -2995,7 +2995,7 @@ def optimize_gtm(
     agent: Optional[Agent] = None,
     X: Optional[np.ndarray] = None,
     descriptor_column: Optional[str] = None,
-):
+) -> tuple[pd.DataFrame, GTM, float]:
     """
     Optimize GTM hyperparameters and fit the final model.
 

@@ -28,6 +28,24 @@ S3.open("/tmp/data.csv", "r")
 - **Backend Toggle**: Local filesystem by default; S3/MinIO only when `USE_S3=true`
 - **Configuration Fallbacks**: Supports multiple env var names (MINIO_ENDPOINT, S3_ENDPOINT_URL, etc.)
 
+## Workflow-run boundaries
+
+The generic `S3` API accepts session-relative paths and explicitly qualified
+S3 or local paths. V2 workflow execution applies a narrower policy:
+
+- run artifacts remain under `workflows/<run_id>/`;
+- manifest, event, artifact-index, and staging paths are reserved for the
+  runtime;
+- registered artifacts are checksummed and immutable during domain execution;
+- traversal, symlink, hard-link, encoded-path, and foreign-run escapes fail
+  closed; and
+- successful domain writes are published through create-only invocation
+  transactions before registration.
+
+Use a `RunContext` or the MCP workflow facade for run artifacts instead of
+constructing workflow paths manually. See
+[Agentic Runtime v2](agentic-runtime-v2.md) for the full integrity model.
+
 ## Integration Pattern
 
 All file I/O should use the storage abstraction:
