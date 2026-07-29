@@ -129,10 +129,9 @@ The repository also includes a tracked `.modelconf` file. Edit it if you want to
 
 ```bash
 uv sync
-
-# Optional retrosynthesis agent (platform support depends on SynPlanner/CGRtools wheels)
-uv sync --extra synplanner
 ```
+
+SynPlanner and CGRtools are included in the default installation.
 
 </details>
 
@@ -270,7 +269,7 @@ engine; in MCP mode, the external client supervises capability-filtered tools.
 | **Report Generator** | Formats analysis results into reports and visual outputs |
 | **Molecular Designer** | Small-molecule design via autoencoder and LLM engines, including standalone and GTM-guided modes |
 | **Peptide Designer** | Peptide design via WAE and LLM engines, latent-space GTM workflows, and DBAASP-backed peptide activity landscapes |
-| **SynPlanner** | Retrosynthetic planning and route visualization for target molecules (install with `uv sync --extra synplanner`) |
+| **SynPlanner** | Retrosynthetic planning and route visualization for target molecules |
 
 ### Separate Evaluation Agent
 

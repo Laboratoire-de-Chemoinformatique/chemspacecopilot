@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 import types
 from pathlib import Path
 
 import pytest
 
 from cs_copilot.storage import S3
-from cs_copilot.tools.chemistry.synplanner_toolkit import SynPlannerToolkit
+from cs_copilot.tools.chemistry.synplanner_toolkit import (
+    SynPlannerToolkit,
+    _install_cgrtools_miniracer_compatibility,
+)
 from cs_copilot.tools.io.session_memory import (
     register_compounds_from_candidates,
     register_generated_candidate_set,
@@ -205,6 +209,38 @@ def test_toolkit_registration():
 def test_toolkit_name():
     toolkit = SynPlannerToolkit()
     assert toolkit.name == "synplanner"
+
+
+def test_synplanner_is_a_default_project_dependency():
+    root = Path(__file__).resolve().parents[2]
+    project = tomllib.loads((root / "pyproject.toml").read_text())
+    dependencies = project["project"]["dependencies"]
+
+    assert any(item.lower().startswith("synplanner") for item in dependencies)
+    assert any(item.lower().startswith("cgrtools") for item in dependencies)
+    assert "synplanner" not in project["project"].get("optional-dependencies", {})
+
+
+def test_cgrtools_miniracer_compatibility_decodes_javascript_bytes(monkeypatch):
+    modern_module = types.ModuleType("py_mini_racer")
+
+    class FakeJSEvalException(Exception):
+        pass
+
+    class FakeMiniRacer:
+        def eval(self, code, *args, **kwargs):
+            return code
+
+    modern_module.MiniRacer = FakeMiniRacer
+    modern_module.JSEvalException = FakeJSEvalException
+    monkeypatch.setitem(sys.modules, "py_mini_racer", modern_module)
+    monkeypatch.delitem(sys.modules, "py_mini_racer.py_mini_racer", raising=False)
+
+    _install_cgrtools_miniracer_compatibility()
+
+    compatibility_module = sys.modules["py_mini_racer.py_mini_racer"]
+    assert compatibility_module.MiniRacer().eval(b"1 + 1") == "1 + 1"
+    assert compatibility_module.JSEvalException is FakeJSEvalException
 
 
 def test_identify_input_with_valid_smiles():

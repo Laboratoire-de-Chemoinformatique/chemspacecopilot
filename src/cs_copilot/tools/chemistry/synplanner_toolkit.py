@@ -27,6 +27,8 @@ import importlib
 import json
 import logging
 import re
+import sys
+import types
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -45,6 +47,46 @@ from .base_chemistry import BaseChemistryToolkit, InvalidSMILESError
 from .standardize import standardize_smiles
 
 logger = logging.getLogger(__name__)
+
+
+def _install_cgrtools_miniracer_compatibility() -> None:
+    """Expose the legacy MiniRacer API expected by CGRtools.
+
+    ``cgrtools-stable==4.2.13`` imports
+    ``py_mini_racer.py_mini_racer`` and evaluates JavaScript loaded as bytes.
+    Modern ``mini-racer`` releases expose their public API from the package
+    root and accept source text instead. Install a narrow in-process adapter
+    before importing SynPlanner's CGRtools-backed modules.
+    """
+
+    legacy_module_name = "py_mini_racer.py_mini_racer"
+    if legacy_module_name in sys.modules:
+        return
+
+    try:
+        importlib.import_module(legacy_module_name)
+        return
+    except ModuleNotFoundError as exc:
+        if exc.name not in {legacy_module_name, "py_mini_racer"}:
+            raise
+
+    try:
+        modern_module = importlib.import_module("py_mini_racer")
+        modern_mini_racer = modern_module.MiniRacer
+        js_eval_exception = modern_module.JSEvalException
+    except (ImportError, AttributeError):
+        return
+
+    class CGRToolsMiniRacer(modern_mini_racer):
+        def eval(self, code: Any, *args: Any, **kwargs: Any) -> Any:
+            if isinstance(code, (bytes, bytearray, memoryview)):
+                code = bytes(code).decode("utf-8")
+            return super().eval(code, *args, **kwargs)
+
+    compatibility_module = types.ModuleType(legacy_module_name)
+    compatibility_module.MiniRacer = CGRToolsMiniRacer
+    compatibility_module.JSEvalException = js_eval_exception
+    sys.modules[legacy_module_name] = compatibility_module
 
 
 def _session_state_for_outputs(
@@ -191,7 +233,8 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             module = importlib.import_module("synplan")
         except ImportError as exc:  # pragma: no cover - defensive branch
             raise SynPlannerError(
-                "The 'synplanner' package is required. Install it with 'pip install SynPlanner'."
+                "The default SynPlanner dependency is unavailable. "
+                "Reinstall the project with 'uv sync'."
             ) from exc
 
         self._synplanner_module = module
@@ -207,6 +250,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             return
 
         self._import_synplanner()
+        _install_cgrtools_miniracer_compatibility()
 
         # Import required modules
         try:

@@ -33,7 +33,7 @@ The registry exposes nine factory types in three categories.
 | `report_generator` | Produces reports and visual artifacts |
 | `molecular_designer` | Generates small molecules in standalone and GTM-guided modes |
 | `peptide_designer` | Generates peptides and supports latent-space GTM workflows |
-| `synplanner` | Plans and visualizes retrosynthetic routes; requires the optional extra |
+| `synplanner` | Plans and visualizes retrosynthetic routes |
 
 The coordinator also receives a read-only Skills toolkit so it can discover and
 fetch the same reusable procedures available through MCP.

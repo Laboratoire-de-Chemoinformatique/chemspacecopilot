@@ -3,7 +3,7 @@ name: retrosynthesis-planning
 description: Resolve a target molecule, run SynPlanner retrosynthesis, persist route artifacts, and prepare synthesis summaries.
 metadata:
   title: Retrosynthesis planning
-  status: optional_backend
+  status: stable
   version: 2.0.0
   depends_on: []
   profiles:
@@ -57,7 +57,7 @@ Use this skill when the user asks how to synthesize a target molecule, generated
 
 1. Resolve the target molecule from SMILES, name, session memory, or a selected candidate set with `session_resolve_session_reference` when a session reference is involved.
 2. For vague generated-candidate follow-ups such as "plan synthesis for top candidates", resolve the candidate set and pass explicit SMILES to SynPlanner. Do not fall back to an older seed or dataset compound.
-3. Confirm the SynPlanner optional backend is installed before promising route generation.
+3. Confirm the SynPlanner runtime data is available before promising route generation.
 4. Use `synplanner_identify_input` to classify the query. If the target is a name, use `synplanner_convert_name_to_smiles` before planning. If name resolution fails, ask for a SMILES string.
 5. Run `synplanner_plan_synthesis` for the canonical target. The tool may retry documented search profiles when the standard search finds no route.
 6. Summarize the latest plan with `synplanner_describe_plan`, including route count, route depth, building blocks, and failed search profiles if relevant.

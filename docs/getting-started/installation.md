@@ -17,10 +17,11 @@ Optional extras:
 ```bash
 # MCP server for ChatGPT/Codex/Claude-style external clients
 uv sync --extra mcp
-
-# Retrosynthesis agent; requires SynPlanner/CGRtools wheels for your platform
-uv sync --extra synplanner
 ```
+
+SynPlanner and CGRtools are installed by the default `uv sync`. SynPlanner
+downloads its runtime model and chemistry data on first use when no local
+`synplan_data` directory is available.
 
 ## Environment Configuration
 

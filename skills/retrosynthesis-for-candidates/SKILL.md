@@ -3,7 +3,7 @@ name: retrosynthesis-for-candidates
 description: Resolve a candidate or named target, run SynPlanner retrosynthesis, and prepare route artifacts.
 metadata:
   title: Retrosynthesis for candidates
-  status: optional_backend
+  status: stable
   version: 2.0.0
   depends_on:
     - retrosynthesis-planning
@@ -58,7 +58,7 @@ Use this skill when the user wants synthesis routes for a generated candidate, s
 
 1. Resolve the target from the user prompt or session memory with `session_resolve_session_reference` when needed.
 2. For generated-candidate references, resolve the candidate set and pass explicit selected SMILES. Ask for a candidate ID or selection when multiple candidates match.
-3. Check the optional SynPlanner backend before promising route generation.
+3. Check that the SynPlanner runtime data is available before promising route generation.
 4. Classify input with `synplanner_identify_input`; convert names with `synplanner_convert_name_to_smiles` when needed. If conversion fails, ask for SMILES.
 5. Run `synplanner_plan_synthesis` and summarize with `synplanner_describe_plan`.
 6. Save route figures with `synplanner_get_route_visualizations` when the user asks for visual artifacts or report-ready output. Present them in order using `![Route {route_index} - {caption}](png_path)` with index/node_id/score in the caption.
