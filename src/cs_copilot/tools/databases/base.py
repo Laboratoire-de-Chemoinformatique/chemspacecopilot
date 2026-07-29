@@ -205,7 +205,7 @@ class BaseDatabaseToolkit(Toolkit, ABC):
                 # Unknown pagination mode, stop
                 break
 
-    def to_dataframe(self, records: Sequence[DatabaseRecord], normalize: bool = True):
+    def to_dataframe(self, records: Sequence[DatabaseRecord], normalize: bool = True) -> Any:
         """
         Convert records to a pandas DataFrame.
 
