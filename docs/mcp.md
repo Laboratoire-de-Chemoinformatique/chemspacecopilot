@@ -19,8 +19,6 @@ The MCP server lives under `src/cs_copilot/mcp/`. It depends on the official
 
 ```sh
 uv sync --extra mcp
-# Add --extra synplanner only if you need the optional retrosynthesis backend
-# and SynPlanner/CGRtools wheels are available for your platform.
 # or, on a normal pip install
 pip install "cs_copilot[mcp]"
 ```

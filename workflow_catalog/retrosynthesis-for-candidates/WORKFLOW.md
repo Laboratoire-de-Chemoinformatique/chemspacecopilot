@@ -3,7 +3,7 @@ name: retrosynthesis-for-candidates
 description: Resolve a generated candidate or named target and create SynPlanner route artifacts.
 metadata:
   title: Retrosynthesis for candidates
-  status: optional_backend
+  status: stable
   version: 2.0.0
   depends_on: []
   profiles:
@@ -54,7 +54,7 @@ Use this workflow when the user asks how to synthesize a generated candidate, se
 
 1. Resolve the target from session memory or the user prompt.
 2. Use `synplanner_identify_input` and convert names with `synplanner_convert_name_to_smiles` when needed.
-3. Confirm the optional SynPlanner backend is available before promising route generation.
+3. Confirm the SynPlanner runtime data is available before promising route generation.
 4. Run `synplanner_plan_synthesis`, summarize with `synplanner_describe_plan`, and save visualizations with `synplanner_get_route_visualizations` when requested.
 5. If no route is found and an LLM fallback is allowed, label it as not SynPlanner-validated.
 6. Include route artifacts in a report if the user asks for a synthesis summary.

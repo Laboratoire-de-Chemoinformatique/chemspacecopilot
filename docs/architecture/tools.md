@@ -50,18 +50,12 @@ no local database configuration.
 Local SQL deployments are useful for high-volume or offline queries. Database
 connection settings are documented in the installation guide and `.env.example`.
 
-## Optional SynPlanner backend
+## SynPlanner backend
 
-The `SynPlannerToolkit` wrapper is part of the base code, while the external
-SynPlanner/CGRtools stack is optional because wheel availability is
-platform-specific:
-
-```bash
-uv sync --extra synplanner
-```
-
-Without the extra, the backend reports an installation error when invoked; the
-remaining agents, toolkits, and MCP profiles remain usable.
+The `SynPlannerToolkit` wrapper and the external SynPlanner/CGRtools stack are
+installed with the default project dependencies. On first use, SynPlanner
+downloads its runtime model and chemistry data when no local `synplan_data`
+directory is available.
 
 ## Adding a tool
 
