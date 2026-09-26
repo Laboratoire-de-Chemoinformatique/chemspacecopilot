@@ -124,10 +124,32 @@ def _optional_int(value: Any) -> Optional[int]:
         return None
 
 
+def _returned_error(result: Any) -> bool:
+    """Recognize explicit application failures, never free-text chemistry outcomes.
+
+    A valid no-route result is a scientific outcome, not a tool exception. Only
+    top-level machine-readable error contracts are interpreted here.
+    """
+    if isinstance(result, str):
+        try:
+            result = json.loads(result)
+        except (ValueError, TypeError):
+            return False
+    if not isinstance(result, dict):
+        return False
+    status = str(result.get("status") or "").lower()
+    if status in {"no_route", "no_routes", "no_route_found", "not_found"}:
+        return False
+    if status in {"error", "failed", "failure"} or result.get("isError") is True:
+        return True
+    return bool(result.get("error")) and result.get("success") is not True
+
+
 def normalize_agno_output(
     run_output: Any,
     *,
     pricing: Optional[Dict[str, float]] = None,
+    complete: bool = True,
 ) -> Dict[str, Any]:
     """Return aggregate model metrics and structured tool-call records.
 
@@ -148,10 +170,15 @@ def normalize_agno_output(
     tool_records: List[ToolCallRecord] = []
     models: List[Dict[str, Optional[str]]] = []
 
+    metrics_seen = False
+    missing_member_metrics = False
     for output, agent_name in _iter_outputs(run_output):
         metrics = getattr(output, "metrics", None)
+        if hasattr(output, "metrics") and metrics is None:
+            missing_member_metrics = True
         token_total = int(_metric_value(metrics, "total_tokens"))
         if metrics is not None:
+            metrics_seen = True
             totals["input_tokens"] += int(_metric_value(metrics, "input_tokens"))
             totals["output_tokens"] += int(_metric_value(metrics, "output_tokens"))
             totals["total_tokens"] += token_total
@@ -184,7 +211,8 @@ def normalize_agno_output(
                         if tool_metrics is not None
                         else None
                     ),
-                    error=bool(_tool_attr(tool, "tool_call_error", False)),
+                    error=bool(_tool_attr(tool, "tool_call_error", False))
+                    or _returned_error(_tool_attr(tool, "result")),
                     result_preview=result_preview,
                     result_sha256=result_sha256,
                     child_run_id=_tool_attr(tool, "child_run_id"),
@@ -205,17 +233,28 @@ def normalize_agno_output(
     input_rate = float(pricing.get("input_per_million", 0) or 0)
     output_rate = float(pricing.get("output_per_million", 0) or 0)
     estimated_cost = None
-    if input_rate or output_rate:
+    if metrics_seen and (input_rate or output_rate):
         estimated_cost = (
             int(totals["input_tokens"]) * input_rate + int(totals["output_tokens"]) * output_rate
         ) / 1_000_000
 
+    status = "unavailable" if run_output is None else "complete" if complete else "partial"
+    if not metrics_seen:
+        totals = dict.fromkeys(totals)
     return {
         **totals,
-        "llm_duration_seconds": round(float(totals["llm_duration_seconds"]), 6),
+        "telemetry_status": status,
+        "token_metrics_status": (
+            ("partial" if missing_member_metrics else status) if metrics_seen else "unavailable"
+        ),
+        "llm_duration_seconds": (
+            round(float(totals["llm_duration_seconds"]), 6) if metrics_seen else None
+        ),
         "estimated_cost": estimated_cost,
         "models": models,
         "tool_calls": [record.to_dict() for record in tool_records],
-        "tool_call_count": len(tool_records),
-        "failed_tool_call_count": sum(record.error for record in tool_records),
+        "tool_call_count": len(tool_records) if run_output is not None else None,
+        "failed_tool_call_count": (
+            sum(record.error for record in tool_records) if run_output is not None else None
+        ),
     }

@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import signal
 import sys
 import time
@@ -28,6 +29,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Set
 
 # Add project root to path
@@ -251,7 +253,7 @@ class RobustnessRunner:
     def __init__(self, config: RobustnessConfig):
         """Initialize runner with configuration."""
         self.config = config
-        self.test_run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.test_run_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         self.system = getattr(config, "system", "team")
         self.results: Dict[str, Dict] = {}
 
@@ -268,6 +270,7 @@ class RobustnessRunner:
         self._model = None
         self._s3_config = None
         self.reliability_records: List[Dict[str, Any]] = []
+        self._active_session_id: Optional[str] = None
 
         # Use shared S3SessionManager for safe session isolation
         self._s3_session_manager = S3SessionManager()
@@ -367,11 +370,6 @@ class RobustnessRunner:
         from cs_copilot.storage import get_s3_config, is_s3_enabled
 
         if not is_s3_enabled():
-            if self.config.s3_session_isolation:
-                raise RuntimeError(
-                    "S3/MinIO must be enabled for robustness testing with session isolation. "
-                    "Set USE_S3=true and provide endpoint, bucket, and credentials."
-                )
             logger.warning("S3 not enabled - files will be stored locally")
             return None
 
@@ -461,7 +459,9 @@ class RobustnessRunner:
 
         return unique_smiles
 
-    def _collect_state_files(self, session_state: Dict[str, Any]) -> Dict[str, str]:
+    def _collect_state_files(
+        self, session_state: Dict[str, Any], *, resolve_relative: bool = True
+    ) -> Dict[str, str]:
         """Collect nested artifact pointers from structured session state."""
         from cs_copilot.storage import S3
 
@@ -505,7 +505,12 @@ class RobustnessRunner:
             )
             if not looks_like_pointer or value.startswith(("http://", "https://")):
                 return
-            if value.startswith("s3://") or Path(value).is_absolute() or not self._s3_config:
+            if (
+                not resolve_relative
+                or value.startswith("s3://")
+                or Path(value).is_absolute()
+                or not self._s3_config
+            ):
                 files[f"state:{path}"] = value
             else:
                 files[f"state:{path}"] = S3.path(value)
@@ -614,6 +619,8 @@ class RobustnessRunner:
 
         payload = fixture_path.read_bytes()
         expected_hash = os.path.expandvars(str(fixture.get("sha256") or "")).strip()
+        if required and not expected_hash:
+            raise FixtureLoadError("Required fixture must declare its SHA-256 digest")
         if "$" in expected_hash:
             raise FixtureLoadError("Fixture SHA-256 contains an unresolved environment variable")
         actual_hash = hashlib.sha256(payload).hexdigest()
@@ -632,7 +639,102 @@ class RobustnessRunner:
         state = loaded.get("session_state", loaded)
         if not isinstance(state, dict):
             raise FixtureLoadError("Fixture session_state must be a JSON object")
-        return state
+        return self._stage_fixture_state(state, fixture_path.parent)
+
+    def _stage_fixture_state(self, state: Dict[str, Any], fixture_dir: Path) -> Dict[str, Any]:
+        """Give each run private local copies; never expose source files for writing."""
+        session_id = self._active_session_id or f"fixture_{uuid.uuid4().hex}"
+        destination = self.output_dir / "fixture_inputs" / session_id
+        replacements: Dict[str, str] = {}
+        provenance = []
+        from cs_copilot.storage import S3
+
+        for raw_path in set(self._collect_state_files(state, resolve_relative=False).values()):
+            if raw_path.startswith("s3://"):
+                # Download into private local files, preserving the source URI in
+                # provenance. No scientific/model computation is performed here.
+                name = Path(raw_path).name
+                source = None
+            else:
+                source = Path(raw_path.removeprefix("file://")).expanduser()
+                if not source.is_absolute():
+                    source = fixture_dir / source
+                if not source.is_file() and not source.is_dir():
+                    raise FixtureLoadError(
+                        f"Fixture artifact is not a readable file or directory: {source}"
+                    )
+                name = source.name
+            key = hashlib.sha256(raw_path.encode()).hexdigest()[:16]
+            target = destination / key / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if source is None:
+                with S3.open(raw_path, "rb") as incoming, target.open("wb") as outgoing:
+                    shutil.copyfileobj(incoming, outgoing)
+            elif source.is_dir():
+                shutil.copytree(source, target)
+            else:
+                shutil.copyfile(source, target)
+            digest = self._file_sha256(target)
+            replacements[raw_path] = str(target.resolve())
+            provenance.append(
+                {"source": raw_path, "staged_path": str(target.resolve()), "sha256": digest}
+            )
+
+        def replace(value: Any) -> Any:
+            if isinstance(value, dict):
+                return {key: replace(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [replace(item) for item in value]
+            return replacements.get(value, value) if isinstance(value, str) else value
+
+        if provenance:
+            (destination / "manifest.json").write_text(json.dumps(provenance, indent=2))
+        return replace(state)
+
+    @staticmethod
+    def _file_sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        paths = (
+            sorted(item for item in path.rglob("*") if item.is_file()) if path.is_dir() else [path]
+        )
+        for item in paths:
+            if path.is_dir():
+                digest.update(str(item.relative_to(path)).encode() + b"\0")
+            with item.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        return digest.hexdigest()
+
+    def _artifact_baseline(self, state: Dict[str, Any]) -> Dict[str, str]:
+        baseline = {}
+        for path in self._collect_state_files(state).values():
+            candidate = Path(path)
+            if candidate.is_file() or candidate.is_dir():
+                baseline[path] = self._file_sha256(candidate)
+        return baseline
+
+    @staticmethod
+    def _partial_output(error: BaseException) -> Any:
+        """Recover only outputs belonging to the failed call's traceback.
+
+        Agno 2.1 keeps in-flight RunOutputs in local run_response variables.
+        Reading an agent's last stored output instead would reuse a previous
+        successful chain stage. When no current output is exposed, usage is null.
+        """
+        outputs = []
+        seen = set()
+        traceback = error.__traceback__
+        while traceback is not None:
+            candidate = traceback.tb_frame.f_locals.get("run_response")
+            if (
+                candidate is not None
+                and id(candidate) not in seen
+                and (hasattr(candidate, "tools") or hasattr(candidate, "metrics"))
+            ):
+                seen.add(id(candidate))
+                outputs.append(candidate)
+            traceback = traceback.tb_next
+        return SimpleNamespace(member_responses=outputs) if outputs else None
 
     def _apply_fixture(self, agent: Any, fixture: Dict[str, Any]) -> None:
         fixture_state = self._load_fixture_state(fixture)
@@ -739,18 +841,30 @@ class RobustnessRunner:
         tier: str,
         started_at: datetime,
         started_timer: float,
+        agent: Any = None,
+        partial_output: Any = None,
+        telemetry_complete: bool = False,
+        initial_session_state: Optional[Dict[str, Any]] = None,
+        artifact_baseline: Optional[Dict[str, str]] = None,
+        artifact_baseline_mtime_ns: Optional[Dict[str, int]] = None,
     ) -> Dict[str, Any]:
         finished_at = datetime.now(timezone.utc)
+        state = self._snapshot_session_state(agent) if agent is not None else {}
+        response = str(getattr(partial_output, "content", "") or "")
+        files = self._collect_state_files(state)
         output: Dict[str, Any] = {
             "run_id": run_id,
             "prompt": prompt,
             "session_id": session_id,
-            "response": "",
-            "response_truncated": "",
-            "session_state_keys": [],
-            "session_state": {},
-            "generated_files": {},
-            "s3_files": {},
+            "response": response,
+            "response_truncated": response[:1000],
+            "session_state_keys": list(state),
+            "session_state": state,
+            "initial_session_state": initial_session_state or {},
+            "artifact_baseline": artifact_baseline or {},
+            "artifact_baseline_mtime_ns": artifact_baseline_mtime_ns or {},
+            "generated_files": files,
+            "s3_files": {key: value for key, value in files.items() if value.startswith("s3://")},
             "smiles_generated": [],
             "n_molecules": 0,
             "status": status,
@@ -765,7 +879,9 @@ class RobustnessRunner:
             "finished_at": finished_at.isoformat(),
             "wall_time_seconds": max(0.0, time.perf_counter() - started_timer),
             "timestamp": finished_at.isoformat(),
-            "telemetry": normalize_agno_output(None, pricing=self.config.pricing),
+            "telemetry": normalize_agno_output(
+                partial_output, pricing=self.config.pricing, complete=telemetry_complete
+            ),
         }
         output["validation"] = evaluate_run(validator_name, output)
         return output
@@ -797,7 +913,7 @@ class RobustnessRunner:
         # S3 prefix is now handled by context manager in run_test()
         # No need to set it here
 
-        session_id = (
+        session_id = self._active_session_id or (
             f"robustness_{self.test_run_id}_{test_name}_run{run_id}_" f"{uuid.uuid4().hex[:8]}"
         )
         started_at = datetime.now(timezone.utc)
@@ -806,6 +922,10 @@ class RobustnessRunner:
         logger.info(f"Running {test_name} variation {run_id + 1}")
         logger.debug(f"Session ID: {session_id}")
         logger.debug(f"Prompt: {prompt[:100]}...")
+        result = None
+        initial_session_state: Dict[str, Any] = {}
+        artifact_baseline: Dict[str, str] = {}
+        artifact_baseline_mtime_ns: Dict[str, int] = {}
 
         try:
             self._validate_required_files(required_files or [])
@@ -817,6 +937,16 @@ class RobustnessRunner:
                 agent = self._build_system()
                 self._apply_fixture_state(agent, fixture_state)
 
+            # Agno uses its instance session_id when run() is not overridden.
+            # The same ID is retained across stages in one sequential workflow.
+            agent.session_id = session_id
+            initial_session_state = self._snapshot_session_state(agent)
+            artifact_baseline = self._artifact_baseline(initial_session_state)
+            artifact_baseline_mtime_ns = {
+                path: Path(path).stat().st_mtime_ns
+                for path in artifact_baseline
+                if Path(path).is_file()
+            }
             # Run the agent
             started_at = datetime.now(timezone.utc)
             started_timer = time.perf_counter()
@@ -864,6 +994,9 @@ class RobustnessRunner:
                 ),
                 "session_state_keys": list(session_state_snapshot.keys()),
                 "session_state": session_state_snapshot,
+                "initial_session_state": initial_session_state,
+                "artifact_baseline": artifact_baseline,
+                "artifact_baseline_mtime_ns": artifact_baseline_mtime_ns,
                 "generated_files": generated_files,
                 "s3_files": s3_files,
                 "smiles_generated": smiles_generated,
@@ -885,7 +1018,7 @@ class RobustnessRunner:
             output["validation"] = evaluate_run(validator_name, output)
             return output
 
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as e:
             logger.warning(f"Run {run_id + 1} interrupted")
             return self._failure_output(
                 prompt=prompt,
@@ -901,6 +1034,12 @@ class RobustnessRunner:
                 tier=tier,
                 started_at=started_at,
                 started_timer=started_timer,
+                agent=agent,
+                partial_output=result if result is not None else self._partial_output(e),
+                telemetry_complete=result is not None,
+                initial_session_state=initial_session_state,
+                artifact_baseline=artifact_baseline,
+                artifact_baseline_mtime_ns=artifact_baseline_mtime_ns,
             )
 
         except ReliabilityTimeoutError as e:
@@ -919,6 +1058,12 @@ class RobustnessRunner:
                 tier=tier,
                 started_at=started_at,
                 started_timer=started_timer,
+                agent=agent,
+                partial_output=result if result is not None else self._partial_output(e),
+                telemetry_complete=result is not None,
+                initial_session_state=initial_session_state,
+                artifact_baseline=artifact_baseline,
+                artifact_baseline_mtime_ns=artifact_baseline_mtime_ns,
             )
 
         except Exception as e:
@@ -942,6 +1087,12 @@ class RobustnessRunner:
                 tier=tier,
                 started_at=started_at,
                 started_timer=started_timer,
+                agent=agent,
+                partial_output=result if result is not None else self._partial_output(e),
+                telemetry_complete=result is not None,
+                initial_session_state=initial_session_state,
+                artifact_baseline=artifact_baseline,
+                artifact_baseline_mtime_ns=artifact_baseline_mtime_ns,
             )
 
     def _compare_outputs(self, outputs: List[Dict], test_name: str) -> Dict:
@@ -1044,7 +1195,14 @@ class RobustnessRunner:
             metadata = {
                 k: v
                 for k, v in output.items()
-                if k not in ["prompt", "response", "response_object", "session_state"]
+                if k
+                not in [
+                    "prompt",
+                    "response",
+                    "response_object",
+                    "session_state",
+                    "initial_session_state",
+                ]
             }
             (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2, default=str))
 
@@ -1084,16 +1242,18 @@ class RobustnessRunner:
             wall_time_seconds=float(output.get("wall_time_seconds") or 0),
             model_provider=first_model.get("model_provider") or self.config.model_provider,
             model_id=first_model.get("model_id") or self.config.model_id,
-            input_tokens=int(telemetry.get("input_tokens") or 0),
-            output_tokens=int(telemetry.get("output_tokens") or 0),
-            total_tokens=int(telemetry.get("total_tokens") or 0),
-            reasoning_tokens=int(telemetry.get("reasoning_tokens") or 0),
-            cache_read_tokens=int(telemetry.get("cache_read_tokens") or 0),
-            cache_write_tokens=int(telemetry.get("cache_write_tokens") or 0),
+            input_tokens=telemetry.get("input_tokens"),
+            output_tokens=telemetry.get("output_tokens"),
+            total_tokens=telemetry.get("total_tokens"),
+            reasoning_tokens=telemetry.get("reasoning_tokens"),
+            cache_read_tokens=telemetry.get("cache_read_tokens"),
+            cache_write_tokens=telemetry.get("cache_write_tokens"),
             llm_duration_seconds=telemetry.get("llm_duration_seconds"),
             estimated_cost=telemetry.get("estimated_cost"),
-            tool_call_count=int(telemetry.get("tool_call_count") or 0),
-            failed_tool_call_count=int(telemetry.get("failed_tool_call_count") or 0),
+            tool_call_count=telemetry.get("tool_call_count"),
+            failed_tool_call_count=telemetry.get("failed_tool_call_count"),
+            telemetry_status=telemetry.get("telemetry_status", "unavailable"),
+            token_metrics_status=telemetry.get("token_metrics_status", "unavailable"),
             tool_calls=telemetry.get("tool_calls") or [],
             validations=validation.get("checks") or [],
             failure_categories=validation.get("failure_categories") or [],
@@ -1105,16 +1265,21 @@ class RobustnessRunner:
 
     @contextmanager
     def _isolated_session(self, *, prompt_idx: int, repetition: int):
-        if self._s3_config and self.config.s3_session_isolation:
-            with self._s3_session_manager.create_isolated_session(
-                test_run_id=self.test_run_id,
-                prompt_idx=prompt_idx,
-                variation_idx=repetition,
-            ) as session_id:
-                logger.debug(f"Created isolated S3 session: {session_id}")
-                yield session_id
-        else:
-            yield None
+        """Isolate local and S3 writes, including fixture staging, in every arm."""
+        from cs_copilot.storage import S3
+
+        original_prefix = S3.prefix
+        original_session_id = self._active_session_id
+        session_id = self._s3_session_manager.create_session_id(
+            f"{self.test_run_id}_{self.system}", prompt_idx, repetition
+        )
+        self._active_session_id = session_id
+        S3.prefix = f"sessions/{session_id}"
+        try:
+            yield session_id
+        finally:
+            S3.prefix = original_prefix
+            self._active_session_id = original_session_id
 
     def _run_independent_test(
         self,
@@ -1148,11 +1313,7 @@ class RobustnessRunner:
         outputs: List[Dict[str, Any]] = []
         run_id = 0
         for repetition in range(self.config.repetitions):
-            with self._isolated_session(prompt_idx=0, repetition=repetition):
-                chain_session_id = (
-                    f"robustness_{self.test_run_id}_{test_config.name}_chain{repetition}_"
-                    f"{uuid.uuid4().hex[:8]}"
-                )
+            with self._isolated_session(prompt_idx=0, repetition=repetition) as chain_session_id:
                 agent = None
                 preparation_error = None
                 try:

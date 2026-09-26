@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
-RELIABILITY_SCHEMA_VERSION = "1.0"
+RELIABILITY_SCHEMA_VERSION = "1.1"
 
 
 @dataclass
@@ -62,16 +62,18 @@ class ReliabilityRunRecord:
     wall_time_seconds: float
     model_provider: Optional[str] = None
     model_id: Optional[str] = None
-    input_tokens: int = 0
-    output_tokens: int = 0
-    total_tokens: int = 0
-    reasoning_tokens: int = 0
-    cache_read_tokens: int = 0
-    cache_write_tokens: int = 0
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    reasoning_tokens: Optional[int] = None
+    cache_read_tokens: Optional[int] = None
+    cache_write_tokens: Optional[int] = None
     llm_duration_seconds: Optional[float] = None
     estimated_cost: Optional[float] = None
-    tool_call_count: int = 0
-    failed_tool_call_count: int = 0
+    tool_call_count: Optional[int] = None
+    failed_tool_call_count: Optional[int] = None
+    telemetry_status: str = "unavailable"
+    token_metrics_status: str = "unavailable"
     tool_calls: List[Dict[str, Any]] = field(default_factory=list)
     validations: List[Dict[str, Any]] = field(default_factory=list)
     failure_categories: List[str] = field(default_factory=list)

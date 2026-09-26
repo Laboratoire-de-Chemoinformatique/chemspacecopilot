@@ -81,15 +81,19 @@ def _repeatability(records: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
                 if isinstance(call, dict)
             )
             for record in group
+            if record.get("telemetry_status", "complete") == "complete"
         ]
-        most_common_sequence = Counter(sequences).most_common(1)[0][1]
+        most_common_sequence = Counter(sequences).most_common(1)[0][1] if sequences else 0
         group_results.append(
             {
                 "case_name": case_name,
                 "prompt_variant": prompt_variant,
                 "repetitions": len(group),
                 "task_outcome_agreement": max(successes, len(group) - successes) / len(group),
-                "exact_tool_sequence_agreement": most_common_sequence / len(group),
+                "exact_tool_sequence_agreement": (
+                    most_common_sequence / len(sequences) if len(sequences) >= 2 else None
+                ),
+                "complete_tool_sequence_runs": len(sequences),
             }
         )
 
@@ -109,8 +113,22 @@ def summarize_records(records: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     total = len(records)
     successful = sum(bool(record.get("task_success")) for record in records)
     low, high = wilson_interval(successful, total)
+    complete_tools = [
+        record
+        for record in records
+        if record.get("telemetry_status", "complete") == "complete"
+        and record.get("tool_call_count") is not None
+    ]
+    complete_tokens = [
+        record
+        for record in records
+        if record.get("token_metrics_status", "complete") == "complete"
+        and record.get("total_tokens") is not None
+    ]
     total_tools = sum(int(record.get("tool_call_count") or 0) for record in records)
     failed_tools = sum(int(record.get("failed_tool_call_count") or 0) for record in records)
+    all_tools_known = bool(records) and len(complete_tools) == total
+    all_tokens_known = bool(records) and len(complete_tokens) == total
     cost_values = [
         float(record["estimated_cost"])
         for record in records
@@ -141,9 +159,18 @@ def summarize_records(records: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         "successful": successful,
         "success_rate": successful / total if total else 0,
         "wilson_95": [low, high],
-        "tool_calls": total_tools,
-        "failed_tool_calls": failed_tools,
-        "failed_tool_calls_per_100": failed_tools / total_tools * 100 if total_tools else 0,
+        "tool_calls": total_tools if all_tools_known else None,
+        "failed_tool_calls": failed_tools if all_tools_known else None,
+        "failed_tool_calls_per_100": (
+            (failed_tools / total_tools * 100 if total_tools else 0) if all_tools_known else None
+        ),
+        "observed_tool_calls": total_tools,
+        "observed_failed_tool_calls": failed_tools,
+        "tool_metrics_complete_runs": len(complete_tools),
+        "token_metrics_complete_runs": len(complete_tokens),
+        "telemetry_statuses": dict(
+            Counter(record.get("telemetry_status", "complete") for record in records)
+        ),
         "incorrect_tool_selection_runs": categories.get("incorrect_tool_selection", 0),
         "incorrect_tool_selection_runs_per_100": (
             categories.get("incorrect_tool_selection", 0) / total * 100 if total else 0
@@ -154,12 +181,24 @@ def summarize_records(records: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         "wall_time_seconds_total": sum(
             float(record.get("wall_time_seconds") or 0) for record in records
         ),
-        "total_tokens_sum": sum(int(record.get("total_tokens") or 0) for record in records),
-        "estimated_cost_total": sum(cost_values) if cost_values else None,
+        "total_tokens_sum": (
+            sum(int(record["total_tokens"]) for record in complete_tokens)
+            if all_tokens_known
+            else None
+        ),
+        "observed_total_tokens_sum": sum(
+            int(record.get("total_tokens") or 0) for record in records
+        ),
+        "estimated_cost_total": (
+            sum(cost_values) if all_tokens_known and len(cost_values) == total else None
+        ),
+        "observed_estimated_cost_total": sum(cost_values) if cost_values else None,
         "wall_time_seconds": _distribution(record.get("wall_time_seconds") for record in records),
-        "total_tokens": _distribution(record.get("total_tokens") for record in records),
-        "tool_calls_per_run": _distribution(record.get("tool_call_count") for record in records),
-        "estimated_cost": _distribution(record.get("estimated_cost") for record in records),
+        "total_tokens": _distribution(record.get("total_tokens") for record in complete_tokens),
+        "tool_calls_per_run": _distribution(
+            record.get("tool_call_count") for record in complete_tools
+        ),
+        "estimated_cost": _distribution(record.get("estimated_cost") for record in complete_tokens),
         "failure_categories": dict(categories),
         "by_case": by_case,
         "repeatability": _repeatability(records),
@@ -531,6 +570,9 @@ def build_environment_manifest(
                 "rdkit",
                 "torch",
                 "optuna",
+                "SynPlanner",
+                "deepchemography",
+                "huggingface-hub",
             )
         ),
     }
@@ -549,15 +591,18 @@ def _markdown_report(summary: Mapping[str, Any]) -> str:
         f"| Successful | {summary.get('successful', 0)} |",
         f"| Success rate | {summary.get('success_rate', 0):.1%} |",
         f"| Wilson 95% CI | {interval[0]:.1%}–{interval[1]:.1%} |",
-        f"| Tool calls | {summary.get('tool_calls', 0)} |",
-        f"| Failed tool calls | {summary.get('failed_tool_calls', 0)} |",
-        ("| Failed tool calls per 100 | " f"{summary.get('failed_tool_calls_per_100', 0):.2f} |"),
+        f"| Tool calls | {_format_optional(summary.get('tool_calls'), 0)} |",
+        f"| Failed tool calls | {_format_optional(summary.get('failed_tool_calls'), 0)} |",
+        (
+            "| Failed tool calls per 100 | "
+            f"{_format_optional(summary.get('failed_tool_calls_per_100'), 2)} |"
+        ),
         (
             "| Runs with incorrect tool selection per 100 | "
             f"{summary.get('incorrect_tool_selection_runs_per_100', 0):.2f} |"
         ),
         f"| Total wall time (s) | {summary.get('wall_time_seconds_total', 0):.3f} |",
-        f"| Total tokens | {summary.get('total_tokens_sum', 0)} |",
+        f"| Total tokens | {_format_optional(summary.get('total_tokens_sum'), 0)} |",
         "",
         "## Results by case",
         "",
@@ -578,7 +623,18 @@ def _markdown_report(summary: Mapping[str, Any]) -> str:
             f"{case_interval[0]:.1%}–{case_interval[1]:.1%} |"
         )
 
-    lines.extend(["", "## Runtime and usage", ""])
+    lines.extend(
+        [
+            "",
+            "## Runtime and usage",
+            "",
+            f"Complete tool telemetry: {summary.get('tool_metrics_complete_runs', 0)}/{summary.get('runs', 0)} runs; "
+            f"complete token usage: {summary.get('token_metrics_complete_runs', 0)}/{summary.get('runs', 0)} runs.",
+            "Incomplete usage is excluded from full-run usage distributions. Observed partial usage "
+            "is retained in JSON; missing usage is never interpreted as zero.",
+            "",
+        ]
+    )
     for label, key in (
         ("Wall time (s)", "wall_time_seconds"),
         ("Total tokens", "total_tokens"),
@@ -614,6 +670,10 @@ def _markdown_report(summary: Mapping[str, Any]) -> str:
         for category, count in sorted(categories.items(), key=lambda item: (-item[1], item[0])):
             lines.append(f"- {category}: {count}")
     return "\n".join(lines) + "\n"
+
+
+def _format_optional(value: Any, digits: int = 2) -> str:
+    return "unavailable" if value is None else f"{float(value):.{digits}f}"
 
 
 def _format_distribution(summary: Mapping[str, Any], key: str, digits: int = 2) -> str:
@@ -675,7 +735,7 @@ def _markdown_system_comparison(comparison: Mapping[str, Any]) -> str:
             f"{_format_distribution(summary, 'wall_time_seconds')} | "
             f"{_format_distribution(summary, 'total_tokens', digits=0)} | "
             f"{_format_distribution(summary, 'tool_calls_per_run')} | "
-            f"{summary.get('failed_tool_calls_per_100', 0):.2f} | "
+            f"{_format_optional(summary.get('failed_tool_calls_per_100'), 2)} | "
             f"{summary.get('incorrect_tool_selection_runs_per_100', 0):.2f} | "
             f"{_format_distribution(summary, 'estimated_cost', digits=6)} |"
         )
@@ -787,6 +847,19 @@ def _markdown_system_comparison(comparison: Mapping[str, Any]) -> str:
                 f"{summary.get('overall_rating', 'N/A')} |"
             )
 
+    for arm in arms:
+        summary = per_arm[arm]
+        lines.extend(
+            [
+                "",
+                f"{arm} telemetry coverage: "
+                f"{summary.get('tool_metrics_complete_runs', 0)}/{summary.get('runs', 0)} complete tool traces; "
+                f"{summary.get('token_metrics_complete_runs', 0)}/{summary.get('runs', 0)} complete token records.",
+            ]
+        )
+    lines.append(
+        "Usage distributions exclude partial/unavailable records; partial observations remain in the raw JSONL."
+    )
     warnings = list(comparison.get("warnings") or [])
     if warnings:
         lines.extend(["", "## Pairing warnings", ""])

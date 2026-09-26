@@ -195,7 +195,9 @@ def test_molecular_validator_requires_real_candidates_and_seed_provenance():
         {
             "count_returned": 2,
             "compound_ids": ["cmp_001", "cmp_002"],
-            "seed_smiles": "CCO",
+            "seed_smiles": "CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1",
+            "seed_compound_id": "CHEMBL3327073",
+            "candidates": [{"smiles": "CCO"}, {"smiles": "CCN"}],
         }
     )
     passed = evaluate_run("molecular_generation", output)
@@ -206,7 +208,7 @@ def test_retrosynthesis_no_route_is_a_valid_reported_outcome():
     state = {
         "synplanner_plan": {
             "smiles": "CCO",
-            "attempts": [{"max_iterations": 100}],
+            "attempts": [{"max_iterations": 100, "stop_reason": "no_routes", "route_count": 0}],
             "routes": [],
         },
         "session_objects": {"routes": {}},
