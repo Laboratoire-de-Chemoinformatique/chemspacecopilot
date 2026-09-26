@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "retrieved_on": "2026-09-26",
+  "purpose": "Pinned public inputs for prospective reviewer-revision studies; not a reconstruction of historical manuscript inputs.",
+  "original_zenodo_archive": "unresolved",
+  "manuscript_pdf": "publisher access returned HTTP403; only incomplete author-uploaded search excerpts recovered",
+  "source_revisions": {
+    "deepchemography": "9822f5c2b70a1ff5428210589fb1cdf8b1ab100f",
+    "moses": "dd7ed6ab38e23afd3ef5371d67939a1760bd8599",
+    "peptide_designer_data": "d81356051db9e1f96e16531b78096ebb0bd7a66d"
+  },
+  "assets": [
+    {
+      "path": "reports/reviewer_revision/scientific_inputs/author_gtm_frameset.csv",
+      "source_url": "https://raw.githubusercontent.com/AxelRolov/deepchemography/9822f5c2b70a1ff5428210589fb1cdf8b1ab100f/data/gtm_frameset_training.csv",
+      "bytes": 2144038,
+      "sha256": "60f43a73e072260e161714d52d8a63367ad6a8200b1d3ecd0d11603ac96d314c",
+      "retrieved_utc": "2026-09-26T16:05:54.639091+00:00",
+      "role": "author_gtm_reference_subset"
+    },
+    {
+      "path": "reports/reviewer_revision/scientific_inputs/moses_train_pointer.txt",
+      "source_url": "https://raw.githubusercontent.com/molecularsets/moses/dd7ed6ab38e23afd3ef5371d67939a1760bd8599/data/train.csv",
+      "bytes": 133,
+      "sha256": "390dbc922906a9d036752a13924443f8ed35f155812f0d7e70de8ce245714d7a",
+      "retrieved_utc": "2026-09-26T16:05:54.314987+00:00",
+      "role": "source_provenance_or_metadata"
+    },
+    {
+      "path": "reports/reviewer_revision/scientific_inputs/moses_README.md",
+      "source_url": "https://raw.githubusercontent.com/molecularsets/moses/dd7ed6ab38e23afd3ef5371d67939a1760bd8599/README.md",
+      "bytes": 13994,
+      "sha256": "b0c1af6e4d83cc2e907bdfced9d69a695210266d3a25e3188d78a6c031e1172a",
+      "retrieved_utc": "2026-09-26T16:05:54.309677+00:00",
+      "role": "source_provenance_or_metadata"
+    },
+    {
+      "path": "reports/reviewer_revision/scientific_inputs/peptide_landscape/landscape.json",
+      "source_url": "https://huggingface.co/datasets/axelrolov/peptide_designer_data/resolve/d81356051db9e1f96e16531b78096ebb0bd7a66d/landscapes/dbaasp_amp_v1/landscape.json",
+      "bytes": 12966,
+      "sha256": "ecc6077f9f6b7a4065ea5875c37bf88bceb2310d4fdc69c5d2a38fd485d2b2f1",
+      "retrieved_utc": "2026-09-26T16:05:54.196969+00:00",
+      "role": "source_provenance_or_metadata"
+    },
+    {
+      "path": "reports/reviewer_revision/scientific_inputs/peptide_landscape/sampler.json",
+      "source_url": "https://huggingface.co/datasets/axelrolov/peptide_designer_data/resolve/d81356051db9e1f96e16531b78096ebb0bd7a66d/landscapes/dbaasp_amp_v1/sampler.json",
+      "bytes": 425,
+      "sha256": "76f3014f77c1c9dab1824bcaeeacf9ce09d1a609128d608589afd2d2e91b47a5",
+      "retrieved_utc": "2026-09-26T16:05:54.386331+00:00",
+      "role": "source_provenance_or_metadata"
+    },
+    {
+      "path": "reports/reviewer_revision/scientific_inputs/peptide_landscape/nodes.parquet",
+      "source_url": "https://huggingface.co/datasets/axelrolov/peptide_designer_data/resolve/d81356051db9e1f96e16531b78096ebb0bd7a66d/landscapes/dbaasp_amp_v1/nodes.parquet",
+      "bytes": 270064,
+      "sha256": "037a39c188b92cbfb5b2c748bfbda3c448ddb049c7ea5ef9e6ef6a3d15c891c0",
+      "retrieved_utc": "2026-09-26T16:05:55.292096+00:00",
+      "role": "aggregate_landscape_not_raw_peptide_records"
+    },
+    {
+      "path": "reports/reviewer_revision/scientific_inputs/peptide_landscape/landscape.safetensors",
+      "source_url": "https://huggingface.co/datasets/axelrolov/peptide_designer_data/resolve/d81356051db9e1f96e16531b78096ebb0bd7a66d/landscapes/dbaasp_amp_v1/landscape.safetensors",
+      "bytes": 597356,
+      "sha256": "16ad29652c5adc95bf0d90e92659337d13349bd2a2cc5b68e414a65031587c40",
+      "retrieved_utc": "2026-09-26T16:05:55.546886+00:00",
+      "role": "aggregate_landscape_not_raw_peptide_records"
+    },
+    {
+      "path": "reports/reviewer_revision/scientific_inputs/peptide_landscape/runtime/gtm.pkl.gz",
+      "source_url": "https://huggingface.co/datasets/axelrolov/peptide_designer_data/resolve/d81356051db9e1f96e16531b78096ebb0bd7a66d/landscapes/dbaasp_amp_v1/runtime/gtm.pkl.gz",
+      "bytes": 1192752,
+      "sha256": "3cb7d70289e5b831af16795e10b24aac32e64fe392222a4172351ac013c92120",
+      "retrieved_utc": "2026-09-26T16:05:55.481190+00:00",
+      "role": "runtime_artifact_not_deserialized"
+    },
+    {
+      "path": "reports/reviewer_revision/scientific_inputs/moses_train.csv",
+      "source_url": "https://media.githubusercontent.com/media/molecularsets/moses/dd7ed6ab38e23afd3ef5371d67939a1760bd8599/data/train.csv",
+      "bytes": 67916778,
+      "sha256": "49fe1aae29604ec0f5023ea34edc8789415f954138f2903dabd005a4b888a961",
+      "retrieved_utc": "2026-09-26T16:06:42.493545+00:00",
+      "role": "official_external_reference_not_confirmed_checkpoint_training_data"
+    },
+    {
+      "path": "reports/reviewer_revision/scientific_inputs/author_autoencoder_v1_config.pt",
+      "source_url": "https://raw.githubusercontent.com/AxelRolov/deepchemography/9822f5c2b70a1ff5428210589fb1cdf8b1ab100f/models/autoencoder_v1/config.pt",
+      "bytes": 1895,
+      "sha256": "e69768094a24d2cc7bdcd7f4c7b0ee5914b5558324db888e64768d80dd74751b",
+      "retrieved_utc": "2026-09-26T16:06:39.033250+00:00",
+      "role": "source_provenance_or_metadata"
+    },
+    {
+      "path": "reports/reviewer_revision/scientific_inputs/author_export_peptide_landscape_bundle.py",
+      "source_url": "https://raw.githubusercontent.com/AxelRolov/deepchemography/9822f5c2b70a1ff5428210589fb1cdf8b1ab100f/scripts/export_peptide_landscape_bundle.py",
+      "bytes": 24908,
+      "sha256": "5b7f88d458faac3cbc0245954d05736038577cf1d7cbfbd52d323b770d5f58c1",
+      "retrieved_utc": "2026-09-26T16:06:39.050459+00:00",
+      "role": "source_provenance_or_metadata"
+    }
+  ],
+  "membership_check": {
+    "method": "Exact case-sensitive SMILES string set membership; no chemical standardization or stereochemistry removal. This does not prove a checkpoint training split.",
+    "author_frameset": {
+      "rows": 50000,
+      "unique_smiles_strings": 50000,
+      "split_counts": {
+        "train": 50000
+      }
+    },
+    "official_moses_train": {
+      "rows": 1584663,
+      "unique_smiles_strings": 1584663,
+      "columns": [
+        "SMILES",
+        "SPLIT"
+      ],
+      "split_counts": {
+        "train": 1584663
+      }
+    },
+    "frameset_strings_found_in_moses_train": 50000,
+    "frameset_strings_not_found_in_moses_train": 0
+  },
+  "training_membership_confirmed": false,
+  "raw_dbaasp_records_in_bundle": false
+}
