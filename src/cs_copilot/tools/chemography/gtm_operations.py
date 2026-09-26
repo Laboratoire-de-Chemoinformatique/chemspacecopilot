@@ -2944,7 +2944,7 @@ def gtm_param_grid(n_samples: int, mode: str = "extended") -> dict:
 
     Args:
         n_samples: Number of molecules in the dataset.
-        mode: ``"heuristic"`` (compact, 9 combos) or ``"extended"`` (~108 combos).
+        mode: ``"heuristic"`` (compact, 9 combos) or ``"extended"`` (up to 144 combos).
 
     Returns:
         Dict with keys ``nodes``, ``basis_functions``, ``basis_width_factor``,
@@ -3003,7 +3003,7 @@ def optimize_gtm(
         df: DataFrame containing SMILES column
         smiles_column: Name of the column containing SMILES (default: 'smi')
         strategy: Optimization effort level — ``"low"`` (heuristic grid, 9 combos),
-            ``"medium"`` (extended grid, ~108 combos), or ``"high"`` (Optuna TPE, 50 trials).
+            ``"medium"`` (extended grid, up to 144 combos), or ``"high"`` (Optuna TPE, 50 trials).
 
     Returns:
         tuple: (df with descriptors, fitted GTM model, best score)
@@ -3089,7 +3089,7 @@ def optimize_gtm(
 
     def shannon_entropy(responsibilities: np.ndarray) -> float:
         """
-        Compute the Shannon entropy (in percent) of a GTM landscape.
+        Compute normalized node-occupancy entropy on the interval [0, 1].
         """
         cumR = responsibilities.sum(axis=0)
         p = cumR / cumR.sum()

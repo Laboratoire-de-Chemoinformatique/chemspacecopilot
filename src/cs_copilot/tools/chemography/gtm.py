@@ -359,7 +359,7 @@ class GTMToolkit(BaseDRToolkit):
             agent: The agent whose session_state dict will be updated
             strategy: Optimization effort level. One of:
                 - "low": Heuristic grid search (9 combinations, fastest)
-                - "medium": Extended grid search (up to ~108 combinations, balanced)
+                - "medium": Extended grid search (up to 144 combinations, balanced)
                 - "high": Optuna TPE with 50 trials (thorough, slowest)
 
         Returns:
