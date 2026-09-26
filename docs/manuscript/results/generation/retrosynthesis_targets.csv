@@ -1,0 +1,11 @@
+target_id,smiles
+generated_001,CCC(C)C(=O)N1CCC(C)C(NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2)CC1
+generated_002,CCC(C)C(=O)N1CCOC(F)C(NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2)CC1
+generated_003,CCC(C)C(=O)C1CCC(=O)CC(C(=O)Nc2ccc(F)c(C(F)(F)C(F)(F)F)c2)CN1
+generated_004,CCC(C)C(=O)N1CCC(NC(=O)N=C2C=CC(CC)C(F)(C(F)F)C(C(F)(F)F)=C2)C1
+generated_005,CCC(C)C(=O)N1CCOC(=O)C(NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2)CC1
+generated_006,CCC(C)C(=O)N1CCC(O)CC(NC(=O)Nc2ccc(C(C)(F)C(F)(F)F)c(F)c2)CC1
+generated_007,CCC(C)C(=O)N1CCCC(NC(=O)Nc2ccc(F)c(C(F)(F)C(F)(F)F)c2)CC1
+generated_008,CCC(C)C(=O)N1CCCC(NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2)CC1
+generated_009,CCC(C)C(=O)N1CCC(O)C(NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2)CC1
+generated_010,CCC(C)C(=O)N1CCC(NC(=O)N=C2C=CC(C(=O)O)C(F)(C(F)(F)F)C(F)=C2)CC1
