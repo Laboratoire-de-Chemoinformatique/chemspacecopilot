@@ -22,7 +22,14 @@ Each JSON file may be either the session-state object itself or:
 }
 ```
 
-Use absolute artifact paths or stable S3 URIs. Do not store API keys, credentials,
+Use absolute artifact paths, local paths relative to the snapshot JSON directory,
+or stable S3 URIs. Referenced files and local directories are copied into private
+per-run inputs; the runner saves their source paths and copied SHA-256 hashes in
+`fixture_inputs/<session_id>/manifest.json`. Compare these hashes to the archived
+scientific sources before measurement. Required snapshot hashes alone do not
+establish the identity of every referenced artifact.
+
+Do not store API keys, credentials,
 raw model tokens, or patient/proprietary data in a fixture.
 
 The benchmark configuration expects:

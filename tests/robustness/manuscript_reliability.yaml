@@ -11,7 +11,7 @@ general:
   debug_mode: false
   output_dir: "reports/manuscript_reliability"
   save_artifacts: true
-  s3_session_isolation: false
+  s3_session_isolation: true
   reliability_enabled: true
   tier: "both"
   timeout_seconds: 1800
@@ -104,15 +104,21 @@ tests:
     prompt_variants:
       - >-
         Analyze the chemical space of the sEH compounds already loaded in this
-        session. Build and interpret density and activity landscapes, identify
+        session. Use the cached default GTM map and descriptor_type=autoencoder
+        for loading, projection, and activity operations. Create and interpret
+        density and activity landscapes, identify
         chemotypes in dense nodes, summarize assays, and compare active and inactive
-        compounds.
+        compounds. Save a grounded report.
       - >-
         Using the preloaded soluble epoxide hydrolase dataset, perform the complete
-        GTM chemical-space analysis: density, activity, dense-node scaffolds or
-        chemotypes, assay distribution, active/inactive separation, and a report.
+        GTM chemical-space analysis with the cached default GTM map and
+        descriptor_type=autoencoder for loading, projection, and activity operations:
+        density, activity, dense-node scaffolds or chemotypes, assay distribution,
+        active/inactive separation, and a saved grounded report.
       - >-
-        Explore the current session's sEH inhibitor data with GTM. Produce the map
+        Explore the current session's sEH inhibitor data using the cached default
+        GTM map and descriptor_type=autoencoder for loading, projection, and activity
+        operations. Produce the map
         artifacts and a grounded report covering density, activity, prominent
         chemotypes, assays, and class separation.
 
@@ -127,14 +133,23 @@ tests:
       sha256: "${CS_COPILOT_SEH_ANALYSIS_SHA256}"
     prompt_variants:
       - >-
-        Generate autoencoder analogues of CHEMBL3327073, guided by the preloaded sEH
-        activity landscape. Return valid structures and preserve parent provenance.
+        Generate 10 autoencoder analogues of CHEMBL3327073, guided by the preloaded
+        sEH activity landscape. The seed SMILES is
+        CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
+        Return valid structures, report the actual number obtained, and preserve
+        the parent identifier and seed SMILES as provenance.
       - >-
-        From the current sEH GTM analysis, design valid analogues around the highly
-        active compound CHEMBL3327073 and register the resulting candidate set.
+        From the current sEH GTM analysis, use the autoencoder to design 10 analogues
+        around CHEMBL3327073 with seed SMILES
+        CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
+        Register the valid resulting candidate set, report its actual size, and
+        retain the parent identifier and seed SMILES.
       - >-
-        Use the session's sEH activity map to sample candidate analogues of
-        CHEMBL3327073. Report the valid generated molecules and their source compound.
+        Use the autoencoder and the session's sEH activity map to sample 10
+        candidate analogues of CHEMBL3327073, starting from seed SMILES
+        CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
+        Report the valid generated structures and actual count, retaining the
+        parent identifier and seed SMILES as provenance.
 
   frozen_case_3_retrosynthesis:
     enabled: true
@@ -148,13 +163,16 @@ tests:
     prompt_variants:
       - >-
         Run SynPlanner retrosynthetic planning for the first valid generated sEH
-        analogue in the current candidate set and report the route outcome.
+        analogue in the current candidate set. Report route count and route length
+        when available, or clearly report a no-route result.
       - >-
-        Select one valid designed sEH candidate from this session and propose
-        retrosynthetic routes, including route count and route length when available.
+        Select the first valid designed sEH candidate from this session and use
+        SynPlanner to propose retrosynthetic routes. Report route count and route
+        length when available, or clearly report a no-route result.
       - >-
-        Evaluate synthetic planning for the current selected generated sEH analogue
-        with SynPlanner. Clearly report success or a no-route result.
+        Evaluate synthetic planning for the first valid generated sEH analogue
+        in the current candidate set with SynPlanner. Clearly report success or a
+        no-route result, including route count and route length when available.
 
   frozen_case_4_peptide_design:
     enabled: true
@@ -176,8 +194,9 @@ tests:
         generate logos, and summarize the analysis.
       - >-
         Explore the session's E. coli AMP landscape, sample new sequences from
-        activity-enriched regions, project and compare them, evaluate novelty by
-        uniqueness, produce sequence logos, and report the results.
+        activity-enriched regions, project and compare them, evaluate exact sequence
+        uniqueness, produce sequence logos, and report the results. Do not equate
+        uniqueness with novelty relative to a training dataset.
 
   recovery_ambiguous_scope:
     enabled: true
