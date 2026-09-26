@@ -17,6 +17,7 @@ import ast
 import base64
 import gzip
 import hashlib
+import io
 import math
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -953,53 +954,59 @@ def resolve_gtm_model_path(
     )
 
 
-def load_gtm_model(gtm_model_path: str) -> Any:
+class _CPUStorageUnpickler(dill.Unpickler):
+    """Remap embedded Torch storages in a trusted GTM pickle on CPU hosts.
+
+    GTM files are executable pickle artifacts and must come from trusted sources.
+    This changes tensor placement, not the pickle trust boundary, and avoids a
+    process-wide monkeypatch of torch.load or torch.storage.
     """
-    Load a GTM model from a file path.
 
-    Supports both gzipped (.pkl.gz) and non-gzipped (.pkl) pickle files.
-    If a file with .pkl.gz extension is not actually gzipped, it will
-    automatically fall back to loading it as a regular pickle file.
+    def find_class(self, module: str, name: str) -> Any:
+        if module == "torch.storage" and name == "_load_from_bytes":
+            return lambda payload: torch.load(
+                io.BytesIO(payload), map_location="cpu", weights_only=False
+            )
+        return super().find_class(module, name)
 
-    Args:
-        gtm_model_path: Path to the GTM model file
 
-    Returns:
-        Loaded GTM model object
+def load_gtm_model(gtm_model_path: str) -> Any:
+    """Load a trusted GTM pickle using its actual compression and available device.
 
-    Raises:
-        FileNotFoundError: If the model file doesn't exist
-        Exception: If loading fails
+    The published default map is a plain pickle despite its .pkl.gz name and
+    contains CUDA tensor storages. On CPU hosts these are remapped while loading,
+    and a saved CUDA device selector is updated so subsequent projection also
+    uses CPU. CUDA-capable hosts retain the checkpoint's original device choices.
     """
     gtm_model_path = _ensure_suffix(gtm_model_path, ".pkl.gz")
-
     logger.info(f"Loading GTM model from: {gtm_model_path}")
+    cpu_only = not torch.cuda.is_available()
+
+    def deserialize(stream: Any) -> Any:
+        return _CPUStorageUnpickler(stream).load() if cpu_only else dill.load(stream)
 
     try:
-        # First, try to load as a gzipped file (expected format)
-        try:
-            with S3.open(gtm_model_path, "rb") as f:
-                with gzip.open(f, "rb") as gz:
-                    gtm = dill.load(gz)
-            logger.info("Successfully loaded GTM model (gzipped)")
-            return gtm
-        except gzip.BadGzipFile:
-            # File has .gz extension but is not actually gzipped
-            # Fall back to loading as a regular pickle file
-            logger.warning(
-                f"File {gtm_model_path} has .gz extension but is not gzipped. "
-                "Loading as regular pickle file."
-            )
-            # Reopen the file for non-gzipped loading
-            with S3.open(gtm_model_path, "rb") as f:
-                gtm = dill.load(f)
-            logger.info("Successfully loaded GTM model (non-gzipped)")
-            return gtm
+        with S3.open(gtm_model_path, "rb") as source:
+            compressed = source.read(2) == b"\x1f\x8b"
+            source.seek(0)
+            if compressed:
+                with gzip.GzipFile(fileobj=source, mode="rb") as stream:
+                    gtm = deserialize(stream)
+            else:
+                gtm = deserialize(source)
+        if cpu_only:
+            device = getattr(gtm, "device", None)
+            if isinstance(device, (str, torch.device)) and str(device).startswith("cuda"):
+                gtm.device = "cpu" if isinstance(device, str) else torch.device("cpu")
+        logger.info(
+            "Successfully loaded GTM model (%s)", "gzipped" if compressed else "plain pickle"
+        )
+        return gtm
     except FileNotFoundError:
         logger.error(f"GTM model file not found: {gtm_model_path}")
         raise
-    except Exception as e:
-        logger.error(f"Error loading GTM model: {e}")
+    except Exception as exc:
+        logger.error(f"Error loading GTM model: {exc}")
         raise
 
 
