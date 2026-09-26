@@ -1,0 +1,19 @@
+{
+  "rdkit_version": "2025.09.4",
+  "matplotlib_version": "3.10.8",
+  "inputs": {
+    "summary.json": "8081565e2c6a1babb6ce49486d7f7c451f3527d700fb20948e61be00220c79a2",
+    "per_seed.csv": "b1c7f4730f1217950f5c158321e4d3e3c249a7ba9a7a1ba3824aa25b9a475a36",
+    "unique_candidates.csv": "f1b864fc7874c64e05697f02910bcc0ee7ba5a389cfe7e700994e1d2c4822d89",
+    "retrosynthesis_targets.csv": "0d8ef9af43a9fca60db8aea23ba76e7bcc305825f2e2e030c0b59e7a3fc59497"
+  },
+  "outputs": {
+    "generation_rates.pdf": "b90e6a83117460fd7356c93fc988bee59212c189dd3988c124f14bdf221eebfd",
+    "generation_rates.png": "7a1ba31b802ce4ddd4eecfae5ce964223979ec93bdcf8d9905123cd143549838",
+    "generation_rates.svg": "bbb27035c3a13c149efddf19e44a880ee628f160479dfa67c76697abe5e0b91d",
+    "selected_structures.pdf": "7b41c196012a9a3647afc509aefd38fd6a0c2ff96d263a644cd9430e025d7ef7",
+    "selected_structures.png": "0a1ca5fbe68ea4000fe420e2ff1e8d4ec41422c0fe9c77b70af34ca153d9337f",
+    "selected_structures.svg": "ba5c61f91336222d7863a96f76ab5cd1d08360a96b96419140009a0e4703b65e"
+  },
+  "interpretation": "Prospective local-latent generation; selected structures are unvalidated computational proposals. No training novelty or activity claim."
+}
