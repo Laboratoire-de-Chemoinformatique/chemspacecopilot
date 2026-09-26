@@ -19,7 +19,7 @@ general:
 
 model:
   provider: "deepseek"
-  model_id: "deepseek-chat"
+  model_id: "deepseek-flash"
   api_key_env: "DEEPSEEK_API_KEY"
   inference_settings:
     temperature: 0.0
