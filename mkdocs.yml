@@ -75,5 +75,6 @@ nav:
   - Testing:
       - Unit Tests: testing/unit.md
       - Robustness Tests: testing/robustness.md
+      - Manuscript Revision: testing/manuscript-revision.md
   - MCP server: mcp.md
   - Contributing: contributing.md

@@ -112,6 +112,11 @@ For `--system both`, a cross-arm comparison is also written to
 
 ## Manuscript reliability benchmark
 
+For the small reviewer-response study, follow the
+[manuscript revision protocol](../../docs/testing/manuscript-revision.md).
+It defines the 48-execution controlled comparison plus 12 live case/stage
+executions, required scientific artifacts, and interpretation limits.
+
 `manuscript_reliability.yaml` implements the quantitative evaluation requested
 for the ChemSpace Copilot manuscript. It separates two sources of variability:
 
