@@ -1439,6 +1439,10 @@ class RobustnessRunner:
 
         # Save artifacts
         self._save_artifacts(test_config.name, outputs, comparison, score)
+        # Saving populates relative transcript paths after records were retained.
+        # Update those same records for the final bundle and human review packets.
+        for record, output in zip(reliability_records, outputs, strict=True):
+            record["response_path"] = output.get("response_path")
 
         successful_tasks = sum(record["task_success"] for record in reliability_records)
         task_success_rate = (

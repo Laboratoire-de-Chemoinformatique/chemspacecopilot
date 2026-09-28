@@ -337,3 +337,25 @@ def test_unknown_traces_do_not_become_perfect_sequence_repeatability():
     )
     assert summary["repeatability"]["task_outcome_agreement"]["median"] == 1
     assert summary["repeatability"]["exact_tool_sequence_agreement"]["median"] is None
+
+
+def test_persisted_transcript_is_linked_in_records_and_human_review(tmp_path, monkeypatch):
+    harness = runner(tmp_path, repetitions=1)
+
+    class Agent:
+        session_state = {}
+
+        def run(self, prompt, stream=False):
+            return output(content="Saved scientific result with explicit uncertainty.")
+
+    monkeypatch.setattr(harness, "_build_system", Agent)
+    monkeypatch.setattr(harness, "_compare_outputs", lambda *_args: {})
+    harness.run_test(case(prompt_variants=["Please complete this task."]))
+    record = harness.reliability_records[0]
+    assert record["response_path"] == "case/run_0/response.txt"
+    assert (harness.output_dir / record["response_path"]).is_file()
+    bundle_dir = harness.output_dir / "reliability"
+    save_reliability_bundle(bundle_dir, [record], environment_manifest={})
+    packets = list((bundle_dir / "human_review_packets").glob("*.md"))
+    assert len(packets) == 1
+    assert "Saved scientific result with explicit uncertainty." in packets[0].read_text()
