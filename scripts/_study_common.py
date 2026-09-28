@@ -73,6 +73,7 @@ def software_identity() -> dict[str, Any]:
         "pytorch-lightning",
         "torch-geometric",
         "ray",
+        "mini-racer",
     )
     for package in packages:
         try:
