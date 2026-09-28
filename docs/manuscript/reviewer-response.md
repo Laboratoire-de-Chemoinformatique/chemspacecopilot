@@ -84,9 +84,11 @@ checkpoint hashes and a reproducible command accompany
 [the generation results](results/generation/README.md). Vector chemical-structure
 and rate figures have been regenerated and visually inspected.
 
-Training-set novelty remains unavailable pending a traceable exact training
-corpus. A named external-reference comparison cannot resolve that missing
-provenance. Ten distinct nonparent candidates were selected by a recorded
+All 23 unique generated structures were absent from a pinned official MOSES
+train split after standardizing all 1,584,663 reference rows with the same policy.
+This is explicitly a reference-set comparison. Training-set novelty remains
+unavailable pending a traceable exact training corpus; the reference comparison
+cannot resolve that missing provenance. Ten distinct nonparent candidates were selected by a recorded
 hash-based rule before any route searches. Fixed-budget searches retain every
 no-route outcome and exception. Route lengths and scores will be reported as
 computational predictions; proposed replacement text removes unsupported

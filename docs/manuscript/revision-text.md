@@ -52,8 +52,10 @@ history behavior must not be described as if it used the revised handoff contrac
 The prospective protocol uses four representative frozen-input tasks, two
 semantically equivalent prompt formulations per task, three repetitions, and two
 architectures, yielding 48 task executions. A further three connected sEH
-workflows and three independent peptide workflows provide 12 live case/stage
-executions. The dependent sEH stages are not independent experimental units.
+workflows with live ChEMBL retrieval and three independent peptide workflows
+provide 12 end-to-end case/stage executions. The peptide workflows begin from
+a pinned public aggregate activity landscape; they do not retrieve or reconstruct
+raw DBAASP measurements. The dependent sEH stages are not independent experimental units.
 The exact prompts and acceptance rules are fixed before measurement. Pilot and
 recovery runs are retained separately from the measured scientific tasks.
 
@@ -230,7 +232,12 @@ or library versions.
 This experiment measures local-latent analogue sampling, rather than
 GTM-conditioned generation or experimental inhibitor discovery. Training-set
 novelty is unavailable because the exact training-corpus/checkpoint linkage has
-not been established. All invalid outputs and duplicates are retained; the rates
+not been established. A separate exact-membership comparison standardized every
+one of the 1,584,663 rows of a pinned official MOSES train split with the same
+identity policy. All rows standardized successfully, and all 23 generated
+structures were absent from that reference. This reference-set absence is not
+interpreted as confirmed training-set novelty. All invalid outputs and duplicates
+are retained; the rates
 therefore characterize the raw decoder output, rather than only a filtered
 returned candidate set. The [generation summary](results/generation/summary.json)
 records model hashes, settings, software, source version and raw-output hashes.

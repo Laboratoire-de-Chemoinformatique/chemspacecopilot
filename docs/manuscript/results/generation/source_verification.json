@@ -1,0 +1,45 @@
+{
+  "schema": "chemspacecopilot.source_verification.v1",
+  "study": "generation_3x100",
+  "source_commit": "bcc3632da20203a8866ea031492078c1bb9882e6",
+  "recorded_working_tree_dirty": true,
+  "files": [
+    {
+      "path": "scripts/summarize_generation.py",
+      "recorded_sha256": "543722583a4a7bd463203fbf0b1a7845818cec520d5821a5c0037aa43793ba40",
+      "commit_sha256": "543722583a4a7bd463203fbf0b1a7845818cec520d5821a5c0037aa43793ba40",
+      "matches": true
+    },
+    {
+      "path": "src/cs_copilot/generation_audit.py",
+      "recorded_sha256": "fecf0a078a2ae66eb2544c2165f1a85d98257bb173c368bbbf0443b72bd5dae1",
+      "commit_sha256": "fecf0a078a2ae66eb2544c2165f1a85d98257bb173c368bbbf0443b72bd5dae1",
+      "matches": true
+    },
+    {
+      "path": "src/cs_copilot/tools/chemistry/autoencoder_toolkit.py",
+      "recorded_sha256": "8f0b23a4b23e94bcd8a42632706dd80cc6833dd329ce41915b685703e4d646af",
+      "commit_sha256": "8f0b23a4b23e94bcd8a42632706dd80cc6833dd329ce41915b685703e4d646af",
+      "matches": true
+    },
+    {
+      "path": "src/cs_copilot/tools/chemistry/standardize.py",
+      "recorded_sha256": "3accab60890eebf8d2d811fc6a5173c11b2f22fd638559f5f2479f2bacc23be8",
+      "commit_sha256": "3accab60890eebf8d2d811fc6a5173c11b2f22fd638559f5f2479f2bacc23be8",
+      "matches": true
+    },
+    {
+      "path": "scripts/run_generation_study.py",
+      "recorded_sha256": "53125f1858c210388372d8d1d24ea579e619d36c0caecb8fbbfb3e4606204d9e",
+      "commit_sha256": "53125f1858c210388372d8d1d24ea579e619d36c0caecb8fbbfb3e4606204d9e",
+      "matches": true
+    },
+    {
+      "path": "scripts/_study_common.py",
+      "recorded_sha256": "e5f6cc2c835e5c0bbca1f1bb2dc8016312fb18e706a232ccd30801e2d430cfcb",
+      "commit_sha256": "e5f6cc2c835e5c0bbca1f1bb2dc8016312fb18e706a232ccd30801e2d430cfcb",
+      "matches": true
+    }
+  ],
+  "all_recorded_implementation_files_match_commit": true
+}
