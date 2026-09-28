@@ -359,3 +359,23 @@ def test_persisted_transcript_is_linked_in_records_and_human_review(tmp_path, mo
     packets = list((bundle_dir / "human_review_packets").glob("*.md"))
     assert len(packets) == 1
     assert "Saved scientific result with explicit uncertainty." in packets[0].read_text()
+
+
+@pytest.mark.parametrize("system", ["team", "single_agent"])
+def test_tool_overrides_are_explicit_equal_and_scoped_to_system_construction(
+    tmp_path, monkeypatch, system
+):
+    from cs_copilot.agents import factories
+
+    harness = runner(tmp_path)
+    harness.system = system
+    harness.config.tool_settings = {
+        "synplanner": {"data_folder": str(tmp_path), "max_time": 12, "enable_retry_profiles": False}
+    }
+    original = factories.SynPlannerToolkit
+    monkeypatch.setattr(harness, "_build_default_system", lambda: factories.SynPlannerToolkit())
+    toolkit = harness._build_system()
+    assert toolkit.data_folder == str(tmp_path)
+    assert toolkit.max_time == 12
+    assert toolkit.enable_retry_profiles is False
+    assert factories.SynPlannerToolkit is original
