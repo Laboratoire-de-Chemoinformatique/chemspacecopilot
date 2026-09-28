@@ -79,6 +79,7 @@ only-include = [
     ".modelconf",
     ".pre-commit-config.yaml",
     "Dockerfile",
+    "Dockerfile.minio",
     "LICENSE",
     "README.md",
     "chainlit.md",

@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1.6
+# Build official, pinned community sources: upstream registry images are unavailable.
+FROM golang:1.25-bookworm AS server-build
+WORKDIR /src
+RUN git init . && git remote add origin https://github.com/minio/minio.git && \
+    git fetch --depth 1 origin 9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a && \
+    git checkout --detach FETCH_HEAD
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -o /out/minio .
+
+FROM golang:1.25-bookworm AS client-build
+WORKDIR /src
+RUN git init . && git remote add origin https://github.com/minio/mc.git && \
+    git fetch --depth 1 origin 7394ce0dd2a80935aded936b09fa12cbb3cb8096 && \
+    git checkout --detach FETCH_HEAD
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -o /out/mc .
+
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+FROM runtime AS server
+COPY --from=server-build /out/minio /usr/local/bin/minio
+COPY --from=server-build /src/LICENSE /usr/share/doc/minio/LICENSE
+LABEL org.opencontainers.image.source="https://github.com/minio/minio" \
+      org.opencontainers.image.revision="9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a"
+ENTRYPOINT ["minio"]
+
+FROM runtime AS client
+COPY --from=client-build /out/mc /usr/local/bin/mc
+COPY --from=client-build /src/LICENSE /usr/share/doc/minio-mc/LICENSE
+LABEL org.opencontainers.image.source="https://github.com/minio/mc" \
+      org.opencontainers.image.revision="7394ce0dd2a80935aded936b09fa12cbb3cb8096"
+ENTRYPOINT ["mc"]

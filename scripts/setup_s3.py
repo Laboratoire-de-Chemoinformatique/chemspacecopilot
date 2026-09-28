@@ -98,7 +98,7 @@ def test_connection():
                 config = get_s3_config()
                 fs = fsspec.filesystem("s3", **config.to_storage_options())
                 fs.rm(f"s3://{config.bucket_name}/{S3.prefix}/test_connection.csv")
-            except:
+            except Exception:
                 pass  # Ignore cleanup errors
 
         except Exception as e:
@@ -181,12 +181,13 @@ def main():
 
         print("\nNext steps:")
         print("1. Start your MinIO server (if using MinIO)")
+        print("   docker build -f Dockerfile.minio --target server -t cs_copilot-minio:local .")
         print("   docker run -d --name minio \\")
         print("     -p 9000:9000 -p 9001:9001 \\")
         print("     -v /mnt/data:/data \\")
         print("     -e MINIO_ROOT_USER=minioadmin \\")
         print("     -e MINIO_ROOT_PASSWORD=minioadmin \\")
-        print('     minio/minio server /data --console-address ":9001"')
+        print('     cs_copilot-minio:local server /data --console-address ":9001"')
         print("2. Access MinIO console at: http://localhost:9001")
         print("3. Run: python test_s3_integration.py")
         print("4. Check the documentation: docs/S3_INTEGRATION.md")

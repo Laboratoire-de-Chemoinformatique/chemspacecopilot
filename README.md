@@ -71,7 +71,7 @@ External client ──► MCP profiles and adapters ─────────�
 
 ```bash
 # Build containers
-docker compose build chainlit-app
+docker compose build
 
 # Run (prompts for DEEPSEEK_API_KEY only when using the DeepSeek provider)
 ./docker-start.sh
@@ -160,13 +160,14 @@ See the [installation guide](docs/getting-started/installation.md) for details.
 # Run the interactive setup script
 python scripts/setup_s3.py
 
-# Or start MinIO manually
+# Or build and start the pinned MinIO source image manually
+docker build -f Dockerfile.minio --target server -t cs_copilot-minio:local .
 docker run -d --name minio \
   -p 9000:9000 -p 9001:9001 \
   -v /mnt/data:/data \
   -e MINIO_ROOT_USER=cs_copilot \
   -e MINIO_ROOT_PASSWORD=chempwd123 \
-  minio/minio server /data --console-address ":9001"
+  cs_copilot-minio:local server /data --console-address ":9001"
 ```
 
 If the container already exists: `docker start minio`

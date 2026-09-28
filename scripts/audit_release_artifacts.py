@@ -191,6 +191,7 @@ def audit(dist_dir: Path) -> None:
             ".agents/plugins/marketplace.json",
             ".env.example",
             "Dockerfile",
+            "Dockerfile.minio",
             "docker-compose.yml",
             "docker-compose.cpu.yml",
             "docker-compose.gpu.yml",
