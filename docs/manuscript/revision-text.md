@@ -73,6 +73,61 @@ architecture differences are exploratory.
 predeclared runs and human reviews exist. Insert actual table references and
 counts, including every failure. This text is a protocol, not a result.
 
+## Methods: prospective sEH dataset for the revision
+
+A new human soluble epoxide hydrolase dataset was extracted from ChEMBL 37
+(release date 1 May 2026) on 26 September 2026. This is a prospective revision
+dataset, not a reconstruction of the original case study. The target record was
+CHEMBL2409, human EPHX2 (UniProt P34913), with target type `SINGLE PROTEIN`.
+All 5,243 target activity records and 289 target assays were downloaded before
+filtering. Original response pages, complete pagination URLs, SHA-256 hashes and
+ChEMBL status responses before and after extraction were preserved.
+
+Assays required target-assignment confidence 9 and type B or F. Activity records
+required the human target assignment, standardized endpoint IC50, units nM,
+relation `=`, and a finite positive value. Records with a nonempty ChEMBL data
+validity comment or a potential-duplicate flag were excluded. Because EPHX2 is
+bifunctional, assay CHEMBL4415272 was additionally excluded after its description
+identified phosphatase activity; its five IC50 records were retained in the raw
+archive and exclusion table. This prevents pooling a second enzyme activity
+with epoxide-hydrolase IC50 values. The human identity criterion followed the
+confidence-9 target assignment; all 151 retained assays also have explicit
+`Homo sapiens` assay-organism metadata and type B. Ki, half-life and other
+endpoints were not converted into IC50 or pooled with it.
+
+RDKit 2025.09.4 performed cleanup, largest-fragment selection, neutralization,
+canonical tautomer selection and removal of stereochemistry. Thus salts,
+tautomers and stereoisomers that share the resulting structure were aggregated
+under an explicitly defined identity rule. Exact repeats of the same standardized
+structure, assay and numeric IC50 were counted once, retaining all original
+activity and molecule identifiers; measurements from different assays were
+retained. The resulting 2,497 eligible source records became 2,490 unique
+measurements after collapsing seven repeats. Per-structure activity was the
+median of `pIC50 = 9 - log10(IC50 in nM)` over these measurements. The corresponding
+reported concentration is `10^(9 - median pIC50)`, not the arithmetic median
+concentration.
+
+The final dataset contains 2,212 standardized structures. A compound was labeled
+active if median pIC50 was greater than 6 (IC50 below 1,000 nM), inactive if median
+pIC50 was at most 5 (IC50 at least 10,000 nM), and intermediate otherwise: 1,794
+active, 158 inactive and 260 intermediate structures. Intermediate compounds
+remain in the dataset with a missing binary label and must not silently become
+inactive in a binary activity landscape. Twenty-six structures have measurements
+in more than one activity class, including two with both active and inactive
+measurements; these structures were retained with explicit conflict flags,
+measurement counts and pIC50 ranges. These labels are a declared visualization
+policy, not new experimental measurements or a validated activity classifier.
+
+The manuscript's molecular-generation seed CHEMBL3327073 was verified separately
+against the ChEMBL molecule record. It appears in the downloaded target records
+with Ki and half-life measurements, so the IC50-only rule excludes it from this
+new dataset. Its use as a generation seed does not imply that it belongs to the
+curated IC50 dataset. Preparation is reproduced by
+`scripts/prepare_revision_seh.py --reuse-raw`; [seh-dataset.lock.json](seh-dataset.lock.json)
+records source/output hashes, selection counts, domain-review evidence and the
+independent parent lookup. Reprocessing the saved raw snapshot reproduced all
+four output CSV hashes exactly.
+
 ## Methods: GTM objective and search
 
 For the current implementation, GTM hyperparameters are selected by maximizing

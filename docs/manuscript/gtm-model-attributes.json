@@ -1,0 +1,205 @@
+{
+  "purpose": "Actual trusted pinned model attributes for prospective fixtures, not recovered historical sEH map parameters",
+  "python": "3.12.13",
+  "models": [
+    {
+      "name": "molecular",
+      "path": "reports/reviewer_revision/assets/gtm/GTM_manifold_900_100_8_100.pkl.gz",
+      "sha256": "b7842e5fb68353df575b07929ba2331a050367b49c6b83494326890ad97b1e4d",
+      "bytes": 3958922,
+      "container_type": "chemographykit.gtm.GTM",
+      "model_class": "chemographykit.gtm.GTM",
+      "attributes": {
+        "pca_engine": "torch",
+        "pca_scale": true,
+        "pca_lowrank": false,
+        "training": true,
+        "_is_full_backward_hook": null,
+        "n_components": 2,
+        "num_nodes": 900,
+        "num_basis_functions": 225,
+        "basis_width": 1,
+        "reg_coeff": 100,
+        "standardize": false,
+        "max_iter": 200,
+        "tolerance": 0.001,
+        "use_cholesky": false,
+        "topology": "square",
+        "nodes": {
+          "shape": [
+            900,
+            2
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "mu": {
+          "shape": [
+            225,
+            2
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "_scaled_basis_width": -0.14349490404129028,
+        "phi": {
+          "shape": [
+            900,
+            226
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "data_mean": {
+          "shape": [
+            256
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "data_std": {
+          "shape": [
+            256
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "weights": {
+          "shape": [
+            226,
+            256
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "beta": {
+          "shape": [],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "beta_init": {
+          "shape": [
+            1
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "init_space_posit": {
+          "shape": [
+            900,
+            256
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        }
+      }
+    },
+    {
+      "name": "peptide",
+      "path": "reports/reviewer_revision/scientific_inputs/peptide_landscape/runtime/gtm.pkl.gz",
+      "sha256": "3cb7d70289e5b831af16795e10b24aac32e64fe392222a4172351ac013c92120",
+      "bytes": 1192752,
+      "container_type": "builtins.dict",
+      "container_keys": [
+        "model",
+        "scaler",
+        "config"
+      ],
+      "config": {
+        "num_nodes": 900,
+        "num_basis_functions": 100,
+        "basis_width": 1,
+        "reg_coeff": 100,
+        "max_iter": 200,
+        "seed": 42,
+        "device": "cuda",
+        "standardize": false
+      },
+      "scaler_type": "sklearn.preprocessing._data.StandardScaler",
+      "scaler_n_features_in": 100,
+      "model_class": "chemographykit.gtm.GTM",
+      "attributes": {
+        "pca_engine": "sklearn",
+        "pca_scale": true,
+        "pca_lowrank": false,
+        "training": true,
+        "_is_full_backward_hook": null,
+        "n_components": 2,
+        "num_nodes": 900,
+        "num_basis_functions": 100,
+        "basis_width": 1,
+        "reg_coeff": 100,
+        "standardize": false,
+        "max_iter": 200,
+        "tolerance": 0.001,
+        "use_cholesky": false,
+        "topology": "square",
+        "nodes": {
+          "shape": [
+            900,
+            2
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "mu": {
+          "shape": [
+            100,
+            2
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "_scaled_basis_width": -0.22446686029434204,
+        "phi": {
+          "shape": [
+            900,
+            101
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "data_mean": {
+          "shape": [
+            100
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "data_std": {
+          "shape": [
+            100
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "weights": {
+          "shape": [
+            101,
+            100
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "beta": {
+          "shape": [],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "beta_init": {
+          "shape": [],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        },
+        "init_space_posit": {
+          "shape": [
+            900,
+            100
+          ],
+          "dtype": "torch.float64",
+          "device": "cpu"
+        }
+      }
+    }
+  ]
+}
