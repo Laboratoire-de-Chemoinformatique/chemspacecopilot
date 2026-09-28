@@ -52,3 +52,7 @@ PYTHONPATH=/absolute/checkout/src:/absolute/isolated/python-deps \
   --targets docs/manuscript/results/generation/retrosynthesis_targets.csv \
   --output-dir /absolute/path/to/new-retrosynthesis-study
 ```
+
+## Proposed caption for generated_001 route figure
+
+**Predicted retrosynthetic route for generated_001.** The cyan structure is the target; pink structures are intermediates; green structures meet the planner's terminal-precursor rule (stock membership or at most six atoms). Green does not establish purchasability. Arrows show the proposed precursor-to-product relationships. The six recorded steps count reaction expansions across branches; the longest linear synthesis is not reported. SynPlanner searched with a budget of 120 seconds or 100 iterations and stopped at the first route (72 iterations; backend score 0.119246). This computational proposal has not been validated experimentally or independently reviewed for synthetic feasibility. SVG mask bounds were corrected for display without altering molecular coordinates, labels, or route connections.

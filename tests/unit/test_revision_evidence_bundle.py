@@ -77,3 +77,51 @@ def test_rejects_environment_files(tmp_path):
     (tmp_path / ".env").write_text("SECRET=dummy")
     with pytest.raises(ValueError, match="Private"):
         module.selected_files(tmp_path, [".env"])
+
+
+@pytest.mark.parametrize(
+    "filename, contents, expected",
+    [
+        (".env", "PROVIDER_TOKEN=plain-unrecognized-format", "Private or runtime source member"),
+        ("source.py", "TOKEN='" + "sk-" + "a" * 30 + "'", "credential signature in source member"),
+    ],
+)
+def test_rejects_committed_private_material_before_archive_promotion(
+    tmp_path, filename, contents, expected
+):
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    (root / filename).write_text(contents)
+    subprocess.run(["git", "add", filename], cwd=root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.org",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+        cwd=root,
+        check=True,
+    )
+    (root / "raw.json").write_text('{"scientific":true}')
+    selection = root / "selection.json"
+    selection.write_text(
+        json.dumps(
+            {
+                "source_commits": ["HEAD"],
+                "included_paths": ["raw.json"],
+                "limitations": ["Test fixture"],
+            }
+        )
+    )
+    output = tmp_path / "bundle.zip"
+    with pytest.raises(ValueError, match=expected):
+        module.package(root, selection, output)
+    assert not output.exists()
+    assert not output.with_name("bundle.zip.partial").exists()
+    assert not output.with_name("bundle.zip.sha256").exists()
