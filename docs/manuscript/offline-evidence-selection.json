@@ -1,0 +1,42 @@
+{
+  "source_commits": [
+    "bcc3632da20203a8866ea031492078c1bb9882e6",
+    "bc51198bfce8c71278660d40e7a651366c8a4f92",
+    "979c736dec88d4ad865f4b6d28bdc0ca46703d1c",
+    "797e12386f1432d96834c75fd2b8ca8485188585",
+    "HEAD"
+  ],
+  "included_paths": [
+    "docs/manuscript",
+    "reports/reviewer_revision/generation_3x100",
+    "reports/reviewer_revision/generation_repeat_seed11",
+    "reports/reviewer_revision/generation_pilot",
+    "reports/reviewer_revision/moses_reference_membership.json",
+    "reports/reviewer_revision/seh",
+    "reports/reviewer_revision/frozen_inputs_v1",
+    "reports/reviewer_revision/retrosynthesis_10",
+    "reports/reviewer_revision/retrosynthesis_pilot",
+    "reports/reviewer_revision/retrosynthesis_pilot_miniracer",
+    "reports/reviewer_revision/retrosynthesis_pilot_targets.csv",
+    "reports/reviewer_revision/architecture_pilot",
+    "reports/reviewer_revision/pilot_reanalysis_20260928",
+    "reports/reviewer_revision/pilot-architecture.yaml",
+    "reports/reviewer_revision/assets",
+    "reports/reviewer_revision/scientific_inputs",
+    "reports/reviewer_revision/sources/parent_CHEMBL3327073.json",
+    "data/sessions/robustness_20260926_181050_923495_single_agent_20260926_181050_p0_v0_40c2d6d6",
+    "data/sessions/robustness_20260926_180718_444049_team_20260926_180718_p0_v0_f3627a2e",
+    "reports/reviewer_revision/peptide_landscape_smoke",
+    "reports/reviewer_revision/unit-regression-20260928.log"
+  ],
+  "limitations": [
+    "Working revision checkpoint, not a submitted or published manuscript release; no archive DOI assigned.",
+    "The final source snapshot resolves HEAD at bundle creation; individual studies retain their original immutable commit and file hashes. These may differ.",
+    "Full 48 frozen and 12 end-to-end agent evaluation executions await explicit provider authorization and have not been completed; two original standalone generation pilots are separate, not the primary study.",
+    "Original editable manuscript, original Zenodo archive, and exact generator checkpoint training-data linkage remain unresolved.",
+    "Prospective datasets, generation and route predictions do not reconstruct historical runs or establish experimental activity or synthetic feasibility.",
+    "No independent human chemistry review has been completed; review packets are templates rather than endorsements.",
+    "The measured ARM SynPlanner runtime used declared compatibility dependencies, not an exact repository-lock installation. Recorded distributions and deviations accompany the route results.",
+    "Absolute paths in unchanged records refer to the original workspace; the bundle manifest documents their relative mapping. Provider credentials, virtual environments and caches are excluded."
+  ]
+}
