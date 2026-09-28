@@ -7,12 +7,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # Selects the base image inside Dockerfile:
-        #   amd64 -> python:3.11-slim (CUDA torch from PyPI)
-        #   arm64 -> nvcr.io/nvidia/pytorch (CUDA torch for DGX Spark / GB10)
-        # docker-start.sh detects the host arch and exports TARGETARCH;
-        # direct `docker compose build` on x86_64 hosts defaults to amd64.
-        TARGETARCH: ${TARGETARCH:-amd64}
+        BASE_IMAGE: ${BASE_IMAGE:-python:3.11-slim}
+        USE_SYSTEM_TORCH: ${USE_SYSTEM_TORCH:-false}
+        INSTALL_RETROSYNTHESIS: ${INSTALL_RETROSYNTHESIS:-false}
     image: cs_copilot_chainlit-app
     container_name: cs_copilot-app
     ports:

@@ -95,7 +95,12 @@ def _build_rollout_components(tree_options, *, policy_network, reaction_rules, b
     SynPlanner 1.2.1 implements rollout inside Tree. Later releases expose a
     separate rollout evaluation config/loader. Never substitute a fake evaluator.
     """
-    config_module = importlib.import_module("synplan.utils.config")
+    try:
+        config_module = importlib.import_module("synplan.mcts.config")
+    except ModuleNotFoundError as exc:
+        if exc.name not in {"synplan", "synplan.mcts", "synplan.mcts.config"}:
+            raise
+        config_module = importlib.import_module("synplan.utils.config")
     loading_module = importlib.import_module("synplan.utils.loading")
     rollout_config = getattr(config_module, "RolloutEvaluationConfig", None)
     load_evaluation = getattr(loading_module, "load_evaluation_function", None)
@@ -268,8 +273,8 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             module = importlib.import_module("synplan")
         except ImportError as exc:  # pragma: no cover - defensive branch
             raise SynPlannerError(
-                "The default SynPlanner dependency is unavailable. "
-                "Reinstall the project with 'uv sync'."
+                "SynPlanner is unavailable. Install the retrosynthesis extra with "
+                "'uv sync --frozen --extra retrosynthesis' on a supported platform."
             ) from exc
 
         self._synplanner_module = module
@@ -284,7 +289,11 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         ):
             return
 
-        self._import_synplanner()
+        synplanner = self._import_synplanner()
+        version_parts = re.match(r"(\d+)\.(\d+)", getattr(synplanner, "__version__", "0.0"))
+        if version_parts and tuple(map(int, version_parts.groups())) >= (1, 6):
+            self._load_modern_synplanner_components()
+            return
         _install_cgrtools_miniracer_compatibility()
 
         # Import required modules
@@ -398,6 +407,34 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             self._policy_network = PolicyNetworkFunction(policy_config=policy_config)
         except Exception as exc:
             raise SynPlannerError(f"Failed to load policy network: {exc}") from exc
+
+    def _load_modern_synplanner_components(self) -> None:
+        """Load chython TSV assets and the public policy factory in SynPlanner 1.7."""
+        from .synplanner_assets import resolve_synplanner_assets
+
+        try:
+            from synplan.utils.loading import (
+                load_building_blocks,
+                load_policy_function,
+                load_reaction_rules,
+            )
+
+            paths = resolve_synplanner_assets(self.data_folder)
+            # Assign together only after every component loads successfully.
+            blocks = load_building_blocks(paths["building_blocks"], standardize=False)
+            rules = load_reaction_rules(str(paths["reaction_rules"]))
+            policy = load_policy_function(
+                weights_path=str(paths["ranking_policy"]),
+                top_rules=self.top_rules,
+                rule_prob_threshold=self.rule_prob_threshold,
+            )
+            if policy.n_rules != len(rules):
+                raise ValueError(
+                    f"Policy has {policy.n_rules} outputs but preset has {len(rules)} rules"
+                )
+        except Exception as exc:
+            raise SynPlannerError(f"Failed to load SynPlanner GPS preset: {exc}") from exc
+        self._building_blocks, self._reaction_rules, self._policy_network = blocks, rules, policy
 
     # ------------------------------------------------------------------
     # Input handling
@@ -777,11 +814,13 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             return
 
         config = getattr(self._policy_network, "config", None)
-        if config is None:
-            return
-
         for key, value in policy_config.items():
-            setattr(config, key, value)
+            # Modern TemplateBasedPolicy reads these attributes directly; older
+            # PolicyNetworkFunction reads config. Keep both surfaces consistent.
+            if hasattr(self._policy_network, key):
+                setattr(self._policy_network, key, value)
+            if config is not None:
+                setattr(config, key, value)
 
     def _summarise_attempt(
         self,
@@ -1072,6 +1111,11 @@ class SynPlannerToolkit(BaseChemistryToolkit):
 
     @staticmethod
     def _safe_max_depth(tree: Any) -> Optional[int]:
+        nodes = getattr(tree, "nodes", None)
+        if isinstance(nodes, dict) and nodes:
+            depths = [getattr(node, "depth", None) for node in nodes.values()]
+            if all(isinstance(depth, int) for depth in depths):
+                return max(depths)
         nodes_depth = getattr(tree, "nodes_depth", None)
         if not isinstance(nodes_depth, dict) or not nodes_depth:
             return None

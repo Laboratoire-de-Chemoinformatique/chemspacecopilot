@@ -1,25 +1,11 @@
 # syntax=docker/dockerfile:1.6
 
-# Per-arch base:
-#   - amd64: python:3.11-slim — PyPI's linux/x86_64 torch wheel already
-#     ships CUDA runtime deps, so the existing path works unchanged.
-#   - arm64: nvcr.io/nvidia/pytorch NGC container — ships a CUDA-enabled
-#     PyTorch build that supports DGX Spark (GB10 / Blackwell). PyPI's
-#     linux/aarch64 torch wheel is CPU-only, which is why torch.cuda was
-#     reporting False inside the container on DGX Spark.
-# TARGETARCH is declared as a build arg with an amd64 default so a plain
-# `docker compose build` on an x86_64 host works without extra flags.
-# docker-compose.yml forwards the TARGETARCH env var into this build arg,
-# and docker-start.sh auto-detects the host arch and exports it (e.g.
-# "arm64" on DGX Spark). BuildKit's auto-populated $TARGETARCH is not
-# reliably substituted into FROM without --platform, so we don't rely on it.
-ARG TARGETARCH=amd64
-FROM python:3.11-slim AS base-amd64
-FROM nvcr.io/nvidia/pytorch:25.11-py3 AS base-arm64
-
-FROM base-${TARGETARCH} AS runtime
-
-ARG TARGETARCH
+# Native CPU image on both amd64 and arm64. DGX users can opt into NGC
+# with BASE_IMAGE=nvcr.io/nvidia/pytorch:25.11-py3 and USE_SYSTEM_TORCH=true.
+ARG BASE_IMAGE=python:3.11-slim
+FROM ${BASE_IMAGE} AS runtime
+ARG USE_SYSTEM_TORCH=false
+ARG INSTALL_RETROSYNTHESIS=false
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -28,33 +14,11 @@ ENV PYTHONUNBUFFERED=1 \
     UV_SYSTEM_PYTHON=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv
 
-# System dependencies
-# On amd64 (python:3.11-slim) install the full toolchain, domain dev libs,
-# and Node 20 (Prisma). On arm64 (NGC PyTorch) the base image already ships
-# build-essential/git/python3-dev, so we only add the domain dev libs and
-# Node 20 on top.
-RUN apt-get update && \
-    if [ "$TARGETARCH" = "arm64" ]; then \
-        apt-get install -y --no-install-recommends \
-            curl \
-            libpq-dev \
-            libboost-all-dev \
-            libcairo2-dev \
-            libeigen3-dev && \
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-        apt-get install -y --no-install-recommends nodejs; \
-    else \
-        apt-get install -y \
-            build-essential \
-            git \
-            curl \
-            libpq-dev \
-            libboost-all-dev \
-            libcairo2-dev \
-            libeigen3-dev && \
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-        apt-get install -y nodejs; \
-    fi && \
+# Build tools and libraries used by the scientific stack and Prisma.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential git curl libpq-dev libcairo2-dev libeigen3-dev && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 # On arm64 (NGC base), PyTorch links against UCC at /opt/hpcx/ucc/lib,
@@ -65,7 +29,7 @@ RUN apt-get update && \
 # fails with "undefined symbol: ucs_config_doc_nop". We prepend HPC-X by
 # using a "000-" prefix so it wins the cache ordering race, without leaking
 # paths into amd64 builds.
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
+RUN if [ "$USE_SYSTEM_TORCH" = "true" ]; then \
         printf '%s\n' \
             '/opt/hpcx/ucx/lib' \
             '/opt/hpcx/ucc/lib' \
@@ -86,47 +50,27 @@ COPY pyproject.toml uv.lock README.md ./
 # Python are importable from inside the venv. uv sync will then reuse this
 # existing venv (see UV_PROJECT_ENVIRONMENT) and install the rest of our
 # dependencies on top of it. On amd64 we let uv create the venv implicitly.
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
+RUN if [ "$USE_SYSTEM_TORCH" = "true" ]; then \
         uv venv --system-site-packages /app/.venv; \
     fi
 
-# Install third-party dependencies only (not the local project) so this
-# expensive layer is cached independently of source-code changes.
-# - arm64: skip torch/torchvision/torchaudio (reuse NGC's CUDA PyTorch) and
-#   the SynPlanner family (no aarch64 wheels). SynPlanner is lazy-imported
-#   so it is never imported unless a retrosynthesis tool is invoked.
-# - amd64: install everything (PyPI torch wheel for linux/x86_64 is CUDA).
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-        uv sync --frozen --no-dev --no-install-project \
-            --no-install-package torch \
-            --no-install-package torchvision \
-            --no-install-package torchaudio \
-            --no-install-package synplanner \
-            --no-install-package cgrtools-stable \
-            --no-install-package chython-synplan \
-            --no-install-package chytorch-synplan \
-            --no-install-package chytorch-rxnmap-synplan; \
-    else \
-        uv sync --frozen --no-dev --no-install-project; \
-    fi
+# Install dependencies first for Docker layer caching. The optional NGC
+# profile reuses its CUDA PyTorch; the default installs the locked packages.
+RUN set --; \
+    if [ "$USE_SYSTEM_TORCH" = "true" ]; then \
+        set -- --no-install-package torch --no-install-package torchvision --no-install-package torchaudio; \
+    fi; \
+    if [ "$INSTALL_RETROSYNTHESIS" = "true" ]; then set -- "$@" --extra retrosynthesis; fi; \
+    uv sync --frozen --no-dev --no-install-project "$@"
 
-# Application source
 COPY . .
 
-# Install the local cs_copilot package into the already-populated venv
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-        uv sync --frozen --no-dev \
-            --no-install-package torch \
-            --no-install-package torchvision \
-            --no-install-package torchaudio \
-            --no-install-package synplanner \
-            --no-install-package cgrtools-stable \
-            --no-install-package chython-synplan \
-            --no-install-package chytorch-synplan \
-            --no-install-package chytorch-rxnmap-synplan; \
-    else \
-        uv sync --frozen --no-dev; \
-    fi
+RUN set --; \
+    if [ "$USE_SYSTEM_TORCH" = "true" ]; then \
+        set -- --no-install-package torch --no-install-package torchvision --no-install-package torchaudio; \
+    fi; \
+    if [ "$INSTALL_RETROSYNTHESIS" = "true" ]; then set -- "$@" --extra retrosynthesis; fi; \
+    uv sync --frozen --no-dev "$@"
 
 # Prisma / Node dependencies
 COPY package.json ./

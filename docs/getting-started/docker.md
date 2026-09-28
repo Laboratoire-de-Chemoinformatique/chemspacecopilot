@@ -29,6 +29,21 @@ docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
+The default image uses native Python on both Intel/AMD and ARM hosts, including
+Apple Silicon, and does not require NVIDIA libraries. For SynPlanner on Linux
+x86_64, build with `INSTALL_RETROSYNTHESIS=true docker compose build chainlit-app`.
+
+For CUDA PyTorch on DGX Spark / Linux ARM64, explicitly build the NGC profile:
+
+```bash
+BASE_IMAGE=nvcr.io/nvidia/pytorch:25.11-py3 USE_SYSTEM_TORCH=true docker compose build chainlit-app
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+```
+
+This GPU profile reuses the NGC image's Torch packages and is separate from the
+locked native CPU installation. The retrosynthesis extra currently requires
+Linux x86_64 (see the installation guide).
+
 **Access:** [App](http://localhost:8000) | [MinIO Console](http://localhost:9001) (cs_copilot / chempwd123) | PostgreSQL: localhost:5432
 
 ## Services
