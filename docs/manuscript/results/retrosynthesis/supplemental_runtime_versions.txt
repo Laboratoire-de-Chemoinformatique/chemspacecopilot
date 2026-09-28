@@ -1,0 +1,19 @@
+# Observed isolated-target distributions; see README for unmet named requirements.
+CGRtools==4.1.35
+CachedMethods==0.1.4
+SynPlanner==1.2.1
+adabelief-pytorch==0.2.1
+chython==3.4
+lightning-utilities==0.15.2
+loguru==0.7.3
+mini-racer==0.14.1
+msgpack==1.1.2
+pytorch-lightning==2.6.1
+quickjs-ng==0.16.2.1
+ray==2.53.0
+reportlab==4.4.9
+torch-geometric==2.7.0
+torchmetrics==1.8.2
+toyplot==2.0.0
+toytree==3.0.11
+xxhash==3.6.0
