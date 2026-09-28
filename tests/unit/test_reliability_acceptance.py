@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import gzip
 import hashlib
 import json
 import sys
@@ -13,7 +14,12 @@ import pytest
 import yaml
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "robustness"))
-from reliability.validators import _SEH_PARENT, evaluate_run  # noqa: E402
+from reliability.validators import (
+    _SEH_PARENT,
+    _model_artifact,
+    _requested_count,
+    evaluate_run,
+)  # noqa: E402
 
 
 def output(state=None, **kwargs):
@@ -390,3 +396,21 @@ def test_all_manuscript_generation_prompts_require_ten_candidates(tmp_path):
         result = evaluate_run("molecular_generation", run)
         assert result["scientific_outcome"]["requested_candidate_count"] == 10, prompt
         assert "valid_candidates_returned" in failures(result), prompt
+
+
+@pytest.mark.parametrize(
+    "description", ["10 unique valid analogues", "10 valid unique molecules", "10 new candidates"]
+)
+def test_requested_count_accepts_explicit_unique_and_valid_modifiers(description):
+    assert _requested_count({"prompt": f"Generate {description} of CHEMBL3327073."}) == 10
+
+
+@pytest.mark.parametrize(
+    "compressed,suffix", [(False, ".pkl.gz"), (True, ".pkl"), (True, ".pkl.gz")]
+)
+def test_model_artifact_sniffs_compression_without_unpickling(tmp_path, compressed, suffix):
+    # Projection evidence is checked independently of this non-executing header inspection.
+    payload = b"\x80\x04chemographykit.gtm\x00GTM\x00"
+    path = tmp_path / f"model{suffix}"
+    path.write_bytes(gzip.compress(payload) if compressed else payload)
+    assert _model_artifact({}, str(path))

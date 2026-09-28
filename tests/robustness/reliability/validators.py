@@ -223,7 +223,9 @@ def _model_artifact(output, path):
         else:
             handle = Path(path).expanduser().open("rb")
         with handle as stream:
-            if path.endswith(".gz"):
+            compressed = stream.read(2) == b"\x1f\x8b"
+            stream.seek(0)
+            if compressed:
                 with gzip.GzipFile(fileobj=stream) as zipped:
                     header = zipped.read(65536)
             else:
@@ -535,7 +537,7 @@ def _requested_count(output):
         return explicit
     # Only the unambiguous immediate count-noun pattern, not other numbers in prose.
     matches = re.findall(
-        r"\b(\d+)\s+(?:(?:valid|new|generated|autoencoder|candidate)\s+){0,3}"
+        r"\b(\d+)\s+(?:(?:unique|valid|new|generated|autoencoder|candidate)\s+){0,3}"
         r"(?:analogues?|analogs?|candidates?|molecules?|peptides?)\b",
         str(output.get("prompt", "")),
         re.I,
