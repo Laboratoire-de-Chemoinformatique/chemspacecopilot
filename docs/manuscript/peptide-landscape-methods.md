@@ -12,6 +12,12 @@ Validity is the fraction of observed decoded sequences that pass sequence valida
 
 A local CPU smoke run with the pinned assets, seed 42, temperature 1.0, categorical decoding, ten requested candidates and oversampling factor four observed 40 valid, unique sequences and returned ten. It selected nodes 480, 299, 509, 479 and 269. This smoke run establishes tool integration only; it is not a reliability repetition or biological validation. Its artifacts are under ignored `reports/reviewer_revision/peptide_landscape_smoke/` and the session-local output path recorded there.
 
+The revision also provides `analyze_peptide_candidates`, which reads the saved candidate artifact and computes all unordered pairwise comparisons. Similarity is the number of matching residues at the same N-terminal position divided by the longer sequence length; unmatched tails count as mismatches. This is positional identity, not an optimal alignment score. The PNG (300 dpi) and SVG logos show N-terminal positional residue frequencies, without claiming multiple-sequence alignment. Each position's denominator contains only sequences that reach that position; the matrix and figure explicitly report these counts. These definitions adapt the positional-analysis helpers from branch 114. Matplotlib renders vector letter stacks without adding alignment or logo dependencies.
+
+The analysis tool writes a pairwise identity table, a position-frequency table, metrics with the source candidate checksum, PNG/SVG logos and an artifact hash manifest. Exact uniqueness is reported for the returned candidate set; raw generation statistics remain a separately labeled section from the generator artifact. The existing `save_markdown_report` tool can use these outputs to prepare the final report.
+
+A full offline tool smoke performed node selection, generation, analysis, logo rendering and report writing using the pinned real inputs. Its ten returned sequences have 45 pairwise comparisons and mean positional identity 0.217577. The self-contained artifact directory `reports/reviewer_revision/peptide_workflow_smoke/` includes a replay script, raw candidate outputs, activity and analysis tables, numerical metrics, PNG/SVG, Markdown report, and SHA-256 manifest. All required scientific peptide acceptance checks pass. Agent telemetry is explicitly unavailable because no LLM agent was invoked; this direct-tool smoke is excluded from benchmark denominators.
+
 The benchmark fixture contains inputs only:
 
 ```json
