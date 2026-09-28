@@ -9,8 +9,8 @@ artifacts have been inspected.
 |---|---|---|
 | 1. Quantitative reliability | Isolated repeated-run harness, content-based validators, timing and usage coverage, human-review packets, 48+12 prospective protocol | Verified input snapshots; completed, retained runs; expert review; numerical results table |
 | 2. Architecture advantage | Same-model flat-agent baseline and paired evaluation; architecture rationale in revision text | Matched measured comparison; report both costs and success; support or moderate advantage claims |
-| 3. sEH and GTM methods | Current-code search ranges/objective/representation audit; pinned model assets | Actual ChEMBL release, query/filter manifest, raw and retained counts, replicate handling, class definitions, final map parameters and criterion for the reported analysis |
-| 4. Generation and synthesis | Raw generation audit; validity/uniqueness/properties/membership analysis; per-execution route summaries with error accounting | Real generation outputs; actual training-corpus linkage or explicit limitation; multiple predeclared route targets with all outcomes and expert inspection |
+| 3. sEH and GTM methods | ChEMBL 37 extraction with exact query/filter manifest; 2,212 curated structures; raw/output hashes and identical offline replay; saved GTM parameter audit; search objective/ranges | Completed projection analysis and map-quality report; distinguish prospective measurements from unrecovered historical methods |
+| 4. Generation and synthesis | Three measured batches (300 raw outputs, 87 valid, 23 unique), seed-repeat check, full properties, vector structures/rate figures; ten route targets predeclared | Actual training-corpus linkage or explicit limitation; completed ten-target searches and inspected routes |
 | 5. Reproducibility and presentation | Versioned code commits, inference/environment manifests, prompts, correction text and verified RDKit/Sattarov references | Exact measurement release and archive DOI; complete outputs; apply edits in editable paper; replace and visually inspect figures |
 
 ## 1. Reliability
@@ -41,32 +41,54 @@ advantage statement to match its direction, uncertainty, and scope.
 
 ## 3. Dataset construction and GTM
 
-The revision will separate historical case-study provenance from newly measured
-analyses. The supplement must specify ChEMBL release, target and assay filters,
-endpoints/units/relations, exclusions, standardization, aggregation of repeat
-measurements, and the exact class definitions. Distinct biological endpoints
-must not silently become equivalent measurements through pooling. For GTM,
-report representation, model provenance, actual parameter ranges, chosen
-parameters, and selection criterion. The current optimization code maximizes
-normalized node-occupancy entropy; its three effort settings are search
-strategies, not three objectives.
+We prepared a fully specified prospective replacement dataset from ChEMBL 37.
+The human EPHX2 target CHEMBL2409 yielded 5,243 raw activities; confidence-9
+binding/functional assays and uncensored positive IC50 measurements in nM were
+retained after quality exclusions. A phosphatase-specific assay was excluded
+because EPHX2 is bifunctional. After structure standardization and within-assay
+duplicate collapse, 2,490 measurements represent 2,212 compounds: 1,794 active,
+158 inactive and 260 intermediate under the declared median-pIC50 thresholds.
+Mixed measurements are flagged and retained. Reprocessing the saved response
+pages reproduces all four CSV hashes exactly. Full methods, source hashes and
+exclusion evidence are in [the sEH manifest](seh-dataset.lock.json) and
+[replacement methods](revision-text.md).
 
-**Before submission:** recover or regenerate a completely specified sEH analysis;
-current defaults cannot retrospectively establish the original methods.
+The molecular-generation parent has a Ki measurement in this extraction and is
+therefore excluded from the IC50-only dataset. We now distinguish its verified
+identity and use as a design seed from membership in the curated dataset.
+For GTM, the saved checkpoint parameters have been inspected directly: the
+molecular map contains 900 nodes, 225 basis functions, width 1, regularization
+100 and a 256-dimensional input, despite different values in its filename.
+The current optimization code maximizes normalized node-occupancy entropy;
+its three effort settings are search strategies, not three objectives.
+
+**Before submission:** insert the completed map-analysis artifacts and measured
+quality criterion, and identify this as a new revision analysis. These records
+cannot retrospectively establish the original case-study methods.
 
 ## 4. Generation and retrosynthesis
 
-The revision measures raw-output validity and standardized uniqueness, parent
-similarity, and physicochemical properties. Training-set novelty requires a
-traceable training corpus and identical structure processing. Archived filtered
-sets cannot establish raw validity or uniqueness. Route searches will cover a
-predeclared set of distinct candidates with fixed budgets, retaining no-route
-outcomes and exceptions. Route lengths and scores will be reported as
-computational predictions, with experimental activity and synthetic feasibility
-claims removed where unsupported.
+We retained 300 raw outputs from three seeded 100-output batches. There were
+87 RDKit-valid outputs (29.0%) and 23 distinct standardized structures (26.4%
+uniqueness among valid outputs), including one parent reconstruction. Median
+parent Tanimoto was 0.574; the supplement contains all individual structures,
+occurrence counts and physicochemical properties. A separate seed-11 repeat
+reproduced every raw string exactly under the recorded environment. Raw data,
+checkpoint hashes and a reproducible command accompany
+[the generation results](results/generation/README.md). Vector chemical-structure
+and rate figures have been regenerated and visually inspected.
 
-**Before submission:** insert real counts and distributions, corpus/checkpoint
-provenance, the complete target denominator, and inspected route figures.
+Training-set novelty remains unavailable pending a traceable exact training
+corpus. A named external-reference comparison cannot resolve that missing
+provenance. Ten distinct nonparent candidates were selected by a recorded
+hash-based rule before any route searches. Fixed-budget searches retain every
+no-route outcome and exception. Route lengths and scores will be reported as
+computational predictions; proposed replacement text removes unsupported
+experimental activity and synthetic feasibility claims.
+
+**Before submission:** insert the complete ten-target route results and inspected
+figures, preserve the training-provenance limitation, and apply the moderated
+claims in the editable paper.
 
 ## 5. Reproducibility and presentation
 

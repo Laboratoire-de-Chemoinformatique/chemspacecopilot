@@ -180,6 +180,41 @@ available, their properties can be analyzed but raw generation rates remain
 unavailable. The count of outputs observed from a backend is not necessarily its
 internal number of decoding attempts.
 
+## Results: prospective small-molecule generation
+
+Three independent batches produced 100 raw decoder outputs each around the
+manuscript seed CHEMBL3327073, using random seeds 11, 22 and 33, latent noise
+scale 0.1, sampling temperature 0.5 and CPU execution with one Torch thread.
+The pinned autoencoder produced 27, 28 and 32 RDKit-valid structures in the
+respective batches, giving pooled validity of 87/300 (29.0%). These batches
+contained 9, 12 and 15 distinct standardized structures; uniqueness among valid
+outputs was therefore 33.3%, 42.9% and 46.9%, respectively. Across batches,
+87 valid outputs collapsed to 23 distinct standardized structures (26.4% pooled
+uniqueness), including one reconstruction of the parent. These pooled molecules
+are not 23 independent trials of biological efficacy.
+
+Over the 23 distinct structures, parent Tanimoto similarity ranged from 0.305 to
+1.000 (median 0.574). Median molecular weight, calculated logP, topological polar
+surface area and QED were 467.45 Da, 4.83, 70.23 Å² and 0.585, respectively.
+The full structure-level properties, occurrences and batch identities are
+provided in [the candidate table](results/generation/unique_candidates.csv).
+Worker wall times, including process startup and model setup, were 4.00, 4.04
+and 3.68 s. These timings exclude language-model orchestration. A separately
+retained seed-11 repeat reproduced all 100 raw strings exactly in the recorded
+environment and is excluded from the primary denominator. Reproducibility under
+this fixed environment does not establish identical sampling across hardware
+or library versions.
+
+This experiment measures local-latent analogue sampling, rather than
+GTM-conditioned generation or experimental inhibitor discovery. Training-set
+novelty is unavailable because the exact training-corpus/checkpoint linkage has
+not been established. All invalid outputs and duplicates are retained; the rates
+therefore characterize the raw decoder output, rather than only a filtered
+returned candidate set. The [generation summary](results/generation/summary.json)
+records model hashes, settings, software, source version and raw-output hashes.
+The revised vector figures show the measured per-batch rates and the parent
+alongside the ten candidates selected before retrosynthesis searches.
+
 ## Discussion: scope of the scientific claims
 
 Activity-enriched map regions provide a way to select structures or latent-space
