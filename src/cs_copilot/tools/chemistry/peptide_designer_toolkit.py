@@ -569,6 +569,7 @@ class PeptideDesignerToolkit(Toolkit):
         facade_tools = (
             self.list_design_engines,
             self.design_peptides,
+            self.sample_peptides_from_landscape,
             self.generate_peptide_analogs,
             self.design_peptide_interpolation,
             self.validate_design_candidates,
@@ -761,6 +762,205 @@ class PeptideDesignerToolkit(Toolkit):
                 "for downstream analysis."
             ),
         }
+
+    def sample_peptides_from_landscape(
+        self,
+        organism: str = "Escherichia coli",
+        bundle_path: Optional[str] = None,
+        n_candidates: int = 20,
+        top_n_nodes: int = 5,
+        min_activity: float = 0.5,
+        min_observations: float = 1.0,
+        local_noise_scale: float = 0.25,
+        oversample_factor: int = 4,
+        temperature: float = 1.0,
+        decode_mode: str = "categorical",
+        random_state: int = 42,
+        session_key: str = "landscape_sampled_peptides",
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Decode peptides from active-enriched nodes of a frozen aggregate landscape.
+
+        This revision capability uses a local directory containing landscape.json,
+        nodes.parquet, landscape.safetensors and sampler.json. If bundle_path is
+        omitted, read session state's peptide_landscape_bundle.bundle_path.
+        No raw DBAASP records or training corpus are reconstructed. Node enrichment
+        guides generation; generated activity and training-set novelty are unproven.
+        A fixed n_candidates * oversample_factor raw decoding batch is retained,
+        together with node probabilities, seeds and sequence filtering counts.
+        Analyze the returned candidate artifact, create logos and a report separately.
+        """
+        import hashlib
+
+        from cs_copilot.tools.chemistry.peptide_landscape_store import (
+            BUNDLE_FILES,
+            load_local_peptide_landscape,
+            node_sampling_probabilities,
+            resolve_organism,
+            sample_latents_from_nodes,
+            select_active_landscape_nodes,
+        )
+
+        if not 1 <= n_candidates <= 1000 or not 1 <= oversample_factor <= 20:
+            raise PeptideDesignerError("n_candidates must be 1..1000 and oversample_factor 1..20")
+        if not np.isfinite(temperature) or temperature <= 0:
+            raise PeptideDesignerError("temperature must be finite and positive")
+        if not np.isfinite(min_activity) or not 0 <= min_activity <= 1:
+            raise PeptideDesignerError("min_activity must be a finite probability")
+        if not np.isfinite(min_observations) or min_observations < 0:
+            raise PeptideDesignerError("min_observations must be finite and non-negative")
+        if decode_mode not in {"categorical", "greedy"}:
+            raise PeptideDesignerError("decode_mode must be categorical or greedy")
+        states = update_state_targets(agent, session_state)
+        if not states:
+            raise PeptideDesignerError("Session state is required to preserve landscape evidence")
+        if not bundle_path:
+            for state in states:
+                pointer = state.get("peptide_landscape_bundle") or {}
+                if isinstance(pointer, dict) and pointer.get("bundle_path"):
+                    bundle_path = pointer["bundle_path"]
+                    break
+        if not bundle_path:
+            raise PeptideDesignerError("Provide a local aggregate peptide landscape bundle_path")
+        bundle = load_local_peptide_landscape(bundle_path)
+        if bundle.latent_dim != self.get_latent_dimension():
+            raise PeptideDesignerError("Landscape latent dimension differs from peptide decoder")
+        organism = resolve_organism(bundle, organism)
+        selected = select_active_landscape_nodes(
+            bundle,
+            organism,
+            top_n=top_n_nodes,
+            min_activity=min_activity,
+            min_observations=min_observations,
+        )
+        selected["node_selection_probability"] = node_sampling_probabilities(selected)
+        latents, assignments = sample_latents_from_nodes(
+            bundle,
+            selected,
+            n_samples=n_candidates * oversample_factor,
+            local_noise_scale=local_noise_scale,
+            random_state=random_state,
+        )
+        devices = (
+            [self.device.index or torch.cuda.current_device()] if self.device.type == "cuda" else []
+        )
+        with torch.random.fork_rng(devices=devices):
+            torch.manual_seed(random_state)
+            decoded = self.decode_latent(
+                latents.tolist(), temperature=temperature, decode_mode=decode_mode
+            )
+        if len(decoded) != len(assignments):
+            raise PeptideDesignerError(
+                "Decoder returned a different count than the sampled latent batch"
+            )
+        raw, candidates, seen, valid_count = [], [], set(), 0
+        alphabet = set(bundle.alphabet)
+        for sequence, assignment in zip(
+            decoded, assignments.to_dict(orient="records"), strict=True
+        ):
+            candidate = _validate_peptide_candidate(sequence, engine="wae_landscape")
+            if (
+                candidate.sequence
+                and alphabet
+                and not set(candidate.sequence.replace(" ", "")).issubset(alphabet)
+            ):
+                candidate.valid = False
+                candidate.error = "Sequence contains residues outside the landscape alphabet"
+            record = candidate.to_dict()
+            record["node_assignment"] = assignment
+            raw.append(record)
+            if candidate.valid and candidate.sequence:
+                valid_count += 1
+                if candidate.sequence not in seen:
+                    seen.add(candidate.sequence)
+                    if len(candidates) < n_candidates:
+                        candidates.append(record)
+        file_hashes = {
+            name: hashlib.sha256((bundle.root_path / name).read_bytes()).hexdigest()
+            for name in BUNDLE_FILES
+        }
+        metadata = {
+            "origin_agent": "peptide_designer",
+            "generation_engine": "wae_landscape",
+            "source_tool": "sample_peptides_from_landscape",
+            "generation_mode": "landscape_guided",
+            "landscape_id": bundle.landscape_id,
+            "organism": organism,
+            "top_n_nodes": top_n_nodes,
+            "min_activity": min_activity,
+            "min_observations": min_observations,
+            "spatial_diversity": True,
+            "bundle_sha256": file_hashes,
+            "random_state": random_state,
+            "torch_seed": random_state,
+            "temperature": temperature,
+            "decode_mode": decode_mode,
+            "local_noise_scale": local_noise_scale,
+            "oversample_factor": oversample_factor,
+            "n_requested": n_candidates,
+            "count_attempted": len(raw),
+            "count_valid": valid_count,
+            "count_unique_valid_observed": len(seen),
+            "count_returned": len(candidates),
+            "validity_fraction": valid_count / len(raw) if raw else None,
+            "exact_sequence_uniqueness_fraction": len(seen) / valid_count if valid_count else None,
+            "selected_nodes": selected.to_dict(orient="records"),
+            "selected_node_probabilities": selected[["node_id", "node_selection_probability"]]
+            .drop_duplicates()
+            .to_dict(orient="records"),
+            "latent_transform": "((gtm.phi @ gtm.weights)[node_id-1] + scaled_space_noise) * scaler.scale + scaler.mean",
+            "raw_outputs": raw,
+            "limitations": "Aggregate source activity is not predicted candidate activity; training-set novelty is unavailable.",
+        }
+        decoder_file = Path(self.model_path) / "model.pt"
+        if decoder_file.is_file():
+            metadata["decoder_sha256"] = hashlib.sha256(decoder_file.read_bytes()).hexdigest()
+        result = {}
+        for state in states:
+            artifact = _save_peptide_design_artifact(
+                state,
+                session_key=session_key,
+                candidates=candidates,
+                metadata=metadata,
+            )
+            landscape_path = artifact["artifact_rel_path"].removesuffix(".json") + "_activity.csv"
+            table = bundle.nodes[bundle.nodes["organism"] == organism].copy()
+            table = table.rename(columns={"activity_mean": "active_prob"})
+            with S3.open(landscape_path, "w") as handle:
+                table.to_csv(handle, index=False)
+            pointer = {
+                **artifact,
+                "activity_landscape_path": S3.path(landscape_path),
+                "generation_engine": "wae_landscape",
+                "generation_mode": "landscape_guided",
+                "count_attempted": len(raw),
+                "count_returned": len(candidates),
+                "preview": _compact_peptide_preview(candidates),
+            }
+            state[session_key] = pointer
+            register_session_object(
+                state,
+                "analysis",
+                {**pointer, "analysis_type": "peptide_design", "organism": organism},
+                label="Aggregate-landscape peptide generation",
+                source_agent=getattr(agent, "name", None),
+                source_tool="sample_peptides_from_landscape",
+                set_current=True,
+                current_role="analysis",
+            )
+            if not result or state is session_state:
+                result = {
+                    **pointer,
+                    "organism": organism,
+                    "selected_node_ids": selected["node_id"].astype(int).tolist(),
+                    "validity_fraction": metadata["validity_fraction"],
+                    "exact_sequence_uniqueness_fraction": metadata[
+                        "exact_sequence_uniqueness_fraction"
+                    ],
+                    "note": metadata["limitations"],
+                }
+        return result
 
     def generate_peptide_analogs(
         self,
