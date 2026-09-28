@@ -395,3 +395,50 @@ def test_fixture_narrative_summaries_and_labels_are_not_artifact_pointers(tmp_pa
     assert staged["session_objects"]["datasets"]["ds_001"]["dataset_path"] != str(source)
     assert staged["session_objects"]["datasets"]["ds_001"]["label"] == "data.csv"
     assert str(source) not in staged["session_memory_summary"]
+
+
+@pytest.mark.parametrize("raises", [False, True])
+def test_scientific_rng_is_repeatable_and_restores_state_on_error(raises):
+    import random
+
+    import numpy as np
+    import torch
+    from robustness_minimal_example import scientific_rng
+
+    python_before = random.getstate()
+    numpy_before = np.random.get_state()
+    torch_before = torch.random.get_rng_state().clone()
+
+    def draw():
+        return random.random(), float(np.random.rand()), float(torch.rand(1))
+
+    with scientific_rng(11):
+        first = draw()
+    try:
+        with scientific_rng(11):
+            assert draw() == first
+            if raises:
+                raise TimeoutError("simulated run timeout")
+    except TimeoutError:
+        pass
+    assert random.getstate() == python_before
+    actual_numpy = np.random.get_state()
+    assert actual_numpy[0] == numpy_before[0]
+    assert np.array_equal(actual_numpy[1], numpy_before[1])
+    assert actual_numpy[2:] == numpy_before[2:]
+    assert torch.equal(torch.random.get_rng_state(), torch_before)
+
+
+def test_timeout_retains_first_run_and_does_not_start_more_repetitions(tmp_path, monkeypatch):
+    harness = runner(tmp_path, repetitions=3)
+    harness.config.stop_on_timeout = True
+    attempts = []
+
+    def timeout(**kwargs):
+        attempts.append(kwargs["run_id"])
+        return {"status": "timeout", "run_id": kwargs["run_id"]}
+
+    monkeypatch.setattr(harness, "_run_single_variation", timeout)
+    records = harness._run_independent_test(case(), ["run", "again"])
+    assert attempts == [0]
+    assert records == [{"status": "timeout", "run_id": 0}]

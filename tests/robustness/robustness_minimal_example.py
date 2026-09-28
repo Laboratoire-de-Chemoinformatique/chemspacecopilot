@@ -72,6 +72,34 @@ class PrerequisiteError(RuntimeError):
 
 
 @contextmanager
+def scientific_rng(seed: Optional[int]):
+    """Scope Python/NumPy/Torch RNG controls; never claim provider determinism."""
+    if seed is None:
+        yield
+        return
+    import random
+
+    import numpy as np
+    import torch
+
+    python_state = random.getstate()
+    numpy_state = np.random.get_state()
+    torch_state = torch.random.get_rng_state()
+    cuda_states = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    try:
+        random.seed(seed)
+        np.random.seed(seed % (2**32))
+        torch.manual_seed(seed)
+        yield
+    finally:
+        random.setstate(python_state)
+        np.random.set_state(numpy_state)
+        torch.random.set_rng_state(torch_state)
+        if cuda_states is not None:
+            torch.cuda.set_rng_state_all(cuda_states)
+
+
+@contextmanager
 def run_timeout(seconds: int):
     """Interrupt a run after ``seconds`` on POSIX main-thread executions."""
     if seconds <= 0 or not hasattr(signal, "SIGALRM"):
@@ -123,6 +151,8 @@ class RobustnessConfig:
     reliability_enabled: bool = False
     tier: str = "both"
     timeout_seconds: int = 0
+    scientific_seed: Optional[int] = None
+    stop_on_timeout: bool = False
     reliability_min_success_rate: float = 0.8
     pricing: Dict[str, float] = field(default_factory=dict)
     inference_settings: Dict[str, Any] = field(default_factory=dict)
@@ -231,6 +261,8 @@ def load_config(config_path: Path) -> RobustnessConfig:
         reliability_enabled=general.get("reliability_enabled", False),
         tier=general.get("tier", "both"),
         timeout_seconds=general.get("timeout_seconds", 0),
+        scientific_seed=general.get("scientific_seed"),
+        stop_on_timeout=general.get("stop_on_timeout", False),
         reliability_min_success_rate=general.get("reliability_min_success_rate", 0.8),
         pricing=model.get("pricing", {}),
         inference_settings=model.get("inference_settings", {}),
@@ -912,6 +944,7 @@ class RobustnessRunner:
             "stage_name": stage_name,
             "prompt_variant": prompt_variant,
             "repetition": repetition,
+            "scientific_seed": self.config.scientific_seed,
             "tier": tier,
             "started_at": started_at.isoformat(),
             "finished_at": finished_at.isoformat(),
@@ -988,7 +1021,10 @@ class RobustnessRunner:
             # Run the agent
             started_at = datetime.now(timezone.utc)
             started_timer = time.perf_counter()
-            with run_timeout(self.config.timeout_seconds):
+            with (
+                scientific_rng(self.config.scientific_seed),
+                run_timeout(self.config.timeout_seconds),
+            ):
                 result = agent.run(prompt, stream=False)
 
             # Capture the completed model output before any optional state
@@ -1047,6 +1083,7 @@ class RobustnessRunner:
                 "stage_name": stage_name,
                 "prompt_variant": prompt_variant,
                 "repetition": repetition,
+                "scientific_seed": self.config.scientific_seed,
                 "tier": tier,
                 "started_at": started_at.isoformat(),
                 "finished_at": finished_at.isoformat(),
@@ -1345,6 +1382,8 @@ class RobustnessRunner:
                     )
                 outputs.append(output)
                 run_id += 1
+                if self.config.stop_on_timeout and output.get("status") == "timeout":
+                    return outputs
         return outputs
 
     def _run_chain_test(self, test_config: TestConfig) -> List[Dict[str, Any]]:
@@ -1564,6 +1603,14 @@ class RobustnessRunner:
                 result = self.run_test(test_config)
                 results[test_config.name] = result
                 self.results[test_config.name] = result
+                if self.config.stop_on_timeout and any(
+                    record.get("execution_status") == "timeout"
+                    for record in self.reliability_records
+                ):
+                    logger.error(
+                        "Stopping this arm after a timeout; remaining cases are unattempted"
+                    )
+                    break
             except Exception as e:
                 logger.error(f"Test '{test_config.name}' failed with error: {e}")
                 results[test_config.name] = {
@@ -1574,6 +1621,9 @@ class RobustnessRunner:
 
         # Generate summary
         summary = self._generate_summary(results)
+        summary["unattempted_tests"] = [
+            case.name for case in enabled_tests if case.name not in results
+        ]
         if self.config.reliability_enabled:
             config_path = self.config.config_path or Path(__file__)
             environment_manifest = build_environment_manifest(
@@ -1585,6 +1635,12 @@ class RobustnessRunner:
                 inference_settings=self.config.inference_settings,
             )
             environment_manifest["tool_settings"] = self.config.tool_settings
+            environment_manifest["scientific_rng"] = {
+                "python_numpy_torch_seed": self.config.scientific_seed,
+                "provider_seed": None,
+                "peptide_conditional_tool_default_random_state": 42,
+                "note": "Explicit tool random_state parameters override ambient RNG; inspect recorded calls.",
+            }
             reliability_summary = save_reliability_bundle(
                 self.output_dir / "reliability",
                 self.reliability_records,
@@ -1956,6 +2012,13 @@ def main():
             print(f"Overall Rating: {summary.get('overall_rating', 'N/A')}")
             print(f"Reports saved to: {runner.output_dir}")
             print(f"{'=' * 60}")
+            if config.stop_on_timeout and any(
+                record.get("execution_status") == "timeout" for record in runner.reliability_records
+            ):
+                logger.error(
+                    "Aborting remaining arms after timeout; preserving partial batch outputs"
+                )
+                break
 
         # Cross-arm comparison artifact (only meaningful for --system both)
         if len(summaries) > 1:
