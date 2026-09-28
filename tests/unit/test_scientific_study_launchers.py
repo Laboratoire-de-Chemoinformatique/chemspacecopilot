@@ -179,3 +179,34 @@ def test_resume_does_not_trust_changed_artifacts(tmp_path):
     artifact.write_text("altered")
     with pytest.raises(ValueError, match="artifact changed"):
         common.run_jobs(_spec(), out, worker_script=worker, resume=True)
+
+
+def test_provenance_records_actual_distribution_and_redacts_source_credentials(monkeypatch):
+    class Distribution:
+        version = "4.1.35"
+
+        def locate_file(self, _path):
+            return Path("/installed/compatibility/runtime")
+
+        def read_text(self, name):
+            assert name == "direct_url.json"
+            return json.dumps(
+                {
+                    "url": "https://user:secret@example.org/repo.git?token=secret#secret",
+                    "vcs_info": {"vcs": "git", "commit_id": "abc123"},
+                }
+            )
+
+    def distribution(name):
+        if name == "CGRtools":
+            return Distribution()
+        raise common.importlib.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(common.importlib.metadata, "distribution", distribution)
+    identity = common.software_identity()
+    assert identity["packages"]["CGRtools"] == "4.1.35"
+    assert identity["packages"]["cgrtools-stable"] is None
+    recorded = identity["distributions"]["CGRtools"]
+    assert recorded["source_url"] == "https://example.org/repo.git"
+    assert recorded["commit_id"] == "abc123"
+    assert "secret" not in json.dumps(identity)
