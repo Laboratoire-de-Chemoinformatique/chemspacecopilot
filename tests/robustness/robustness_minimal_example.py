@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Set
+from unittest.mock import patch
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
@@ -125,6 +126,7 @@ class RobustnessConfig:
     reliability_min_success_rate: float = 0.8
     pricing: Dict[str, float] = field(default_factory=dict)
     inference_settings: Dict[str, Any] = field(default_factory=dict)
+    tool_settings: Dict[str, Any] = field(default_factory=dict)
     config_path: Optional[Path] = None
 
     # System under test: "team" (multi-agent) or "single_agent" (flat baseline).
@@ -232,6 +234,7 @@ def load_config(config_path: Path) -> RobustnessConfig:
         reliability_min_success_rate=general.get("reliability_min_success_rate", 0.8),
         pricing=model.get("pricing", {}),
         inference_settings=model.get("inference_settings", {}),
+        tool_settings=data.get("tool_settings", {}),
         config_path=config_path,
         model_provider=model.get("provider", "deepseek"),
         model_id=model.get("model_id", "deepseek-chat"),
@@ -519,6 +522,24 @@ class RobustnessRunner:
         return files
 
     def _build_system(self):
+        """Apply explicit benchmark-only toolkit configuration to both arms."""
+        settings = self.config.tool_settings
+        if not settings:
+            return self._build_default_system()
+        if set(settings) - {"synplanner"}:
+            raise ValueError("Unsupported benchmark tool_settings entry")
+        synplanner_settings = settings.get("synplanner")
+        if not isinstance(synplanner_settings, dict):
+            raise ValueError("tool_settings.synplanner must be a mapping")
+        from cs_copilot.agents import factories
+
+        original = factories.SynPlannerToolkit
+        # Constructors run sequentially in this runner; the patch is restored
+        # before inference, including when any toolkit constructor fails.
+        with patch.object(factories, "SynPlannerToolkit", lambda: original(**synplanner_settings)):
+            return self._build_default_system()
+
+    def _build_default_system(self):
         """Build the system under test for the current arm.
 
         Both arms use the same model instance and keep memory disabled, so the
@@ -1546,6 +1567,7 @@ class RobustnessRunner:
                 pricing=self.config.pricing,
                 inference_settings=self.config.inference_settings,
             )
+            environment_manifest["tool_settings"] = self.config.tool_settings
             reliability_summary = save_reliability_bundle(
                 self.output_dir / "reliability",
                 self.reliability_records,
