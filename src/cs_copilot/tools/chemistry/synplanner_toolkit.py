@@ -26,9 +26,11 @@ import hashlib
 import importlib
 import json
 import logging
+import math
 import re
 import sys
 import types
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -1333,20 +1335,22 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         return normalised
 
     @staticmethod
-    def _strip_masks(svg: str) -> str:
-        """Remove mask attributes and definitions from SVG to prevent gray fringes.
-
-        Args:
-            svg: SVG content as string
-
-        Returns:
-            SVG string with masks removed
-        """
-        # 1) Remove mask attributes on elements
-        svg = re.sub(r'\s+mask="url\(#[-\w]+\)"', "", svg)
-        # 2) Remove mask definitions entirely
-        svg = re.sub(r"<mask\b[\s\S]*?</mask>", "", svg, flags=re.IGNORECASE)
-        return svg
+    def _prepare_route_svg(svg: str, background: str = "white") -> str:
+        """Keep atom-label masks and give them explicit bounds for SVG renderers."""
+        namespace = "http://www.w3.org/2000/svg"
+        ET.register_namespace("", namespace)
+        root = ET.fromstring(svg)
+        bounds = root.get("viewBox", "").split()
+        if len(bounds) != 4 or any(not math.isfinite(float(value)) for value in bounds):
+            raise ValueError("SVG requires a finite four-coordinate viewBox")
+        if float(bounds[2]) <= 0 or float(bounds[3]) <= 0:
+            raise ValueError("SVG requires positive dimensions")
+        dimensions = dict(zip(("x", "y", "width", "height"), bounds, strict=True))
+        for mask in root.iter(f"{{{namespace}}}mask"):
+            mask.set("maskUnits", "userSpaceOnUse")
+            mask.attrib.update(dimensions)
+        root.insert(0, ET.Element(f"{{{namespace}}}rect", {**dimensions, "fill": background}))
+        return ET.tostring(root, encoding="unicode")
 
     def _export_crisp(
         self, svg_string: str, output_path: str, k: int = 100, background: str = "white"
@@ -1363,30 +1367,15 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             True if conversion successful, False otherwise
         """
         try:
-            import cairosvg
-        except ImportError:
-            logger.warning("cairosvg not available for PNG conversion")
-            return False
+            import vl_convert
 
-        # Remove the masks that cause gray fringes
-        svg = self._strip_masks(svg_string)
-
-        # Read viewBox to compute integer output size
-        m = re.search(
-            r'viewBox="[^"]*?(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)"',
-            svg,
-        )
-        if not m:
-            raise ValueError("SVG has no viewBox; can't compute pixel-accurate size.")
-        vw, vh = float(m.group(3)), float(m.group(4))
-
-        try:
-            png_bytes = cairosvg.svg2png(
-                bytestring=svg.encode("utf-8"),
-                output_width=int(round(vw * k)),
-                output_height=int(round(vh * k)),
-                background_color=background,
-            )
+            # resvg implements luminance masks; CairoSVG only supports alpha
+            # masks, which leaves bonds visible through chemical atom labels.
+            root = ET.fromstring(self._prepare_route_svg(svg_string, background))
+            _, _, width, height = map(float, root.get("viewBox").split())
+            root.set("width", str(int(round(width * k))))
+            root.set("height", str(int(round(height * k))))
+            png_bytes = vl_convert.svg_to_png(ET.tostring(root, encoding="unicode"))
             with S3.open(output_path, "wb") as f:
                 f.write(png_bytes)
             return True
@@ -1449,6 +1438,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                 svg_string = get_route_svg(tree, node_id)
 
                 if svg_string:
+                    svg_string = self._prepare_route_svg(svg_string)
                     # Convert SVG to base64 data URL for display in UI
                     svg_bytes = svg_string.encode("utf-8")
                     svg_base64 = base64.b64encode(svg_bytes).decode("utf-8")
