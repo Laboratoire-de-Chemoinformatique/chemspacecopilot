@@ -69,13 +69,11 @@ def check_planning_imports() -> None:
             "synplan.chem.utils": ("mol_from_smiles",),
             "synplan.utils.config": (
                 "PolicyNetworkConfig",
-                "RolloutEvaluationConfig",
                 "TreeConfig",
             ),
             "synplan.utils.loading": (
                 "load_building_blocks",
                 "load_reaction_rules",
-                "load_evaluation_function",
             ),
         }
         for module_name, symbols in required.items():
@@ -83,6 +81,18 @@ def check_planning_imports() -> None:
             for symbol in symbols:
                 if not hasattr(module, symbol):
                     raise ImportError(f"{module_name}.{symbol} is unavailable")
+        config_module = importlib.import_module("synplan.utils.config")
+        loading_module = importlib.import_module("synplan.utils.loading")
+        if not (
+            hasattr(config_module, "RolloutEvaluationConfig")
+            and hasattr(loading_module, "load_evaluation_function")
+        ):
+            config = config_module.TreeConfig(evaluation_type="rollout")
+            tree_type = importlib.import_module("synplan.mcts.tree").Tree
+            if config.evaluation_type != "rollout" or not callable(
+                getattr(tree_type, "_rollout_node", None)
+            ):
+                raise ImportError("No supported built-in rollout evaluation API")
     except Exception as exc:
         raise ValueError(
             f"SynPlanner runtime preflight failed before starting any targets: {type(exc).__name__}: {exc}"

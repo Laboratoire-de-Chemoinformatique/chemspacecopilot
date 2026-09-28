@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.metadata
+import importlib.util
 import json
 import os
 import platform
@@ -15,6 +16,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 TERMINAL = {"completed", "error", "timeout", "interrupted"}
 
@@ -57,12 +59,65 @@ def software_identity() -> dict[str, Any]:
         ["git", "rev-parse", "HEAD"], cwd=repository, text=True
     ).strip()
     dirty = subprocess.check_output(["git", "status", "--porcelain"], cwd=repository, text=True)
-    versions = {}
-    for package in ("rdkit", "numpy", "torch", "deepchemography", "SynPlanner", "cgrtools-stable"):
+    versions, distributions = {}, {}
+    packages = (
+        "rdkit",
+        "numpy",
+        "torch",
+        "deepchemography",
+        "SynPlanner",
+        "CGRtools",
+        "cgrtools-stable",
+        "chython",
+        "chython-synplan",
+        "pytorch-lightning",
+        "torch-geometric",
+        "ray",
+    )
+    for package in packages:
         try:
-            versions[package] = importlib.metadata.version(package)
+            distribution = importlib.metadata.distribution(package)
+            versions[package] = distribution.version
+            identity = {
+                "version": distribution.version,
+                "location": str(distribution.locate_file("")),
+            }
+            direct = distribution.read_text("direct_url.json")
+            if direct:
+                source = json.loads(direct)
+                parsed = urlsplit(source.get("url", ""))
+                # Keep provenance, never URL credentials, access tokens, or query strings.
+                host = parsed.hostname or ""
+                if parsed.port:
+                    host += f":{parsed.port}"
+                identity["source_url"] = urlunsplit((parsed.scheme, host, parsed.path, "", ""))
+                if source.get("vcs_info"):
+                    identity["vcs"] = source["vcs_info"].get("vcs")
+                    identity["commit_id"] = source["vcs_info"].get("commit_id")
+            distributions[package] = identity
         except importlib.metadata.PackageNotFoundError:
             versions[package] = None
+    module_origins = {}
+    for module in ("synplan", "CGRtools", "chython", "pytorch_lightning", "torch_geometric", "ray"):
+        active = sys.modules.get(module)
+        module_spec = getattr(active, "__spec__", None) or importlib.util.find_spec(module)
+        module_origins[module] = getattr(active, "__file__", None) or getattr(
+            module_spec, "origin", None
+        )
+    unmet = []
+    requirements = importlib.metadata.requires("SynPlanner") if versions["SynPlanner"] else []
+    from packaging.requirements import Requirement
+
+    for text in requirements or []:
+        requirement = Requirement(text)
+        if requirement.marker and not requirement.marker.evaluate({"extra": ""}):
+            continue
+        try:
+            installed = importlib.metadata.version(requirement.name)
+        except importlib.metadata.PackageNotFoundError:
+            installed = None
+        if installed is None or not requirement.specifier.contains(installed, prereleases=True):
+            unmet.append({"requirement": text, "installed_distribution_version": installed})
     return {
         "git_commit": commit,
         "working_tree_dirty": bool(dirty),
@@ -71,6 +126,10 @@ def software_identity() -> dict[str, Any]:
         "machine": platform.machine(),
         "logical_cpu_count": os.cpu_count(),
         "packages": versions,
+        "distributions": distributions,
+        "imported_module_origins": module_origins,
+        "synplanner_declared_requirements": requirements,
+        "synplanner_unmet_named_requirements": unmet,
     }
 
 
