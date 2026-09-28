@@ -21,13 +21,13 @@ jobs:
         uses: astral-sh/setup-uv@v8.0.0
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --frozen
 
       - name: Check formatting
-        run: uv run black --check src/ tests/
+        run: uv run --no-sync black --check src/ tests/
 
       - name: Run linter
-        run: uv run ruff check src/ tests/
+        run: uv run --no-sync ruff check src/ tests/
 
   test:
     runs-on: ubuntu-latest
@@ -44,12 +44,37 @@ jobs:
         uses: astral-sh/setup-uv@v8.0.0
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --frozen --extra mcp
 
       - name: Run unit tests
-        run: uv run pytest tests/unit/ -v --tb=short
+        run: uv run --no-sync pytest tests/unit/ -v --tb=short
         env:
           USE_S3: "false"
+
+  retrosynthesis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v8.0.0
+      - name: Install pinned retrosynthesis profile
+        run: uv sync --frozen --extra retrosynthesis
+      - name: Exercise real planning and native route figures
+        env:
+          USE_S3: "false"
+          AGNO_TELEMETRY: "false"
+          CUDA_VISIBLE_DEVICES: "-1"
+        run: uv run --no-sync python scripts/smoke_synplanner.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synplanner-integration-smoke
+          path: |
+            reports/synplanner-smoke.json
+            data/sessions/synplanner-integration-smoke/
 
   package:
     runs-on: ubuntu-latest
@@ -66,12 +91,12 @@ jobs:
         uses: astral-sh/setup-uv@v8.0.0
 
       - name: Install MCP dependencies
-        run: uv sync --extra mcp
+        run: uv sync --frozen --extra mcp
 
       - name: Build and audit release archives
         run: |
           uv build
-          uv run python scripts/audit_release_artifacts.py
+          uv run --no-sync python scripts/audit_release_artifacts.py
 
       - name: Smoke-test installed wheel metadata
         run: |
@@ -97,4 +122,9 @@ jobs:
       - name: Smoke-test plugin MCP command
         env:
           USE_S3: "false"
-        run: uv run cscopilot-mcp-check --profile standard --json --timeout 30
+        run: uv run --no-sync cscopilot-mcp-check --profile standard --json --timeout 30
+
+      - name: MCP stdio integration
+        env:
+          USE_S3: "false"
+        run: uv run --no-sync pytest tests/integration/mcp/ -m live

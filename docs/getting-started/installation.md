@@ -9,19 +9,30 @@
 ## Install Dependencies
 
 ```bash
-uv sync
+uv sync --frozen
 ```
 
 Optional extras:
 
 ```bash
 # MCP server for ChatGPT/Codex/Claude-style external clients
-uv sync --extra mcp
+uv sync --frozen --extra mcp
 ```
 
-SynPlanner and CGRtools are installed by the default `uv sync`. SynPlanner
-downloads its runtime model and chemistry data on first use when no local
-`synplan_data` directory is available.
+Retrosynthesis is optional and uses SynPlanner 1.7.0:
+
+```bash
+uv sync --frozen --extra retrosynthesis --extra mcp
+uv run --no-sync chainlit run chainlit_app.py -w
+```
+
+Use `uv run --no-sync` after installing extras, or repeat the extras on each
+`uv run`; otherwise uv may remove them. SynPlanner's published dependencies
+support Linux x86_64 and macOS ARM64. Linux ARM64 currently lacks
+`chytorch-synplan` wheels; use the core installation there or run retrosynthesis
+on a supported host. The new version uses chython and its matching TSV rules
+and policy preset. Historical CGRtools-based manuscript results retain their
+original software and asset manifests.
 
 ## Environment Configuration
 
@@ -119,7 +130,7 @@ By default the ChEMBL Downloader agent queries the [ChEMBL REST API](https://www
 2. Load the dump into a MySQL 8+ server.
 3. Install project dependencies (MySQL support is included):
    ```bash
-   uv sync
+   uv sync --frozen
    ```
 4. Set the environment variables:
    ```bash

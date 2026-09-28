@@ -137,10 +137,19 @@ The repository also includes a tracked `.modelconf` file. Edit it if you want to
 <summary><strong>Install dependencies</strong></summary>
 
 ```bash
-uv sync
+uv sync --frozen
 ```
 
-SynPlanner and CGRtools are included in the default installation.
+Retrosynthesis uses the optional SynPlanner 1.7.0 profile:
+
+```bash
+uv sync --frozen --extra retrosynthesis
+```
+
+Its published dependencies support Linux x86_64 and macOS ARM64, but currently
+lack Linux ARM64 wheels. The core application runs without this extra.
+When running with extras, use `uv run --no-sync` to retain the installed profile.
+See the [installation guide](docs/getting-started/installation.md) for details.
 
 </details>
 

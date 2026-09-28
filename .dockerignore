@@ -30,6 +30,7 @@ env/
 .cursor/
 
 # Git
+.git
 .git/
 .gitignore
 
@@ -85,3 +86,8 @@ docs/
 # Large model files (uncomment if you don't want to include them)
 # models/*.pt
 # models/*.pth
+
+# Local revision evidence and cached studies
+reports/
+synplan_data/
+synplan_preset/

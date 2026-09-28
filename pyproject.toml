@@ -43,15 +43,13 @@ dependencies = [
     "asyncpg>=0.30.0",
     "numba>=0.62.1",
     "huggingface-hub<1.0",
-    "deepchemography @ git+https://github.com/AxelRolov/deepchemography.git@main",
+    "deepchemography @ git+https://github.com/AxelRolov/deepchemography.git@301130e889a4697a876be2db8644cbba875ce0da",
     "marimo>=0.18.4",
     "transformers>=4.57.3",
     "sentence-transformers>=5.2.0",
     "rich>=13.0.0",
     "prompt_toolkit>=3.0.0",
     "boto3>=1.42.30",
-    "CGRtools==4.1.35",
-    "SynPlanner>=1.2.1",
 ]
 requires-python = ">=3.11,<3.13"
 readme = "README.md"
@@ -88,6 +86,7 @@ only-include = [
     "chainlit_app.py",
     "docker-compose.cpu.yml",
     "docker-compose.dev.yml",
+    "docker-compose.gpu.yml",
     "docker-compose.yml",
     "docker-entrypoint.sh",
     "docker-start.sh",
@@ -169,17 +168,15 @@ cscopilot-mcp-serve = "cs_copilot.mcp.__main__:serve_main"
 cscopilot-mcp-check = "cs_copilot.mcp.check:main"
 
 [project.optional-dependencies]
+retrosynthesis = [
+    "SynPlanner==1.7.0",
+]
 postgresql = [
     "psycopg2-binary>=2.9.9",
 ]
 mcp = [
     "mcp>=1.2,<2",
 ]
-
-[tool.uv]
-# CGRtools' legacy setup.py requests an unconstrained Cython. Its extension
-# does not compile with Cython 3; this only constrains builds that request it.
-build-constraint-dependencies = ["cython<3"]
 
 [dependency-groups]
 dev = [

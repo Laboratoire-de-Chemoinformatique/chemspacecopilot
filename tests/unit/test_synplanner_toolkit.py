@@ -211,14 +211,17 @@ def test_toolkit_name():
     assert toolkit.name == "synplanner"
 
 
-def test_synplanner_is_a_default_project_dependency():
+def test_retrosynthesis_extra_avoids_conflicting_cgrtools_distributions():
     root = Path(__file__).resolve().parents[2]
     project = tomllib.loads((root / "pyproject.toml").read_text())
     dependencies = project["project"]["dependencies"]
 
-    assert any(item.lower().startswith("synplanner") for item in dependencies)
-    assert any(item.lower().startswith("cgrtools") for item in dependencies)
-    assert "synplanner" not in project["project"].get("optional-dependencies", {})
+    # SynPlanner brings cgrtools-stable, which owns the same CGRtools module as
+    # the legacy distribution. Installing both makes file ownership ambiguous.
+    assert not any(item.lower().startswith(("synplanner", "cgrtools")) for item in dependencies)
+    extra = project["project"]["optional-dependencies"]["retrosynthesis"]
+    assert "SynPlanner==1.7.0" in extra
+    assert not any(item.lower().startswith("cgrtools==") for item in extra)
 
 
 def test_cgrtools_miniracer_compatibility_decodes_javascript_bytes(monkeypatch):

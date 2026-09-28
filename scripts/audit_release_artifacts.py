@@ -190,6 +190,10 @@ def audit(dist_dir: Path) -> None:
         required={
             ".agents/plugins/marketplace.json",
             ".env.example",
+            "Dockerfile",
+            "docker-compose.yml",
+            "docker-compose.cpu.yml",
+            "docker-compose.gpu.yml",
             "plugins/chemspace-copilot/.codex-plugin/plugin.json",
             "plugins/chemspace-copilot/.mcp.json",
             "plugins/chemspace-copilot/skills/chemspace-orchestrate/SKILL.md",
