@@ -175,6 +175,8 @@ def summarize_records(records: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         "incorrect_tool_selection_runs_per_100": (
             categories.get("incorrect_tool_selection", 0) / total * 100 if total else 0
         ),
+        "tool_selection_assessment_scope": "Automatic validator flags only; absence of a flag does not establish correct tool selection. Human review is not included in these counts.",
+        "human_reviewed_incorrect_tool_selection_rate": None,
         "execution_statuses": dict(
             Counter(str(record.get("execution_status") or "unknown") for record in records)
         ),
@@ -598,7 +600,7 @@ def _markdown_report(summary: Mapping[str, Any]) -> str:
             f"{_format_optional(summary.get('failed_tool_calls_per_100'), 2)} |"
         ),
         (
-            "| Runs with incorrect tool selection per 100 | "
+            "| Runs automatically flagged for tool selection per 100 | "
             f"{summary.get('incorrect_tool_selection_runs_per_100', 0):.2f} |"
         ),
         f"| Total wall time (s) | {summary.get('wall_time_seconds_total', 0):.3f} |",
@@ -632,6 +634,9 @@ def _markdown_report(summary: Mapping[str, Any]) -> str:
             f"complete token usage: {summary.get('token_metrics_complete_runs', 0)}/{summary.get('runs', 0)} runs.",
             "Incomplete usage is excluded from full-run usage distributions. Observed partial usage "
             "is retained in JSON; missing usage is never interpreted as zero.",
+            "Tool-selection counts are automatic validator flags, not expert adjudications. "
+            "A zero means no flag was emitted; human-reviewed incorrect-selection frequency "
+            "remains unavailable until review is completed and analyzed separately.",
             "",
         ]
     )
@@ -717,12 +722,15 @@ def _markdown_system_comparison(comparison: Mapping[str, Any]) -> str:
         "prerequisite is unavailable are listed as not evaluated and excluded from "
         "success and efficiency metrics.",
         "",
+        "Tool-selection counts below are automatic validator flags. Zero flags do not "
+        "establish correct tool selection; human adjudication remains a separate assessment.",
+        "",
         "## Overall objective results",
         "",
         "| Arm | Runs | Successful | Success rate (Wilson 95% CI) | "
         "Wall time median (IQR), s | Tokens median (IQR) | "
         "Tool calls median (IQR) | Failed calls / 100 | "
-        "Incorrect selection runs / 100 | Cost median (IQR) |",
+        "Automatically flagged selection runs / 100 | Cost median (IQR) |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for arm in arms:
@@ -792,7 +800,7 @@ def _markdown_system_comparison(comparison: Mapping[str, Any]) -> str:
         ("Median tool calls", "tool_calls_per_run_median", False, 2),
         ("Failed tool calls per 100", "failed_tool_calls_per_100", False, 2),
         (
-            "Incorrect-selection runs per 100",
+            "Automatically flagged selection runs per 100",
             "incorrect_tool_selection_runs_per_100",
             False,
             2,
@@ -889,6 +897,8 @@ def _write_human_review(path: Path, records: Sequence[Mapping[str, Any]]) -> Non
         "task_fulfillment_0_2",
         "uncertainty_handling_0_2",
         "unsupported_claims_0_2",
+        "incorrect_tool_selection_present_yes_no",
+        "tool_selection_evidence",
         "reviewer_id",
         "notes",
     ]

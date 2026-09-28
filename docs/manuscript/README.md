@@ -25,6 +25,7 @@ protocol is in [manuscript-revision.md](../testing/manuscript-revision.md).
 The compact scientific results are:
 
 - [Generation and reference-set membership](results/generation/README.md).
+- [Retained agent pilots and their limits](results/architecture-pilot/README.md).
 - [sEH projection and source tables](results/seh/README.md).
 - [All ten retrosynthesis outcomes and route figures](results/retrosynthesis/README.md).
 - [Publication figure captions](figures/README.md).
