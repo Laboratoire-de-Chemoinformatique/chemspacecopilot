@@ -1,0 +1,369 @@
+[
+  {
+    "configuration": {
+      "data_dir": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/assets/synplanner",
+      "enable_retry_profiles": false,
+      "llm_fallback": false,
+      "max_depth": 9,
+      "max_iterations": 20,
+      "max_time": 10,
+      "max_tree_size": 10000,
+      "min_mol_size": 6,
+      "rule_prob_threshold": 0.0,
+      "top_k": 1,
+      "top_rules": 50
+    },
+    "excluded_from_generated_target_denominator": true,
+    "execution": {
+      "controller_pid": 1469604,
+      "finished_at": "2026-09-26T16:18:59.988789+00:00",
+      "hostname": "tellurophene",
+      "id": "target_001",
+      "result": {
+        "artifacts": {
+          "plan.json": {
+            "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_pilot/target_001/plan.json",
+            "sha256": "79aed690a86a5637612662087dc191f43370d5a24bb4e24dd30702526a371613",
+            "size_bytes": 4748
+          }
+        },
+        "first_route_num_steps": null,
+        "first_route_score": null,
+        "route_count": 0,
+        "route_length_check": "unavailable",
+        "scientific_outcome": "error",
+        "search_seconds": null,
+        "seed_control": {
+          "cuda_seeded": false,
+          "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+          "numpy_random": true,
+          "python_random": true,
+          "pythonhashseed": "42",
+          "seed": 42,
+          "torch": true,
+          "torch_deterministic_algorithms": true,
+          "torch_num_threads": 1
+        },
+        "target_id": "aspirin"
+      },
+      "seed": 42,
+      "started_at": "2026-09-26T16:18:47.838204+00:00",
+      "status": "completed",
+      "wall_seconds": 12.149327598977834,
+      "worker_pid": 1469688
+    },
+    "label": "aspirin_preflight_missing_miniracer",
+    "manifest": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_pilot/manifest.json",
+      "sha256": "ec6f12a2bf8097f1ffbe8f59f0cee367828e694d448f73cfa8fd6f33ecca81db",
+      "size_bytes": 8351
+    },
+    "software": {
+      "distributions": {
+        "CGRtools": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "4.1.35"
+        },
+        "SynPlanner": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "1.2.1"
+        },
+        "chython": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "3.4"
+        },
+        "deepchemography": {
+          "commit_id": "301130e889a4697a876be2db8644cbba875ce0da",
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+          "source_url": "https://github.com/axelrolov/deepchemography",
+          "vcs": "git",
+          "version": "0.2.0"
+        },
+        "numpy": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+          "version": "2.3.5"
+        },
+        "pytorch-lightning": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "2.6.1"
+        },
+        "ray": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "2.53.0"
+        },
+        "rdkit": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+          "version": "2025.9.4"
+        },
+        "torch": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+          "version": "2.10.0"
+        },
+        "torch-geometric": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "2.7.0"
+        }
+      },
+      "git_commit": "4724bc854a50891402f64a1030cf26844b3115f0",
+      "imported_module_origins": {
+        "CGRtools": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/CGRtools/__init__.py",
+        "chython": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/chython/__init__.py",
+        "pytorch_lightning": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/pytorch_lightning/__init__.py",
+        "ray": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/ray/__init__.py",
+        "synplan": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/synplan/__init__.py",
+        "torch_geometric": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/torch_geometric/__init__.py"
+      },
+      "logical_cpu_count": 20,
+      "machine": "aarch64",
+      "packages": {
+        "CGRtools": "4.1.35",
+        "SynPlanner": "1.2.1",
+        "cgrtools-stable": null,
+        "chython": "3.4",
+        "chython-synplan": null,
+        "deepchemography": "0.2.0",
+        "numpy": "2.3.5",
+        "pytorch-lightning": "2.6.1",
+        "ray": "2.53.0",
+        "rdkit": "2025.9.4",
+        "torch": "2.10.0",
+        "torch-geometric": "2.7.0"
+      },
+      "platform": "Linux-6.17.0-1029-nvidia-aarch64-with-glibc2.39",
+      "python": "3.12.13 (main, May 10 2026, 19:27:23) [Clang 22.1.3 ]",
+      "synplanner_declared_requirements": [
+        "adabelief-pytorch (>=0.2.1)",
+        "cgrtools-stable (==4.2.13)",
+        "chython-synplan (>=1.91)",
+        "chytorch-rxnmap-synplan (>=1.6)",
+        "chytorch-synplan (>=1.69)",
+        "click (>=8.0.0)",
+        "huggingface-hub (>=0.24.0)",
+        "ipykernel (>6.29.0)",
+        "ipywidgets (>8.1.0)",
+        "numpy (>=2)",
+        "pandas (>=1.4)",
+        "pytorch-lightning (>=2)",
+        "ray (>=2.0)",
+        "streamlit (>1.35.1)",
+        "streamlit-ketcher (>=0.0.1)",
+        "torch (>=2.0)",
+        "torch-geometric (>=2.4.0)",
+        "toytree (>=2.0)"
+      ],
+      "synplanner_unmet_named_requirements": [
+        {
+          "installed_distribution_version": null,
+          "requirement": "cgrtools-stable (==4.2.13)"
+        },
+        {
+          "installed_distribution_version": null,
+          "requirement": "chython-synplan (>=1.91)"
+        },
+        {
+          "installed_distribution_version": null,
+          "requirement": "chytorch-rxnmap-synplan (>=1.6)"
+        },
+        {
+          "installed_distribution_version": null,
+          "requirement": "chytorch-synplan (>=1.69)"
+        },
+        {
+          "installed_distribution_version": null,
+          "requirement": "streamlit (>1.35.1)"
+        },
+        {
+          "installed_distribution_version": null,
+          "requirement": "streamlit-ketcher (>=0.0.1)"
+        }
+      ],
+      "working_tree_dirty": true
+    }
+  },
+  {
+    "configuration": {
+      "data_dir": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/assets/synplanner",
+      "enable_retry_profiles": false,
+      "llm_fallback": false,
+      "max_depth": 9,
+      "max_iterations": 20,
+      "max_time": 10,
+      "max_tree_size": 10000,
+      "min_mol_size": 6,
+      "rule_prob_threshold": 0.0,
+      "top_k": 1,
+      "top_rules": 50
+    },
+    "excluded_from_generated_target_denominator": true,
+    "execution": {
+      "controller_pid": 3035798,
+      "finished_at": "2026-09-28T05:50:43.623007+00:00",
+      "hostname": "tellurophene",
+      "id": "target_001",
+      "result": {
+        "artifacts": {
+          "plan.json": {
+            "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_pilot_miniracer/target_001/plan.json",
+            "sha256": "3fa2ad2726832a88a645f129094cb092fe30b008dcf936faee8f614d9db8beb9",
+            "size_bytes": 6906
+          }
+        },
+        "first_route_num_steps": 1,
+        "first_route_score": 0.375,
+        "route_count": 1,
+        "route_length_check": "consistent",
+        "scientific_outcome": "route_found",
+        "search_seconds": 0.001,
+        "seed_control": {
+          "cuda_seeded": false,
+          "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+          "numpy_random": true,
+          "python_random": true,
+          "pythonhashseed": "42",
+          "seed": 42,
+          "torch": true,
+          "torch_deterministic_algorithms": true,
+          "torch_num_threads": 1
+        },
+        "target_id": "aspirin"
+      },
+      "seed": 42,
+      "started_at": "2026-09-28T05:50:31.771781+00:00",
+      "status": "completed",
+      "wall_seconds": 11.850885393796489,
+      "worker_pid": 3035967
+    },
+    "label": "aspirin_implementation_positive_control",
+    "manifest": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_pilot_miniracer/manifest.json",
+      "sha256": "fc788e58ec53c659de870da271de263caab90bd341294b957edfc1eca8b4ae99",
+      "size_bytes": 8575
+    },
+    "software": {
+      "distributions": {
+        "CGRtools": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "4.1.35"
+        },
+        "SynPlanner": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "1.2.1"
+        },
+        "chython": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "3.4"
+        },
+        "deepchemography": {
+          "commit_id": "301130e889a4697a876be2db8644cbba875ce0da",
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+          "source_url": "https://github.com/axelrolov/deepchemography",
+          "vcs": "git",
+          "version": "0.2.0"
+        },
+        "mini-racer": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "0.14.1"
+        },
+        "numpy": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+          "version": "2.3.5"
+        },
+        "pytorch-lightning": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "2.6.1"
+        },
+        "ray": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "2.53.0"
+        },
+        "rdkit": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+          "version": "2025.9.4"
+        },
+        "torch": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+          "version": "2.10.0"
+        },
+        "torch-geometric": {
+          "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+          "version": "2.7.0"
+        }
+      },
+      "git_commit": "aacb316f49200dc31d60cf8163a6ddee3bd9de22",
+      "imported_module_origins": {
+        "CGRtools": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/CGRtools/__init__.py",
+        "chython": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/chython/__init__.py",
+        "pytorch_lightning": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/pytorch_lightning/__init__.py",
+        "ray": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/ray/__init__.py",
+        "synplan": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/synplan/__init__.py",
+        "torch_geometric": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/torch_geometric/__init__.py"
+      },
+      "logical_cpu_count": 20,
+      "machine": "aarch64",
+      "packages": {
+        "CGRtools": "4.1.35",
+        "SynPlanner": "1.2.1",
+        "cgrtools-stable": null,
+        "chython": "3.4",
+        "chython-synplan": null,
+        "deepchemography": "0.2.0",
+        "mini-racer": "0.14.1",
+        "numpy": "2.3.5",
+        "pytorch-lightning": "2.6.1",
+        "ray": "2.53.0",
+        "rdkit": "2025.9.4",
+        "torch": "2.10.0",
+        "torch-geometric": "2.7.0"
+      },
+      "platform": "Linux-6.17.0-1029-nvidia-aarch64-with-glibc2.39",
+      "python": "3.12.13 (main, May 10 2026, 19:27:23) [Clang 22.1.3 ]",
+      "synplanner_declared_requirements": [
+        "adabelief-pytorch (>=0.2.1)",
+        "cgrtools-stable (==4.2.13)",
+        "chython-synplan (>=1.91)",
+        "chytorch-rxnmap-synplan (>=1.6)",
+        "chytorch-synplan (>=1.69)",
+        "click (>=8.0.0)",
+        "huggingface-hub (>=0.24.0)",
+        "ipykernel (>6.29.0)",
+        "ipywidgets (>8.1.0)",
+        "numpy (>=2)",
+        "pandas (>=1.4)",
+        "pytorch-lightning (>=2)",
+        "ray (>=2.0)",
+        "streamlit (>1.35.1)",
+        "streamlit-ketcher (>=0.0.1)",
+        "torch (>=2.0)",
+        "torch-geometric (>=2.4.0)",
+        "toytree (>=2.0)"
+      ],
+      "synplanner_unmet_named_requirements": [
+        {
+          "installed_distribution_version": null,
+          "requirement": "cgrtools-stable (==4.2.13)"
+        },
+        {
+          "installed_distribution_version": null,
+          "requirement": "chython-synplan (>=1.91)"
+        },
+        {
+          "installed_distribution_version": null,
+          "requirement": "chytorch-rxnmap-synplan (>=1.6)"
+        },
+        {
+          "installed_distribution_version": null,
+          "requirement": "chytorch-synplan (>=1.69)"
+        },
+        {
+          "installed_distribution_version": null,
+          "requirement": "streamlit (>1.35.1)"
+        },
+        {
+          "installed_distribution_version": null,
+          "requirement": "streamlit-ketcher (>=0.0.1)"
+        }
+      ],
+      "working_tree_dirty": true
+    }
+  }
+]

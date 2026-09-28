@@ -1,0 +1,17 @@
+{
+  "tested_git_commit": "432645376b519a0ee9056e6f57c9408cee10e25c",
+  "source_ref_note": "Full commit resolved below; only an untracked evidence selection file was present at suite start.",
+  "command": "USE_S3=false PYTHONPATH=src:/absolute/isolated/python-deps /absolute/python -m pytest tests/unit -q",
+  "python_executable": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/bin/python",
+  "result": {
+    "passed": 1176,
+    "skipped": 2,
+    "warnings": 2,
+    "duration_seconds": 15.68
+  },
+  "log": {
+    "path": "reports/reviewer_revision/unit-regression-20260928.log",
+    "sha256": "5f2094ff9eea0b5d49e5caf38594ad84fe26e5e65014ed52f756243773c614e4"
+  },
+  "scope": "Unit regression, not a measurement of autonomous scientific task success. Later code changes require their own relevant validation."
+}

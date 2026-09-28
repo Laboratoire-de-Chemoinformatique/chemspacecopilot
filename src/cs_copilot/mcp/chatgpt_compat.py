@@ -3,7 +3,7 @@
 ChatGPT developer mode can call arbitrary MCP tools, but data-only apps,
 company knowledge, and deep research rely on the conventional read-only
 ``search`` and ``fetch`` pair. These helpers expose cs_copilot's MCP tool
-catalog, prompt catalog, skill catalog, workflow catalog, and current session
+catalog, prompt catalog, skill catalog, workflow catalog, and registered run
 artifacts through that interface without importing the optional MCP SDK.
 """
 
@@ -67,7 +67,7 @@ def search(query: str) -> SearchOutput:
 
 
 def fetch(id: str) -> FetchOutput:
-    """Fetch one cs_copilot MCP catalog entry or session artifact by id."""
+    """Fetch one cs_copilot MCP catalog entry or registered run resource by id."""
 
     for doc in _iter_documents():
         if doc.id == id:
@@ -92,7 +92,7 @@ def _catalog_documents() -> Iterable[_Document]:
         kind="catalog",
         summary=(
             "Overview of the cs_copilot MCP server, remote transports, tool "
-            "catalog, prompt catalog, and session artifact resources."
+            "catalog, prompt catalog, and workflow-run artifact resources."
         ),
         metadata={},
     )
@@ -129,19 +129,22 @@ def _catalog_documents() -> Iterable[_Document]:
         metadata={},
     )
     yield _Document(
-        id="catalog:session",
-        title="cs_copilot session artifacts",
-        url="cscopilot://session/manifest.json",
+        id="catalog:runs",
+        title="cs_copilot workflow runs",
+        url="cscopilot://runs/",
         kind="catalog",
-        summary="Files, reports, plots, and datasets written by the active session.",
+        summary="Run manifests, events, and checksummed registered artifacts.",
         metadata={},
     )
 
 
 def _tool_documents() -> Iterable[_Document]:
+    from .context import get_current_context
     from .tools_registry import iter_specs
 
-    for spec in iter_specs():
+    ctx = get_current_context()
+    profile = getattr(ctx, "mcp_profile", None) if ctx is not None else None
+    for spec in iter_specs(profile=profile):
         yield _Document(
             id=f"tool:{spec.mcp_name}",
             title=f"Tool: {spec.mcp_name}",
@@ -153,6 +156,18 @@ def _tool_documents() -> Iterable[_Document]:
                 "method": spec.method,
                 "group": spec.group,
                 "forced_arguments": sorted(spec.forces),
+                "read_only": spec.read_only,
+                "destructive": spec.destructive,
+                "idempotent": spec.idempotent,
+                "risk": spec.risk,
+                "roles": list(spec.roles),
+                "profiles": list(spec.profiles),
+                "timeout_s": spec.timeout_s,
+                "max_output_bytes": spec.max_output_bytes,
+                "requires_network": spec.requires_network,
+                "write_scope": spec.write_scope,
+                "read_artifact_fields": list(spec.read_artifact_fields),
+                "trusted_pickle_fields": list(spec.trusted_pickle_fields),
             },
         )
 
@@ -186,11 +201,16 @@ def _skill_documents() -> Iterable[_Document]:
             summary=spec.summary,
             metadata={
                 "slug": spec.slug,
+                "version": spec.version,
                 "status": spec.status,
                 "tags": list(spec.tags),
+                "depends_on": list(spec.depends_on),
+                "profiles": list(spec.profiles),
+                "permissions": list(spec.permissions),
+                "input_artifacts": [contract.as_dict() for contract in spec.input_artifacts],
+                "output_artifacts": [contract.as_dict() for contract in spec.output_artifacts],
                 "required_tools": list(spec.required_tools),
                 "optional_tools": list(spec.optional_tools),
-                "artifact_outputs": list(spec.artifact_outputs),
             },
         )
 
@@ -207,12 +227,18 @@ def _workflow_documents() -> Iterable[_Document]:
             summary=spec.summary,
             metadata={
                 "slug": spec.slug,
+                "version": spec.version,
                 "status": spec.status,
                 "tags": list(spec.tags),
+                "depends_on": list(spec.depends_on),
+                "profiles": list(spec.profiles),
+                "permissions": list(spec.permissions),
+                "input_artifacts": [contract.as_dict() for contract in spec.input_artifacts],
+                "output_artifacts": [contract.as_dict() for contract in spec.output_artifacts],
+                "tasks": [task.as_dict() for task in spec.tasks],
                 "preflight_tools": list(spec.preflight_tools),
                 "required_tools": list(spec.required_tools),
                 "optional_tools": list(spec.optional_tools),
-                "expected_artifacts": list(spec.expected_artifacts),
                 "recommended_prompt": spec.recommended_prompt,
             },
         )
@@ -222,15 +248,13 @@ def _resource_documents() -> Iterable[_Document]:
     from .resources import list_entries
 
     for entry in list_entries():
-        rel_path = entry.uri.rsplit("/", 1)[-1]
-        if entry.uri.startswith("cscopilot://session/"):
-            rel_path = entry.uri[len("cscopilot://session/") :]
+        rel_path = entry.uri.removeprefix("cscopilot://runs/")
         yield _Document(
             id=f"resource:{rel_path}",
-            title=f"Session artifact: {rel_path}",
+            title=f"Run resource: {rel_path}",
             url=entry.uri,
             kind="resource",
-            summary=f"{entry.mime_type} session artifact {rel_path}",
+            summary=f"{entry.mime_type} workflow-run resource {rel_path}",
             metadata={
                 "uri": entry.uri,
                 "mime_type": entry.mime_type,
@@ -339,18 +363,18 @@ def _render_catalog(doc_id: str) -> str:
             rows.append(f"- {doc.metadata['slug']}: {doc.summary}{suffix}")
         return "cs_copilot workflows\n\n" + "\n".join(rows)
 
-    if doc_id == "catalog:session":
+    if doc_id == "catalog:runs":
         rows = []
         for doc in _resource_documents():
             rows.append(f"- {doc.url}: {doc.summary}")
-        return "cs_copilot session artifacts\n\n" + "\n".join(rows)
+        return "cs_copilot workflow runs\n\n" + "\n".join(rows)
 
     return (
         "cs_copilot MCP server\n\n"
         "Use full ChatGPT developer-mode MCP access to call cs_copilot tools "
         "directly. Use this search/fetch interface for read-only discovery, "
         "deep research, company knowledge, and citations over the tool catalog, "
-        "prompt catalog, skill catalog, workflow catalog, and session artifacts."
+        "prompt catalog, skill catalog, workflow catalog, and registered run resources."
     )
 
 
@@ -358,12 +382,25 @@ def _render_tool(doc: _Document) -> str:
     forced = doc.metadata.get("forced_arguments") or []
     forced_text = ", ".join(forced) if forced else "none"
     group_text = doc.metadata.get("group") or "uncategorized"
+    roles = ", ".join(doc.metadata.get("roles") or []) or "none"
+    profiles = ", ".join(doc.metadata.get("profiles") or []) or "none"
+    read_artifact_fields = ", ".join(doc.metadata.get("read_artifact_fields") or []) or "none"
     return (
         f"Tool: {doc.metadata['name']}\n\n"
         f"Group: {group_text}\n"
         f"Summary: {doc.summary}\n"
         f"Backed by toolkit method: {doc.metadata['method']}\n"
-        f"Server-forced arguments hidden from clients: {forced_text}\n\n"
+        f"Server-forced arguments hidden from clients: {forced_text}\n"
+        f"Read only: {doc.metadata['read_only']}\n"
+        f"Idempotent: {doc.metadata['idempotent']}\n"
+        f"Risk: {doc.metadata['risk']}\n"
+        f"Allowed roles: {roles}\n"
+        f"Profiles: {profiles}\n"
+        f"Network required: {doc.metadata['requires_network']}\n"
+        f"Write scope: {doc.metadata['write_scope']}\n"
+        f"Verified artifact inputs: {read_artifact_fields}\n"
+        f"Timeout seconds: {doc.metadata['timeout_s']}\n"
+        f"Maximum inline output bytes: {doc.metadata['max_output_bytes']}\n\n"
         "In full MCP developer mode, call this tool by name with arguments "
         "matching the tool schema returned by list_tools. In data-only "
         "ChatGPT modes, this entry is documentation only."
@@ -400,8 +437,11 @@ def _render_skill(doc: _Document) -> str:
     return (
         f"Skill: {spec.title}\n\n"
         f"Slug: {spec.slug}\n"
+        f"Version: {spec.version}\n"
         f"Status: {spec.status}\n"
         f"Summary: {spec.summary}\n"
+        f"Profiles: {', '.join(spec.profiles) or 'none'}\n"
+        f"Permissions: {', '.join(spec.permissions) or 'none'}\n"
         f"Required tools: {required}\n"
         f"Optional tools: {optional}\n"
         f"Expected artifacts: {artifacts}\n\n"
@@ -421,8 +461,11 @@ def _render_workflow(doc: _Document) -> str:
     return (
         f"Workflow: {spec.title}\n\n"
         f"Slug: {spec.slug}\n"
+        f"Version: {spec.version}\n"
         f"Status: {spec.status}\n"
         f"Summary: {spec.summary}\n"
+        f"Profiles: {', '.join(spec.profiles) or 'none'}\n"
+        f"Permissions: {', '.join(spec.permissions) or 'none'}\n"
         f"Recommended prompt: {prompt}\n"
         f"Preflight tools: {preflight}\n"
         f"Required tools: {required}\n"
@@ -442,7 +485,7 @@ def _render_resource(doc: _Document) -> str:
     size = doc.metadata.get("size")
     size_text = f", {size} bytes" if size is not None else ""
     return (
-        f"Binary session artifact: {uri}\n"
+        f"Binary workflow-run artifact: {uri}\n"
         f"MIME type: {mime_type}{size_text}\n\n"
         "This artifact is available through the MCP resource interface, but "
         "the ChatGPT-compatible fetch text field only contains metadata for "

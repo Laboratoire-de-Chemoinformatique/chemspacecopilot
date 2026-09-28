@@ -18,13 +18,14 @@ SPECS: List[ToolSpec] = [
         toolkit_factory=workflow_policy_facade,
         method="prepare_chembl_retrieval",
         summary=(
-            "Read-only preflight gate that validates a ChEMBL retrieval before "
+            "Contract-recording preflight gate that validates a ChEMBL retrieval before "
             "chembl_fetch_compounds. You extract the target (gene symbol, protein name, "
             "ChEMBL id, or organism), organism, assay_types, and mechanism from the "
             "request and pass them in; the gate checks completeness and returns "
             "clarifying questions for anything missing. Do not infer fields just to pass."
         ),
-        read_only=True,
+        write_scope="session",
+        result_artifact_type="retrieval_plan",
     ),
     ToolSpec(
         mcp_name="chembl_fetch_compounds",
@@ -40,6 +41,7 @@ SPECS: List[ToolSpec] = [
         ),
         run_in_worker_process=True,
         worker_timeout_s=900,
+        requires_network=True,
     ),
     ToolSpec(
         mcp_name="chembl_create_external_judge_task",
@@ -65,6 +67,7 @@ SPECS: List[ToolSpec] = [
         method="describe_dataset",
         summary="Return a structural summary of a previously fetched ChEMBL dataset by path.",
         read_only=True,
+        read_artifact_fields=("path_to_dataset",),
     ),
     ToolSpec(
         mcp_name="chembl_convert_to_chembl_query",

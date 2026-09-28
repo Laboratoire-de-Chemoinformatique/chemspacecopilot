@@ -218,7 +218,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         self,
         config: Optional[DBConfig] = None,
         backend: str = "auto",
-        **toolkit_kwargs,
+        **toolkit_kwargs: Any,
     ):
         """
         Initialize ChEMBL toolkit.
@@ -277,9 +277,36 @@ class ChemblToolkit(BaseDatabaseToolkit):
         self._client = None  # Will be initialized lazily
         self._client_init_error = None  # Store initialization error if any
         self._fetcher = fetcher
+        self.register(self.prepare_retrieval)
         self.register(self.fetch_compounds)
         self.register(self.describe_dataset)
         self.register(self.convert_to_chembl_query)
+
+    def prepare_retrieval(
+        self,
+        target: Optional[str] = None,
+        target_type: Optional[str] = None,
+        organism: Optional[str] = None,
+        assay_types: Optional[Sequence[str]] = None,
+        mechanism: Optional[str] = None,
+        notes: Optional[str] = None,
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Validate target, organism, assay, and mechanism choices before retrieval."""
+        from cs_copilot.workflows import prepare_chembl_retrieval
+
+        decision = prepare_chembl_retrieval(
+            target=target,
+            target_type=target_type,
+            organism=organism,
+            assay_types=assay_types,
+            mechanism=mechanism,
+            notes=notes,
+        )
+        for state in update_state_targets(agent, session_state):
+            state["chembl_retrieval_preflight"] = decision
+        return decision
 
     def _ensure_client(self):
         """Lazy initialization of ChEMBL client."""
@@ -758,13 +785,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 clean_filename=f"chembl_{query_slug}_clean.csv",
                 descriptor_filename=f"chembl_{query_slug}_descriptors.parquet",
                 report_filename=f"chembl_{query_slug}_standardization_report.md",
+                report_appendix=self._retrieval_filtering_report_appendix(filtering.summary),
                 session_state=session_for_artifacts,
             )
             prepared.standardization_summary["chembl_retrieval_filtering"] = filtering.summary
-            self._append_retrieval_filtering_report(
-                prepared.standardization_report_path,
-                filtering.summary,
-            )
             total_assays = len(all_assay_ids)
             clean_df = prepared.clean_df
             activity_mapping = prepared.activity_mapping.to_dict()
@@ -1404,15 +1428,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
         report_path: str,
         filtering_summary: Dict[str, Any],
     ) -> None:
-        if not filtering_summary:
+        section = self._retrieval_filtering_report_appendix(filtering_summary)
+        if section is None:
             return
-        if (
-            filtering_summary.get("suspicious_row_count", 0) == 0
-            and filtering_summary.get("metadata_judge_row_count", 0) == 0
-            and filtering_summary.get("filtered_row_count", 0) == 0
-        ):
-            return
-        section = self._format_retrieval_filtering_report_section(filtering_summary)
         try:
             if self._is_remote_or_explicit_path(report_path):
                 try:
@@ -1430,6 +1448,22 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 path.write_text(existing.rstrip() + "\n\n" + section)
         except Exception as exc:
             logger.warning("Could not append ChEMBL retrieval filtering report: %s", exc)
+
+    def _retrieval_filtering_report_appendix(
+        self,
+        filtering_summary: Dict[str, Any],
+    ) -> Optional[str]:
+        """Return the ChEMBL provenance section for single-pass report creation."""
+
+        if not filtering_summary:
+            return None
+        if (
+            filtering_summary.get("suspicious_row_count", 0) == 0
+            and filtering_summary.get("metadata_judge_row_count", 0) == 0
+            and filtering_summary.get("filtered_row_count", 0) == 0
+        ):
+            return None
+        return self._format_retrieval_filtering_report_section(filtering_summary)
 
     def _write_retrieval_filtering_only_report(
         self,

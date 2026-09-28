@@ -1,0 +1,33 @@
+{
+  "schema": "chemspacecopilot.source_verification.v1",
+  "study": "retrosynthesis_10",
+  "source_commit": "797e12386f1432d96834c75fd2b8ca8485188585",
+  "recorded_working_tree_dirty": true,
+  "files": [
+    {
+      "path": "scripts/summarize_retrosynthesis.py",
+      "recorded_sha256": "95a8a965601789e587b54ea548f9e53ec139ccbed9dee0c3a34345e156a63515",
+      "commit_sha256": "95a8a965601789e587b54ea548f9e53ec139ccbed9dee0c3a34345e156a63515",
+      "matches": true
+    },
+    {
+      "path": "src/cs_copilot/tools/chemistry/synplanner_toolkit.py",
+      "recorded_sha256": "8a1b34450e4a4cba89baa69a78b9cc0c35df0eeec8cb69d1ed946c21dde9ffab",
+      "commit_sha256": "8a1b34450e4a4cba89baa69a78b9cc0c35df0eeec8cb69d1ed946c21dde9ffab",
+      "matches": true
+    },
+    {
+      "path": "scripts/run_retrosynthesis_study.py",
+      "recorded_sha256": "9b4804248e25172e0adae8c55376e4996181e2d0bbfb2f3d8a6f658dcb405250",
+      "commit_sha256": "9b4804248e25172e0adae8c55376e4996181e2d0bbfb2f3d8a6f658dcb405250",
+      "matches": true
+    },
+    {
+      "path": "scripts/_study_common.py",
+      "recorded_sha256": "e12abe7b7f5aa7622850446f2c0c5a49c6b8d89e0326504a3a6be441481f2ebc",
+      "commit_sha256": "e12abe7b7f5aa7622850446f2c0c5a49c6b8d89e0326504a3a6be441481f2ebc",
+      "matches": true
+    }
+  ],
+  "all_recorded_implementation_files_match_commit": true
+}

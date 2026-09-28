@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from cs_copilot.agents import prompts as agent_prompts
+from cs_copilot.agents import instructions as agent_prompts
 from cs_copilot.mcp.prompts_registry import all_specs
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -33,10 +33,13 @@ def test_mcp_workflow_prompt_is_external_reasoner_native():
 
     assert "external MCP reasoner" in rendered
     assert "mcp_bootstrap" in rendered
+    assert "workflow and skill documents" in rendered
+    assert "source of truth" in rendered
+    assert "Follow fetched skill/workflow procedures" in rendered
     assert "Call MCP tools directly" in rendered
     assert "Do not invent missing target" in rendered
-    assert "gtm_save_density_plot" in rendered
-    assert "gtm_load_density_matrix" in rendered
+    assert "gtm_save_density_plot" not in rendered
+    assert "gtm_load_density_matrix" not in rendered
 
 
 def test_chembl_retrieval_judge_template_renders():
@@ -70,3 +73,5 @@ def test_cs_copilot_workflow_prompt_uses_team_instructions():
     assert agent_prompts.AGENT_TEAM_INSTRUCTIONS, "team instructions constant is empty"
     # The rendered prompt should contain the first line of the team instructions.
     assert agent_prompts.AGENT_TEAM_INSTRUCTIONS[0] in rendered
+    assert "fetch_skill" in rendered
+    assert "source of truth" in rendered

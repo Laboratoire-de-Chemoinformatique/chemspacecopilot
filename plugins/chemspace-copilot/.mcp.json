@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "chemspace-copilot": {
+      "command": "cscopilot-mcp",
+      "args": ["--profile", "standard"]
+    }
+  }
+}

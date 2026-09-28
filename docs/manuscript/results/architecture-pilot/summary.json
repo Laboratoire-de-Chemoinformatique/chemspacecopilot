@@ -1,0 +1,55 @@
+{
+  "scope": "Two retained standalone-generation pilots from2026-09-26; not the primary frozen48+end-to-end12 protocol. One observation per arm, team first, no replication or counterbalancing. Outputs were reanalyzed offline after validator corrections without rerunning the models.",
+  "provider_model": "deepseek-flash",
+  "inference_settings": {
+    "temperature": 0.0,
+    "max_tokens": 8192
+  },
+  "records": [
+    {
+      "arm": "team",
+      "run_id": "0",
+      "case_name": "pilot_standalone_parent_analogues",
+      "task_success": true,
+      "wall_time_seconds": 212.10724362405017,
+      "tool_call_count": 50,
+      "failed_tool_call_count": 2,
+      "input_tokens": 780236,
+      "output_tokens": 51359,
+      "total_tokens": 831595,
+      "cache_read_tokens": 667904,
+      "telemetry_status": "complete",
+      "token_metrics_status": "complete",
+      "source_path": "reports/reviewer_revision/pilot_reanalysis_20260928/team/reliability/runs.jsonl",
+      "source_sha256": "785b81474bf1f180eacbe5f9ef3f1d2d62a1d11cf854381b1c7e1bfc2a4c96df",
+      "expert_review_status": "not_completed",
+      "repeatability": "not_measured"
+    },
+    {
+      "arm": "single_agent",
+      "run_id": "0",
+      "case_name": "pilot_standalone_parent_analogues",
+      "task_success": true,
+      "wall_time_seconds": 132.22581660503056,
+      "tool_call_count": 23,
+      "failed_tool_call_count": 0,
+      "input_tokens": 701425,
+      "output_tokens": 29719,
+      "total_tokens": 731144,
+      "cache_read_tokens": 664576,
+      "telemetry_status": "complete",
+      "token_metrics_status": "complete",
+      "source_path": "reports/reviewer_revision/pilot_reanalysis_20260928/single_agent/reliability/runs.jsonl",
+      "source_sha256": "79d191b2ced87ba8cb6c9a1d595e5e5f74067435ad7bd0c7f30b97becdcffbb4",
+      "expert_review_status": "not_completed",
+      "repeatability": "not_measured"
+    }
+  ],
+  "limitations": [
+    "Source commits differ in original environment manifests and working trees were marked dirty; this is not a final frozen-version architecture ablation.",
+    "All agent/tool/coordinator calls captured by Agno are counted; totals include delegation overhead.",
+    "Token counts are provider/Agno usage records, not a dollar-cost estimate. Cache-hit counts are retained separately.",
+    "Artifact-based task fulfillment is not independent chemical or factual review. No expert incorrect-tool-choice rate is available.",
+    "No GTM guidance or retrospective reproduction of historical case studies was evaluated."
+  ]
+}

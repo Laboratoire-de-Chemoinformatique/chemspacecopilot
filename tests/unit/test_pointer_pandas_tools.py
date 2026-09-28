@@ -6,6 +6,7 @@ import json
 import pandas as pd
 import pytest
 
+from cs_copilot.mcp.facades.pandas import PointerPandasFacade
 from cs_copilot.tools.io.pointer_pandas_tools import PointerPandasTools, _coerce_columns
 
 
@@ -144,6 +145,37 @@ class TestPointerPandasTools:
 
         assert result["dataframe_name"] == "loaded_activity"
         assert tools.dataframes["loaded_activity"].shape == sample_df.shape
+
+    @pytest.mark.parametrize(
+        "create_using_function",
+        ["DataFrame", "pd.DataFrame"],
+    )
+    def test_mcp_facade_structures_direct_dataframe_constructor(
+        self,
+        create_using_function,
+    ):
+        facade = PointerPandasFacade()
+
+        result = facade.create_dataframe(
+            dataframe_name="constructed",
+            create_using_function=create_using_function,
+            function_parameters={"data": {"value": [1, 2]}},
+        )
+
+        assert result["dataframe_name"] == "constructed"
+        assert "preview" in result
+
+    def test_mcp_facade_normalizes_prefixed_dataframe_class_method(self):
+        facade = PointerPandasFacade()
+
+        result = facade.create_dataframe(
+            dataframe_name="constructed",
+            create_using_function="pd.DataFrame.from_dict",
+            function_parameters={"data": {"value": [1, 2]}},
+        )
+
+        assert result["dataframe_name"] == "constructed"
+        assert "preview" in result
 
     def test_run_dataframe_operation_accepts_json_string_parameters(self, tools, sample_df):
         """Operation parameters are parsed when the tool runtime stringifies them."""

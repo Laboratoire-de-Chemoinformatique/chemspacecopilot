@@ -31,6 +31,14 @@ Example usage:
 from .config import MLflowConfig
 from .core import MLflowTracker, get_tracker, reset_tracker
 from .decorators import track_agent_run, track_tool_call
+from .replay import (
+    GoldenTrajectory,
+    TrajectoryReport,
+    evaluate_trajectory,
+    golden_for_workflow,
+    log_trajectory_report,
+    replay_run,
+)
 from .streaming_buffer import StreamingBuffer
 from .utils import calculate_cost, count_tokens, format_duration
 
@@ -44,6 +52,13 @@ __all__ = [
     # Decorators
     "track_agent_run",
     "track_tool_call",
+    # Replay and golden trajectories
+    "GoldenTrajectory",
+    "TrajectoryReport",
+    "evaluate_trajectory",
+    "golden_for_workflow",
+    "log_trajectory_report",
+    "replay_run",
     # Utilities
     "StreamingBuffer",
     "count_tokens",

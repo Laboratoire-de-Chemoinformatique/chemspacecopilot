@@ -1,0 +1,142 @@
+{
+  "measured_at": "2026-09-26T16:11:58.271200+00:00",
+  "source_study": "reports/reviewer_revision/generation_3x100",
+  "source_commit": "bcc3632da20203a8866ea031492078c1bb9882e6",
+  "configuration": {
+    "decode_mode": "sample",
+    "device": "cpu",
+    "model_dir": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/assets/autoencoder",
+    "n_samples": 100,
+    "noise_scale": 0.1,
+    "parent_id": "CHEMBL3327073",
+    "parent_smiles": "CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1",
+    "temperature": 0.5
+  },
+  "software": {
+    "git_commit": "bcc3632da20203a8866ea031492078c1bb9882e6",
+    "logical_cpu_count": 20,
+    "machine": "aarch64",
+    "packages": {
+      "SynPlanner": null,
+      "cgrtools-stable": null,
+      "deepchemography": "0.2.0",
+      "numpy": "2.3.5",
+      "rdkit": "2025.9.4",
+      "torch": "2.10.0"
+    },
+    "platform": "Linux-6.17.0-1029-nvidia-aarch64-with-glibc2.39",
+    "python": "3.12.13 (main, May 10 2026, 19:27:23) [Clang 22.1.3 ]",
+    "working_tree_dirty": true
+  },
+  "model_assets": {
+    "config.pt": {
+      "sha256": "d15f0fc66da95bfcfa96c31861de71f28e5ce625ebb5d3a542ed9b3d56626a7e",
+      "size_bytes": 1500
+    },
+    "model.pt": {
+      "sha256": "e1872b63c3554c15c84b40aba3af4a78ab4c9428d0fb7970eb2fdc7b4c356392",
+      "size_bytes": 8752098
+    },
+    "vocab.pt": {
+      "sha256": "1b6607e57088f408b7e843b1a5c962781ede66e0bc3e1ff65abb1c30c5e68e4b",
+      "size_bytes": 5330
+    }
+  },
+  "planned_runs": 3,
+  "completed_runs": 3,
+  "raw_output_count": 300,
+  "valid_output_count": 87,
+  "pooled_validity": 0.29,
+  "pooled_unique_standardized_count": 23,
+  "pooled_uniqueness": 0.26436781609195403,
+  "parent_reconstruction_count": 1,
+  "training_novelty": null,
+  "training_novelty_reason": "The exact checkpoint training corpus has not been established. Reference-set absence is not substituted for training novelty.",
+  "unique_candidate_distributions": {
+    "parent_tanimoto": {
+      "n": 23,
+      "min": 0.3048780487804878,
+      "median": 0.5735294117647058,
+      "mean": 0.585175395593844,
+      "max": 1.0
+    },
+    "molecular_weight": {
+      "n": 23,
+      "min": 453.42700000000013,
+      "median": 467.4540000000002,
+      "mean": 469.64873913043493,
+      "max": 487.41600000000017
+    },
+    "logp": {
+      "n": 23,
+      "min": 3.5687000000000015,
+      "median": 4.833300000000003,
+      "mean": 4.655700000000004,
+      "max": 5.367400000000005
+    },
+    "tpsa": {
+      "n": 23,
+      "min": 61.440000000000005,
+      "median": 70.23,
+      "mean": 71.22608695652174,
+      "max": 99.07000000000001
+    },
+    "hbd": {
+      "n": 23,
+      "min": 1.0,
+      "median": 2.0,
+      "mean": 2.130434782608696,
+      "max": 3.0
+    },
+    "hba": {
+      "n": 23,
+      "min": 2.0,
+      "median": 3.0,
+      "mean": 2.608695652173913,
+      "max": 4.0
+    },
+    "rotatable_bonds": {
+      "n": 23,
+      "min": 4.0,
+      "median": 5.0,
+      "mean": 5.304347826086956,
+      "max": 7.0
+    },
+    "qed": {
+      "n": 23,
+      "min": 0.4929906228103285,
+      "median": 0.5850090505497882,
+      "mean": 0.5839604611889397,
+      "max": 0.6373671962743166
+    }
+  },
+  "same_seed_repeat": {
+    "seed": 11,
+    "raw_output_count": 100,
+    "raw_outputs_identical": true,
+    "included_in_primary_denominator": false,
+    "repeat_raw_audit_sha256": "7a3c4fed97dd82cefbbf23df1a415c8e27175814ca0dc3037c36990f9f2417e1",
+    "repeat_raw_audit_path": "reports/reviewer_revision/generation_repeat_seed11/seed_11/raw_audit.json"
+  },
+  "source_raw_audits": [
+    {
+      "path": "reports/reviewer_revision/generation_3x100/seed_11/raw_audit.json",
+      "sha256": "7a3c4fed97dd82cefbbf23df1a415c8e27175814ca0dc3037c36990f9f2417e1"
+    },
+    {
+      "path": "reports/reviewer_revision/generation_3x100/seed_22/raw_audit.json",
+      "sha256": "d4e77bc3cdc0660bcda56a472c252452eb29ea38cc33a7d7490cd5390df170cd"
+    },
+    {
+      "path": "reports/reviewer_revision/generation_3x100/seed_33/raw_audit.json",
+      "sha256": "66e47eb8feb7afc511f447a06c4d1619ec6d335898efb96b159d3eb755c6e9fd"
+    }
+  ],
+  "limitations": [
+    "Raw-output validity is conditional on model-returned strings; internal backend attempts are not exposed.",
+    "This is a prospective bounded local-latent neighborhood experiment around the manuscript parent, not a reconstruction of historical case-study runs or a GTM-conditioned generation benchmark.",
+    "Uniqueness and exact parent membership use repository standardization including stereochemistry removal.",
+    "Physicochemical summaries are computed once per distinct standardized candidate.",
+    "Candidates have no experimental activity or synthesis validation."
+  ]
+}

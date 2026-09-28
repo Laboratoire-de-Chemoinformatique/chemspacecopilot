@@ -1,0 +1,20 @@
+{
+  "criterion_scope": "descriptive projection occupancy; not a model-selection score",
+  "hard_occupied_nodes": 293,
+  "input_dimensions": 256,
+  "mean_normalized_sample_responsibility_entropy": 0.03731077031169361,
+  "model_attributes": {
+    "basis_width": 1,
+    "max_iter": 200,
+    "num_basis_functions": 225,
+    "num_nodes": 900,
+    "pca_scale": true,
+    "reg_coeff": 100,
+    "standardize": false
+  },
+  "model_sha256": "b7842e5fb68353df575b07929ba2331a050367b49c6b83494326890ad97b1e4d",
+  "node_count": 900,
+  "normalized_occupancy_entropy": 0.6746617974445414,
+  "sample_count": 2212,
+  "soft_occupancy_sum": 2212.0
+}

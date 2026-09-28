@@ -143,6 +143,18 @@ def test_chemical_space_preflight_clears_with_intent_and_session_dataset():
     assert "gtm_create_activity_landscapes" in result["recommended_next_tools"]
 
 
+def test_chemical_space_preflight_recommends_density_plot_tools():
+    result = plan_chemical_space_analysis(
+        analysis_intents=["density_landscape"],
+        dataset_source="session_clean_dataset",
+    )
+
+    assert result["can_proceed"] is True
+    assert "gtm_save_density_plot" in result["recommended_next_tools"]
+    assert "gtm_get_density_summary" in result["recommended_next_tools"]
+    assert "gtm_create_activity_landscapes" not in result["recommended_next_tools"]
+
+
 def test_chemical_space_preflight_chembl_intent_defaults_source():
     result = plan_chemical_space_analysis(analysis_intents=["chembl_retrieval"])
 

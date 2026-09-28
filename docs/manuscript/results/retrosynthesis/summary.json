@@ -1,0 +1,424 @@
+{
+  "assets": {
+    "building_blocks": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/assets/synplanner/building_blocks/building_blocks_em_sa_ln.smi",
+      "sha256": "53b6d5eec7b3c522e8499213b95f5884028ce73fd83e09e1e63b6ded97e5affb",
+      "size_bytes": 5784208
+    },
+    "ranking_policy": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/assets/synplanner/uspto/weights/ranking_policy_network.ckpt",
+      "sha256": "c1c8852c4d8177538ba2a815d53e7b29f27e8a6067341f05b136a690bc46d53e",
+      "size_bytes": 164172437
+    },
+    "reaction_rules": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/assets/synplanner/uspto/uspto_reaction_rules.pickle",
+      "sha256": "7d9f275781cc926eeff1d9a9564b4aa335b66506c621f943c82ec902460bf977",
+      "size_bytes": 45489168
+    }
+  },
+  "attempted_target_count": 10,
+  "case_timeout_seconds": 300,
+  "configuration": {
+    "data_dir": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/assets/synplanner",
+    "enable_retry_profiles": false,
+    "llm_fallback": false,
+    "max_depth": 9,
+    "max_iterations": 100,
+    "max_time": 120,
+    "max_tree_size": 10000,
+    "min_mol_size": 6,
+    "rule_prob_threshold": 0.0,
+    "top_k": 1,
+    "top_rules": 50
+  },
+  "declared_target_count": 10,
+  "finalized": true,
+  "implementation_files": {
+    "scripts/summarize_retrosynthesis.py": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/scripts/summarize_retrosynthesis.py",
+      "sha256": "95a8a965601789e587b54ea548f9e53ec139ccbed9dee0c3a34345e156a63515",
+      "size_bytes": 6872
+    },
+    "src/cs_copilot/tools/chemistry/synplanner_toolkit.py": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/src/cs_copilot/tools/chemistry/synplanner_toolkit.py",
+      "sha256": "8a1b34450e4a4cba89baa69a78b9cc0c35df0eeec8cb69d1ed946c21dde9ffab",
+      "size_bytes": 66710
+    }
+  },
+  "inputs": [
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/manifest.json",
+      "sha256": "e4b1aef3ab6e3db6ba86517803db8f381967a045114a855b4e8af20968da0564",
+      "size_bytes": 11159
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_001/execution.json",
+      "sha256": "ed30b6250320e9aea095f4851f1b7aac79d83f19dafff557f2e2a61d2bc501f1",
+      "size_bytes": 1257
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_001/plan.json",
+      "sha256": "882c1ffa39d77ba4eb438cefb7c983d475dfe96191ebe6c6e894eff73a1ffc81",
+      "size_bytes": 11590
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_002/execution.json",
+      "sha256": "f771513e4707522664dd228f34f5c00c605f8ec678d579eaaded35f542068be3",
+      "size_bytes": 1244
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_002/plan.json",
+      "sha256": "a0536590175e79769c82b430d2eaeb32ba7c58e9da287a05f38d2692ab69b812",
+      "size_bytes": 5295
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_003/execution.json",
+      "sha256": "e0f491b253b848f3f3f70e2369f6e9a470279564a363a3dc51bc742ebd8413e2",
+      "size_bytes": 1244
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_003/plan.json",
+      "sha256": "efbc46568f42ae8c50270c0f1688db50904212230173e8b6d400adc49788f583",
+      "size_bytes": 5272
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_004/execution.json",
+      "sha256": "71ad83f445173078fc8845deb93456e9f644e550defc9923a0653bc00806e0bd",
+      "size_bytes": 1243
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_004/plan.json",
+      "sha256": "4b2a603f1e37f7c090860273aec4d20386faae0d24a1d04ecc9693e3b460df26",
+      "size_bytes": 5297
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_005/execution.json",
+      "sha256": "8c07ae86fcb12948b3b6a6d0db80452509d3911982a97c8108dc4ef1c4b79ead",
+      "size_bytes": 1257
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_005/plan.json",
+      "sha256": "bdf15de45321ecb14317869b930db3b0a6434bd2be0bffe0e92e217952a8ca7e",
+      "size_bytes": 13979
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_006/execution.json",
+      "sha256": "8ac1b4ee60852a5146724a462cc2f6bfc318fb895037ed000fbe9dc86f511b2c",
+      "size_bytes": 1243
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_006/plan.json",
+      "sha256": "f97793c3d415e7678285901c45a623ff6cbd8b39640e653dd54e011bf6a92ab2",
+      "size_bytes": 5317
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_007/execution.json",
+      "sha256": "d171e1c1822ec9bf0c3685a2b2739c2d58a737dd9fee07992725a4914aa8ec17",
+      "size_bytes": 1256
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_007/plan.json",
+      "sha256": "779d8231edd643bb57626a78a9fed84efc364f2bae7b3a16b74d960c168839fc",
+      "size_bytes": 10488
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_008/execution.json",
+      "sha256": "0f88b6338b8402385d0c3272efd3dbb06e3189558850092aecb545abebd5ae82",
+      "size_bytes": 1257
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_008/plan.json",
+      "sha256": "3cd187cd9aefd4d70c5033f5b08eee41c7475f25023f9d0f862eaaa3c8172d5a",
+      "size_bytes": 10498
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_009/execution.json",
+      "sha256": "7d2ff27b5143ca3a824663cb1dd0334cecc0c3dea18d758143e014887e7e0ed3",
+      "size_bytes": 1244
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_009/plan.json",
+      "sha256": "5e2aa764d3dd673f397f975e24170ff8265bf0e19d5d7a5dfbef96a8099536c8",
+      "size_bytes": 5316
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_010/execution.json",
+      "sha256": "a677a41abf66ae3071dbd855b14cc56529b5a70e2bd57c693354fa873da222a0",
+      "size_bytes": 1242
+    },
+    {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_010/plan.json",
+      "sha256": "9b490e569dc9e5ddbd39910ec25f855dedc5a02c51ca2a4d58c065304ab49dde",
+      "size_bytes": 5330
+    }
+  ],
+  "interpretation": "Every predeclared target is retained, including failures before a plan was written. Only completed executions with verified plan hashes count as route_found. Predicted routes are not experimentally verified synthetic feasibility. Backend-reported search time may omit its final iteration; worker wall time includes loading, search and rendering. No-route describes only these fixed budgets.",
+  "launcher": {
+    "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/scripts/run_retrosynthesis_study.py",
+    "sha256": "9b4804248e25172e0adae8c55376e4996181e2d0bbfb2f3d8a6f658dcb405250",
+    "size_bytes": 11822
+  },
+  "ledger_code": {
+    "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/scripts/_study_common.py",
+    "sha256": "e12abe7b7f5aa7622850446f2c0c5a49c6b8d89e0326504a3a6be441481f2ebc",
+    "size_bytes": 15399
+  },
+  "manifest_created_at": "2026-09-28T05:53:02.762983+00:00",
+  "outcomes": {
+    "no_route": 6,
+    "route_found": 4
+  },
+  "route_found_count": 4,
+  "route_found_fraction_of_declared_targets": 0.4,
+  "schema": "chemspacecopilot.retrosynthesis_study_summary.v1",
+  "seed_controls": {
+    "target_001": {
+      "cuda_seeded": false,
+      "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+      "numpy_random": true,
+      "python_random": true,
+      "pythonhashseed": "42",
+      "seed": 42,
+      "torch": true,
+      "torch_deterministic_algorithms": true,
+      "torch_num_threads": 1
+    },
+    "target_002": {
+      "cuda_seeded": false,
+      "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+      "numpy_random": true,
+      "python_random": true,
+      "pythonhashseed": "43",
+      "seed": 43,
+      "torch": true,
+      "torch_deterministic_algorithms": true,
+      "torch_num_threads": 1
+    },
+    "target_003": {
+      "cuda_seeded": false,
+      "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+      "numpy_random": true,
+      "python_random": true,
+      "pythonhashseed": "44",
+      "seed": 44,
+      "torch": true,
+      "torch_deterministic_algorithms": true,
+      "torch_num_threads": 1
+    },
+    "target_004": {
+      "cuda_seeded": false,
+      "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+      "numpy_random": true,
+      "python_random": true,
+      "pythonhashseed": "45",
+      "seed": 45,
+      "torch": true,
+      "torch_deterministic_algorithms": true,
+      "torch_num_threads": 1
+    },
+    "target_005": {
+      "cuda_seeded": false,
+      "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+      "numpy_random": true,
+      "python_random": true,
+      "pythonhashseed": "46",
+      "seed": 46,
+      "torch": true,
+      "torch_deterministic_algorithms": true,
+      "torch_num_threads": 1
+    },
+    "target_006": {
+      "cuda_seeded": false,
+      "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+      "numpy_random": true,
+      "python_random": true,
+      "pythonhashseed": "47",
+      "seed": 47,
+      "torch": true,
+      "torch_deterministic_algorithms": true,
+      "torch_num_threads": 1
+    },
+    "target_007": {
+      "cuda_seeded": false,
+      "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+      "numpy_random": true,
+      "python_random": true,
+      "pythonhashseed": "48",
+      "seed": 48,
+      "torch": true,
+      "torch_deterministic_algorithms": true,
+      "torch_num_threads": 1
+    },
+    "target_008": {
+      "cuda_seeded": false,
+      "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+      "numpy_random": true,
+      "python_random": true,
+      "pythonhashseed": "49",
+      "seed": 49,
+      "torch": true,
+      "torch_deterministic_algorithms": true,
+      "torch_num_threads": 1
+    },
+    "target_009": {
+      "cuda_seeded": false,
+      "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+      "numpy_random": true,
+      "python_random": true,
+      "pythonhashseed": "50",
+      "seed": 50,
+      "torch": true,
+      "torch_deterministic_algorithms": true,
+      "torch_num_threads": 1
+    },
+    "target_010": {
+      "cuda_seeded": false,
+      "limitations": "Determinism is scoped to these RNGs and the recorded software/hardware; external backend RNGs may differ.",
+      "numpy_random": true,
+      "python_random": true,
+      "pythonhashseed": "51",
+      "seed": 51,
+      "torch": true,
+      "torch_deterministic_algorithms": true,
+      "torch_num_threads": 1
+    }
+  },
+  "software": {
+    "distributions": {
+      "CGRtools": {
+        "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+        "version": "4.1.35"
+      },
+      "SynPlanner": {
+        "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+        "version": "1.2.1"
+      },
+      "chython": {
+        "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+        "version": "3.4"
+      },
+      "deepchemography": {
+        "commit_id": "301130e889a4697a876be2db8644cbba875ce0da",
+        "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+        "source_url": "https://github.com/axelrolov/deepchemography",
+        "vcs": "git",
+        "version": "0.2.0"
+      },
+      "mini-racer": {
+        "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+        "version": "0.14.1"
+      },
+      "numpy": {
+        "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+        "version": "2.3.5"
+      },
+      "pytorch-lightning": {
+        "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+        "version": "2.6.1"
+      },
+      "ray": {
+        "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+        "version": "2.53.0"
+      },
+      "rdkit": {
+        "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+        "version": "2025.9.4"
+      },
+      "torch": {
+        "location": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/lib/python3.12/site-packages",
+        "version": "2.10.0"
+      },
+      "torch-geometric": {
+        "location": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
+        "version": "2.7.0"
+      }
+    },
+    "git_commit": "797e12386f1432d96834c75fd2b8ca8485188585",
+    "imported_module_origins": {
+      "CGRtools": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/CGRtools/__init__.py",
+      "chython": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/chython/__init__.py",
+      "pytorch_lightning": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/pytorch_lightning/__init__.py",
+      "ray": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/ray/__init__.py",
+      "synplan": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/synplan/__init__.py",
+      "torch_geometric": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps/torch_geometric/__init__.py"
+    },
+    "logical_cpu_count": 20,
+    "machine": "aarch64",
+    "packages": {
+      "CGRtools": "4.1.35",
+      "SynPlanner": "1.2.1",
+      "cgrtools-stable": null,
+      "chython": "3.4",
+      "chython-synplan": null,
+      "deepchemography": "0.2.0",
+      "mini-racer": "0.14.1",
+      "numpy": "2.3.5",
+      "pytorch-lightning": "2.6.1",
+      "ray": "2.53.0",
+      "rdkit": "2025.9.4",
+      "torch": "2.10.0",
+      "torch-geometric": "2.7.0"
+    },
+    "platform": "Linux-6.17.0-1029-nvidia-aarch64-with-glibc2.39",
+    "python": "3.12.13 (main, May 10 2026, 19:27:23) [Clang 22.1.3 ]",
+    "synplanner_declared_requirements": [
+      "adabelief-pytorch (>=0.2.1)",
+      "cgrtools-stable (==4.2.13)",
+      "chython-synplan (>=1.91)",
+      "chytorch-rxnmap-synplan (>=1.6)",
+      "chytorch-synplan (>=1.69)",
+      "click (>=8.0.0)",
+      "huggingface-hub (>=0.24.0)",
+      "ipykernel (>6.29.0)",
+      "ipywidgets (>8.1.0)",
+      "numpy (>=2)",
+      "pandas (>=1.4)",
+      "pytorch-lightning (>=2)",
+      "ray (>=2.0)",
+      "streamlit (>1.35.1)",
+      "streamlit-ketcher (>=0.0.1)",
+      "torch (>=2.0)",
+      "torch-geometric (>=2.4.0)",
+      "toytree (>=2.0)"
+    ],
+    "synplanner_unmet_named_requirements": [
+      {
+        "installed_distribution_version": null,
+        "requirement": "cgrtools-stable (==4.2.13)"
+      },
+      {
+        "installed_distribution_version": null,
+        "requirement": "chython-synplan (>=1.91)"
+      },
+      {
+        "installed_distribution_version": null,
+        "requirement": "chytorch-rxnmap-synplan (>=1.6)"
+      },
+      {
+        "installed_distribution_version": null,
+        "requirement": "chytorch-synplan (>=1.69)"
+      },
+      {
+        "installed_distribution_version": null,
+        "requirement": "streamlit (>1.35.1)"
+      },
+      {
+        "installed_distribution_version": null,
+        "requirement": "streamlit-ketcher (>=0.0.1)"
+      }
+    ],
+    "working_tree_dirty": true
+  },
+  "target_source": {
+    "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/generation/retrosynthesis_targets.csv",
+    "sha256": "0d8ef9af43a9fca60db8aea23ba76e7bcc305825f2e2e030c0b59e7a3fc59497",
+    "size_bytes": 784
+  },
+  "worker_wall_seconds": {
+    "max": 33.19226626702584,
+    "median": 23.1593156515155,
+    "min": 12.683181014843285,
+    "observed_count": 10,
+    "total": 226.78032794501632
+  }
+}

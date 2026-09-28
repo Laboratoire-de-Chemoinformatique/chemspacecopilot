@@ -7,12 +7,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # Selects the base image inside Dockerfile:
-        #   amd64 -> python:3.11-slim (CUDA torch from PyPI)
-        #   arm64 -> nvcr.io/nvidia/pytorch (CUDA torch for DGX Spark / GB10)
-        # docker-start.sh detects the host arch and exports TARGETARCH;
-        # direct `docker compose build` on x86_64 hosts defaults to amd64.
-        TARGETARCH: ${TARGETARCH:-amd64}
+        BASE_IMAGE: ${BASE_IMAGE:-python:3.11-slim}
+        USE_SYSTEM_TORCH: ${USE_SYSTEM_TORCH:-false}
+        INSTALL_RETROSYNTHESIS: ${INSTALL_RETROSYNTHESIS:-false}
     image: cs_copilot_chainlit-app
     container_name: cs_copilot-app
     ports:
@@ -92,7 +89,11 @@ services:
 
   # MinIO (S3-compatible storage)
   minio:
-    image: minio/minio:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.minio
+      target: server
+    image: cs_copilot-minio:local
     container_name: cs_copilot-minio
     ports:
       - "${MINIO_PORT:-9000}:9000"  # API (fallback 9000-9010 via docker-start.sh)
@@ -115,13 +116,17 @@ services:
 
   # MinIO Setup (Create bucket on first run)
   minio-setup:
-    image: minio/mc:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.minio
+      target: client
+    image: cs_copilot-minio-mc:local
     container_name: cs_copilot-minio-setup
     depends_on:
       minio:
         condition: service_healthy
     entrypoint: >
-      /bin/sh -c "
+      /bin/sh -ec "
       mc alias set minio http://minio:9000 ${MINIO_ACCESS_KEY:-cs_copilot} ${MINIO_SECRET_KEY:-chempwd123};
       mc mb minio/${ASSETS_BUCKET:-chatbot-assets} --ignore-existing;
       mc anonymous set download minio/${ASSETS_BUCKET:-chatbot-assets};

@@ -5,8 +5,10 @@
       "args": [
         "--session-id",
         "demo",
+        "--profile",
+        "gtm-analysis",
         "--workflow-slug",
-        "chemical_space",
+        "gtm-density-landscape",
         "--log-level",
         "info"
       ],

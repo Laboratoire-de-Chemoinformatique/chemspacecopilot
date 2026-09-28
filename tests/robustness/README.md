@@ -65,6 +65,12 @@ uv run python tests/robustness/robustness_minimal_example.py --test chembl_downl
 # Enable debug mode
 uv run python tests/robustness/robustness_minimal_example.py --debug
 
+# Multi-agent vs single-agent comparison (runs both arms + writes a comparison)
+uv run python tests/robustness/robustness_minimal_example.py --system both
+
+# Run only the single-agent baseline
+uv run python tests/robustness/robustness_minimal_example.py --system single_agent
+
 # List available tests
 uv run python tests/robustness/robustness_minimal_example.py --list-tests
 
@@ -90,15 +96,153 @@ uv run pytest tests/robustness/ --cov=src/cs_copilot --cov-report=html
 
 ### 5. View Reports
 
-Reports are generated in `tests/robustness/reports/<timestamp>/`:
+Reports are generated in `tests/robustness/reports/<timestamp>_<system>/` (the
+`<system>` suffix is `team` or `single_agent`):
 - `report.md` - Comprehensive markdown robustness report
-- `summary.json` - JSON summary for programmatic access
+- `summary.json` - JSON summary for programmatic access (includes `system_under_test`)
 - `<test_name>/` - Per-test artifacts and detailed results
+
+For `--system both`, a cross-arm comparison is also written to
+`reports/<timestamp>_comparison/` (`comparison.md` + `comparison.json`).
 
 **NEW:** Test results are also automatically saved to S3 (when enabled):
 - See [S3 Results Integration](S3_RESULTS_INTEGRATION.md) for full details
 - Results saved in multiple formats (JSON, CSV, TXT) under session-scoped paths
 - Example: `s3://{bucket}/sessions/{session_id}/robustness_tests/chembl_interactivity/{timestamp}/`
+
+## Manuscript reliability benchmark
+
+For the small reviewer-response study, follow the
+[manuscript revision protocol](../../docs/testing/manuscript-revision.md).
+It defines the 48-execution controlled comparison plus 12 live case/stage
+executions, required scientific artifacts, and interpretation limits.
+
+`manuscript_reliability.yaml` implements the quantitative evaluation requested
+for the ChemSpace Copilot manuscript. It separates two sources of variability:
+
+- The `live` tier repeats the connected sEH Cases 1-3 in one shared session and
+  runs the peptide case independently. It measures the complete deployed system,
+  including external data and model dependencies.
+- The `frozen` tier starts each case from a checksum-verified session-state
+  fixture. It measures orchestration and tool use against stable scientific
+  inputs. Required fixtures fail closed and never fall back to live data.
+
+Each execution records objective task success, structured failed tool calls,
+wall time, Agno token metrics, optional estimated cost, artifact pointers, and
+case-specific acceptance evidence. The legacy semantic robustness score remains
+a secondary descriptive metric; it does not determine reliability pass/fail.
+Wall time covers the synchronous `agent.run(...)` call from submitted prompt to
+returned result; one-time team/model initialization is excluded.
+
+Configure the fixture variables documented in
+`fixtures/manuscript/README.md`, then run:
+
+```bash
+# Small live study: 4 manuscript cases × 3 repeated workflows
+uv run python tests/robustness/robustness_minimal_example.py \
+  --config tests/robustness/manuscript_reliability.yaml \
+  --tier live --repetitions 3
+
+# Larger fixture-backed study with three prompt phrasings × ten repetitions
+uv run python tests/robustness/robustness_minimal_example.py \
+  --config tests/robustness/manuscript_reliability.yaml \
+  --tier frozen --n-variations 3 --repetitions 10
+```
+
+The `reliability/` output directory contains:
+
+- `runs.jsonl`: one normalized, schema-versioned record per execution.
+- `tool_calls.jsonl`: ordered calls with redacted arguments, duration, error
+  flag, bounded result preview, and result hash.
+- `validations.jsonl`: machine-verifiable acceptance checks and evidence.
+- `reliability_summary.json` and `reliability_report.md`: success rates with
+  Wilson 95% intervals, failed calls per 100 calls, runtime/token/cost
+  distributions, and failure categories.
+- `environment_manifest.json`: Git state, exact configured model identifier,
+  configuration hash, Python/platform, and relevant package versions.
+- `human_review.csv`: anonymized, blinded response list for two independent
+  reviewers to score factual grounding and task fulfillment.
+
+Give separate copies of `human_review.csv` and `human_review_packets/` to at
+least two reviewers. Packets contain the task prompt, response, and artifact
+references but hide the system arm, repetition, machine validation, and outcome.
+For the first three dimensions, `0` means absent/poor and `2` means fully
+satisfied. For `unsupported_claims_0_2`, `0` means none, `1` minor, and `2`
+major. Reviewers must fill `reviewer_id` and should not see each other's ratings.
+Aggregate completed sheets with:
+
+```bash
+uv run python tests/robustness/reliability/human_review.py \
+  reviewer_a.csv reviewer_b.csv \
+  --output-dir human_review_results
+```
+
+The aggregate includes dimension means, exact agreement, and pairwise
+quadratic-weighted Cohen's kappa. Resolve material disagreements by a third,
+independent adjudicator and retain both original scores.
+
+## Multi-agent vs single-agent comparison (paper ablation)
+
+The `--system` flag turns the runner into an A/B harness for the reviewer-requested
+multi-agent-vs-single-agent comparison. It is a **controlled ablation**: both arms
+hold the **model, tools, task set, and harness constant** and vary **only the
+agentic structure**.
+
+- **Arm `team`** — the 7-member Agno `Team` (`get_cs_copilot_agent_team`): a
+  coordinator routing to specialists, each with its own context window, focused
+  instructions, and a subset of tools.
+- **Arm `single_agent`** — one flat Agno agent
+  (`get_cs_copilot_single_agent`) holding the **union of all specialist toolkits**
+  with no coordinator, no routing, and no per-specialist context isolation.
+
+Controls and caveats to state in the methods section:
+
+- **Model held constant.** `--system both` builds the model once and reuses the
+  same instance for both arms.
+- **Same tasks and primary metrics.** Both arms run identical prompts, fixtures,
+  objective validators, and telemetry collection. The comparison reports task
+  success with Wilson 95% intervals, wall time, tokens, tool calls and failures,
+  incorrect tool selection, and optional estimated cost.
+- **Secondary robustness metric.** Semantic/data/process/visual similarity remains
+  available for prompt-variation analysis, but it does not determine the
+  publication-facing task-success result.
+- **Complete flat tool namespace.** Agno keeps the first tool when names collide.
+  The flat baseline registers peptide operations under their MCP-style
+  `peptide_*` names, retaining both peptide and small-molecule capabilities. The
+  production peptide specialist keeps its native unprefixed names.
+- **Order control.** Use `--arm-order team-first` and
+  `--arm-order single-agent-first` in alternating independent batches to reduce
+  temporal model/API service bias. Comparison tables always report the canonical
+  team-minus-single-agent delta.
+- **Not** the same as pointing an external agent (Codex/Claude over MCP) at the
+  tools: that confounds architecture with base-model identity and a proprietary
+  harness. Keep that only as a secondary "vs general-purpose agent" note.
+
+Recommended four-case manuscript run:
+
+```bash
+uv run python tests/robustness/robustness_minimal_example.py \
+  --config tests/robustness/manuscript_reliability.yaml \
+  --tier frozen --system both --arm-order team-first \
+  --n-variations 3 --repetitions 10 \
+  --test frozen_case_1_seh_analysis \
+  --test frozen_case_2_seh_generation \
+  --test frozen_case_3_retrosynthesis \
+  --test frozen_case_4_peptide_design
+```
+
+The comparison directory contains paired `comparison.md` and `comparison.json`
+artifacts with overall and per-case outcomes. Unmatched runs are retained in arm
+summaries but listed as pairing warnings. With `--mlflow`, each suite run is
+tagged `system_under_test` so `mlflow_reporter.compare_runs` provides the A/B
+dashboard.
+
+The architectural interpretation is deliberately bounded: deterministic
+scientific operations remain toolkit functions. Specialized agents are intended
+to reduce tool-schema and context complexity, enforce role boundaries, and
+compose open-ended cross-domain requests. Fixed workflows remain preferable for
+fully specified, stable recipes and are represented separately in
+`workflow_catalog/`.
 
 ## Session Isolation
 

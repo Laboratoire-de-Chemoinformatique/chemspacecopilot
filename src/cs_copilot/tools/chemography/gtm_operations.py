@@ -17,6 +17,7 @@ import ast
 import base64
 import gzip
 import hashlib
+import io
 import math
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -886,13 +887,19 @@ def resolve_gtm_model_path(
         # Look for model files in the default directory
         for suffix in GTM_MODEL_SUFFIXES:
             pattern = f"*{suffix}"
-            matches = list(default_path.glob(pattern))
-            if matches:
-                model_path = str(matches[0])
+            for candidate in sorted(default_path.glob(pattern)):
+                model_path = str(candidate)
+                try:
+                    load_gtm_model(model_path)
+                except Exception as exc:
+                    logger.warning("Ignoring invalid cached GTM model %s: %s", model_path, exc)
+                    tried.append(f"default cache file {model_path} (invalid: {exc})")
+                    continue
                 logger.info(f"Found default GTM model at: {model_path}")
                 return model_path
         tried.append(
-            f"default cache {default_path} " f"(no files matching {list(GTM_MODEL_SUFFIXES)})"
+            f"default cache {default_path} "
+            f"(no loadable files matching {list(GTM_MODEL_SUFFIXES)})"
         )
     else:
         tried.append(f"default cache {default_path} (directory does not exist)")
@@ -913,9 +920,14 @@ def resolve_gtm_model_path(
         # Find the model file in the downloaded directory
         for suffix in GTM_MODEL_SUFFIXES:
             pattern = f"*{suffix}"
-            matches = list(Path(downloaded_path).glob(pattern))
-            if matches:
-                model_path = str(matches[0])
+            for candidate in sorted(Path(downloaded_path).glob(pattern)):
+                model_path = str(candidate)
+                try:
+                    load_gtm_model(model_path)
+                except Exception as exc:
+                    logger.warning("Ignoring invalid downloaded GTM model %s: %s", model_path, exc)
+                    tried.append(f"HuggingFace download file {model_path} (invalid: {exc})")
+                    continue
                 logger.info(f"Downloaded GTM model to: {model_path}")
                 return model_path
 
@@ -942,53 +954,59 @@ def resolve_gtm_model_path(
     )
 
 
-def load_gtm_model(gtm_model_path: str) -> Any:
+class _CPUStorageUnpickler(dill.Unpickler):
+    """Remap embedded Torch storages in a trusted GTM pickle on CPU hosts.
+
+    GTM files are executable pickle artifacts and must come from trusted sources.
+    This changes tensor placement, not the pickle trust boundary, and avoids a
+    process-wide monkeypatch of torch.load or torch.storage.
     """
-    Load a GTM model from a file path.
 
-    Supports both gzipped (.pkl.gz) and non-gzipped (.pkl) pickle files.
-    If a file with .pkl.gz extension is not actually gzipped, it will
-    automatically fall back to loading it as a regular pickle file.
+    def find_class(self, module: str, name: str) -> Any:
+        if module == "torch.storage" and name == "_load_from_bytes":
+            return lambda payload: torch.load(
+                io.BytesIO(payload), map_location="cpu", weights_only=False
+            )
+        return super().find_class(module, name)
 
-    Args:
-        gtm_model_path: Path to the GTM model file
 
-    Returns:
-        Loaded GTM model object
+def load_gtm_model(gtm_model_path: str) -> Any:
+    """Load a trusted GTM pickle using its actual compression and available device.
 
-    Raises:
-        FileNotFoundError: If the model file doesn't exist
-        Exception: If loading fails
+    The published default map is a plain pickle despite its .pkl.gz name and
+    contains CUDA tensor storages. On CPU hosts these are remapped while loading,
+    and a saved CUDA device selector is updated so subsequent projection also
+    uses CPU. CUDA-capable hosts retain the checkpoint's original device choices.
     """
     gtm_model_path = _ensure_suffix(gtm_model_path, ".pkl.gz")
-
     logger.info(f"Loading GTM model from: {gtm_model_path}")
+    cpu_only = not torch.cuda.is_available()
+
+    def deserialize(stream: Any) -> Any:
+        return _CPUStorageUnpickler(stream).load() if cpu_only else dill.load(stream)
 
     try:
-        # First, try to load as a gzipped file (expected format)
-        try:
-            with S3.open(gtm_model_path, "rb") as f:
-                with gzip.open(f, "rb") as gz:
-                    gtm = dill.load(gz)
-            logger.info("Successfully loaded GTM model (gzipped)")
-            return gtm
-        except gzip.BadGzipFile:
-            # File has .gz extension but is not actually gzipped
-            # Fall back to loading as a regular pickle file
-            logger.warning(
-                f"File {gtm_model_path} has .gz extension but is not gzipped. "
-                "Loading as regular pickle file."
-            )
-            # Reopen the file for non-gzipped loading
-            with S3.open(gtm_model_path, "rb") as f:
-                gtm = dill.load(f)
-            logger.info("Successfully loaded GTM model (non-gzipped)")
-            return gtm
+        with S3.open(gtm_model_path, "rb") as source:
+            compressed = source.read(2) == b"\x1f\x8b"
+            source.seek(0)
+            if compressed:
+                with gzip.GzipFile(fileobj=source, mode="rb") as stream:
+                    gtm = deserialize(stream)
+            else:
+                gtm = deserialize(source)
+        if cpu_only:
+            device = getattr(gtm, "device", None)
+            if isinstance(device, (str, torch.device)) and str(device).startswith("cuda"):
+                gtm.device = "cpu" if isinstance(device, str) else torch.device("cpu")
+        logger.info(
+            "Successfully loaded GTM model (%s)", "gzipped" if compressed else "plain pickle"
+        )
+        return gtm
     except FileNotFoundError:
         logger.error(f"GTM model file not found: {gtm_model_path}")
         raise
-    except Exception as e:
-        logger.error(f"Error loading GTM model: {e}")
+    except Exception as exc:
+        logger.error(f"Error loading GTM model: {exc}")
         raise
 
 
@@ -1580,7 +1598,7 @@ def data_load_and_prep(
     *,
     descriptor_type: Optional[str] = None,
     agent: Optional[Agent] = None,
-):
+) -> tuple[Any, pd.DataFrame, np.ndarray, np.ndarray]:
     """
     Load GTM model and dataset from S3 storage, prepare descriptors and projections.
 
@@ -1614,21 +1632,7 @@ def data_load_and_prep(
     gtm_saved_file = _ensure_suffix(gtm_model, ".pkl.gz")
     data_file = _ensure_suffix(dataset, ".csv")
 
-    gtm = None
-    try:
-        try:
-            with S3.open(gtm_saved_file, "rb") as f:
-                with gzip.open(f, "rb") as gz:
-                    gtm = dill.load(gz)
-        except gzip.BadGzipFile:
-            # File is not actually gzipped (e.g. a plain .pkl from HuggingFace);
-            # fall back to loading as a regular pickle.
-            logger.warning(f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file.")
-            with S3.open(gtm_saved_file, "rb") as f:
-                gtm = dill.load(f)
-    except ModuleNotFoundError as e:
-        logger.error(f"Error loading GTM model: {e}")
-        raise
+    gtm = load_gtm_model(gtm_saved_file)
 
     with S3.open(data_file, "r") as f:
         df = _read_csv_flexible(f)
@@ -1710,16 +1714,7 @@ def project_data_on_gtm(
     # -------------------------------------------------------------------------
     logger.debug("Loading GTM model for compatibility check...")
     try:
-        try:
-            with S3.open(gtm_saved_file, "rb") as f:
-                with gzip.open(f, "rb") as gz:
-                    gtm = dill.load(gz)
-        except gzip.BadGzipFile:
-            # File is not actually gzipped (e.g. a plain .pkl from HuggingFace);
-            # fall back to loading as a regular pickle.
-            logger.warning(f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file.")
-            with S3.open(gtm_saved_file, "rb") as f:
-                gtm = dill.load(f)
+        gtm = load_gtm_model(gtm_saved_file)
     except FileNotFoundError as e:
         raise FileNotFoundError(f"GTM model file not found: {gtm_saved_file}") from e
     except ModuleNotFoundError as e:
@@ -1998,7 +1993,7 @@ def create_activity_landscapes_plotly(
     node_threshold: float = 0.1,
     chart_width: int = DEFAULT_CHART_WIDTH,
     chart_height: int = DEFAULT_CHART_HEIGHT,
-):
+) -> Any:
     """
     Create a Plotly activity landscape (classification or regression, auto-detected).
 
@@ -2856,7 +2851,7 @@ def tri(grid: np.array) -> int:
     return float(tri_val[valid].mean()) * 100
 
 
-def calculate_map_ruggedness(df, gtm):
+def calculate_map_ruggedness(df: pd.DataFrame, gtm: Any) -> str:
     """
     Calculate the Topographic Ruggedness Index (TRI) for a GTM density map.
 
@@ -2933,7 +2928,7 @@ def gtm_param_grid(n_samples: int, mode: str = "extended") -> dict:
 
     Args:
         n_samples: Number of molecules in the dataset.
-        mode: ``"heuristic"`` (compact, 9 combos) or ``"extended"`` (~108 combos).
+        mode: ``"heuristic"`` (compact, 9 combos) or ``"extended"`` (up to 144 combos).
 
     Returns:
         Dict with keys ``nodes``, ``basis_functions``, ``basis_width_factor``,
@@ -2984,7 +2979,7 @@ def optimize_gtm(
     agent: Optional[Agent] = None,
     X: Optional[np.ndarray] = None,
     descriptor_column: Optional[str] = None,
-):
+) -> tuple[pd.DataFrame, GTM, float]:
     """
     Optimize GTM hyperparameters and fit the final model.
 
@@ -2992,7 +2987,7 @@ def optimize_gtm(
         df: DataFrame containing SMILES column
         smiles_column: Name of the column containing SMILES (default: 'smi')
         strategy: Optimization effort level — ``"low"`` (heuristic grid, 9 combos),
-            ``"medium"`` (extended grid, ~108 combos), or ``"high"`` (Optuna TPE, 50 trials).
+            ``"medium"`` (extended grid, up to 144 combos), or ``"high"`` (Optuna TPE, 50 trials).
 
     Returns:
         tuple: (df with descriptors, fitted GTM model, best score)
@@ -3078,7 +3073,7 @@ def optimize_gtm(
 
     def shannon_entropy(responsibilities: np.ndarray) -> float:
         """
-        Compute the Shannon entropy (in percent) of a GTM landscape.
+        Compute normalized node-occupancy entropy on the interval [0, 1].
         """
         cumR = responsibilities.sum(axis=0)
         p = cumR / cumR.sum()

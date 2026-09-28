@@ -1,0 +1,34 @@
+{
+  "docs/manuscript/results/retrosynthesis/routes/target_001.svg": {
+    "copy_sha256": "eb655164c238338dfec90bb6a4ba6c408945f25159f73b55502f2adffc483563",
+    "source": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_001/data/sessions/study_target_001/workflows/retrosynthesis-c7601edcd13f/03_retrosynthesis/targets/CCC_C_C_O_N1CCC_C_C_NC_O_Nc2ccc_C_F_F_C_F_F_F_c_769fe469/routes/route_001.svg",
+      "sha256": "eb655164c238338dfec90bb6a4ba6c408945f25159f73b55502f2adffc483563",
+      "size_bytes": 43353
+    }
+  },
+  "docs/manuscript/results/retrosynthesis/routes/target_005.svg": {
+    "copy_sha256": "6f0051b6975c0bf81823b8b364a6439f70b12bb16ddf6d6db3b696ace065d1cf",
+    "source": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_005/data/sessions/study_target_005/workflows/retrosynthesis-8309928de649/03_retrosynthesis/targets/CCC_C_C_O_N1CCOC_O_C_NC_O_Nc2ccc_C_F_F_C_F_F_F_c_a1073fdf/routes/route_001.svg",
+      "sha256": "6f0051b6975c0bf81823b8b364a6439f70b12bb16ddf6d6db3b696ace065d1cf",
+      "size_bytes": 63602
+    }
+  },
+  "docs/manuscript/results/retrosynthesis/routes/target_007.svg": {
+    "copy_sha256": "a87be5a25a041a055b687d24a4a5460618b205fab23f4387d884835b7ac98bb5",
+    "source": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_007/data/sessions/study_target_007/workflows/retrosynthesis-34c455bf9a8b/03_retrosynthesis/targets/CCC_C_C_O_N1CCCC_NC_O_Nc2ccc_F_c_C_F_F_C_F_F_F_c_7c407ed3/routes/route_001.svg",
+      "sha256": "a87be5a25a041a055b687d24a4a5460618b205fab23f4387d884835b7ac98bb5",
+      "size_bytes": 34566
+    }
+  },
+  "docs/manuscript/results/retrosynthesis/routes/target_008.svg": {
+    "copy_sha256": "3240986ed7d392993f6d0d42fa6613b8b53ee65b08d1900a0757981d2905f6ac",
+    "source": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_008/data/sessions/study_target_008/workflows/retrosynthesis-c170da354326/03_retrosynthesis/targets/CCC_C_C_O_N1CCCC_NC_O_Nc2ccc_C_F_F_C_F_F_F_c_F_c_2c3f82fe/routes/route_001.svg",
+      "sha256": "3240986ed7d392993f6d0d42fa6613b8b53ee65b08d1900a0757981d2905f6ac",
+      "size_bytes": 34552
+    }
+  }
+}

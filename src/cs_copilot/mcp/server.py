@@ -1,15 +1,8 @@
 """FastMCP server wiring for cs_copilot.
 
-This is the only module that imports from ``mcp.server.fastmcp``. All other
-modules in the package stay pure-Python so they can be unit-tested without
-the optional ``[mcp]`` extra installed.
-
-The server is intentionally a thin orchestrator: it instantiates the toolkit
-singletons, wraps each via :mod:`cs_copilot.mcp.tool_adapter`, registers
-prompts from :mod:`cs_copilot.mcp.prompts_registry`, and overrides resource
-list / read on a FastMCP subclass. It never imports
-``cs_copilot.agents.teams``, ``cs_copilot.agents.factories``, or any other
-module that would launch the Agno multi-agent system.
+This is the only module that imports ``mcp.server.fastmcp``.  Profile
+selection filters the deterministic MCP surface; the external MCP client
+remains the reasoning layer.
 """
 
 from __future__ import annotations
@@ -27,20 +20,21 @@ _LOCAL_ALLOWED_HOSTS = ("127.0.0.1:*", "localhost:*", "[::1]:*")
 _LOCAL_ALLOWED_ORIGINS = ("http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*")
 
 SERVER_INSTRUCTIONS = (
-    "cs_copilot MCP: external MCP client is the reasoning layer. "
-    "Do not invoke the Agno team unless agno_team_run enabled. "
-    "Start with mcp_bootstrap; prompt cs_copilot_mcp_workflow; "
-    "cs_copilot_workflow is legacy. Fetch workflow/skills. "
-    "Run chembl_prepare_retrieval / chemspace_plan_analysis before ChEMBL, "
-    "chemical-space or GTM writes. If preflight asks, ask user; do not "
-    "infer targets/datasets. Use session_* for artifacts, llm_* for "
-    "needs_external_llm, chembl_retrieval_judge for row filtering. Review write actions."
+    "cs_copilot MCP: external MCP client is the reasoning layer/supervisor. "
+    "Do not invoke the Agno team unless agno_team_run is enabled. Start mcp_bootstrap; "
+    "use cs_copilot_mcp_workflow (cs_copilot_workflow is legacy). Fetch workflow/skills; "
+    "workflow_start_run; start each task before tools. Run "
+    "chembl_prepare_retrieval / chemspace_plan_analysis before writes; ask questions, "
+    "never infer targets/datasets. Use run resources, session_*, llm_* for "
+    "needs_external_llm, chembl_retrieval_judge. Review write actions."
 )
 
 
 def build_server(
     ctx: MCPAgentContext,
     *,
+    profile: str = "standard",
+    workflow_slug: str | None = None,
     include_tools: bool = True,
     include_chatgpt_compat: bool = True,
     include_prompts: bool = True,
@@ -64,8 +58,13 @@ def build_server(
     allowed_origins: list[str] | None = None,
     disable_dns_rebinding_protection: bool = False,
 ) -> Any:
-    """Create and configure the FastMCP server instance."""
+    """Create a FastMCP server restricted to one validated profile."""
 
+    from .profiles import get_profile, validate_workflow_profile
+
+    selected_profile = get_profile(profile)
+    if workflow_slug:
+        validate_workflow_profile(selected_profile, workflow_slug)
     require_mcp()
 
     from mcp.server.fastmcp import FastMCP
@@ -81,6 +80,7 @@ def build_server(
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
             self._cs_include_resources = include_resources
+            self._cs_profile = selected_profile.name
 
         async def list_resources(self) -> list[MCPResource]:  # type: ignore[override]
             if not self._cs_include_resources:
@@ -89,7 +89,7 @@ def build_server(
                 MCPResource(
                     uri=entry.uri,  # type: ignore[arg-type]
                     name=entry.name,
-                    description=f"cs_copilot session artifact ({entry.mime_type}).",
+                    description=f"cs_copilot run artifact ({entry.mime_type}).",
                     mimeType=entry.mime_type,
                 )
                 for entry in _resources.list_entries()
@@ -151,7 +151,7 @@ def build_server(
     if include_tools:
         if include_chatgpt_compat:
             _register_chatgpt_compat_tools(server, ToolAnnotations)
-        _register_tools(server, ctx, ToolAnnotations)
+        _register_tools(server, ctx, ToolAnnotations, profile=selected_profile.name)
         if enable_agno_team_tool:
             _register_agno_team_tool(server, ctx, ToolAnnotations)
     if include_prompts:
@@ -160,17 +160,27 @@ def build_server(
     return server
 
 
-def _register_tools(server: Any, ctx: MCPAgentContext, tool_annotations_cls: Any) -> None:
+def _register_tools(
+    server: Any,
+    ctx: MCPAgentContext,
+    tool_annotations_cls: Any,
+    *,
+    profile: str,
+) -> None:
     from .tool_adapter import build_tool
     from .tools_registry import iter_specs
 
     registered: set[str] = set()
-    for spec in iter_specs():
+    instances: dict[int, Any] = {}
+    for spec in iter_specs(profile=profile):
         if spec.mcp_name in registered:
             logger.warning("Duplicate MCP tool name skipped: %s", spec.mcp_name)
             continue
         try:
-            instance = spec.toolkit_factory()
+            factory_key = id(spec.toolkit_factory)
+            if factory_key not in instances:
+                instances[factory_key] = spec.toolkit_factory()
+            instance = instances[factory_key]
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "Skipping MCP tool %s: factory %s raised %s",
@@ -188,12 +198,13 @@ def _register_tools(server: Any, ctx: MCPAgentContext, tool_annotations_cls: Any
                 tool_annotations_cls,
                 read_only=spec.read_only,
                 destructive=spec.destructive,
+                idempotent=spec.idempotent,
                 open_world=spec.open_world,
             ),
-            structured_output=False,
+            structured_output=True,
         )
         registered.add(spec.mcp_name)
-    logger.info("Registered %d MCP tools", len(registered))
+    logger.info("Registered %d MCP tools for profile %s", len(registered), profile)
 
 
 def _dedupe(values: tuple[str, ...] | list[str]) -> list[str]:
@@ -228,11 +239,13 @@ def _tool_annotations(
     *,
     read_only: bool,
     destructive: bool = False,
+    idempotent: bool = False,
     open_world: bool = False,
 ) -> Any:
     return tool_annotations_cls(
         readOnlyHint=read_only,
         destructiveHint=destructive,
+        idempotentHint=idempotent,
         openWorldHint=open_world,
     )
 
@@ -251,10 +264,14 @@ def _register_chatgpt_compat_tools(server: Any, tool_annotations_cls: Any) -> No
         name="search",
         description=(
             "Search the cs_copilot MCP tool, prompt, skill, workflow, and active "
-            "session artifact catalogs. This read-only compatibility tool is "
+            "run artifact catalogs. This read-only compatibility tool is "
             "intended for ChatGPT data-only apps, company knowledge, and deep research."
         ),
-        annotations=_tool_annotations(tool_annotations_cls, read_only=True),
+        annotations=_tool_annotations(
+            tool_annotations_cls,
+            read_only=True,
+            idempotent=True,
+        ),
         structured_output=True,
     )
     server.add_tool(
@@ -262,9 +279,13 @@ def _register_chatgpt_compat_tools(server: Any, tool_annotations_cls: Any) -> No
         name="fetch",
         description=(
             "Fetch a cs_copilot MCP search result by id. Returns tool/prompt "
-            "documentation or the text content of a session artifact."
+            "documentation or the text content of a run artifact."
         ),
-        annotations=_tool_annotations(tool_annotations_cls, read_only=True),
+        annotations=_tool_annotations(
+            tool_annotations_cls,
+            read_only=True,
+            idempotent=True,
+        ),
         structured_output=True,
     )
 
@@ -280,7 +301,11 @@ def _register_agno_team_tool(server: Any, ctx: MCPAgentContext, tool_annotations
             "cs_copilot Agno team, using the configured Agno model. Disabled "
             "by default; prefer fine-grained MCP skills and tools for external clients."
         ),
-        annotations=_tool_annotations(tool_annotations_cls, read_only=False),
+        annotations=_tool_annotations(
+            tool_annotations_cls,
+            read_only=False,
+            idempotent=False,
+        ),
         structured_output=True,
     )
 

@@ -35,6 +35,23 @@ class TestChemblToolkit:
         assert toolkit.config.page_size == 50
         assert toolkit.name == "chembl_toolkit"  # Check toolkit name
 
+    def test_prepare_retrieval_records_preflight(self):
+        toolkit = ChemblToolkit()
+        state = {}
+
+        decision = toolkit.prepare_retrieval(
+            target="EPHX2",
+            target_type="protein",
+            organism="Homo sapiens",
+            assay_types=["binding", "functional"],
+            mechanism="any",
+            session_state=state,
+        )
+
+        assert decision["can_proceed"] is True
+        assert decision["assay_types"] == ["B", "F"]
+        assert state["chembl_retrieval_preflight"] == decision
+
     @patch.object(ChemblToolkit, "_ensure_client")
     def test_connect_success(self, mock_ensure_client):
         """Test successful connection to ChEMBL API."""

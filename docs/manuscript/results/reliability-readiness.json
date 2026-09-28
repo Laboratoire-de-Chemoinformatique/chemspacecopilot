@@ -1,0 +1,34 @@
+{
+  "all_batches_ready": true,
+  "batch_count": 9,
+  "execution_gate": "Automatic approval review rejected the new pilot; waiting for explicit user approval for this external payload/destination and account usage. Do not execute a study command before it arrives.",
+  "fixture_staging": "All four genuine input snapshots copied and resolved successfully in isolated offline sessions",
+  "frozen_case_executions": 48,
+  "frozen_source_mismatches": [],
+  "git_commit_at_planning": "55863a39ce93faa3dd8d6cb879dab4423710be69",
+  "limitations": [
+    "Offline readiness is not measured task success",
+    "A separate analysis pilot has not run",
+    "Archived generation A/B pilot remains n=1 per arm and is excluded from planned60",
+    "Expert review remains incomplete"
+  ],
+  "live_case_stage_executions": 12,
+  "live_scope": "9 ChEMBL chain stages plus3 peptide aggregate-landscape workflows; no raw DBAASP retrieval/training claim",
+  "offline_readiness_path": "reports/reviewer_revision/reliability_study_frozen_v2/offline_readiness.json",
+  "offline_readiness_sha256": "5a83cf5e569584743c51f882eb2a3f3e830c5be701071c0ee2fa3e8a83d6a79e",
+  "plan_path": "reports/reviewer_revision/reliability_study_frozen_v2/study_plan.json",
+  "plan_sha256": "d9ca9867d45310339e27ca2fb4922dffb4a28874828a883597f5bca72646120b",
+  "provider": "DeepSeek API; modeldeepseek-flash; no credential values recorded",
+  "runtime_file_count": 150,
+  "seeds": {
+    "ambient_python_numpy_torch_by_repetition": [
+      11,
+      22,
+      33
+    ],
+    "peptide_tool_default_random_state": 42,
+    "provider_seed": null
+  },
+  "status": "offline ready; no new provider executions; user authorization pending",
+  "verified_input_file_count": 27
+}

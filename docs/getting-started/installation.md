@@ -9,18 +9,30 @@
 ## Install Dependencies
 
 ```bash
-uv sync
+uv sync --frozen
 ```
 
 Optional extras:
 
 ```bash
 # MCP server for ChatGPT/Codex/Claude-style external clients
-uv sync --extra mcp
-
-# Retrosynthesis agent; requires SynPlanner/CGRtools wheels for your platform
-uv sync --extra synplanner
+uv sync --frozen --extra mcp
 ```
+
+Retrosynthesis is optional and uses SynPlanner 1.7.0:
+
+```bash
+uv sync --frozen --extra retrosynthesis --extra mcp
+uv run --no-sync chainlit run chainlit_app.py -w
+```
+
+Use `uv run --no-sync` after installing extras, or repeat the extras on each
+`uv run`; otherwise uv may remove them. SynPlanner's published dependencies
+support Linux x86_64 and macOS ARM64. Linux ARM64 currently lacks
+`chytorch-synplan` wheels; use the core installation there or run retrosynthesis
+on a supported host. The new version uses chython and its matching TSV rules
+and policy preset. Historical CGRtools-based manuscript results retain their
+original software and asset manifests.
 
 ## Environment Configuration
 
@@ -81,13 +93,14 @@ An example workflow is available in `notebooks/cs_copilot.ipynb`.
 # Run the interactive setup script
 python scripts/setup_s3.py
 
-# Or start MinIO manually
+# Or build and start the pinned MinIO source image manually
+docker build -f Dockerfile.minio --target server -t cs_copilot-minio:local .
 docker run -d --name minio \
   -p 9000:9000 -p 9001:9001 \
   -v /mnt/data:/data \
   -e MINIO_ROOT_USER=cs_copilot \
   -e MINIO_ROOT_PASSWORD=chempwd123 \
-  minio/minio server /data --console-address ":9001"
+  cs_copilot-minio:local server /data --console-address ":9001"
 ```
 
 If the container already exists: `docker start minio`
@@ -118,7 +131,7 @@ By default the ChEMBL Downloader agent queries the [ChEMBL REST API](https://www
 2. Load the dump into a MySQL 8+ server.
 3. Install project dependencies (MySQL support is included):
    ```bash
-   uv sync
+   uv sync --frozen
    ```
 4. Set the environment variables:
    ```bash

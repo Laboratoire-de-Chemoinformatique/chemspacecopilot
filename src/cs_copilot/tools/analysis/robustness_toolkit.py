@@ -9,6 +9,7 @@ from S3 or local storage.
 
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,7 +17,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from agno.tools import Toolkit
 
-from cs_copilot.storage import S3, is_s3_enabled
+from cs_copilot.storage import S3, is_s3_enabled, validate_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,22 @@ RATING_THRESHOLDS = {
     "good": 0.80,
     "acceptable": 0.70,
 }
+_ROBUSTNESS_TIMESTAMP_RE = re.compile(r"^\d{8}_\d{6}$")
+
+
+def _validate_test_name(value: str) -> str:
+    return validate_identifier(value, field="test_name")
+
+
+def _validate_timestamp(value: str) -> str:
+    timestamp = str(value or "").strip()
+    if not _ROBUSTNESS_TIMESTAMP_RE.fullmatch(timestamp):
+        raise ValueError("timestamp must use the exact YYYYMMDD_HHMMSS format")
+    try:
+        datetime.strptime(timestamp, "%Y%m%d_%H%M%S")
+    except ValueError as exc:
+        raise ValueError("timestamp must contain a valid UTC date and time") from exc
+    return timestamp
 
 
 class RobustnessAnalysisToolkit(Toolkit):
@@ -62,6 +79,9 @@ class RobustnessAnalysisToolkit(Toolkit):
             - failed: Number of failed tests
             - variations: List of variation results
         """
+        test_name = _validate_test_name(test_name)
+        timestamp = _validate_timestamp(timestamp)
+
         # Try S3 first if enabled
         if is_s3_enabled():
             json_path = f"robustness_tests/{test_name}/{timestamp}/results.json"
@@ -105,6 +125,9 @@ class RobustnessAnalysisToolkit(Toolkit):
             - dataset_name: Dataset name (for ChEMBL tests)
             - row_count: Number of rows (for data tests)
         """
+        test_name = _validate_test_name(test_name)
+        timestamp = _validate_timestamp(timestamp)
+
         # Try S3 first if enabled
         if is_s3_enabled():
             csv_path = f"robustness_tests/{test_name}/{timestamp}/summary.csv"
@@ -139,6 +162,7 @@ class RobustnessAnalysisToolkit(Toolkit):
         Returns:
             List of timestamp strings in descending order (newest first)
         """
+        test_name = _validate_test_name(test_name)
         timestamps = []
 
         # Check local storage
@@ -284,6 +308,8 @@ class RobustnessAnalysisToolkit(Toolkit):
             - statistics: Overall statistics
             - trend: Improvement/Regression/Stable
         """
+        test_name = _validate_test_name(test_name)
+        timestamps = [_validate_timestamp(timestamp) for timestamp in timestamps]
         runs = []
         for ts in timestamps:
             try:
@@ -356,8 +382,11 @@ class RobustnessAnalysisToolkit(Toolkit):
             - improvements: List of improvements
             - regressions: List of regressions
         """
+        test_name = _validate_test_name(test_name)
         if timestamps is None:
             timestamps = self.list_available_test_runs(test_name)
+        else:
+            timestamps = [_validate_timestamp(timestamp) for timestamp in timestamps]
 
         if not timestamps:
             return {"error": f"No test runs found for {test_name}"}
