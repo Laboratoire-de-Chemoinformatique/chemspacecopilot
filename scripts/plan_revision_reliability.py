@@ -40,6 +40,21 @@ def runtime_hashes(root: Path) -> dict[str, str]:
     return {str(path.relative_to(root)): sha256(path) for path in sorted(paths)}
 
 
+def verify_plan(plan: dict, root: Path) -> list[str]:
+    """Verify frozen source, scientific inputs and batch configs without inference."""
+    mismatches = []
+    for group in ("runtime_sha256", "input_sha256"):
+        for name, expected in plan[group].items():
+            path = Path(name) if group == "input_sha256" else root / name
+            if not path.is_file() or sha256(path) != expected:
+                mismatches.append(f"{group}: {name}")
+    for batch in plan["batches"]:
+        path = Path(batch["config_path"])
+        if not path.is_file() or sha256(path) != batch["config_sha256"]:
+            mismatches.append(f"batch config: {batch['batch_id']}")
+    return mismatches
+
+
 def fixture(path: Path) -> dict:
     return {"required": True, "session_state_path": str(path.resolve()), "sha256": sha256(path)}
 
@@ -270,13 +285,37 @@ def main():
     parser.add_argument(
         "--config", type=Path, default=root / "tests/robustness/manuscript_reliability.yaml"
     )
-    parser.add_argument("--seh-manifest", type=Path, required=True)
-    parser.add_argument("--peptide-bundle", type=Path, required=True)
-    parser.add_argument("--synplanner-dir", type=Path, required=True)
-    parser.add_argument("--autoencoder-dir", type=Path, required=True)
-    parser.add_argument("--peptide-model-dir", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path, required=True)
-    prepare(parser.parse_args())
+    parser.add_argument(
+        "--verify-plan", type=Path, help="Check an existing frozen plan only; no inference"
+    )
+    parser.add_argument("--seh-manifest", type=Path)
+    parser.add_argument("--peptide-bundle", type=Path)
+    parser.add_argument("--synplanner-dir", type=Path)
+    parser.add_argument("--autoencoder-dir", type=Path)
+    parser.add_argument("--peptide-model-dir", type=Path)
+    parser.add_argument("--output-dir", type=Path)
+    args = parser.parse_args()
+    if args.verify_plan:
+        mismatches = verify_plan(json.loads(args.verify_plan.read_text()), root)
+        print(json.dumps({"verified": not mismatches, "mismatches": mismatches}, indent=2))
+        raise SystemExit(1 if mismatches else 0)
+    missing = [
+        name
+        for name in (
+            "seh_manifest",
+            "peptide_bundle",
+            "synplanner_dir",
+            "autoencoder_dir",
+            "peptide_model_dir",
+            "output_dir",
+        )
+        if getattr(args, name) is None
+    ]
+    if missing:
+        parser.error(
+            "Required for planning: " + ", ".join("--" + name.replace("_", "-") for name in missing)
+        )
+    prepare(args)
 
 
 if __name__ == "__main__":

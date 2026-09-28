@@ -52,3 +52,26 @@ def test_counterbalanced_matrix_is_exactly_48_frozen_plus_12_live(tmp_path):
             "DBAASP_DATA" not in str(item)
             for item in tests["live_peptide_design"]["required_files"]
         )
+
+
+def test_frozen_plan_guard_detects_changed_source_input_and_config(tmp_path):
+    source = tmp_path / "runtime.py"
+    artifact = tmp_path / "model.pt"
+    config = tmp_path / "batch.yaml"
+    for path in (source, artifact, config):
+        path.write_text("original")
+    plan = {
+        "runtime_sha256": {"runtime.py": planner.sha256(source)},
+        "input_sha256": {str(artifact): planner.sha256(artifact)},
+        "batches": [
+            {
+                "batch_id": "batch",
+                "config_path": str(config),
+                "config_sha256": planner.sha256(config),
+            }
+        ],
+    }
+    assert planner.verify_plan(plan, tmp_path) == []
+    for path in (source, artifact, config):
+        path.write_text("changed")
+    assert len(planner.verify_plan(plan, tmp_path)) == 3
