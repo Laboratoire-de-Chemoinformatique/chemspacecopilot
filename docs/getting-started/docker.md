@@ -7,7 +7,7 @@
 **First-time build:**
 
 ```bash
-docker compose build chainlit-app
+docker compose build
 ```
 
 **Run:**
@@ -36,7 +36,7 @@ x86_64, build with `INSTALL_RETROSYNTHESIS=true docker compose build chainlit-ap
 For CUDA PyTorch on DGX Spark / Linux ARM64, explicitly build the NGC profile:
 
 ```bash
-BASE_IMAGE=nvcr.io/nvidia/pytorch:25.11-py3 USE_SYSTEM_TORCH=true docker compose build chainlit-app
+BASE_IMAGE=nvcr.io/nvidia/pytorch:25.11-py3 USE_SYSTEM_TORCH=true docker compose build
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
@@ -55,6 +55,14 @@ Linux x86_64 (see the installation guide).
 | postgres | Chat history DB | 5432 |
 | minio-setup | One-time bucket init | - |
 | chainlit-db-init | Prisma migrations | - |
+
+The MinIO server and client are built from pinned official source commits in
+`Dockerfile.minio`, because the upstream Docker Hub and Quay images could not be
+pulled during integration. The pins correspond to server
+`RELEASE.2025-10-15T17-29-55Z` and client `RELEASE.2025-08-13T08-35-41Z`.
+Their source links and licenses remain in the images. First-time builds therefore
+also require access to GitHub and the Go module registry. See [upstream source
+build instructions](https://github.com/minio/minio#install-from-source).
 
 ## Secret Management
 
@@ -80,7 +88,7 @@ cp ./data/.chainlit_secret chainlit_secret_backup.txt
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 # Rebuild
-docker compose build chainlit-app
+docker compose build
 
 # Complete reset
 docker compose down -v --remove-orphans --rmi all
