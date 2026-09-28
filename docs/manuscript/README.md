@@ -70,6 +70,14 @@ The response draft deliberately keeps these conditions open.
 
 ## Local evidence bundle
 
+The completed checkpoint is
+`reports/reviewer_revision/bundles/offline-evidence-20260928.zip` (270.41 MiB).
+All 418 bundled files passed SHA-256 verification after extraction. The
+[receipt](evidence-bundle-receipt.json) records the archive hash, immutable
+source snapshots and remaining limitations. Its final source snapshot is
+`cb9e19d`; the receipt itself was committed afterwards and is not inside the
+archive it describes.
+
 `offline-evidence-selection.json` explicitly selects the raw data, outputs,
 figures, pinned assets and original source commits for a local revision
 checkpoint. It retains failed implementation controls and pilot transcripts.
