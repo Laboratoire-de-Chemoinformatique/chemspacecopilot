@@ -570,6 +570,7 @@ class PeptideDesignerToolkit(Toolkit):
             self.list_design_engines,
             self.design_peptides,
             self.sample_peptides_from_landscape,
+            self.analyze_peptide_candidates,
             self.generate_peptide_analogs,
             self.design_peptide_interpolation,
             self.validate_design_candidates,
@@ -960,6 +961,116 @@ class PeptideDesignerToolkit(Toolkit):
                     ],
                     "note": metadata["limitations"],
                 }
+        return result
+
+    def analyze_peptide_candidates(
+        self,
+        reference: str = "landscape_sampled_peptides",
+        session_key: str = "peptide_sequence_analysis",
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Analyze saved candidates and produce numerical tables plus PNG/SVG logos.
+
+        Similarity is N-terminal positional matches divided by the longer sequence
+        length (missing tails mismatch), not an alignment score. Logos use N-terminal
+        alignment, not MSA; position-specific denominators exclude shorter sequences.
+        Exact sequence uniqueness is not training-set novelty. Use these artifacts
+        and the actual sequences when preparing the final report.
+        """
+        import hashlib
+
+        from cs_copilot.tools.chemistry.peptide_analysis import (
+            analyze_sequences,
+            render_frequency_logo,
+        )
+
+        states = update_state_targets(agent, session_state)
+        if not states:
+            raise PeptideDesignerError("Session state is required to preserve analysis artifacts")
+        state = session_state if session_state is not None else states[0]
+        payload = self.load_peptide_design_candidates(reference, session_state=state)
+        sequences = [
+            str(row["sequence"])
+            for row in payload["candidates"]
+            if row.get("valid") and row.get("sequence")
+        ]
+        metrics, pairwise, frequency = analyze_sequences(sequences)
+        generation = payload.get("metadata") or {}
+        metrics["source_generation_statistics"] = {
+            key: generation.get(key)
+            for key in (
+                "count_attempted",
+                "count_valid",
+                "count_unique_valid_observed",
+                "count_returned",
+                "validity_fraction",
+                "exact_sequence_uniqueness_fraction",
+            )
+        }
+        metrics["candidate_set_id"] = payload["peptide_candidate_set_id"]
+        source_reference = (
+            (payload.get("session_pointer") or {}).get("artifact_rel_path")
+            or (payload.get("session_pointer") or {}).get("artifact_path")
+            or reference
+        )
+        with S3.open(str(source_reference), "rb") as handle:
+            metrics["candidate_artifact_sha256"] = hashlib.sha256(handle.read()).hexdigest()
+        counter = int(state.get("_peptide_analysis_counter", 0)) + 1
+        run_id = f"peptide_analysis_{counter:03d}"
+        base = _peptide_design_artifact_rel_path(
+            session_key, run_id, session_state=state
+        ).removesuffix(".json")
+        artifacts, manifest = {}, []
+
+        def save(suffix, data):
+            path = base + suffix
+            with S3.open(path, "wb") as handle:
+                handle.write(data)
+            absolute = S3.path(path)
+            manifest.append(
+                {"path": absolute, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+            )
+            return absolute
+
+        artifacts["pairwise_similarity_csv"] = save(
+            "_pairwise_similarity.csv", pairwise.to_csv(index=False).encode()
+        )
+        artifacts["frequency_matrix_csv"] = save(
+            "_position_frequencies.csv", frequency.to_csv(index=False).encode()
+        )
+        artifacts["metrics_json"] = save("_metrics.json", json.dumps(metrics, indent=2).encode())
+        for extension, data in render_frequency_logo(frequency).items():
+            artifacts[f"sequence_logo_{extension}"] = save(f"_sequence_logo.{extension}", data)
+        artifacts["manifest_json"] = save(
+            "_manifest.json", json.dumps({"artifacts": list(manifest)}, indent=2).encode()
+        )
+        result = {
+            "analysis_type": "peptide_sequence_analysis",
+            "candidate_set_id": payload["peptide_candidate_set_id"],
+            "sequence_count": metrics["sequence_count"],
+            "unique_sequence_count": metrics["unique_sequence_count"],
+            "exact_sequence_uniqueness": metrics["exact_sequence_uniqueness"],
+            "mean_pairwise_similarity": metrics["mean_pairwise_similarity"],
+            "preview_sequences": metrics["sequences"][:5],
+            "artifacts": artifacts,
+            "similarity_definition": metrics["similarity_definition"],
+            "logo_definition": metrics["logo_definition"],
+            "note": "Generated activity and training-set novelty are unverified. Use the recorded definitions in the report.",
+        }
+        for target in states:
+            target["_peptide_analysis_counter"] = counter
+            target[session_key] = result
+            register_session_object(
+                target,
+                "analysis",
+                result,
+                label="Peptide positional sequence analysis",
+                source_agent=getattr(agent, "name", None),
+                source_tool="analyze_peptide_candidates",
+                set_current=True,
+                current_role="analysis",
+            )
         return result
 
     def generate_peptide_analogs(
