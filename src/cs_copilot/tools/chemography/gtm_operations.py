@@ -1632,21 +1632,7 @@ def data_load_and_prep(
     gtm_saved_file = _ensure_suffix(gtm_model, ".pkl.gz")
     data_file = _ensure_suffix(dataset, ".csv")
 
-    gtm = None
-    try:
-        try:
-            with S3.open(gtm_saved_file, "rb") as f:
-                with gzip.open(f, "rb") as gz:
-                    gtm = dill.load(gz)
-        except gzip.BadGzipFile:
-            # File is not actually gzipped (e.g. a plain .pkl from HuggingFace);
-            # fall back to loading as a regular pickle.
-            logger.warning(f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file.")
-            with S3.open(gtm_saved_file, "rb") as f:
-                gtm = dill.load(f)
-    except ModuleNotFoundError as e:
-        logger.error(f"Error loading GTM model: {e}")
-        raise
+    gtm = load_gtm_model(gtm_saved_file)
 
     with S3.open(data_file, "r") as f:
         df = _read_csv_flexible(f)
@@ -1728,16 +1714,7 @@ def project_data_on_gtm(
     # -------------------------------------------------------------------------
     logger.debug("Loading GTM model for compatibility check...")
     try:
-        try:
-            with S3.open(gtm_saved_file, "rb") as f:
-                with gzip.open(f, "rb") as gz:
-                    gtm = dill.load(gz)
-        except gzip.BadGzipFile:
-            # File is not actually gzipped (e.g. a plain .pkl from HuggingFace);
-            # fall back to loading as a regular pickle.
-            logger.warning(f"File {gtm_saved_file} is not gzipped. Loading as regular pickle file.")
-            with S3.open(gtm_saved_file, "rb") as f:
-                gtm = dill.load(f)
+        gtm = load_gtm_model(gtm_saved_file)
     except FileNotFoundError as e:
         raise FileNotFoundError(f"GTM model file not found: {gtm_saved_file}") from e
     except ModuleNotFoundError as e:

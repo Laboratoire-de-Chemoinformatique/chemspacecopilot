@@ -6,6 +6,7 @@ import gzip
 from types import SimpleNamespace
 
 import dill
+import pandas as pd
 import pytest
 import torch
 
@@ -57,6 +58,18 @@ def test_embedded_cuda_storages_and_model_device_are_remapped_for_projection(tmp
     assert loaded.device == torch.device("cpu")
     assert loaded.weights.device.type == "cpu"
     assert torch.allclose(actual, expected)
+
+    dataset = tmp_path / "molecules.csv"
+    pd.DataFrame({"smi": ["CCO", "CCN", "CCC", "CCCl"]}).to_csv(dataset, index=False)
+    monkeypatch.setattr(
+        gtm_operations,
+        "_prepare_gtm_training_data",
+        lambda frame, *_args, **_kwargs: SimpleNamespace(df=frame, X=points.numpy()),
+    )
+    _map, _frame, _descriptors, projected = gtm_operations.data_load_and_prep(
+        str(dataset), str(path), descriptor_type="autoencoder"
+    )
+    assert torch.allclose(torch.from_numpy(projected), expected)
 
 
 def test_cuda_available_preserves_checkpoint_device_and_normal_loader(tmp_path, monkeypatch):
