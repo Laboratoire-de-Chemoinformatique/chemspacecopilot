@@ -29,6 +29,7 @@ def summarize_study(study_dir: Path, output_dir: Path) -> dict:
     if not jobs or len(set(ids)) != len(ids):
         raise ValueError("Study jobs must be nonempty and have unique IDs")
     rows, inputs = [], [file_identity(manifest_path)]
+    seed_controls = {}
     for job in jobs:
         if Path(job["id"]).name != job["id"] or job["id"] in (".", ".."):
             raise ValueError("Unsafe job identifier")
@@ -41,6 +42,7 @@ def summarize_study(study_dir: Path, output_dir: Path) -> dict:
         if status not in TERMINAL | {"not_started", "running"}:
             raise ValueError(f"{job['id']}: unknown execution status")
         result = record.get("result", {})
+        seed_controls[job["id"]] = result.get("seed_control")
         if execution_path.is_file():
             inputs.append(file_identity(execution_path))
         row = {
@@ -111,6 +113,7 @@ def summarize_study(study_dir: Path, output_dir: Path) -> dict:
         },
         "manifest_created_at": manifest["created_at"],
         "configuration": spec["configuration"],
+        "seed_controls": seed_controls,
         "software": spec["software"],
         "assets": spec["assets"],
         "implementation_files": spec["implementation_files"],
