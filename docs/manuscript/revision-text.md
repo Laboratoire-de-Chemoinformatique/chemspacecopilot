@@ -158,6 +158,28 @@ hash instead of implying that a new search was performed. The cached-map
 reliability tasks evaluate projection and analysis, not GTM fitting. Replace the
 claim of three optimization objectives with the objective actually used.
 
+## Results: prospective sEH projection
+
+The 2,212 curated compounds were encoded into 256-dimensional molecular
+autoencoder representations and projected onto the pinned pretrained GTM.
+The saved model contains 900 nodes, 225 basis functions, basis width 1 and
+regularization coefficient 100; fitting used a maximum of 200 iterations,
+PCA scaling and no descriptor standardization. These parameters were read
+from the checkpoint, whose filename is not an accurate parameter record.
+No new parameter search was performed for this projection study.
+
+All 2,212 structures produced finite projections. The node responsibilities
+sum to 2,212, 293 of the 900 nodes receive at least one maximum-responsibility
+assignment, and normalized occupancy entropy is 0.6747. Mean normalized
+per-compound responsibility entropy is 0.03731. These are descriptive
+projection diagnostics and were not used to select this pretrained model.
+The activity landscape is the responsibility-weighted mean of the compound
+median pIC50 at each node. Nodes with responsibility mass below 0.1 are masked
+in both published landscape panels. Continuous activity uses all 2,212
+compounds, including the intermediate class; a binary comparison instead
+contains the 1,952 explicitly active or inactive compounds. The maps and
+projection statistics are provided with [their source tables](results/seh/README.md).
+
 ## Methods: chemical identity and generation metrics
 
 For new generation runs, raw backend outputs are retained before application-level

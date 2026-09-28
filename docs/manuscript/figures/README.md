@@ -41,4 +41,27 @@ PYTHONPATH=src python scripts/render_revision_figures.py
 
 The input and output checksums are in `figure_manifest.json`. Inspect the vector
 versions at the intended final journal size after integration into the paper.
-Original GTM and route-figure replacements remain separate work.
+
+## Prospective sEH landscapes
+
+![Prospective sEH density and activity landscapes](seh_landscapes.png)
+
+**Proposed caption.** Projection of 2,212 standardized ChEMBL 37 sEH compounds
+onto the pinned pretrained 900-node autoencoder GTM. (A) Node responsibility
+mass summed over compounds, shown on a logarithmic color scale. (B) Continuous
+activity landscape, calculated as the responsibility-weighted mean of compound
+median pIC50. Both panels include the 260 intermediate-class compounds. Gray
+nodes have responsibility mass below 0.1 and are masked; no spatial
+interpolation is applied. Coordinates are the saved one-based map grid, with
+y increasing upwards. Occupancy entropy is 0.6747; this descriptive measure
+does not establish predictive activity performance or neighborhood preservation.
+These are newly curated revision data projected onto an existing model, rather
+than a reconstruction of the original manuscript map.
+
+Reproduce from the committed map tables:
+
+```bash
+python scripts/render_revision_gtm.py --input-dir docs/manuscript/results/seh
+```
+
+`seh_figure_manifest.json` records input/output checksums and display conventions.

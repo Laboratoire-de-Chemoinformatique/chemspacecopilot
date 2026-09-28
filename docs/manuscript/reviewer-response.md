@@ -9,7 +9,7 @@ artifacts have been inspected.
 |---|---|---|
 | 1. Quantitative reliability | Isolated repeated-run harness, content-based validators, timing and usage coverage, human-review packets, 48+12 prospective protocol | Verified input snapshots; completed, retained runs; expert review; numerical results table |
 | 2. Architecture advantage | Same-model flat-agent baseline and paired evaluation; architecture rationale in revision text | Matched measured comparison; report both costs and success; support or moderate advantage claims |
-| 3. sEH and GTM methods | ChEMBL 37 extraction with exact query/filter manifest; 2,212 curated structures; raw/output hashes and identical offline replay; saved GTM parameter audit; search objective/ranges | Completed projection analysis and map-quality report; distinguish prospective measurements from unrecovered historical methods |
+| 3. sEH and GTM methods | ChEMBL 37 extraction with exact query/filter manifest; 2,212 curated structures; raw/output hashes and identical offline replay; saved GTM parameter audit; finite projections, occupancy diagnostics and vector maps | Apply the completed prospective methods/results to the editable paper; do not attribute them to unrecovered historical runs |
 | 4. Generation and synthesis | Three measured batches (300 raw outputs, 87 valid, 23 unique), seed-repeat check, full properties, vector structures/rate figures; ten route targets predeclared | Actual training-corpus linkage or explicit limitation; completed ten-target searches and inspected routes |
 | 5. Reproducibility and presentation | Versioned code commits, inference/environment manifests, prompts, correction text and verified RDKit/Sattarov references | Exact measurement release and archive DOI; complete outputs; apply edits in editable paper; replace and visually inspect figures |
 
@@ -59,12 +59,18 @@ identity and use as a design seed from membership in the curated dataset.
 For GTM, the saved checkpoint parameters have been inspected directly: the
 molecular map contains 900 nodes, 225 basis functions, width 1, regularization
 100 and a 256-dimensional input, despite different values in its filename.
-The current optimization code maximizes normalized node-occupancy entropy;
+All 2,212 compounds project successfully; 293 nodes receive a
+maximum-responsibility assignment, and normalized occupancy entropy is 0.6747.
+The continuous pIC50 landscape includes intermediate compounds, while binary
+analyses must exclude their missing labels. The [saved map tables](results/seh/README.md)
+and vector figures make the projection and display conventions reproducible.
+This reused model was not selected by a new optimization. The current
+optimization code maximizes normalized node-occupancy entropy;
 its three effort settings are search strategies, not three objectives.
 
-**Before submission:** insert the completed map-analysis artifacts and measured
-quality criterion, and identify this as a new revision analysis. These records
-cannot retrospectively establish the original case-study methods.
+**Before submission:** integrate these methods, results and figures into the paper
+as a new revision analysis. These records cannot retrospectively establish the
+original case-study methods.
 
 ## 4. Generation and retrosynthesis
 
