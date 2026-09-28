@@ -1,7 +1,7 @@
 """Prospective frozen inputs preserve curated scientific thresholds."""
 
-from pathlib import Path
 import importlib.util
+from pathlib import Path
 
 import pandas as pd
 import pytest

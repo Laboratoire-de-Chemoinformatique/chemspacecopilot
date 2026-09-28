@@ -176,3 +176,42 @@ def test_missing_dependency_is_reported_without_importing_it(tmp_path, versions,
         home=tmp_path,
     )
     assert "Missing package: torch" in report["blockers"]
+
+
+def test_explicit_benchmark_synplanner_assets_are_honored(tmp_path, versions):
+    create_models(tmp_path)
+    config_path = write_config(
+        tmp_path,
+        tests={
+            "planning": {
+                "enabled": True,
+                "validator": "retrosynthesis",
+                "prompt_variants": ["plan"],
+            }
+        },
+    )
+    assets = tmp_path / "pinned_assets"
+    for relative in (
+        "building_blocks/building_blocks_em_sa_ln.smi",
+        "uspto/uspto_reaction_rules.pickle",
+        "uspto/weights/ranking_policy_network.ckpt",
+    ):
+        target = assets / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"real-file-not-lfs")
+    config = yaml.safe_load(config_path.read_text())
+    config["tool_settings"] = {"synplanner": {"data_folder": str(assets)}}
+    config_path.write_text(yaml.safe_dump(config))
+    report = readiness.check_readiness(
+        config_path, project_root=tmp_path, env={"TEST_PROVIDER_KEY": "present"}, home=tmp_path
+    )
+    assert report["ready_for_pilot"]
+
+
+def test_narrative_and_display_labels_do_not_become_missing_files():
+    state = {
+        "session_memory_summary": "Memory:\n- dataset=data.csv",
+        "label": "data.csv",
+        "dataset_path": "real.csv",
+    }
+    assert list(readiness.pointers(state)) == ["real.csv"]

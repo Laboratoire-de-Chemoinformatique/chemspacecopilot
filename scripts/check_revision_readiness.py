@@ -100,7 +100,17 @@ def artifact(path: str, *, base: Path, env: Mapping[str, str], home: Path) -> di
 
 
 def pointers(value: Any, key: str = ""):
-    if SECRET_KEY.search(key):
+    if SECRET_KEY.search(key) or key.lower() in {
+        "label",
+        "title",
+        "description",
+        "session_memory_summary",
+        "prompt",
+        "summary",
+        "notes",
+        "message",
+        "content",
+    }:
         return
     if isinstance(value, dict):
         for name, item in value.items():
@@ -108,11 +118,15 @@ def pointers(value: Any, key: str = ""):
     elif isinstance(value, list):
         for item in value:
             yield from pointers(item, key)
-    elif isinstance(value, str) and (
-        key.endswith(("_path", "_uri"))
-        or key in {"path", "uri"}
-        or value.lower().endswith(FILE_SUFFIXES)
-        or value.startswith("s3://")
+    elif (
+        isinstance(value, str)
+        and "\n" not in value
+        and (
+            key.endswith(("_path", "_uri"))
+            or key in {"path", "uri"}
+            or value.lower().endswith(FILE_SUFFIXES)
+            or value.startswith("s3://")
+        )
     ):
         yield value
 
@@ -298,6 +312,9 @@ def check_readiness(
             Path.cwd() / "synplan_data",
             home / ".synplan_data",
         ]
+        explicit_folder = config.get("tool_settings", {}).get("synplanner", {}).get("data_folder")
+        if explicit_folder:
+            candidates.insert(0, Path(expand(str(explicit_folder), env, home)))
         relative_files = [
             "building_blocks/building_blocks_em_sa_ln.smi",
             "uspto/uspto_reaction_rules.pickle",

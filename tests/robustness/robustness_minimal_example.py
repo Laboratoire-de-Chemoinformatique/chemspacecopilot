@@ -497,7 +497,19 @@ class RobustnessRunner:
                 for index, item in enumerate(value):
                     visit(item, f"{path}[{index}]", depth + 1)
                 return
-            if not isinstance(value, str) or not value:
+            if not isinstance(value, str) or not value or "\n" in value:
+                return
+            if path.rsplit(".", 1)[-1].lower() in {
+                "label",
+                "title",
+                "description",
+                "session_memory_summary",
+                "prompt",
+                "summary",
+                "notes",
+                "message",
+                "content",
+            }:
                 return
             value_lower = value.lower().split("?", 1)[0]
             key_lower = path.lower()
@@ -710,7 +722,12 @@ class RobustnessRunner:
 
         if provenance:
             (destination / "manifest.json").write_text(json.dumps(provenance, indent=2))
-        return replace(state)
+        staged_state = replace(state)
+        if "session_objects" in staged_state:
+            from cs_copilot.tools.io.session_memory import refresh_session_memory_summary
+
+            refresh_session_memory_summary(staged_state)
+        return staged_state
 
     @staticmethod
     def _file_sha256(path: Path) -> str:
