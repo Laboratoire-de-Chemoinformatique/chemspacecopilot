@@ -459,7 +459,7 @@ def calc_morgan_fp_batch(
     return results
 
 
-def calc_fp(smiles: str, fp_generator) -> np.ndarray:
+def calc_fp(smiles: str, fp_generator: Any) -> np.ndarray | None:
     """
     Calculate a fingerprint for a given SMILES string using the provided fingerprint generator.
 
@@ -468,7 +468,7 @@ def calc_fp(smiles: str, fp_generator) -> np.ndarray:
         fp_generator: A fingerprint generator object.
 
     Returns:
-        np.ndarray: Fingerprint as a numpy array, or None if molecule is invalid.
+        Fingerprint as a NumPy array, or ``None`` if the molecule is invalid.
     """
     mol = _smiles_to_mol_or_none(smiles)
     if mol is None:

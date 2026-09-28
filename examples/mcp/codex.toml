@@ -6,7 +6,8 @@
 command = "cscopilot-mcp"
 args = [
     "--session-id", "demo",
-    "--workflow-slug", "chemical_space",
+    "--profile", "gtm-analysis",
+    "--workflow-slug", "gtm-density-landscape",
     "--log-level", "info",
 ]
 

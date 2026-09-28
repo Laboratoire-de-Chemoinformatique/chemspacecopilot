@@ -1,0 +1,257 @@
+# Reviewer 1, item 1: small, manuscript-aligned reliability benchmark.
+#
+# Live tier:
+#   Prospective ChEMBL retrieval for Cases 1-3; Case 4 orchestrates a pinned
+#   public aggregate peptide landscape, not fresh DBAASP retrieval or retraining.
+#   Both tiers reuse the same cached checkpoint files; each run has fresh state.
+# Frozen tier:
+#   Uses versioned session-state snapshots to isolate orchestration/tool reliability
+#   from changing ChEMBL/model artifacts. Required fixtures never fall back to live data.
+general:
+  n_variations: 2
+  repetitions: 3
+  debug_mode: false
+  output_dir: "reports/manuscript_reliability"
+  save_artifacts: true
+  s3_session_isolation: true
+  reliability_enabled: true
+  tier: "both"
+  timeout_seconds: 1800
+  reliability_min_success_rate: 0.80
+
+model:
+  provider: "deepseek"
+  model_id: "deepseek-flash"
+  api_key_env: "DEEPSEEK_API_KEY"
+  inference_settings:
+    temperature: 0.0
+    max_tokens: 8192
+  # Optional USD rates; when omitted, cost is reported as unavailable.
+  # pricing:
+  #   input_per_million: 0.0
+  #   output_per_million: 0.0
+
+metrics:
+  # Legacy prompt-robustness score is retained as a descriptive secondary metric.
+  # Publication-facing pass/fail uses each case's objective validator.
+  weights:
+    data_similarity: 0.4
+    semantic_similarity: 0.3
+    process_consistency: 0.2
+    visual_similarity: 0.1
+  thresholds:
+    excellent: 0.90
+    good: 0.80
+    acceptable: 0.70
+  pass_threshold: 0.75
+
+tests:
+  live_seh_workflow:
+    enabled: true
+    tier: "live"
+    description: "Sequential replay of manuscript Cases 1-3 in a shared session"
+    steps:
+      - name: "case_1_seh_analysis"
+        validator: "seh_analysis"
+        prompt: >-
+          Analyze the chemical space of human soluble epoxide hydrolase
+          (sEH/EPHX2). Use Homo sapiens binding and functional assays from ChEMBL
+          with no mechanism-of-action filter. Complete the retrieval preflight,
+          retrieve and describe the clean dataset, use the cached default GTM map,
+          and use descriptor_type=autoencoder for all GTM loading, projection, and
+          activity operations. Create and summarize density and activity landscapes,
+          identify prominent scaffolds or chemotypes, compare active and inactive
+          compounds, summarize assay coverage, and save a grounded report.
+      - name: "case_2_seh_generation"
+        validator: "molecular_generation"
+        prompt: >-
+          Using the sEH activity landscape and compounds from this session, generate
+          10 analogues of the highly active compound CHEMBL3327073 with the
+          autoencoder. Its seed SMILES is
+          CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
+          Return the valid generated structures and retain CHEMBL3327073 and the
+          seed SMILES as parent provenance.
+      - name: "case_3_retrosynthesis"
+        validator: "retrosynthesis"
+        prompt: >-
+          Select the first valid sEH analogue generated in the preceding step and run
+          SynPlanner retrosynthetic planning for it. Report whether a route was found,
+          the number of routes, and the route length when available.
+
+  live_peptide_design:
+    enabled: true
+    tier: "live"
+    validator: "peptide_design"
+    description: "Prospective peptide orchestration from a pinned public aggregate landscape"
+    fixture:
+      required: true
+      session_state_path: "${CS_COPILOT_PEPTIDE_INPUT_FIXTURE}"
+      sha256: "${CS_COPILOT_PEPTIDE_INPUT_SHA256}"
+    required_files:
+      - name: "Public peptide landscape metadata"
+        default_path: "${CS_COPILOT_PEPTIDE_BUNDLE}/landscape.json"
+      - name: "Public peptide landscape tensors"
+        default_path: "${CS_COPILOT_PEPTIDE_BUNDLE}/landscape.safetensors"
+      - name: "Public peptide node activity table"
+        default_path: "${CS_COPILOT_PEPTIDE_BUNDLE}/nodes.parquet"
+      - name: "Public peptide sampling configuration"
+        default_path: "${CS_COPILOT_PEPTIDE_BUNDLE}/sampler.json"
+    prompt_variants:
+      - >-
+        Use the session's pinned public aggregate anti-Escherichia coli peptide
+        landscape. Select enriched nodes and generate 20 peptide sequences with
+        the WAE sample_peptides_from_landscape tool. Assess pairwise sequence
+        similarity and exact uniqueness, create sequence logos, and save a grounded
+        report. This is inference from an existing map; raw DBAASP records and a
+        verified training corpus are unavailable. Do not claim raw-data retrieval,
+        retraining, training-set novelty, or experimentally verified activity.
+
+  frozen_case_1_seh_analysis:
+    enabled: true
+    tier: "frozen"
+    validator: "seh_analysis"
+    description: "Case 1 against a frozen, curated sEH input snapshot"
+    fixture:
+      required: true
+      session_state_path: "${CS_COPILOT_SEH_INPUT_FIXTURE}"
+      sha256: "${CS_COPILOT_SEH_INPUT_SHA256}"
+    prompt_variants:
+      - >-
+        Analyze the chemical space of the sEH compounds already loaded in this
+        session. Use the cached default GTM map and descriptor_type=autoencoder
+        for loading, projection, and activity operations. Create and interpret
+        density and activity landscapes, identify
+        chemotypes in dense nodes, summarize assays, and compare active and inactive
+        compounds. Save a grounded report.
+      - >-
+        Using the preloaded soluble epoxide hydrolase dataset, perform the complete
+        GTM chemical-space analysis with the cached default GTM map and
+        descriptor_type=autoencoder for loading, projection, and activity operations:
+        density, activity, dense-node scaffolds or chemotypes, assay distribution,
+        active/inactive separation, and a saved grounded report.
+      - >-
+        Explore the current session's sEH inhibitor data using the cached default
+        GTM map and descriptor_type=autoencoder for loading, projection, and activity
+        operations. Produce the map
+        artifacts and a grounded report covering density, activity, prominent
+        chemotypes, assays, and class separation.
+
+  frozen_case_2_seh_generation:
+    enabled: true
+    tier: "frozen"
+    validator: "molecular_generation"
+    description: "Case 2 against a frozen post-analysis sEH snapshot"
+    fixture:
+      required: true
+      session_state_path: "${CS_COPILOT_SEH_ANALYSIS_FIXTURE}"
+      sha256: "${CS_COPILOT_SEH_ANALYSIS_SHA256}"
+    prompt_variants:
+      - >-
+        Generate 10 autoencoder analogues of CHEMBL3327073, guided by the preloaded
+        sEH activity landscape. The seed SMILES is
+        CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
+        Return valid structures, report the actual number obtained, and preserve
+        the parent identifier and seed SMILES as provenance.
+      - >-
+        From the current sEH GTM analysis, use the autoencoder to design 10 analogues
+        around CHEMBL3327073 with seed SMILES
+        CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
+        Register the valid resulting candidate set, report its actual size, and
+        retain the parent identifier and seed SMILES.
+      - >-
+        Use the autoencoder and the session's sEH activity map to sample 10
+        candidate analogues of CHEMBL3327073, starting from seed SMILES
+        CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
+        Report the valid generated structures and actual count, retaining the
+        parent identifier and seed SMILES as provenance.
+
+  frozen_case_3_retrosynthesis:
+    enabled: true
+    tier: "frozen"
+    validator: "retrosynthesis"
+    description: "Case 3 against a frozen candidate-set snapshot"
+    fixture:
+      required: true
+      session_state_path: "${CS_COPILOT_SEH_CANDIDATES_FIXTURE}"
+      sha256: "${CS_COPILOT_SEH_CANDIDATES_SHA256}"
+    prompt_variants:
+      - >-
+        Run SynPlanner retrosynthetic planning for the first valid generated sEH
+        analogue in the current candidate set. Report route count and route length
+        when available, or clearly report a no-route result.
+      - >-
+        Select the first valid designed sEH candidate from this session and use
+        SynPlanner to propose retrosynthetic routes. Report route count and route
+        length when available, or clearly report a no-route result.
+      - >-
+        Evaluate synthetic planning for the first valid generated sEH analogue
+        in the current candidate set with SynPlanner. Clearly report success or a
+        no-route result, including route count and route length when available.
+
+  frozen_case_4_peptide_design:
+    enabled: true
+    tier: "frozen"
+    validator: "peptide_design"
+    description: "Case 4 against pinned public aggregate landscape and WAE inputs"
+    fixture:
+      required: true
+      session_state_path: "${CS_COPILOT_PEPTIDE_INPUT_FIXTURE}"
+      sha256: "${CS_COPILOT_PEPTIDE_INPUT_SHA256}"
+    prompt_variants:
+      - >-
+        Use the preloaded aggregate anti-E. coli peptide activity landscape to select
+        enriched nodes and generate 20 WAE peptide sequences with
+        sample_peptides_from_landscape. Evaluate pairwise sequence similarity and
+        exact uniqueness, create sequence logos, and save a grounded report. Raw
+        DBAASP and training structures are unavailable; do not claim training-set
+        novelty or experimentally verified activity.
+      - >-
+        Design 20 peptide candidates for Escherichia coli from active-enriched
+        regions of the session's aggregate GTM landscape, using WAE conditional
+        sampling with sample_peptides_from_landscape. Quantify pairwise sequence
+        similarity and exact uniqueness, generate sequence logos, and save a report
+        grounded in the generated sequences. Do not infer training-set novelty or
+        verified activity from this existing map.
+      - >-
+        Explore the session's E. coli AMP landscape, sample new sequences from
+        activity-enriched regions, project and compare them, evaluate exact sequence
+        uniqueness, produce sequence logos, and report the results. Do not equate
+        uniqueness with novelty relative to a training dataset.
+
+  recovery_ambiguous_scope:
+    enabled: true
+    tier: "frozen"
+    validator: "clarification"
+    description: "Ambiguous opening prompt should elicit clarification without work"
+    prompt_variants:
+      - "Explore a chemical space for me."
+
+  recovery_missing_gtm:
+    enabled: true
+    tier: "frozen"
+    validator: "missing_gtm"
+    description: "Missing map prerequisite should be identified without fabrication"
+    prompt_variants:
+      - "Create and interpret an activity landscape for the current dataset."
+
+  recovery_missing_design_seed:
+    enabled: true
+    tier: "frozen"
+    validator: "missing_design_seed"
+    description: "Missing molecular design seed should trigger a targeted question"
+    prompt_variants:
+      - "Generate analogues for me."
+
+  recovery_invalid_retrosynthesis:
+    enabled: true
+    tier: "frozen"
+    validator: "invalid_retrosynthesis"
+    description: "Invalid chemical input should be rejected before SynPlanner"
+    prompt_variants:
+      - "Plan a synthesis for the SMILES string this-is-not-a-smiles."
+
+reporting:
+  generate_markdown: true
+  generate_json: true
+  include_run_details: true
+  include_recommendations: false

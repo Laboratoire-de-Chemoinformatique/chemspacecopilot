@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 import json
 import logging
 from typing import Any, Optional, Sequence
@@ -295,6 +294,5 @@ class ChemblMCPFacade:
         return record if isinstance(record, dict) else None
 
 
-@functools.lru_cache(maxsize=1)
 def chembl_mcp_facade() -> ChemblMCPFacade:
     return ChemblMCPFacade()

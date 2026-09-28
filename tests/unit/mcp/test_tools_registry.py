@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
-from cs_copilot.mcp.tools_registry import all_specs
+import pytest
+
+from cs_copilot.mcp.tools_registry import (
+    all_specs,
+    required_permissions_for_spec,
+    validate_workflow_permissions,
+)
+from cs_copilot.workflows import get_workflow, list_workflows
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -50,12 +58,22 @@ def test_every_spec_has_explicit_safety_hints():
         assert isinstance(spec.run_in_worker_process, bool), spec.mcp_name
 
 
+def test_result_artifacts_are_declared_as_session_writes():
+    for spec in all_specs():
+        if spec.result_artifact_type is None:
+            continue
+        assert spec.read_only is False, spec.mcp_name
+        assert spec.write_scope == "session", spec.mcp_name
+
+
 def test_review_sensitive_tools_are_classified_conservatively():
     specs = {spec.mcp_name: spec for spec in all_specs()}
 
     assert specs["chembl_describe_dataset"].read_only is True
-    assert specs["chembl_prepare_retrieval"].read_only is True
-    assert specs["chemspace_plan_analysis"].read_only is True
+    assert specs["chembl_prepare_retrieval"].read_only is False
+    assert specs["chembl_prepare_retrieval"].write_scope == "session"
+    assert specs["chemspace_plan_analysis"].read_only is False
+    assert specs["chemspace_plan_analysis"].write_scope == "session"
     assert specs["chem_calculate_tanimoto_similarity"].read_only is True
     assert specs["session_resolve_candidate_set"].read_only is True
     assert specs["robustness_generate_insights"].read_only is True
@@ -149,6 +167,17 @@ def test_every_spec_has_discoverability_group():
     assert groups == expected_groups
 
 
+def test_control_and_shared_tool_roles_include_supervisor():
+    specs = {spec.mcp_name: spec for spec in all_specs()}
+
+    assert "supervisor" in specs["workflow_start_run"].roles
+    assert "supervisor" in specs["workflow_transition_task"].roles
+    assert "supervisor" in specs["skill_fetch"].roles
+    assert "gtm_agent" in specs["skill_fetch"].roles
+    assert "chembl_downloader" in specs["llm_get_task"].roles
+    assert "supervisor" in specs["session_list_session_objects"].roles
+
+
 def test_new_direct_tool_safety_hints_are_classified():
     specs = {spec.mcp_name: spec for spec in all_specs()}
 
@@ -183,6 +212,59 @@ def test_new_direct_tool_safety_hints_are_classified():
     assert specs["peptide_sample_peptides"].read_only is False
     assert specs["synplanner_plan_synthesis"].read_only is False
     assert specs["synplanner_get_route_visualizations"].read_only is False
+
+
+def test_network_capabilities_are_open_world_and_high_risk():
+    network_specs = [spec for spec in all_specs() if spec.requires_network]
+
+    assert network_specs
+    assert all(spec.open_world for spec in network_specs)
+    assert all(spec.risk == "high" for spec in network_specs)
+
+
+def test_tool_capabilities_map_to_workflow_permissions():
+    specs = {spec.mcp_name: spec for spec in all_specs()}
+
+    assert required_permissions_for_spec(specs["chembl_fetch_compounds"]) == {
+        "network:read",
+        "artifact:write",
+    }
+    assert required_permissions_for_spec(specs["gtm_project_data"]) == {
+        "network:read",
+        "compute:execute",
+        "artifact:read",
+        "artifact:write",
+    }
+    assert required_permissions_for_spec(specs["chem_calculate_tanimoto_similarity"]) == {
+        "compute:execute",
+    }
+
+
+def test_workflow_permission_contracts_cover_declared_capabilities():
+    validate_workflow_permissions(all_specs(), workflows=list_workflows())
+
+
+@pytest.mark.parametrize(
+    ("workflow_slug", "permission"),
+    [
+        ("candidate-design-to-gtm", "network:read"),
+        ("candidate-design-to-gtm", "compute:execute"),
+        ("chembl-target-retrieval", "artifact:read"),
+        ("chembl-target-retrieval", "artifact:write"),
+    ],
+)
+def test_workflow_permission_validation_rejects_missing_capability(
+    workflow_slug,
+    permission,
+):
+    workflow = get_workflow(workflow_slug)
+    weakened = replace(
+        workflow,
+        permissions=tuple(item for item in workflow.permissions if item != permission),
+    )
+
+    with pytest.raises(ValueError, match=rf"{re.escape(workflow_slug)}.*{re.escape(permission)}"):
+        validate_workflow_permissions(all_specs(), workflows=[weakened])
 
 
 def test_internal_source_tool_arguments_are_forced_and_hidden():

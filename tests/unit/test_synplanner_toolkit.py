@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 import types
 from pathlib import Path
 
 import pytest
 
 from cs_copilot.storage import S3
-from cs_copilot.tools.chemistry.synplanner_toolkit import SynPlannerToolkit
+from cs_copilot.tools.chemistry.synplanner_toolkit import (
+    SynPlannerToolkit,
+    _install_cgrtools_miniracer_compatibility,
+)
 from cs_copilot.tools.io.session_memory import (
     register_compounds_from_candidates,
     register_generated_candidate_set,
@@ -205,6 +209,41 @@ def test_toolkit_registration():
 def test_toolkit_name():
     toolkit = SynPlannerToolkit()
     assert toolkit.name == "synplanner"
+
+
+def test_retrosynthesis_extra_avoids_conflicting_cgrtools_distributions():
+    root = Path(__file__).resolve().parents[2]
+    project = tomllib.loads((root / "pyproject.toml").read_text())
+    dependencies = project["project"]["dependencies"]
+
+    # SynPlanner brings cgrtools-stable, which owns the same CGRtools module as
+    # the legacy distribution. Installing both makes file ownership ambiguous.
+    assert not any(item.lower().startswith(("synplanner", "cgrtools")) for item in dependencies)
+    extra = project["project"]["optional-dependencies"]["retrosynthesis"]
+    assert "SynPlanner==1.7.0" in extra
+    assert not any(item.lower().startswith("cgrtools==") for item in extra)
+
+
+def test_cgrtools_miniracer_compatibility_decodes_javascript_bytes(monkeypatch):
+    modern_module = types.ModuleType("py_mini_racer")
+
+    class FakeJSEvalException(Exception):
+        pass
+
+    class FakeMiniRacer:
+        def eval(self, code, *args, **kwargs):
+            return code
+
+    modern_module.MiniRacer = FakeMiniRacer
+    modern_module.JSEvalException = FakeJSEvalException
+    monkeypatch.setitem(sys.modules, "py_mini_racer", modern_module)
+    monkeypatch.delitem(sys.modules, "py_mini_racer.py_mini_racer", raising=False)
+
+    _install_cgrtools_miniracer_compatibility()
+
+    compatibility_module = sys.modules["py_mini_racer.py_mini_racer"]
+    assert compatibility_module.MiniRacer().eval(b"1 + 1") == "1 + 1"
+    assert compatibility_module.JSEvalException is FakeJSEvalException
 
 
 def test_identify_input_with_valid_smiles():
@@ -592,3 +631,71 @@ def test_get_route_visualizations_updates_report_ready_session_state(monkeypatch
     assert report_plan["visualizations"][0]["png_path"].endswith("synplanner_route_42.png")
     assert "svg" not in report_plan["visualizations"][0]
     assert "svg_data_url" not in report_plan["visualizations"][0]
+
+
+def test_synplanner_121_uses_builtin_rollout_without_fake_evaluator(monkeypatch):
+    from cs_copilot.tools.chemistry import synplanner_toolkit as module
+
+    config_module = types.SimpleNamespace(
+        TreeConfig=lambda **options: types.SimpleNamespace(**options)
+    )
+    loading_module = types.SimpleNamespace()
+    monkeypatch.setattr(
+        module.importlib,
+        "import_module",
+        lambda name: config_module if name.endswith("config") else loading_module,
+    )
+    config, evaluation, api = module._build_rollout_components(
+        {"max_depth": 9, "min_mol_size": 6},
+        policy_network=object(),
+        reaction_rules=[],
+        building_blocks=set(),
+    )
+    assert config.evaluation_type == "rollout"
+    assert config.max_depth == 9
+    assert evaluation is None
+    assert api == "tree_builtin_rollout"
+
+
+def test_newer_synplanner_keeps_its_external_rollout_evaluator(monkeypatch):
+    from cs_copilot.tools.chemistry import synplanner_toolkit as module
+
+    policy, rules, stock = object(), ["rule"], {"CCO"}
+    config_module = types.SimpleNamespace(
+        TreeConfig=lambda **options: types.SimpleNamespace(**options),
+        RolloutEvaluationConfig=lambda **options: options,
+    )
+    loading_module = types.SimpleNamespace(load_evaluation_function=lambda config: config)
+    monkeypatch.setattr(
+        module.importlib,
+        "import_module",
+        lambda name: config_module if name.endswith("config") else loading_module,
+    )
+    _config, evaluation, api = module._build_rollout_components(
+        {"max_depth": 9, "min_mol_size": 6},
+        policy_network=policy,
+        reaction_rules=rules,
+        building_blocks=stock,
+    )
+    assert evaluation["policy_network"] is policy
+    assert evaluation["reaction_rules"] is rules
+    assert evaluation["building_blocks"] is stock
+    assert api == "external_rollout_evaluator"
+
+
+def test_incomplete_rollout_api_fails_instead_of_silent_substitution(monkeypatch):
+    from cs_copilot.tools.chemistry import synplanner_toolkit as module
+
+    config_module = types.SimpleNamespace(RolloutEvaluationConfig=object)
+    monkeypatch.setattr(
+        module.importlib,
+        "import_module",
+        lambda name: config_module if name.endswith("config") else types.SimpleNamespace(),
+    )
+    with pytest.raises(module.SynPlannerError, match="Incomplete external rollout"):
+        module._build_rollout_components(
+            {"max_depth": 9, "min_mol_size": 6},
+            policy_network=object(),
+            reaction_rules=[],
+            building_blocks=set(),
+        )

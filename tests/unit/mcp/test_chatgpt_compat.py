@@ -5,7 +5,9 @@ from __future__ import annotations
 import pytest
 
 from cs_copilot.mcp.chatgpt_compat import fetch, search
+from cs_copilot.mcp.context import MCPAgentContext, set_current_context
 from cs_copilot.storage import S3
+from cs_copilot.workflows import RunContext
 
 
 @pytest.fixture
@@ -64,16 +66,23 @@ def test_fetch_renders_mcp_native_workflow_prompt(isolated_session):
     assert "mcp_bootstrap" in fetched.text
 
 
-def test_fetch_round_trips_text_session_artifact(isolated_session):
-    with S3.open("notes.md", "w") as handle:
+def test_fetch_round_trips_registered_text_run_artifact(isolated_session):
+    context = RunContext.create("mcp-session", run_id="run-chat")
+    with S3.open("workflows/run-chat/notes.md", "w") as handle:
         handle.write("# Notes\ncs_copilot MCP artifact\n")
+    context.register_artifact(
+        "notes.md",
+        artifact_id="notes",
+        artifact_type="notes",
+        mime_type="text/markdown",
+    )
 
     result = search("notes")
     ids = [item.id for item in result.results]
-    assert "resource:notes.md" in ids
+    assert "resource:run-chat/artifacts/notes" in ids
 
-    fetched = fetch("resource:notes.md")
-    assert fetched.url == "cscopilot://session/notes.md"
+    fetched = fetch("resource:run-chat/artifacts/notes")
+    assert fetched.url == "cscopilot://runs/run-chat/artifacts/notes"
     assert fetched.text.startswith("# Notes")
     assert fetched.metadata["mime_type"] == "text/markdown"
 
@@ -88,6 +97,16 @@ def test_search_and_fetch_skill_documentation(isolated_session):
     assert fetched.metadata["kind"] == "skill"
     assert "gtm_create_activity_landscapes" in fetched.text
     assert "# GTM Activity Landscape" in fetched.text
+
+    density = search("gtm density landscape skill")
+    density_ids = [item.id for item in density.results]
+    assert "skill:gtm-density-landscape" in density_ids
+
+    fetched_density = fetch("skill:gtm-density-landscape")
+    assert fetched_density.title == "Skill: GTM density landscape"
+    assert fetched_density.metadata["kind"] == "skill"
+    assert "gtm_save_density_plot" in fetched_density.text
+    assert "# GTM Density Landscape" in fetched_density.text
 
 
 def test_fetch_skill_catalog(isolated_session):
@@ -142,3 +161,23 @@ def test_fetch_renders_new_direct_tool_documentation(isolated_session):
     assert mol_doc.title == "Tool: mol_validate_design_candidates"
     assert "Group: molecular_design" in mol_doc.text
     assert "Validate" in mol_doc.text
+
+
+def test_tool_catalog_respects_active_profile_and_exposes_policy(isolated_session):
+    bootstrap = MCPAgentContext()
+    bootstrap.mcp_profile = "bootstrap"
+    set_current_context(bootstrap)
+    try:
+        assert "tool:mcp_bootstrap" in [item.id for item in search("mcp bootstrap").results]
+        assert "tool:gtm_optimization" not in [
+            item.id for item in search("gtm optimization").results
+        ]
+    finally:
+        standard = MCPAgentContext()
+        standard.mcp_profile = "standard"
+        set_current_context(standard)
+
+    fetched = fetch("tool:chembl_fetch_compounds")
+    assert fetched.metadata["risk"] in {"medium", "high"}
+    assert "chembl-retrieval" in fetched.metadata["profiles"]
+    assert "Allowed roles:" in fetched.text

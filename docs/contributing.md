@@ -1,49 +1,45 @@
 # Contributing
 
-Contributions are welcome! Please follow the guidelines below.
+Contributions are welcome. Create a focused branch, add tests with the change,
+and keep documentation aligned with the owning source of truth.
 
-## Workflow
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Make your changes
-4. Ensure code passes `pre-commit run --all-files`
-5. Run unit tests: `uv run pytest tests/unit/ -v`
-6. Submit a pull request
-
-## Code Style
-
-- **Formatting**: Black with 100-character line length (auto-applied by pre-commit)
-- **Imports**: isort with Black profile
-- **Linting**: Ruff (E, W, F, I, B, C4 rules)
-- **Python Version**: 3.11 only
-- **Type Hints**: Encouraged but not strictly enforced
-- **Docstrings**: Required for toolkit methods (visible to the LLM as tool descriptions)
+## Development checks
 
 ```bash
-# Format code
 uv run black src/ tests/
-
-# Lint
-uv run ruff check src/ tests/ --fix
-
-# Sort imports
+uv run ruff check src/ tests/
 uv run isort src/ tests/
+uv run pytest tests/unit/ -v
+uv run --group docs mkdocs build --strict
 ```
 
-## Agent Instructions
+The project targets Python 3.11, Black's 100-character line length, the Black
+isort profile, and the configured Ruff rules. Toolkit method docstrings are
+required because they are visible to language models and generated API
+documentation.
 
-Agent instructions written in `prompts.py` should be:
+## Agent descriptions and instructions
 
-- Clear and specific (LLMs follow them literally)
-- Include examples where helpful
-- Specify output format expectations
-- Reference available tools explicitly
+Agent text is split by responsibility:
 
-## Adding Agents
+- Add identity, role, and domain ownership to
+  `src/cs_copilot/agents/descriptions.py`.
+- Add cross-task routing, evidence, state, and output rules to
+  `src/cs_copilot/agents/instructions.py`.
+- Put reusable scientific procedures in `skills/<slug>/SKILL.md`.
+- Put MCP-facing tool, permission, task, and artifact contracts in
+  `workflow_catalog/<slug>/WORKFLOW.md`.
 
-See the [Agents architecture page](architecture/agents.md#adding-a-new-agent).
+Do not duplicate long tool sequences across agent instructions, workflow
+contracts, and plugins. See [Skills and Workflows](architecture/catalogs.md)
+for the ownership model.
 
-## Adding Tools
+## Extending the system
 
-See the [Tools architecture page](architecture/tools.md#adding-a-new-tool).
+- [Adding an agent](architecture/agents.md#adding-an-agent)
+- [Adding a tool](architecture/tools.md#adding-a-tool)
+- [Changing a procedure](architecture/catalogs.md#changing-a-procedure)
+- [MCP profiles and contracts](mcp.md#capability-profiles)
+
+Before submitting a pull request, ensure the strict documentation build,
+focused unit tests, and pre-commit checks pass.

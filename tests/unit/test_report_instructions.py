@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""Tests for report-generation instruction requirements."""
+"""Tests for report-generation skill requirements."""
 
-from cs_copilot.agents.prompts import REPORT_GENERATOR_INSTRUCTIONS
+from cs_copilot.skills import get_skill
 
 
-def _report_instructions_text() -> str:
-    return "\n".join(REPORT_GENERATOR_INSTRUCTIONS)
+def _report_skill_text() -> str:
+    return get_skill("report-generation").skill_md
 
 
 def test_report_instructions_require_named_captioned_inline_figures():
-    """Report Generator instructions should enforce named, captioned inline figures."""
-    instructions = _report_instructions_text()
+    """Report Generator skill should enforce named, captioned inline figures."""
+    instructions = _report_skill_text()
 
     assert (
         "Every available non-Plotly static PNG or registered inline_static figure" in instructions
@@ -75,7 +75,7 @@ def test_report_instructions_require_named_captioned_inline_figures():
 
 def test_report_instructions_define_required_report_structures():
     """Workflow-specific reports should have stable required structures."""
-    instructions = _report_instructions_text()
+    instructions = _report_skill_text()
 
     assert "GTM analysis report required structure" in instructions
     assert "User Request and Data Source" in instructions
