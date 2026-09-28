@@ -379,3 +379,19 @@ def test_tool_overrides_are_explicit_equal_and_scoped_to_system_construction(
     assert toolkit.max_time == 12
     assert toolkit.enable_retry_profiles is False
     assert factories.SynPlannerToolkit is original
+
+
+def test_fixture_narrative_summaries_and_labels_are_not_artifact_pointers(tmp_path):
+    harness = runner(tmp_path)
+    source = tmp_path / "data.csv"
+    source.write_text("smiles\nCCO\n")
+    state = {
+        "session_memory_summary": f"Session working memory:\n- dataset={source}",
+        "session_objects": {
+            "datasets": {"ds_001": {"label": "data.csv", "dataset_path": str(source)}}
+        },
+    }
+    staged = harness._stage_fixture_state(state, tmp_path)
+    assert staged["session_objects"]["datasets"]["ds_001"]["dataset_path"] != str(source)
+    assert staged["session_objects"]["datasets"]["ds_001"]["label"] == "data.csv"
+    assert str(source) not in staged["session_memory_summary"]
