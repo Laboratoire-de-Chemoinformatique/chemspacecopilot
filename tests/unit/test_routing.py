@@ -52,6 +52,20 @@ def test_gtm_request_selects_landscape_and_chemspace_preflight():
     assert result.preflight_tools == ("chemspace_plan_analysis",)
 
 
+def test_gtm_density_request_selects_density_landscape_and_preflight():
+    result = match_request("Show the GTM density map for the current clean dataset")
+    assert _wf(result) == "gtm-density-landscape"
+    assert result.skills == ("gtm-density-landscape",)
+    assert result.preflight_tools == ("chemspace_plan_analysis",)
+
+
+def test_gtm_density_and_activity_request_fetches_both_skills():
+    result = match_request("Show the density map and create an activity landscape")
+    assert _wf(result) == "gtm-density-landscape"
+    assert result.skills == ("gtm-density-landscape", "gtm-activity-landscape")
+    assert result.preflight_tools == ("chemspace_plan_analysis",)
+
+
 # --- tie-breaks ------------------------------------------------------------
 
 

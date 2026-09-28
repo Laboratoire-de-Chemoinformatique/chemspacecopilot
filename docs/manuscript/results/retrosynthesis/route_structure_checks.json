@@ -1,0 +1,66 @@
+[
+  {
+    "all_stored_step_smiles_rdkit_parseable": true,
+    "every_expansion_target_connected_to_declared_root": true,
+    "remaining_terminal_precursor_count": 7,
+    "reported_steps_match_stored_expansions": true,
+    "stock_membership_and_reaction_feasibility": "not independently assessed",
+    "target_id": "generated_001",
+    "terminal_precursors": [
+      "CCC(C)C(=O)Cl",
+      "[NH4+]",
+      "O=C(Cl)Cl",
+      "CC(C)(C)OC(=O)N1CCCC(=O)CC1",
+      "CI",
+      "Nc1cccc(F)c1",
+      "FC(F)(F)C(F)(F)I"
+    ]
+  },
+  {
+    "all_stored_step_smiles_rdkit_parseable": true,
+    "every_expansion_target_connected_to_declared_root": true,
+    "remaining_terminal_precursor_count": 7,
+    "reported_steps_match_stored_expansions": true,
+    "stock_membership_and_reaction_feasibility": "not independently assessed",
+    "target_id": "generated_005",
+    "terminal_precursors": [
+      "CCC(C)C(=O)O",
+      "CC(C)(C)OC(=O)NC(CCN)C(=O)O",
+      "O=CCO",
+      "Oc1ccccc1Br",
+      "O=C(Cl)Cl",
+      "Nc1cccc(F)c1",
+      "FC(F)(F)C(F)(F)I"
+    ]
+  },
+  {
+    "all_stored_step_smiles_rdkit_parseable": true,
+    "every_expansion_target_connected_to_declared_root": true,
+    "remaining_terminal_precursor_count": 5,
+    "reported_steps_match_stored_expansions": true,
+    "stock_membership_and_reaction_feasibility": "not independently assessed",
+    "target_id": "generated_007",
+    "terminal_precursors": [
+      "O=C(Cl)Cl",
+      "CCC(C)C(=O)O",
+      "CC(C)(C)OC(=O)NC1CCCNCC1",
+      "Nc1ccc(F)cc1",
+      "FC(F)(F)C(F)(F)I"
+    ]
+  },
+  {
+    "all_stored_step_smiles_rdkit_parseable": true,
+    "every_expansion_target_connected_to_declared_root": true,
+    "remaining_terminal_precursor_count": 5,
+    "reported_steps_match_stored_expansions": true,
+    "stock_membership_and_reaction_feasibility": "not independently assessed",
+    "target_id": "generated_008",
+    "terminal_precursors": [
+      "O=C(Cl)Cl",
+      "CCC(C)C(=O)O",
+      "CC(C)(C)OC(=O)NC1CCCNCC1",
+      "Nc1cccc(F)c1",
+      "FC(F)(F)C(F)(F)I"
+    ]
+  }
+]

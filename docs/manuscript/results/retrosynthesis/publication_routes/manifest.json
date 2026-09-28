@@ -1,0 +1,77 @@
+{
+  "figures": [
+    {
+      "corrected_svg": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/publication_routes/target_001.svg",
+        "sha256": "29839779184682f1dd9fe7069588ef44b85368cc0446c2247228b7725ee05f98",
+        "size_bytes": 44739
+      },
+      "masks_corrected": 12,
+      "pdf": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/publication_routes/target_001.pdf",
+        "sha256": "edbe68303069bc4e71a52bedcbb399a1d3e3ed6cfed9f81750ad70eeba8bb876",
+        "size_bytes": 48462
+      },
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/routes/target_001.svg",
+        "sha256": "eb655164c238338dfec90bb6a4ba6c408945f25159f73b55502f2adffc483563",
+        "size_bytes": 43353
+      }
+    },
+    {
+      "corrected_svg": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/publication_routes/target_005.svg",
+        "sha256": "511456f2a35b1e64e8217364e90d170862210ff4ff680ff0a8b91cc8c328225b",
+        "size_bytes": 65420
+      },
+      "masks_corrected": 16,
+      "pdf": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/publication_routes/target_005.pdf",
+        "sha256": "f70365d6028999b07108cb02015bac8612311511f817b7a8ae93fafc66307e9e",
+        "size_bytes": 64873
+      },
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/routes/target_005.svg",
+        "sha256": "6f0051b6975c0bf81823b8b364a6439f70b12bb16ddf6d6db3b696ace065d1cf",
+        "size_bytes": 63602
+      }
+    },
+    {
+      "corrected_svg": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/publication_routes/target_007.svg",
+        "sha256": "c8990595c634b99c09377f796e5af462f2e3d850963143fe60bf4aba04e176ca",
+        "size_bytes": 35784
+      },
+      "masks_corrected": 10,
+      "pdf": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/publication_routes/target_007.pdf",
+        "sha256": "d1ee2d90c724eee4fd609f87b548a70dcf555008cbb068751d229758a4861c42",
+        "size_bytes": 38180
+      },
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/routes/target_007.svg",
+        "sha256": "a87be5a25a041a055b687d24a4a5460618b205fab23f4387d884835b7ac98bb5",
+        "size_bytes": 34566
+      }
+    },
+    {
+      "corrected_svg": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/publication_routes/target_008.svg",
+        "sha256": "6b2622c8c7b007810d49ff01160afc75ac0c052d7a3f805ca35bec923e61c4f9",
+        "size_bytes": 35770
+      },
+      "masks_corrected": 10,
+      "pdf": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/publication_routes/target_008.pdf",
+        "sha256": "eb2c8543cfaecf56995167e5e9f55c893894c8709e0de0f00b3212f3628803b1",
+        "size_bytes": 38169
+      },
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/docs/manuscript/results/retrosynthesis/routes/target_008.svg",
+        "sha256": "3240986ed7d392993f6d0d42fa6613b8b53ee65b08d1900a0757981d2905f6ac",
+        "size_bytes": 34552
+      }
+    }
+  ],
+  "transformation": "Set each SVG maskUnits=userSpaceOnUse and its x/y/width/height to root viewBox; add white viewBox-sized background. Preserve every molecular drawing primitive, route connection and label. Original backend files are not modified."
+}

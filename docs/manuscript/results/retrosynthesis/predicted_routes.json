@@ -1,0 +1,373 @@
+[
+  {
+    "routes": [
+      {
+        "index": 0,
+        "num_steps": 6,
+        "route_json_path": "data/sessions/study_target_001/workflows/retrosynthesis-c7601edcd13f/03_retrosynthesis/targets/CCC_C_C_O_N1CCC_C_C_NC_O_Nc2ccc_C_F_F_C_F_F_F_c_769fe469/routes/route_001.json",
+        "score": 0.11924603174603174,
+        "steps": [
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1c(F)cc(NC(NC2CCN(CCC2C)C(C(CC)C)=O)=O)cc1 -> O=C(C(C)CC)Cl, CC(C)(C)OC(=O)N1CCC(C(CC1)C)NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2",
+            "index": 1,
+            "products": [
+              "O=C(C(C)CC)Cl",
+              "CC(C)(C)OC(=O)N1CCC(C(CC1)C)NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1c(F)cc(NC(NC2CCN(CCC2C)C(C(CC)C)=O)=O)cc1"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: CC(C)(C)OC(=O)N1CCC(C(CC1)C)NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2 -> CC(C)(C)OC(=O)N1CCC(C(N)CC1)C, FC(F)(F)C(F)(F)c1c(F)cc(N=C=O)cc1",
+            "index": 2,
+            "products": [
+              "CC(C)(C)OC(=O)N1CCC(C(N)CC1)C",
+              "FC(F)(F)C(F)(F)c1c(F)cc(N=C=O)cc1"
+            ],
+            "reactants": [
+              "CC(C)(C)OC(=O)N1CCC(C(CC1)C)NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: CC(C)(C)OC(=O)N1CCC(C(N)CC1)C -> CC(C)(C)OC(=O)N1CCC(C)C(CC1)=O, [NH4+]",
+            "index": 3,
+            "products": [
+              "CC(C)(C)OC(=O)N1CCC(C)C(CC1)=O",
+              "[NH4+]"
+            ],
+            "reactants": [
+              "CC(C)(C)OC(=O)N1CCC(C(N)CC1)C"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1c(F)cc(N=C=O)cc1 -> ClC(Cl)=O, FC(F)(F)C(F)(F)c1ccc(N)cc1F",
+            "index": 4,
+            "products": [
+              "ClC(Cl)=O",
+              "FC(F)(F)C(F)(F)c1ccc(N)cc1F"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1c(F)cc(N=C=O)cc1"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: CC(C)(C)OC(=O)N1CCC(C)C(CC1)=O -> CC(C)(C)OC(N1CCC(CCC1)=O)=O, CI",
+            "index": 5,
+            "products": [
+              "CC(C)(C)OC(N1CCC(CCC1)=O)=O",
+              "CI"
+            ],
+            "reactants": [
+              "CC(C)(C)OC(=O)N1CCC(C)C(CC1)=O"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1ccc(N)cc1F -> c1(cccc(F)c1)N, FC(F)(F)C(F)(F)I",
+            "index": 6,
+            "products": [
+              "c1(cccc(F)c1)N",
+              "FC(F)(F)C(F)(F)I"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1ccc(N)cc1F"
+            ],
+            "reagents": []
+          }
+        ]
+      }
+    ],
+    "smiles": "CCC(C)C(=O)N1CCC(C)C(NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2)CC1",
+    "source": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_001/plan.json",
+      "sha256": "882c1ffa39d77ba4eb438cefb7c983d475dfe96191ebe6c6e894eff73a1ffc81",
+      "size_bytes": 11590
+    },
+    "target_id": "generated_001"
+  },
+  {
+    "routes": [
+      {
+        "index": 0,
+        "num_steps": 9,
+        "route_json_path": "data/sessions/study_target_005/workflows/retrosynthesis-8309928de649/03_retrosynthesis/targets/CCC_C_C_O_N1CCOC_O_C_NC_O_Nc2ccc_C_F_F_C_F_F_F_c_a1073fdf/routes/route_001.json",
+        "score": 0.04149661654135338,
+        "steps": [
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1ccc(cc1F)NC(NC2C(=O)OCCN(CC2)C(=O)C(CC)C)=O -> FC(F)(F)C(F)(F)c1ccc(NC(NC(CCN(CCO)C(=O)C(C)CC)C(=O)O)=O)cc1F",
+            "index": 1,
+            "products": [
+              "FC(F)(F)C(F)(F)c1ccc(NC(NC(CCN(CCO)C(=O)C(C)CC)C(=O)O)=O)cc1F"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1ccc(cc1F)NC(NC2C(=O)OCCN(CC2)C(=O)C(CC)C)=O"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1ccc(NC(NC(CCN(CCO)C(=O)C(C)CC)C(=O)O)=O)cc1F -> C(CN(C(C(C)CC)=O)CCC(C(O)=O)N)O, FC(F)(F)C(F)(F)c1ccc(NC(Oc2ccccc2)=O)cc1F",
+            "index": 2,
+            "products": [
+              "C(CN(C(C(C)CC)=O)CCC(C(O)=O)N)O",
+              "FC(F)(F)C(F)(F)c1ccc(NC(Oc2ccccc2)=O)cc1F"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1ccc(NC(NC(CCN(CCO)C(=O)C(C)CC)C(=O)O)=O)cc1F"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: C(CN(C(C(C)CC)=O)CCC(C(O)=O)N)O -> CC(C)(C)OC(=O)NC(C(=O)O)CCN(CCO)C(=O)C(C)CC",
+            "index": 3,
+            "products": [
+              "CC(C)(C)OC(=O)NC(C(=O)O)CCN(CCO)C(=O)C(C)CC"
+            ],
+            "reactants": [
+              "C(CN(C(C(C)CC)=O)CCC(C(O)=O)N)O"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1ccc(NC(Oc2ccccc2)=O)cc1F -> FC(F)(F)C(F)(F)c1ccc(cc1F)NC(=O)Oc2ccccc2Br",
+            "index": 4,
+            "products": [
+              "FC(F)(F)C(F)(F)c1ccc(cc1F)NC(=O)Oc2ccccc2Br"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1ccc(NC(Oc2ccccc2)=O)cc1F"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: CC(C)(C)OC(=O)NC(C(=O)O)CCN(CCO)C(=O)C(C)CC -> OC(C(C)CC)=O, CC(C)(C)OC(=O)NC(CCNCCO)C(O)=O",
+            "index": 5,
+            "products": [
+              "OC(C(C)CC)=O",
+              "CC(C)(C)OC(=O)NC(CCNCCO)C(O)=O"
+            ],
+            "reactants": [
+              "CC(C)(C)OC(=O)NC(C(=O)O)CCN(CCO)C(=O)C(C)CC"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1ccc(cc1F)NC(=O)Oc2ccccc2Br -> c1cc(c(Br)cc1)OC(Cl)=O, FC(F)(F)C(F)(F)c1ccc(N)cc1F",
+            "index": 6,
+            "products": [
+              "c1cc(c(Br)cc1)OC(Cl)=O",
+              "FC(F)(F)C(F)(F)c1ccc(N)cc1F"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1ccc(cc1F)NC(=O)Oc2ccccc2Br"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: CC(C)(C)OC(=O)NC(CCNCCO)C(O)=O -> CC(C)(C)OC(=O)NC(C(=O)O)CCN, C(C=O)O",
+            "index": 7,
+            "products": [
+              "CC(C)(C)OC(=O)NC(C(=O)O)CCN",
+              "C(C=O)O"
+            ],
+            "reactants": [
+              "CC(C)(C)OC(=O)NC(CCNCCO)C(O)=O"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: c1cc(c(Br)cc1)OC(Cl)=O -> c1c(O)c(Br)ccc1, ClC(Cl)=O",
+            "index": 8,
+            "products": [
+              "c1c(O)c(Br)ccc1",
+              "ClC(Cl)=O"
+            ],
+            "reactants": [
+              "c1cc(c(Br)cc1)OC(Cl)=O"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1ccc(N)cc1F -> c1(cccc(F)c1)N, FC(F)(F)C(F)(F)I",
+            "index": 9,
+            "products": [
+              "c1(cccc(F)c1)N",
+              "FC(F)(F)C(F)(F)I"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1ccc(N)cc1F"
+            ],
+            "reagents": []
+          }
+        ]
+      }
+    ],
+    "smiles": "CCC(C)C(=O)N1CCOC(=O)C(NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2)CC1",
+    "source": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_005/plan.json",
+      "sha256": "bdf15de45321ecb14317869b930db3b0a6434bd2be0bffe0e92e217952a8ca7e",
+      "size_bytes": 13979
+    },
+    "target_id": "generated_005"
+  },
+  {
+    "routes": [
+      {
+        "index": 0,
+        "num_steps": 5,
+        "route_json_path": "data/sessions/study_target_007/workflows/retrosynthesis-34c455bf9a8b/03_retrosynthesis/targets/CCC_C_C_O_N1CCCC_NC_O_Nc2ccc_F_c_C_F_F_C_F_F_F_c_7c407ed3/routes/route_001.json",
+        "score": 0.1527777777777778,
+        "steps": [
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1c(ccc(c1)NC(=O)NC2CCCN(CC2)C(=O)C(C)CC)F -> C1(CCN(C(=O)C(CC)C)CCC1)N, FC(F)(F)C(F)(F)c1cc(N=C=O)ccc1F",
+            "index": 1,
+            "products": [
+              "C1(CCN(C(=O)C(CC)C)CCC1)N",
+              "FC(F)(F)C(F)(F)c1cc(N=C=O)ccc1F"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1c(ccc(c1)NC(=O)NC2CCCN(CC2)C(=O)C(C)CC)F"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: C1(CCN(C(=O)C(CC)C)CCC1)N -> CC(C)(C)OC(=O)NC1CCN(C(=O)C(C)CC)CCC1",
+            "index": 2,
+            "products": [
+              "CC(C)(C)OC(=O)NC1CCN(C(=O)C(C)CC)CCC1"
+            ],
+            "reactants": [
+              "C1(CCN(C(=O)C(CC)C)CCC1)N"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1cc(N=C=O)ccc1F -> ClC(Cl)=O, FC(F)(F)C(F)(F)c1c(F)ccc(N)c1",
+            "index": 3,
+            "products": [
+              "ClC(Cl)=O",
+              "FC(F)(F)C(F)(F)c1c(F)ccc(N)c1"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1cc(N=C=O)ccc1F"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: CC(C)(C)OC(=O)NC1CCN(C(=O)C(C)CC)CCC1 -> OC(C(C)CC)=O, CC(C)(C)OC(=O)NC1CCNCCC1",
+            "index": 4,
+            "products": [
+              "OC(C(C)CC)=O",
+              "CC(C)(C)OC(=O)NC1CCNCCC1"
+            ],
+            "reactants": [
+              "CC(C)(C)OC(=O)NC1CCN(C(=O)C(C)CC)CCC1"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1c(F)ccc(N)c1 -> c1cc(ccc1F)N, FC(F)(F)C(F)(F)I",
+            "index": 5,
+            "products": [
+              "c1cc(ccc1F)N",
+              "FC(F)(F)C(F)(F)I"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1c(F)ccc(N)c1"
+            ],
+            "reagents": []
+          }
+        ]
+      }
+    ],
+    "smiles": "CCC(C)C(=O)N1CCCC(NC(=O)Nc2ccc(F)c(C(F)(F)C(F)(F)F)c2)CC1",
+    "source": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_007/plan.json",
+      "sha256": "779d8231edd643bb57626a78a9fed84efc364f2bae7b3a16b74d960c168839fc",
+      "size_bytes": 10488
+    },
+    "target_id": "generated_007"
+  },
+  {
+    "routes": [
+      {
+        "index": 0,
+        "num_steps": 5,
+        "route_json_path": "data/sessions/study_target_008/workflows/retrosynthesis-c170da354326/03_retrosynthesis/targets/CCC_C_C_O_N1CCCC_NC_O_Nc2ccc_C_F_F_C_F_F_F_c_F_c_2c3f82fe/routes/route_001.json",
+        "score": 0.1527777777777778,
+        "steps": [
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1c(F)cc(NC(=O)NC2CCCN(CC2)C(=O)C(C)CC)cc1 -> C1(CCN(C(=O)C(CC)C)CCC1)N, FC(F)(F)C(F)(F)c1c(F)cc(N=C=O)cc1",
+            "index": 1,
+            "products": [
+              "C1(CCN(C(=O)C(CC)C)CCC1)N",
+              "FC(F)(F)C(F)(F)c1c(F)cc(N=C=O)cc1"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1c(F)cc(NC(=O)NC2CCCN(CC2)C(=O)C(C)CC)cc1"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: C1(CCN(C(=O)C(CC)C)CCC1)N -> CC(C)(C)OC(=O)NC1CCN(C(=O)C(C)CC)CCC1",
+            "index": 2,
+            "products": [
+              "CC(C)(C)OC(=O)NC1CCN(C(=O)C(C)CC)CCC1"
+            ],
+            "reactants": [
+              "C1(CCN(C(=O)C(CC)C)CCC1)N"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1c(F)cc(N=C=O)cc1 -> ClC(Cl)=O, FC(F)(F)C(F)(F)c1ccc(N)cc1F",
+            "index": 3,
+            "products": [
+              "ClC(Cl)=O",
+              "FC(F)(F)C(F)(F)c1ccc(N)cc1F"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1c(F)cc(N=C=O)cc1"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: CC(C)(C)OC(=O)NC1CCN(C(=O)C(C)CC)CCC1 -> OC(C(C)CC)=O, CC(C)(C)OC(=O)NC1CCNCCC1",
+            "index": 4,
+            "products": [
+              "OC(C(C)CC)=O",
+              "CC(C)(C)OC(=O)NC1CCNCCC1"
+            ],
+            "reactants": [
+              "CC(C)(C)OC(=O)NC1CCN(C(=O)C(C)CC)CCC1"
+            ],
+            "reagents": []
+          },
+          {
+            "description": "Reaction step: FC(F)(F)C(F)(F)c1ccc(N)cc1F -> c1(cccc(F)c1)N, FC(F)(F)C(F)(F)I",
+            "index": 5,
+            "products": [
+              "c1(cccc(F)c1)N",
+              "FC(F)(F)C(F)(F)I"
+            ],
+            "reactants": [
+              "FC(F)(F)C(F)(F)c1ccc(N)cc1F"
+            ],
+            "reagents": []
+          }
+        ]
+      }
+    ],
+    "smiles": "CCC(C)C(=O)N1CCCC(NC(=O)Nc2ccc(C(F)(F)C(F)(F)F)c(F)c2)CC1",
+    "source": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/retrosynthesis_10/target_008/plan.json",
+      "sha256": "3cd187cd9aefd4d70c5033f5b08eee41c7475f25023f9d0f862eaaa3c8172d5a",
+      "size_bytes": 10498
+    },
+    "target_id": "generated_008"
+  }
+]

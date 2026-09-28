@@ -1,0 +1,19 @@
+{
+  "inputs": {
+    "seh_density.csv": "8c9000c5c31a2e8558e34a71ca0626a62604fc3c37f036d9253cf5dc3652a584",
+    "seh_activity_regression.csv": "7c90052b1315e168101894bedf70c6e7a8507a0613ec434bca275715635b3ece",
+    "projection_summary.json": "23bb828e7489e3eda48c336bd67482b6f5599aad0ad10cd45ae5876a5c1bf7a1"
+  },
+  "outputs": {
+    "seh_landscapes.svg": "ebbc3b13eb6abdddd0170b4b5126cf1cf3ce17489df4b815ff12dd32af778334",
+    "seh_landscapes.pdf": "ad38c1928a1d4188aa594ca48fdd7e604575f27568bf39a4106aa6cd8689688e",
+    "seh_landscapes.png": "6d0fe1b89bac3a76e92cfbdc55565c73e1a861ea1a43ad5d60932bf51bba655e"
+  },
+  "matplotlib_version": "3.10.8",
+  "sample_count": 2212,
+  "coordinate_convention": "One-based x/y from saved tables; node=(x-1)*30+y; y increases upwards.",
+  "density": "Sum of responsibilities over all 2,212 standardized compounds; logarithmic color scale.",
+  "activity": "Sum(r_ij*pIC50_i)/sum(r_ij) over all 2,212 compounds, including intermediate labels.",
+  "mask": "Both panels gray where node responsibility mass is below 0.1; no interpolation.",
+  "scope": "Projection onto a pinned pretrained model, not a newly fitted map or a predictive validation."
+}

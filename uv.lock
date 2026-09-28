@@ -6,6 +6,9 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
+[manifest]
+build-constraints = [{ name = "cython", specifier = "<3" }]
+
 [[package]]
 name = "accelerate"
 version = "1.12.0"
@@ -649,6 +652,15 @@ wheels = [
 ]
 
 [[package]]
+name = "cgrtools"
+version = "4.1.35"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cachedmethods" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6a/5e/cc29dec8f6da3a62167057cb7a8695ff72958a84f70619351c443745b6c0/CGRtools-4.1.35.tar.gz", hash = "sha256:907436c0f12af7b8a6b5baadfc62dffd4a29ae1802416fd76ab410d3cf95c340", size = 1477051, upload-time = "2022-10-03T09:53:38.65Z" }
+
+[[package]]
 name = "cgrtools-stable"
 version = "4.2.13"
 source = { registry = "https://pypi.org/simple" }
@@ -972,7 +984,7 @@ wheels = [
 
 [[package]]
 name = "cs-copilot"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
@@ -980,6 +992,7 @@ dependencies = [
     { name = "asyncpg" },
     { name = "boto3" },
     { name = "cairosvg" },
+    { name = "cgrtools" },
     { name = "chainlit" },
     { name = "chembl-webresource-client" },
     { name = "chemographykit" },
@@ -1011,6 +1024,7 @@ dependencies = [
     { name = "seaborn" },
     { name = "sentence-transformers" },
     { name = "sqlalchemy" },
+    { name = "synplanner" },
     { name = "tabulate" },
     { name = "tantivy" },
     { name = "torch" },
@@ -1027,9 +1041,6 @@ mcp = [
 ]
 postgresql = [
     { name = "psycopg2-binary" },
-]
-synplanner = [
-    { name = "synplanner" },
 ]
 
 [package.dev-dependencies]
@@ -1055,6 +1066,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "boto3", specifier = ">=1.42.30" },
     { name = "cairosvg", specifier = ">=2.8.2" },
+    { name = "cgrtools", specifier = "==4.1.35" },
     { name = "chainlit", specifier = ">=2.8.3" },
     { name = "chembl-webresource-client", specifier = ">=0.10.9" },
     { name = "chemographykit", specifier = ">=0.1.0" },
@@ -1088,7 +1100,7 @@ requires-dist = [
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "sentence-transformers", specifier = ">=5.2.0" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
-    { name = "synplanner", marker = "extra == 'synplanner'", specifier = ">=1.2.1" },
+    { name = "synplanner", specifier = ">=1.2.1" },
     { name = "tabulate", specifier = ">=0.9.0" },
     { name = "tantivy", specifier = ">=0.25.0" },
     { name = "torch", specifier = ">=2.9.0" },
@@ -1098,7 +1110,7 @@ requires-dist = [
     { name = "ugtm", specifier = ">=2.1.0.post2" },
     { name = "vl-convert-python", specifier = ">=1.8.0" },
 ]
-provides-extras = ["postgresql", "mcp", "synplanner"]
+provides-extras = ["postgresql", "mcp"]
 
 [package.metadata.requires-dev]
 dev = [

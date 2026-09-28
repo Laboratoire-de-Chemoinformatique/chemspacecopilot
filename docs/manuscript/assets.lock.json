@@ -1,0 +1,68 @@
+{
+  "purpose": "Model assets for prospective reviewer-revision measurements, not evidence of the historical manuscript configuration",
+  "artifacts": [
+    {
+      "repo": "axelrolov/lstm_autoencoder",
+      "revision": "99c13c62daa37a1c015c9bf1deafdd3c8c162265",
+      "file": "config.pt",
+      "relative_path": "autoencoder/config.pt",
+      "url": "https://huggingface.co/axelrolov/lstm_autoencoder/resolve/99c13c62daa37a1c015c9bf1deafdd3c8c162265/config.pt",
+      "bytes": 1500,
+      "sha256": "d15f0fc66da95bfcfa96c31861de71f28e5ce625ebb5d3a542ed9b3d56626a7e"
+    },
+    {
+      "repo": "axelrolov/lstm_autoencoder",
+      "revision": "99c13c62daa37a1c015c9bf1deafdd3c8c162265",
+      "file": "vocab.pt",
+      "relative_path": "autoencoder/vocab.pt",
+      "url": "https://huggingface.co/axelrolov/lstm_autoencoder/resolve/99c13c62daa37a1c015c9bf1deafdd3c8c162265/vocab.pt",
+      "bytes": 5330,
+      "sha256": "1b6607e57088f408b7e843b1a5c962781ede66e0bc3e1ff65abb1c30c5e68e4b"
+    },
+    {
+      "repo": "axelrolov/lstm_autoencoder",
+      "revision": "99c13c62daa37a1c015c9bf1deafdd3c8c162265",
+      "file": "model.pt",
+      "relative_path": "autoencoder/model.pt",
+      "url": "https://huggingface.co/axelrolov/lstm_autoencoder/resolve/99c13c62daa37a1c015c9bf1deafdd3c8c162265/model.pt",
+      "bytes": 8752098,
+      "sha256": "e1872b63c3554c15c84b40aba3af4a78ab4c9428d0fb7970eb2fdc7b4c356392"
+    },
+    {
+      "repo": "axelrolov/wae_peptides",
+      "revision": "22cba9e093a9fe74014603f4ca2498639d639f00",
+      "file": "config.json",
+      "relative_path": "peptide_designer/config.json",
+      "url": "https://huggingface.co/axelrolov/wae_peptides/resolve/22cba9e093a9fe74014603f4ca2498639d639f00/config.json",
+      "bytes": 873,
+      "sha256": "333ea280b78acecc94ca6882780eb65a8b7d048be86ec18a8ba28be81d46c009"
+    },
+    {
+      "repo": "axelrolov/wae_peptides",
+      "revision": "22cba9e093a9fe74014603f4ca2498639d639f00",
+      "file": "vocab.dict",
+      "relative_path": "peptide_designer/vocab.dict",
+      "url": "https://huggingface.co/axelrolov/wae_peptides/resolve/22cba9e093a9fe74014603f4ca2498639d639f00/vocab.dict",
+      "bytes": 138,
+      "sha256": "51e6205671e42d483b15ea83fe76809d8437c19c69d1f6462c29acb553145d0c"
+    },
+    {
+      "repo": "axelrolov/wae_peptides",
+      "revision": "22cba9e093a9fe74014603f4ca2498639d639f00",
+      "file": "model.pt",
+      "relative_path": "peptide_designer/model.pt",
+      "url": "https://huggingface.co/axelrolov/wae_peptides/resolve/22cba9e093a9fe74014603f4ca2498639d639f00/model.pt",
+      "bytes": 1767651,
+      "sha256": "e232c07e5144cea650b8c3375a23a96a301b24d0c331d0610c04383a1b22b5d3"
+    },
+    {
+      "repo": "axelrolov/chemspacecopilot-gtm",
+      "revision": "ad9f1257cd80aaa84fc422a78b1a9fc579d0510b",
+      "file": "GTM_manifold_900_100_8_100.pkl.gz",
+      "relative_path": "gtm/GTM_manifold_900_100_8_100.pkl.gz",
+      "url": "https://huggingface.co/axelrolov/chemspacecopilot-gtm/resolve/ad9f1257cd80aaa84fc422a78b1a9fc579d0510b/GTM_manifold_900_100_8_100.pkl.gz",
+      "bytes": 3958922,
+      "sha256": "b7842e5fb68353df575b07929ba2331a050367b49c6b83494326890ad97b1e4d"
+    }
+  ]
+}

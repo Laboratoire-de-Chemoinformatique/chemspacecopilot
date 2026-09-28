@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import functools
-
 
 class ReportExportFacade:
     """Adapter exposing report-export module functions as methods."""
@@ -15,6 +13,5 @@ class ReportExportFacade:
         self.save_rich = save_rich_report
 
 
-@functools.lru_cache(maxsize=1)
 def report_facade() -> ReportExportFacade:
     return ReportExportFacade()

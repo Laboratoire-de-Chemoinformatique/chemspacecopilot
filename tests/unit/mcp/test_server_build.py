@@ -25,7 +25,7 @@ def server(tmp_path_factory):
     work = tmp_path_factory.mktemp("mcp-server")
     os.chdir(work)
     apply_session_id("mcp-server-test")
-    ctx = bootstrap(BootstrapConfig(session_id="mcp-server-test", workflow_slug="smoke"))
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-server-test"))
     from cs_copilot.mcp.server import build_server
 
     return build_server(ctx)
@@ -42,6 +42,8 @@ def test_server_instructions_are_chatgpt_orchestration_contract(server):
     assert "mcp_bootstrap" in SERVER_INSTRUCTIONS
     assert "cs_copilot_mcp_workflow" in SERVER_INSTRUCTIONS
     assert "cs_copilot_workflow" in SERVER_INSTRUCTIONS
+    assert "workflow_start_run" in SERVER_INSTRUCTIONS
+    assert "start each task" in SERVER_INSTRUCTIONS
     assert "chembl_prepare_retrieval" in SERVER_INSTRUCTIONS
     assert "chemspace_plan_analysis" in SERVER_INSTRUCTIONS
     assert "llm_*" in SERVER_INSTRUCTIONS
@@ -51,7 +53,7 @@ def test_server_instructions_are_chatgpt_orchestration_contract(server):
 def test_bootstrap_attaches_default_external_llm_broker(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     apply_session_id("mcp-llm-policy-test")
-    ctx = bootstrap(BootstrapConfig(session_id="mcp-llm-policy-test", workflow_slug="smoke"))
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-llm-policy-test"))
 
     assert ctx.llm_policy == "external"
     assert ctx.model is None
@@ -137,17 +139,25 @@ def test_all_direct_parity_tools_registered(server):
 
 
 def test_tool_annotations_for_chatgpt_approval(server):
+    from cs_copilot.mcp.tools_registry import all_specs
+
     tools = {tool.name: tool for tool in server._tool_manager.list_tools()}
+    specs = {spec.mcp_name: spec for spec in all_specs()}
 
     for name, tool in tools.items():
         assert tool.annotations is not None, name
-        assert tool.annotations.destructiveHint is False, name
-        assert tool.annotations.openWorldHint is False, name
+        assert tool.annotations.destructiveHint is (
+            specs[name].destructive if name in specs else False
+        ), name
+        assert tool.annotations.openWorldHint is (
+            specs[name].open_world if name in specs else False
+        ), name
+        assert isinstance(tool.annotations.idempotentHint, bool), name
 
     assert tools["search"].annotations.readOnlyHint is True
     assert tools["fetch"].annotations.readOnlyHint is True
-    assert tools["chembl_prepare_retrieval"].annotations.readOnlyHint is True
-    assert tools["chemspace_plan_analysis"].annotations.readOnlyHint is True
+    assert tools["chembl_prepare_retrieval"].annotations.readOnlyHint is False
+    assert tools["chemspace_plan_analysis"].annotations.readOnlyHint is False
     assert tools["chem_calculate_tanimoto_similarity"].annotations.readOnlyHint is True
     assert tools["chembl_describe_dataset"].annotations.readOnlyHint is True
     assert tools["gtm_get_density_summary"].annotations.readOnlyHint is True
@@ -155,6 +165,7 @@ def test_tool_annotations_for_chatgpt_approval(server):
     assert tools["skill_fetch"].annotations.readOnlyHint is True
     assert tools["mcp_bootstrap"].annotations.readOnlyHint is True
     assert tools["workflow_fetch"].annotations.readOnlyHint is True
+    assert tools["workflow_abandon_tool_invocation"].annotations.destructiveHint is True
     assert tools["llm_list_pending_tasks"].annotations.readOnlyHint is True
     assert tools["llm_get_task"].annotations.readOnlyHint is True
     assert tools["mol_validate_design_candidates"].annotations.readOnlyHint is True
@@ -179,7 +190,7 @@ def test_tool_annotations_for_chatgpt_approval(server):
 def test_agno_team_tool_is_opt_in(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     apply_session_id("mcp-agno-opt-in-test")
-    ctx = bootstrap(BootstrapConfig(session_id="mcp-agno-opt-in-test", workflow_slug="smoke"))
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-agno-opt-in-test"))
     from cs_copilot.mcp.server import build_server
 
     server = build_server(ctx, enable_agno_team_tool=True)
@@ -197,17 +208,34 @@ def test_prompts_registered(server):
 
 
 def test_resources_include_manifest(server):
+    from cs_copilot.storage import S3
+
+    S3.set_session_prefix("sessions/mcp-server-test")
     entries = asyncio.run(server.list_resources())
     uris = {str(e.uri) for e in entries}
-    assert "cscopilot://session/manifest.json" in uris
+    assert any(
+        uri.startswith("cscopilot://runs/") and uri.endswith("/manifest.json") for uri in uris
+    )
+
+
+def test_server_profile_is_a_strict_tool_boundary(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-bootstrap-profile"))
+    from cs_copilot.mcp.server import build_server
+
+    profiled = build_server(ctx, profile="bootstrap")
+    names = {tool.name for tool in profiled._tool_manager.list_tools()}
+
+    assert "mcp_bootstrap" in names
+    assert "workflow_fetch" in names
+    assert "gtm_optimization" not in names
+    assert profiled._cs_profile == "bootstrap"
 
 
 def test_transport_security_adds_public_proxy_hosts(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     apply_session_id("mcp-transport-security-test")
-    ctx = bootstrap(
-        BootstrapConfig(session_id="mcp-transport-security-test", workflow_slug="smoke")
-    )
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-transport-security-test"))
     from cs_copilot.mcp.server import build_server
 
     server = build_server(
@@ -228,12 +256,7 @@ def test_transport_security_adds_public_proxy_hosts(tmp_path, monkeypatch):
 def test_transport_security_can_be_disabled(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     apply_session_id("mcp-transport-security-disabled-test")
-    ctx = bootstrap(
-        BootstrapConfig(
-            session_id="mcp-transport-security-disabled-test",
-            workflow_slug="smoke",
-        )
-    )
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-transport-security-disabled-test"))
     from cs_copilot.mcp.server import build_server
 
     server = build_server(ctx, disable_dns_rebinding_protection=True)
@@ -245,9 +268,7 @@ def test_transport_security_can_be_disabled(tmp_path, monkeypatch):
 def test_transport_security_rejects_unlisted_host(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     apply_session_id("mcp-transport-security-http-test")
-    ctx = bootstrap(
-        BootstrapConfig(session_id="mcp-transport-security-http-test", workflow_slug="smoke")
-    )
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-transport-security-http-test"))
     from cs_copilot.mcp.server import build_server
 
     server = build_server(ctx)
@@ -273,12 +294,7 @@ def test_transport_security_rejects_unlisted_host(tmp_path, monkeypatch):
 def test_transport_security_allows_configured_host(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     apply_session_id("mcp-transport-security-http-allow-test")
-    ctx = bootstrap(
-        BootstrapConfig(
-            session_id="mcp-transport-security-http-allow-test",
-            workflow_slug="smoke",
-        )
-    )
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-transport-security-http-allow-test"))
     from cs_copilot.mcp.server import build_server
 
     server = build_server(ctx, allowed_hosts=["mcp.example.com"])
@@ -304,7 +320,7 @@ def test_transport_security_allows_configured_host(tmp_path, monkeypatch):
 def test_bearer_auth_configured(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     apply_session_id("mcp-auth-test")
-    ctx = bootstrap(BootstrapConfig(session_id="mcp-auth-test", workflow_slug="smoke"))
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-auth-test"))
     from cs_copilot.mcp.server import build_server
 
     protected = "https://mcp.example.com/mcp"
@@ -327,7 +343,7 @@ def test_bearer_auth_configured(tmp_path, monkeypatch):
 def test_bearer_auth_rejects_missing_header(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     apply_session_id("mcp-auth-http-test")
-    ctx = bootstrap(BootstrapConfig(session_id="mcp-auth-http-test", workflow_slug="smoke"))
+    ctx = bootstrap(BootstrapConfig(session_id="mcp-auth-http-test"))
     from cs_copilot.mcp.server import build_server
 
     server = build_server(

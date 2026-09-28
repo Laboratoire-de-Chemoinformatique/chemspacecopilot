@@ -94,6 +94,7 @@ class MLflowRobustnessRunner(RobustnessRunner):
                     "debug_mode": self.config.debug_mode,
                     "s3_session_isolation": self.config.s3_session_isolation,
                     "pass_threshold": self.config.pass_threshold,
+                    "system_under_test": self.system,
                 }
             )
 
@@ -104,6 +105,8 @@ class MLflowRobustnessRunner(RobustnessRunner):
                     "suite_id": self.test_run_id,
                     "test_count": len(enabled_tests),
                     "enabled_tests": ",".join(enabled_tests),
+                    # Enables A/B via mlflow_reporter.compare_runs across arms.
+                    "system_under_test": self.system,
                 }
             )
 
@@ -158,7 +161,12 @@ class MLflowRobustnessRunner(RobustnessRunner):
             return result
 
     def _run_single_variation(
-        self, prompt: str, test_name: str, run_id: int, s3_prefix: Optional[str] = None
+        self,
+        prompt: str,
+        test_name: str,
+        run_id: int,
+        s3_prefix: Optional[str] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """Run a single prompt variation with MLflow variation-level tracking.
 
@@ -172,7 +180,13 @@ class MLflowRobustnessRunner(RobustnessRunner):
             Variation results dictionary
         """
         if not self.enable_mlflow:
-            return super()._run_single_variation(prompt, test_name, run_id, s3_prefix)
+            return super()._run_single_variation(
+                prompt,
+                test_name,
+                run_id,
+                s3_prefix,
+                **kwargs,
+            )
 
         import mlflow
 
@@ -184,6 +198,8 @@ class MLflowRobustnessRunner(RobustnessRunner):
                 {
                     "variation_idx": run_id,
                     "prompt_preview": prompt[:200] if prompt else "",
+                    "prompt_variant": kwargs.get("prompt_variant", 0),
+                    "repetition": kwargs.get("repetition", 0),
                 }
             )
 
@@ -198,7 +214,13 @@ class MLflowRobustnessRunner(RobustnessRunner):
             mlflow.log_text(prompt, f"prompt_variation_{run_id}.txt")
 
             # Run the variation
-            result = super()._run_single_variation(prompt, test_name, run_id, s3_prefix)
+            result = super()._run_single_variation(
+                prompt,
+                test_name,
+                run_id,
+                s3_prefix,
+                **kwargs,
+            )
 
             # Log variation-level metrics
             if result:

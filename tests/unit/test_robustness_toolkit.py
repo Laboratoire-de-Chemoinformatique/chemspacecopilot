@@ -176,6 +176,42 @@ def test_analyze_temporal_trends_insufficient_data(toolkit):
     assert "error" in result or result["trend"] == "Insufficient data"
 
 
+@pytest.mark.parametrize(
+    ("method_name", "arguments"),
+    [
+        (
+            "load_test_results",
+            {"test_name": "chembl_download", "timestamp": "../../../external"},
+        ),
+        (
+            "load_test_summary_csv",
+            {"test_name": "../external", "timestamp": "20250122_120000"},
+        ),
+        (
+            "compare_test_runs",
+            {
+                "test_name": "chembl_download",
+                "timestamps": ["20250122_120000", "../../external"],
+            },
+        ),
+        (
+            "analyze_temporal_trends",
+            {
+                "test_name": "chembl_download",
+                "timestamps": ["20250230_120000"],
+            },
+        ),
+    ],
+)
+def test_robustness_run_identifiers_reject_path_traversal(
+    toolkit,
+    method_name,
+    arguments,
+):
+    with pytest.raises(ValueError, match="timestamp|test_name"):
+        getattr(toolkit, method_name)(**arguments)
+
+
 def test_generate_insights(toolkit):
     """Test insight generation."""
     analysis = {

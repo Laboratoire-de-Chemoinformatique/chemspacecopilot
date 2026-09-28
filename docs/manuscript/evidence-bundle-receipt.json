@@ -1,0 +1,51 @@
+{
+  "status": "unpublished_working_revision",
+  "archive": "reports/reviewer_revision/bundles/offline-evidence-20260928.zip",
+  "sha256": "6e534236990e01eaa830665f482a500f5eeca392613a4928e9a34e5c6d2e9403",
+  "size_bytes": 283540350,
+  "created_utc": "2026-09-28T06:18:21.070134+00:00",
+  "verified_files": 418,
+  "verification_output": "Verified 418 bundled files",
+  "source_snapshots": [
+    {
+      "git_commit": "bcc3632da20203a8866ea031492078c1bb9882e6",
+      "path": "source/bcc3632da20203a8866ea031492078c1bb9882e6.tar.gz",
+      "validated_source_file_count": 348,
+      "decompressed_private_and_secret_scan_passed": true
+    },
+    {
+      "git_commit": "bc51198bfce8c71278660d40e7a651366c8a4f92",
+      "path": "source/bc51198bfce8c71278660d40e7a651366c8a4f92.tar.gz",
+      "validated_source_file_count": 350,
+      "decompressed_private_and_secret_scan_passed": true
+    },
+    {
+      "git_commit": "979c736dec88d4ad865f4b6d28bdc0ca46703d1c",
+      "path": "source/979c736dec88d4ad865f4b6d28bdc0ca46703d1c.tar.gz",
+      "validated_source_file_count": 356,
+      "decompressed_private_and_secret_scan_passed": true
+    },
+    {
+      "git_commit": "797e12386f1432d96834c75fd2b8ca8485188585",
+      "path": "source/797e12386f1432d96834c75fd2b8ca8485188585.tar.gz",
+      "validated_source_file_count": 373,
+      "decompressed_private_and_secret_scan_passed": true
+    },
+    {
+      "git_commit": "cb9e19d0e3a24601b403e5e1c19d375f44413727",
+      "path": "source/cb9e19d0e3a24601b403e5e1c19d375f44413727.tar.gz",
+      "validated_source_file_count": 429,
+      "decompressed_private_and_secret_scan_passed": true
+    }
+  ],
+  "limitations": [
+    "Working revision checkpoint, not a submitted or published manuscript release; no archive DOI assigned.",
+    "The final source snapshot resolves HEAD at bundle creation; individual studies retain their original immutable commit and file hashes. These may differ.",
+    "Full 48 frozen and 12 end-to-end agent evaluation executions await explicit provider authorization and have not been completed; two original standalone generation pilots are separate, not the primary study.",
+    "Original editable manuscript, original Zenodo archive, and exact generator checkpoint training-data linkage remain unresolved.",
+    "Prospective datasets, generation and route predictions do not reconstruct historical runs or establish experimental activity or synthetic feasibility.",
+    "No independent human chemistry review has been completed; review packets are templates rather than endorsements.",
+    "The measured ARM SynPlanner runtime used declared compatibility dependencies, not an exact repository-lock installation. Recorded distributions and deviations accompany the route results.",
+    "Absolute paths in unchanged records refer to the original workspace; the bundle manifest documents their relative mapping. Provider credentials, virtual environments and caches are excluded."
+  ]
+}

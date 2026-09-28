@@ -1,0 +1,266 @@
+{
+  "local_directory": "reports/reviewer_revision/seh",
+  "offline_replay": {
+    "files": {
+      "clean_compounds.csv": "bc4b51eeb040892bb4199d4c7e09345b6e34a1a0bb78ec18fcc5a5d976024bb7",
+      "clean_measurements.csv": "9c31e21986e40e8f2068f91cfe431d8e4369b80a0bb1b005d7b82d69adcb02ee",
+      "excluded_activities.csv": "9b9f80396d7667717de2267bd6ae6199033a7d87d33c70bbdacf8eb61e7e60d1",
+      "raw_activities.csv": "e21b3d88876ba76f3dec8d2884a8b229701236380ad982ded4d59c37f1e7169e"
+    },
+    "identical_csv_sha256": true,
+    "method": "Reprocess saved checksum-verified raw snapshot without network calls"
+  },
+  "parent_exclusion_reason": "Both records fail the endpoint_not_IC50 criterion (Ki and T1/2); this parent is used independently for molecular generation.",
+  "parent_molecule_lookup": {
+    "bytes": 4393,
+    "canonical_smiles": "CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1",
+    "molecule_chembl_id": "CHEMBL3327073",
+    "path": "reports/reviewer_revision/sources/parent_CHEMBL3327073.json",
+    "retrieved_utc": "2026-09-26T16:19:48.827021+00:00",
+    "sha256": "b0d3b1a317573064da86ae7822c5a407e636ed1bb6eea98dc9a3983647ee7e6e",
+    "url": "https://www.ebi.ac.uk/chembl/api/data/molecule/CHEMBL3327073.json"
+  },
+  "parent_target_records": [
+    {
+      "activity_id": 15022010,
+      "assay_chembl_id": "CHEMBL3361516",
+      "molecule_chembl_id": "CHEMBL3327073",
+      "standard_relation": "=",
+      "standard_type": "T1/2",
+      "standard_units": "hr",
+      "standard_value": "0.6167"
+    },
+    {
+      "activity_id": 15022036,
+      "assay_chembl_id": "CHEMBL3361515",
+      "molecule_chembl_id": "CHEMBL3327073",
+      "standard_relation": "=",
+      "standard_type": "Ki",
+      "standard_units": "nM",
+      "standard_value": "0.02"
+    }
+  ],
+  "preparation": {
+    "chembl_release": "ChEMBL_37",
+    "counts": {
+      "accepted_source_records": 2497,
+      "class_counts": {
+        "active": 1794,
+        "inactive": 158,
+        "intermediate": 260
+      },
+      "compounds_with_active_inactive_conflict": 2,
+      "compounds_with_multiple_observed_classes": 26,
+      "exact_within_assay_duplicate_measurements_collapsed": 7,
+      "excluded_by_first_failed_filter": {
+        "assay_confidence_not_9": 1542,
+        "assay_type_not_B_or_F": 3,
+        "data_validity_comment": 14,
+        "endpoint_not_IC50": 807,
+        "phosphatase_domain_assay": 5,
+        "potential_duplicate": 96,
+        "relation_not_equal": 152,
+        "units_not_nM": 127
+      },
+      "raw_activities": 5243,
+      "raw_assays": 289,
+      "retained_assays": 151,
+      "unique_measurements": 2490,
+      "unique_standardized_compounds": 2212
+    },
+    "domain_review_excluded_assays": [
+      {
+        "aidx": "1174177",
+        "assay_category": null,
+        "assay_cell_type": null,
+        "assay_chembl_id": "CHEMBL4415272",
+        "assay_classifications": [],
+        "assay_group": null,
+        "assay_organism": "Homo sapiens",
+        "assay_parameters": [],
+        "assay_strain": null,
+        "assay_subcellular_fraction": null,
+        "assay_tax_id": 9606,
+        "assay_test_type": null,
+        "assay_tissue": null,
+        "assay_type": "B",
+        "assay_type_description": "Binding",
+        "bao_format": "BAO_0000357",
+        "bao_label": "single protein format",
+        "cell_chembl_id": null,
+        "confidence_description": "Direct single protein target assigned",
+        "confidence_score": 9,
+        "description": "Inhibition of phosphatase activity of full length human soluble epoxide hydrolase pre-incubated for 30 mins before FDP substrate addition by fluorescence based assay",
+        "document_chembl_id": "CHEMBL4414562",
+        "relationship_description": "Direct protein target assigned",
+        "relationship_type": "D",
+        "src_assay_id": null,
+        "src_id": 1,
+        "target_chembl_id": "CHEMBL2409",
+        "tissue_chembl_id": null,
+        "variant_sequence": null
+      }
+    ],
+    "outputs": [
+      {
+        "bytes": 5110567,
+        "path": "raw_activities.csv",
+        "sha256": "e21b3d88876ba76f3dec8d2884a8b229701236380ad982ded4d59c37f1e7169e"
+      },
+      {
+        "bytes": 312742,
+        "path": "clean_measurements.csv",
+        "sha256": "9c31e21986e40e8f2068f91cfe431d8e4369b80a0bb1b005d7b82d69adcb02ee"
+      },
+      {
+        "bytes": 570034,
+        "path": "clean_compounds.csv",
+        "sha256": "bc4b51eeb040892bb4199d4c7e09345b6e34a1a0bb78ec18fcc5a5d976024bb7"
+      },
+      {
+        "bytes": 122073,
+        "path": "excluded_activities.csv",
+        "sha256": "9b9f80396d7667717de2267bd6ae6199033a7d87d33c70bbdacf8eb61e7e60d1"
+      }
+    ],
+    "policy": {
+      "aggregation": "median pIC50 = median(9 - log10(IC50 in nM)); independent assays retained",
+      "assay_confidence_score": 9,
+      "assay_organism_filter": "none; human identity follows confidence-9 target assignment",
+      "assay_types": [
+        "B",
+        "F"
+      ],
+      "chemical_identity": "RDKit cleanup, largest fragment, uncharge, canonical tautomer, remove stereochemistry",
+      "classification": "active pIC50 > 6 (IC50 < 1000 nM); inactive pIC50 <= 5 (IC50 >= 10000 nM); otherwise intermediate",
+      "conflicts": "retain all compounds; flag multiple observed classes and active/inactive disagreement separately",
+      "data_validity_comment": "null or empty only",
+      "duplicate_measurements": "collapse same standardized structure + assay + exact numeric IC50; retain all source IDs",
+      "excluded_assays_after_domain_review": {
+        "CHEMBL4415272": "Phosphatase activity of bifunctional EPHX2, not epoxide hydrolase activity"
+      },
+      "potential_duplicate": "unflagged only (0, false, null or empty)",
+      "purpose": "prospective_reviewer_revision_not_historical_reconstruction",
+      "standard_relation": "=",
+      "standard_type": "IC50",
+      "standard_units": "nM",
+      "standard_value": "finite and greater than zero",
+      "target_accession": "P34913",
+      "target_chembl_id": "CHEMBL2409",
+      "target_organism": "Homo sapiens",
+      "target_type": "SINGLE PROTEIN"
+    },
+    "preparation_script_sha256": "6ece7ba1ab8c52e6d763509deeb9f6a70fe2bce116a7b8d16a9b2113c67f6edb",
+    "raw_manifest": {
+      "bytes": 3886,
+      "path": "raw_manifest.json",
+      "sha256": "50b6faedd1e473cff6ef886c33a0ebff62af573843fe3bbf571f4b691d7763b4"
+    },
+    "schema": "chemspacecopilot.seh_preparation.v1",
+    "software": {
+      "python": "3.12.13",
+      "rdkit": "2025.09.4"
+    },
+    "standardization_source_sha256": "3accab60890eebf8d2d811fc6a5173c11b2f22fd638559f5f2479f2bacc23be8"
+  },
+  "purpose": "Prospective revision dataset, not original-manuscript reconstruction",
+  "raw_snapshot": {
+    "api_base": "https://www.ebi.ac.uk/chembl/api/data/",
+    "artifacts": [
+      {
+        "bytes": 212,
+        "path": "raw/status_before.json",
+        "request_url": "https://www.ebi.ac.uk/chembl/api/data/status.json",
+        "retrieved_utc": "2026-09-26T16:14:16.622302+00:00",
+        "sha256": "29dc1fb09487a8d2962253a4d0d92c4ded0aa0d831effab42445d0c3483d4740"
+      },
+      {
+        "bytes": 20388,
+        "path": "raw/target.json",
+        "request_url": "https://www.ebi.ac.uk/chembl/api/data/target/CHEMBL2409.json",
+        "retrieved_utc": "2026-09-26T16:14:16.787839+00:00",
+        "sha256": "3f3e5696983f81c891f5156928dc2097139f43a45b7ab1eb47b0c1ed591d7591"
+      },
+      {
+        "bytes": 297502,
+        "path": "raw/assay_0000.json",
+        "request_url": "https://www.ebi.ac.uk/chembl/api/data/assay.json?target_chembl_id=CHEMBL2409&limit=1000",
+        "retrieved_utc": "2026-09-26T16:14:20.124341+00:00",
+        "sha256": "b9c2b2fa439693d17585822021fbce5a776d86c31d60f19768e0a545b0c017be"
+      },
+      {
+        "bytes": 1468465,
+        "path": "raw/activity_0000.json",
+        "request_url": "https://www.ebi.ac.uk/chembl/api/data/activity.json?target_chembl_id=CHEMBL2409&limit=1000",
+        "retrieved_utc": "2026-09-26T16:14:29.885512+00:00",
+        "sha256": "b2ef32a8eb6d245e54b1fb382624ad7740245e5556814df042513e9a171d8a89"
+      },
+      {
+        "bytes": 1561661,
+        "path": "raw/activity_0001.json",
+        "request_url": "https://www.ebi.ac.uk/chembl/api/data/activity.json?limit=1000&offset=1000&target_chembl_id=CHEMBL2409",
+        "retrieved_utc": "2026-09-26T16:14:34.578110+00:00",
+        "sha256": "071a8788ab56ac99a2f6c8347358c1b0295e612f3905aac9518de25f00e7474b"
+      },
+      {
+        "bytes": 1648273,
+        "path": "raw/activity_0002.json",
+        "request_url": "https://www.ebi.ac.uk/chembl/api/data/activity.json?limit=1000&offset=2000&target_chembl_id=CHEMBL2409",
+        "retrieved_utc": "2026-09-26T16:14:42.595299+00:00",
+        "sha256": "6ed3662d6b8a6e41d66c09a7dc9d55f6d7d460ec0c704e5ec53a5eb88f432b6f"
+      },
+      {
+        "bytes": 1948715,
+        "path": "raw/activity_0003.json",
+        "request_url": "https://www.ebi.ac.uk/chembl/api/data/activity.json?limit=1000&offset=3000&target_chembl_id=CHEMBL2409",
+        "retrieved_utc": "2026-09-26T16:14:48.042089+00:00",
+        "sha256": "907e56eda0e8d0c0b962dfbe04207f87d54fbc70c60ee036f48d2f96d8eda637"
+      },
+      {
+        "bytes": 3001342,
+        "path": "raw/activity_0004.json",
+        "request_url": "https://www.ebi.ac.uk/chembl/api/data/activity.json?limit=1000&offset=4000&target_chembl_id=CHEMBL2409",
+        "retrieved_utc": "2026-09-26T16:15:33.221658+00:00",
+        "sha256": "1b47868fef59bdb51b1758494b0d838d93a54bef7a3fc3069c9d9c259f31e75e"
+      },
+      {
+        "bytes": 577240,
+        "path": "raw/activity_0005.json",
+        "request_url": "https://www.ebi.ac.uk/chembl/api/data/activity.json?limit=1000&offset=5000&target_chembl_id=CHEMBL2409",
+        "retrieved_utc": "2026-09-26T16:15:35.169219+00:00",
+        "sha256": "037b3297e585574ad35bafe67d0071f687aec0a1058675b71fa5a2ee39135f02"
+      },
+      {
+        "bytes": 212,
+        "path": "raw/status_after.json",
+        "request_url": "https://www.ebi.ac.uk/chembl/api/data/status.json",
+        "retrieved_utc": "2026-09-26T16:15:37.904166+00:00",
+        "sha256": "29dc1fb09487a8d2962253a4d0d92c4ded0aa0d831effab42445d0c3483d4740"
+      }
+    ],
+    "collections": {
+      "activities": {
+        "paths": [
+          "raw/activity_0000.json",
+          "raw/activity_0001.json",
+          "raw/activity_0002.json",
+          "raw/activity_0003.json",
+          "raw/activity_0004.json",
+          "raw/activity_0005.json"
+        ],
+        "row_count": 5243
+      },
+      "assays": {
+        "paths": [
+          "raw/assay_0000.json"
+        ],
+        "row_count": 289
+      }
+    },
+    "complete": true,
+    "expected_release": "ChEMBL_37",
+    "schema": "chemspacecopilot.seh_snapshot.v1",
+    "target_chembl_id": "CHEMBL2409"
+  },
+  "schema_version": 1
+}

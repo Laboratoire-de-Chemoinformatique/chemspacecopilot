@@ -7,7 +7,7 @@ Provides the main public API for agent creation.
 
 import inspect
 import logging
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from agno.agent import Agent
 from agno.models.base import Model
@@ -45,7 +45,7 @@ class AgentRegistry:
                 self._aliases[alias] = agent_type
                 self.logger.info(f"Registered alias '{alias}' -> '{agent_type}'")
 
-    def create_agent(self, agent_type: str, model: Model, **kwargs) -> Agent:
+    def create_agent(self, agent_type: str, model: Model, **kwargs: Any) -> Agent:
         """Create an agent by type (supports aliases).
 
         Args:
@@ -96,7 +96,7 @@ _agent_registry = AgentRegistry()
 _agent_registry.auto_register()
 
 
-def create_agent(agent_type: str, model: Model, **kwargs) -> Agent:
+def create_agent(agent_type: str, model: Model, **kwargs: Any) -> Agent:
     """
     Create an agent by type using the global registry.
 

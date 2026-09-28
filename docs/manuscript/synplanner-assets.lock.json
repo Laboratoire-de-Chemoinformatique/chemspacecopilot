@@ -1,0 +1,29 @@
+{
+  "purpose": "Prospective revision planning assets; not proof of historical manuscript search configuration",
+  "artifacts": [
+    {
+      "repo": "Laboratoire-De-Chemoinformatique/SynPlanner",
+      "revision": "59a2ccf491d031eb2242b65e4a166027a22547cd",
+      "relative_path": "synplanner/building_blocks/building_blocks_em_sa_ln.smi",
+      "url": "https://huggingface.co/Laboratoire-De-Chemoinformatique/SynPlanner/resolve/59a2ccf491d031eb2242b65e4a166027a22547cd/building_blocks/building_blocks_em_sa_ln.smi",
+      "bytes": 5784208,
+      "sha256": "53b6d5eec7b3c522e8499213b95f5884028ce73fd83e09e1e63b6ded97e5affb"
+    },
+    {
+      "repo": "Laboratoire-De-Chemoinformatique/SynPlanner",
+      "revision": "59a2ccf491d031eb2242b65e4a166027a22547cd",
+      "relative_path": "synplanner/uspto/uspto_reaction_rules.pickle",
+      "url": "https://huggingface.co/Laboratoire-De-Chemoinformatique/SynPlanner/resolve/59a2ccf491d031eb2242b65e4a166027a22547cd/uspto/uspto_reaction_rules.pickle",
+      "bytes": 45489168,
+      "sha256": "7d9f275781cc926eeff1d9a9564b4aa335b66506c621f943c82ec902460bf977"
+    },
+    {
+      "repo": "Laboratoire-De-Chemoinformatique/SynPlanner",
+      "revision": "59a2ccf491d031eb2242b65e4a166027a22547cd",
+      "relative_path": "synplanner/uspto/weights/ranking_policy_network.ckpt",
+      "url": "https://huggingface.co/Laboratoire-De-Chemoinformatique/SynPlanner/resolve/59a2ccf491d031eb2242b65e4a166027a22547cd/uspto/weights/ranking_policy_network.ckpt",
+      "bytes": 164172437,
+      "sha256": "c1c8852c4d8177538ba2a815d53e7b29f27e8a6067341f05b136a690bc46d53e"
+    }
+  ]
+}

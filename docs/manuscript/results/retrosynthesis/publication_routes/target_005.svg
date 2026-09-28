@@ -1,0 +1,1159 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="46.21cm" height="15.91cm" viewBox="-0.62 -13.26 77.01 26.52" version="1.1">
+  <desc>Backend-predicted retrosynthesis route. SVG mask bounds corrected to the complete viewBox and a white background added; molecular geometry, labels and connectivity are unchanged. This diagram does not establish synthetic feasibility.</desc><rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" /><defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="0" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3" />
+    </marker>
+  </defs>
+  <polyline points="61.57 0.00, 62.90 0.00, 62.90 0.00, 64.57 0.00" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />
+  <polyline points="42.30 -3.64, 46.47 -3.64, 46.47 0.00, 48.14 0.00" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="46.472755738651365" cy="-3.643411948709253" r="0.1" />
+  <polyline points="45.14 3.97, 46.47 3.97, 46.47 0.00, 48.14 0.00" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="46.472755738651365" cy="3.974999999999937" r="0.1" />
+  <polyline points="32.30 -3.30, 33.64 -3.30, 33.64 -3.64, 35.30 -3.64" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="33.63525477668116" cy="-3.300984803865644" r="0.1" />
+  <polyline points="31.59 3.36, 33.16 3.36, 33.16 3.97, 35.30 3.97" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="33.15894111315322" cy="3.356249278521336" r="0.1" />
+  <polyline points="13.86 -9.16, 20.06 -9.16, 20.06 -3.30, 21.73 -3.30" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="20.061603279217156" cy="-9.158866247802052" r="0.1" />
+  <polyline points="18.73 -3.14, 20.06 -3.14, 20.06 -3.30, 21.73 -3.30" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="20.061603279217156" cy="-3.1351914691401057" r="0.1" />
+  <polyline points="15.43 3.14, 18.24 3.14, 18.24 3.36, 21.73 3.36" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="18.24448534425711" cy="3.1351894938107963" r="0.1" />
+  <polyline points="16.00 8.60, 18.24 8.60, 18.24 3.36, 21.73 3.36" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="18.24448534425711" cy="8.595381123279378" r="0.1" />
+  <polyline points="6.72 -11.41, 8.05 -11.41, 8.05 -3.14, 9.72 -3.14" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="8.049100072650013" cy="-11.40913809570578" r="0.1" />
+  <polyline points="3.14 -7.23, 8.05 -7.23, 8.05 -3.14, 9.72 -3.14" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="8.049100072650013" cy="-7.226903329045109" r="0.1" />
+  <polyline points="3.14 -2.78, 5.67 -2.78, 5.67 3.14, 9.72 3.14" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="5.667531384743771" cy="-2.783152607567192" r="0.1" />
+  <polyline points="2.43 2.02, 5.67 2.02, 5.67 3.14, 9.72 3.14" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="5.667531384743771" cy="2.0178328714936082" r="0.1" />
+  <polyline points="3.48 6.65, 5.89 6.65, 5.89 8.60, 9.72 8.60" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="5.888589340648056" cy="6.653024695172122" r="0.1" />
+  <polyline points="3.25 11.55, 5.89 11.55, 5.89 8.60, 9.72 8.60" fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)" />  <circle cx="5.888589340648056" cy="11.554926590338905" r="0.1" />
+  <g>
+<rect x="-0.6" y="10.274731039789556" rx="0.25603911010987" ry="0.25603911010987" width="3.7540564212755343" height="2.5603911010987" stroke="black" stroke-width=".0025" fill="#9BFAB3" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-c8732ffe-56cd-42a3-8bcc-6135c5e41cac" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="0.00" cy="11.65" r="0.20" />
+          <circle cx="0.91" cy="12.39" r="0.20" />
+          <circle cx="1.47" cy="12.29" r="0.20" />
+          <circle cx="2.25" cy="10.93" r="0.20" />
+          <circle cx="1.31" cy="10.72" r="0.20" />
+          <circle cx="0.73" cy="10.74" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="0.00" y="11.65" dx="-0.20" dy="0.20">F</text>
+            <text x="0.91" y="12.39" dx="-0.20" dy="0.20">F</text>
+            <text x="1.47" y="12.29" dx="-0.20" dy="0.20">F</text>
+            <text x="2.25" y="10.93" dx="-0.20" dy="0.20">F</text>
+            <text x="1.31" y="10.72" dx="-0.20" dy="0.20">F</text>
+            <text x="0.73" y="10.74" dx="-0.07" dy="0.20">I</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-c8732ffe-56cd-42a3-8bcc-6135c5e41cac)">
+      <line x1="1.64" y1="11.48" x2="0.82" y2="11.56" />
+      <line x1="1.64" y1="11.48" x2="1.47" y2="12.29" />
+      <line x1="1.64" y1="11.48" x2="2.25" y2="10.93" />
+      <line x1="1.64" y1="11.48" x2="1.31" y2="10.72" />
+      <line x1="0.82" y1="11.56" x2="0.91" y2="12.39" />
+      <line x1="0.82" y1="11.56" x2="0.00" y2="11.65" />
+      <line x1="0.82" y1="11.56" x2="0.73" y2="10.74" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="0.00" y="11.65" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="0.91" y="12.39" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="1.47" y="12.29" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="2.25" y="10.93" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="1.31" y="10.72" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#940094" font-family="sans-serif">
+        <text x="0.73" y="10.74" dx="-0.07" dy="0.20" font-size="0.50">I</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="-0.6" y="5.131318350554689" rx="0.30434126892348656" ry="0.30434126892348656" width="3.9750006413137444" height="3.0434126892348656" stroke="black" stroke-width=".0025" fill="#9BFAB3" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-10d7f918-6497-4fc6-b6e4-5daf4a44feb3" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="2.48" cy="7.01" r="0.20" />
+          <circle cx="0.00" cy="5.58" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="2.48" y="7.01" dx="-0.20" dy="0.20">NH</text>
+            <text x="0.00" y="5.58" dx="-0.20" dy="0.20">F</text>
+          </g>
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.03">
+            <text x="2.48" y="7.01" dx="-0.20" dy="0.20">NH<tspan dy="0.15" font-size="0.35">2</tspan></text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-10d7f918-6497-4fc6-b6e4-5daf4a44feb3)">
+      <line x1="0.41" y1="6.30" x2="0.00" y2="7.01" />
+      <line x1="0.41" y1="6.30" x2="0.00" y2="5.58" />
+      <line x1="0.41" y1="6.30" x2="1.24" y2="6.30" />
+      <line x1="0.00" y1="7.01" x2="0.41" y2="7.72" />
+      <line x1="0.41" y1="7.72" x2="1.24" y2="7.72" />
+      <line x1="2.48" y1="7.01" x2="1.65" y2="7.01" />
+      <line x1="1.65" y1="7.01" x2="1.24" y2="7.72" />
+      <line x1="1.65" y1="7.01" x2="1.24" y2="6.30" />
+      <line x1="1.49" y1="7.01" x2="1.16" y2="7.58" stroke-dasharray="0.15 0.05" />
+      <line x1="1.16" y1="7.58" x2="0.49" y2="7.58" stroke-dasharray="0.15 0.05" />
+      <line x1="0.49" y1="7.58" x2="0.16" y2="7.01" stroke-dasharray="0.15 0.05" />
+      <line x1="0.16" y1="7.01" x2="0.49" y2="6.44" stroke-dasharray="0.15 0.05" />
+      <line x1="0.49" y1="6.44" x2="1.16" y2="6.44" stroke-dasharray="0.15 0.05" />
+      <line x1="1.16" y1="6.44" x2="1.49" y2="7.01" stroke-dasharray="0.15 0.05" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="2.48" y="7.01" dx="-0.20" dy="0.20" font-size="0.50">NH<tspan dy="0.15" font-size="0.35">2</tspan></text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="0.00" y="5.58" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="-0.6" y="1.0043473924325272" rx="0.20269709581221618" ry="0.20269709581221618" width="2.928941916244324" height="2.0269709581221615" stroke="black" stroke-width=".0025" fill="#9BFAB3" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-ed54bb75-0305-453d-a1e2-7de0f3878679" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="1.13" cy="2.58" r="0.20" />
+          <ellipse cx="1.30" cy="1.45" rx="0.3" ry="0.2" />
+          <ellipse cx="-0.12" cy="2.28" rx="0.3" ry="0.2" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="1.13" y="2.58" dx="-0.20" dy="0.20">O</text>
+            <text x="1.43" y="1.45" dx="-0.35" dy="0.20">Cl</text>
+            <text x="0.00" y="2.28" dx="-0.35" dy="0.20">Cl</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-ed54bb75-0305-453d-a1e2-7de0f3878679)">
+      <line x1="0.00" y1="2.28" x2="0.71" y2="1.87" />
+      <line x1="0.71" y1="1.87" x2="1.43" y2="1.45" />
+      <line x1="0.77" y1="1.84" x2="1.18" y2="2.55" />
+      <line x1="0.66" y1="1.90" x2="1.08" y2="2.61" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="1.13" y="2.58" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#1FF01F" font-family="sans-serif">
+        <text x="1.43" y="1.45" dx="-0.35" dy="0.20" font-size="0.50">Cl</text>
+      </g>
+      <g fill="#1FF01F" font-family="sans-serif">
+        <text x="0.00" y="2.28" dx="-0.35" dy="0.20" font-size="0.50">Cl</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="-0.6" y="-4.470652607566912" rx="0.33749999999994396" ry="0.33749999999994396" width="3.6434137074573165" height="3.3749999999994396" stroke="black" stroke-width=".0025" fill="#9BFAB3" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-496b350b-82a6-4d7a-9c9b-8d47c5bd897b" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="1.43" cy="-4.02" r="0.20" />
+          <ellipse cx="-0.12" cy="-3.20" rx="0.3" ry="0.2" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="1.43" y="-4.02" dx="-0.20" dy="0.20">OH</text>
+            <text x="0.00" y="-3.20" dx="-0.35" dy="0.20">Br</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-496b350b-82a6-4d7a-9c9b-8d47c5bd897b)">
+      <line x1="1.43" y1="-3.20" x2="1.43" y2="-4.02" />
+      <line x1="1.43" y1="-3.20" x2="2.14" y2="-2.78" />
+      <line x1="1.43" y1="-3.20" x2="0.71" y2="-2.78" />
+      <line x1="2.14" y1="-2.78" x2="2.14" y2="-1.96" />
+      <line x1="2.14" y1="-1.96" x2="1.43" y2="-1.55" />
+      <line x1="1.43" y1="-1.55" x2="0.71" y2="-1.96" />
+      <line x1="0.71" y1="-1.96" x2="0.71" y2="-2.78" />
+      <line x1="0.71" y1="-2.78" x2="0.00" y2="-3.20" />
+      <line x1="2.00" y1="-2.70" x2="2.00" y2="-2.04" stroke-dasharray="0.15 0.05" />
+      <line x1="2.00" y1="-2.04" x2="1.43" y2="-1.71" stroke-dasharray="0.15 0.05" />
+      <line x1="1.43" y1="-1.71" x2="0.85" y2="-2.04" stroke-dasharray="0.15 0.05" />
+      <line x1="0.85" y1="-2.04" x2="0.85" y2="-2.70" stroke-dasharray="0.15 0.05" />
+      <line x1="0.85" y1="-2.70" x2="1.43" y2="-3.03" stroke-dasharray="0.15 0.05" />
+      <line x1="1.43" y1="-3.03" x2="2.00" y2="-2.70" stroke-dasharray="0.15 0.05" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="1.43" y="-4.02" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+      <g fill="#A62929" font-family="sans-serif">
+        <text x="0.00" y="-3.20" dx="-0.35" dy="0.20" font-size="0.50">Br</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="-0.6" y="-7.883154050523305" rx="0.13125014429563936" ry="0.13125014429563936" width="3.643412596668895" height="1.3125014429563935" stroke="black" stroke-width=".0025" fill="#9BFAB3" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-84cc043f-00bf-43ec-aa96-83f782561dbd" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="0.00" cy="-7.43" r="0.20" />
+          <circle cx="2.14" cy="-7.02" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="0.00" y="-7.43" dx="-0.20" dy="0.20">OH</text>
+            <text x="2.14" y="-7.02" dx="-0.20" dy="0.20">O</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-84cc043f-00bf-43ec-aa96-83f782561dbd)">
+      <line x1="0.71" y1="-7.02" x2="1.43" y2="-7.43" />
+      <line x1="0.71" y1="-7.02" x2="0.00" y2="-7.43" />
+      <line x1="1.46" y1="-7.49" x2="2.17" y2="-7.07" />
+      <line x1="1.40" y1="-7.38" x2="2.11" y2="-6.97" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="0.00" y="-7.43" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="2.14" y="-7.02" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="-0.6" y="-12.835122140888252" rx="0.2851968090364947" ry="0.2851968090364947" width="7.215766739316679" height="2.851968090364947" stroke="black" stroke-width=".0025" fill="#9BFAB3" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-28d61089-ff99-4d7e-ad59-a3a47cc43428" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="0.00" cy="-12.08" r="0.20" />
+          <circle cx="1.43" cy="-10.43" r="0.20" />
+          <circle cx="2.86" cy="-12.08" r="0.20" />
+          <circle cx="2.86" cy="-10.43" r="0.20" />
+          <circle cx="4.29" cy="-12.08" r="0.20" />
+          <circle cx="3.57" cy="-10.85" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="0.00" y="-12.08" dx="-0.20" dy="0.20">NH</text>
+            <text x="1.43" y="-10.43" dx="-0.20" dy="0.20">O</text>
+            <text x="2.86" y="-12.08" dx="-0.20" dy="0.20">NH</text>
+            <text x="2.86" y="-10.43" dx="-0.20" dy="0.20">OH</text>
+            <text x="4.29" y="-12.08" dx="-0.20" dy="0.20">O</text>
+            <text x="3.57" y="-10.85" dx="-0.20" dy="0.20">O</text>
+          </g>
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.03">
+            <text x="0.00" y="-12.08" dx="-0.20" dy="0.20">NH<tspan dy="0.15" font-size="0.35">2</tspan></text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-28d61089-ff99-4d7e-ad59-a3a47cc43428)">
+      <line x1="0.71" y1="-11.67" x2="0.00" y2="-12.08" />
+      <line x1="0.71" y1="-11.67" x2="1.43" y2="-12.08" />
+      <line x1="2.14" y1="-10.85" x2="2.14" y2="-11.67" />
+      <line x1="2.14" y1="-10.85" x2="2.86" y2="-10.43" />
+      <line x1="2.17" y1="-10.79" x2="1.46" y2="-10.38" />
+      <line x1="2.11" y1="-10.90" x2="1.40" y2="-10.49" />
+      <line x1="2.14" y1="-11.67" x2="2.86" y2="-12.08" />
+      <line x1="2.14" y1="-11.67" x2="1.43" y2="-12.08" />
+      <line x1="2.86" y1="-12.08" x2="3.57" y2="-11.67" />
+      <line x1="5.72" y1="-11.26" x2="5.00" y2="-11.67" />
+      <line x1="5.00" y1="-11.67" x2="4.59" y2="-10.96" />
+      <line x1="5.00" y1="-11.67" x2="5.41" y2="-12.39" />
+      <line x1="5.00" y1="-11.67" x2="4.29" y2="-12.08" />
+      <line x1="4.29" y1="-12.08" x2="3.57" y2="-11.67" />
+      <line x1="3.63" y1="-11.67" x2="3.63" y2="-10.85" />
+      <line x1="3.51" y1="-11.67" x2="3.51" y2="-10.85" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="0.00" y="-12.08" dx="-0.20" dy="0.20" font-size="0.50">NH<tspan dy="0.15" font-size="0.35">2</tspan></text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="1.43" y="-10.43" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="2.86" y="-12.08" dx="-0.20" dy="0.20" font-size="0.50">NH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="2.86" y="-10.43" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="4.29" y="-12.08" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="3.57" y="-10.85" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="10.11576673931668" y="6.756895838428229" rx="0.3676970569702298" ry="0.3676970569702298" width="5.786826304127073" height="3.6769705697022976" stroke="black" stroke-width=".0025" fill="#F0AB90" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-c8a4b0e6-7df7-4d88-8f83-acdcf4531021" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="10.72" cy="7.21" r="0.20" />
+          <circle cx="13.99" cy="8.14" r="0.20" />
+          <circle cx="13.16" cy="9.57" r="0.20" />
+          <circle cx="15.00" cy="9.68" r="0.20" />
+          <circle cx="14.70" cy="8.55" r="0.20" />
+          <circle cx="13.88" cy="9.98" r="0.20" />
+          <circle cx="12.14" cy="9.68" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="10.72" y="7.21" dx="-0.20" dy="0.20">NH</text>
+            <text x="13.99" y="8.14" dx="-0.20" dy="0.20">F</text>
+            <text x="13.16" y="9.57" dx="-0.20" dy="0.20">F</text>
+            <text x="15.00" y="9.68" dx="-0.20" dy="0.20">F</text>
+            <text x="14.70" y="8.55" dx="-0.20" dy="0.20">F</text>
+            <text x="13.88" y="9.98" dx="-0.20" dy="0.20">F</text>
+            <text x="12.14" y="9.68" dx="-0.20" dy="0.20">F</text>
+          </g>
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.03">
+            <text x="10.72" y="7.21" dx="-0.20" dy="0.20">NH<tspan dy="0.15" font-size="0.35">2</tspan></text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-c8a4b0e6-7df7-4d88-8f83-acdcf4531021)">
+      <line x1="11.43" y1="7.62" x2="10.72" y2="7.21" />
+      <line x1="11.43" y1="7.62" x2="12.14" y2="7.21" />
+      <line x1="11.43" y1="7.62" x2="11.43" y2="8.44" />
+      <line x1="12.14" y1="7.21" x2="12.86" y2="7.62" />
+      <line x1="12.86" y1="7.62" x2="12.86" y2="8.44" />
+      <line x1="12.86" y1="8.44" x2="13.57" y2="8.86" />
+      <line x1="12.86" y1="8.44" x2="12.14" y2="8.86" />
+      <line x1="13.57" y1="8.86" x2="13.99" y2="8.14" />
+      <line x1="13.57" y1="8.86" x2="13.16" y2="9.57" />
+      <line x1="13.57" y1="8.86" x2="14.29" y2="9.27" />
+      <line x1="14.29" y1="9.27" x2="15.00" y2="9.68" />
+      <line x1="14.29" y1="9.27" x2="14.70" y2="8.55" />
+      <line x1="14.29" y1="9.27" x2="13.88" y2="9.98" />
+      <line x1="12.14" y1="8.86" x2="12.14" y2="9.68" />
+      <line x1="12.14" y1="8.86" x2="11.43" y2="8.44" />
+      <line x1="11.57" y1="7.70" x2="12.14" y2="7.37" stroke-dasharray="0.15 0.05" />
+      <line x1="12.14" y1="7.37" x2="12.72" y2="7.70" stroke-dasharray="0.15 0.05" />
+      <line x1="12.72" y1="7.70" x2="12.72" y2="8.36" stroke-dasharray="0.15 0.05" />
+      <line x1="12.72" y1="8.36" x2="12.14" y2="8.70" stroke-dasharray="0.15 0.05" />
+      <line x1="12.14" y1="8.70" x2="11.57" y2="8.36" stroke-dasharray="0.15 0.05" />
+      <line x1="11.57" y1="8.36" x2="11.57" y2="7.70" stroke-dasharray="0.15 0.05" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="10.72" y="7.21" dx="-0.20" dy="0.20" font-size="0.50">NH<tspan dy="0.15" font-size="0.35">2</tspan></text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="13.99" y="8.14" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="13.16" y="9.57" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="15.00" y="9.68" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="14.70" y="8.55" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="13.88" y="9.98" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="12.14" y="9.68" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="10.115766739316681" y="1.6134831491933637" rx="0.30434126892348656" ry="0.30434126892348656" width="5.212500320656622" height="3.0434126892348656" stroke="black" stroke-width=".0025" fill="#F0AB90" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-8475c9c9-ba54-42e3-a6c8-eeb38e7c7e2d" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="13.19" cy="2.06" r="0.20" />
+          <circle cx="13.19" cy="3.49" r="0.20" />
+          <ellipse cx="12.24" cy="2.06" rx="0.3" ry="0.2" />
+          <ellipse cx="14.30" cy="2.78" rx="0.3" ry="0.2" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="13.19" y="2.06" dx="-0.20" dy="0.20">O</text>
+            <text x="13.19" y="3.49" dx="-0.20" dy="0.20">O</text>
+            <text x="12.37" y="2.06" dx="-0.35" dy="0.20">Br</text>
+            <text x="14.43" y="2.78" dx="-0.35" dy="0.20">Cl</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-8475c9c9-ba54-42e3-a6c8-eeb38e7c7e2d)">
+      <line x1="13.19" y1="3.49" x2="13.60" y2="2.78" />
+      <line x1="13.19" y1="3.49" x2="12.37" y2="3.49" />
+      <line x1="13.55" y1="2.81" x2="13.14" y2="2.09" />
+      <line x1="13.66" y1="2.75" x2="13.24" y2="2.03" />
+      <line x1="13.60" y1="2.78" x2="14.43" y2="2.78" />
+      <line x1="11.95" y1="4.21" x2="12.37" y2="3.49" />
+      <line x1="11.95" y1="4.21" x2="11.13" y2="4.21" />
+      <line x1="11.13" y1="4.21" x2="10.72" y2="3.49" />
+      <line x1="10.72" y1="3.49" x2="11.13" y2="2.78" />
+      <line x1="11.13" y1="2.78" x2="11.95" y2="2.78" />
+      <line x1="11.95" y1="2.78" x2="12.37" y2="3.49" />
+      <line x1="11.95" y1="2.78" x2="12.37" y2="2.06" />
+      <line x1="11.87" y1="4.07" x2="11.21" y2="4.07" stroke-dasharray="0.15 0.05" />
+      <line x1="11.21" y1="4.07" x2="10.88" y2="3.49" stroke-dasharray="0.15 0.05" />
+      <line x1="10.88" y1="3.49" x2="11.21" y2="2.92" stroke-dasharray="0.15 0.05" />
+      <line x1="11.21" y1="2.92" x2="11.87" y2="2.92" stroke-dasharray="0.15 0.05" />
+      <line x1="11.87" y1="2.92" x2="12.20" y2="3.49" stroke-dasharray="0.15 0.05" />
+      <line x1="12.20" y1="3.49" x2="11.87" y2="4.07" stroke-dasharray="0.15 0.05" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="13.19" y="2.06" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="13.19" y="3.49" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#A62929" font-family="sans-serif">
+        <text x="12.37" y="2.06" dx="-0.35" dy="0.20" font-size="0.50">Br</text>
+      </g>
+      <g fill="#1FF01F" font-family="sans-serif">
+        <text x="14.43" y="2.78" dx="-0.35" dy="0.20" font-size="0.50">Cl</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="10.11576673931668" y="-5.783866087473575" rx="0.5297349236666938" ry="0.5297349236666938" width="8.512503206567143" height="5.297349236666938" stroke="black" stroke-width=".0025" fill="#F0AB90" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-d5a26dbf-745e-4f73-995c-eefe20d4b20e" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="12.37" cy="-3.90" r="0.20" />
+          <circle cx="10.72" cy="-5.33" r="0.20" />
+          <circle cx="14.43" cy="-4.62" r="0.20" />
+          <circle cx="14.84" cy="-2.48" r="0.20" />
+          <circle cx="15.67" cy="-3.90" r="0.20" />
+          <circle cx="16.08" cy="-1.76" r="0.20" />
+          <circle cx="16.08" cy="-3.19" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="12.37" y="-3.90" dx="-0.20" dy="0.20">NH</text>
+            <text x="10.72" y="-5.33" dx="-0.20" dy="0.20">OH</text>
+            <text x="14.43" y="-4.62" dx="-0.20" dy="0.20">O</text>
+            <text x="14.84" y="-2.48" dx="-0.20" dy="0.20">NH</text>
+            <text x="15.67" y="-3.90" dx="-0.20" dy="0.20">OH</text>
+            <text x="16.08" y="-1.76" dx="-0.20" dy="0.20">O</text>
+            <text x="16.08" y="-3.19" dx="-0.20" dy="0.20">O</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-d5a26dbf-745e-4f73-995c-eefe20d4b20e)">
+      <line x1="13.19" y1="-3.90" x2="12.37" y2="-3.90" />
+      <line x1="13.19" y1="-3.90" x2="13.60" y2="-3.19" />
+      <line x1="12.37" y1="-3.90" x2="11.95" y2="-4.62" />
+      <line x1="11.95" y1="-4.62" x2="11.13" y2="-4.62" />
+      <line x1="11.13" y1="-4.62" x2="10.72" y2="-5.33" />
+      <line x1="14.84" y1="-3.90" x2="14.43" y2="-3.19" />
+      <line x1="14.84" y1="-3.90" x2="15.67" y2="-3.90" />
+      <line x1="14.79" y1="-3.87" x2="14.38" y2="-4.59" />
+      <line x1="14.89" y1="-3.93" x2="14.48" y2="-4.65" />
+      <line x1="14.43" y1="-3.19" x2="14.84" y2="-2.48" />
+      <line x1="14.43" y1="-3.19" x2="13.60" y2="-3.19" />
+      <line x1="14.84" y1="-2.48" x2="15.67" y2="-2.48" />
+      <line x1="17.73" y1="-1.76" x2="16.90" y2="-1.76" />
+      <line x1="16.90" y1="-1.76" x2="16.90" y2="-0.94" />
+      <line x1="16.90" y1="-1.76" x2="16.90" y2="-2.59" />
+      <line x1="16.90" y1="-1.76" x2="16.08" y2="-1.76" />
+      <line x1="16.08" y1="-1.76" x2="15.67" y2="-2.48" />
+      <line x1="15.61" y1="-2.51" x2="16.03" y2="-3.22" />
+      <line x1="15.72" y1="-2.45" x2="16.13" y2="-3.16" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="12.37" y="-3.90" dx="-0.20" dy="0.20" font-size="0.50">NH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="10.72" y="-5.33" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="14.43" y="-4.62" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="14.84" y="-2.48" dx="-0.20" dy="0.20" font-size="0.50">NH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="15.67" y="-3.90" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="16.08" y="-1.76" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="16.08" y="-3.19" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="10.11576673931668" y="-10.433866408130529" rx="0.2550000320656955" ry="0.2550000320656955" width="3.6434131520635358" height="2.550000320656955" stroke="black" stroke-width=".0025" fill="#9BFAB3" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-b0368269-cac3-438e-8b31-fe93c40d3911" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="12.14" cy="-8.33" r="0.20" />
+          <circle cx="10.72" cy="-8.33" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="12.14" y="-8.33" dx="-0.20" dy="0.20">O</text>
+            <text x="10.72" y="-8.33" dx="-0.20" dy="0.20">OH</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-b0368269-cac3-438e-8b31-fe93c40d3911)">
+      <line x1="11.43" y1="-9.57" x2="11.43" y2="-8.75" />
+      <line x1="11.43" y1="-9.57" x2="12.14" y2="-9.98" />
+      <line x1="11.43" y1="-9.57" x2="10.72" y2="-9.98" />
+      <line x1="11.43" y1="-8.75" x2="10.72" y2="-8.33" />
+      <line x1="11.46" y1="-8.80" x2="12.17" y2="-8.39" />
+      <line x1="11.40" y1="-8.69" x2="12.11" y2="-8.28" />
+      <line x1="12.86" y1="-9.57" x2="12.14" y2="-9.98" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="12.14" y="-8.33" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="10.72" y="-8.33" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="22.128269945883822" y="1.1052644746556919" rx="0.4501969607731289" ry="0.4501969607731289" width="9.35918100217209" height="4.501969607731288" stroke="black" stroke-width=".0025" fill="#F0AB90" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-223a07a5-6381-4b4f-8fff-6860a778cae3" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="25.59" cy="3.09" r="0.20" />
+          <circle cx="26.30" cy="4.33" r="0.20" />
+          <circle cx="29.57" cy="3.40" r="0.20" />
+          <circle cx="28.75" cy="1.97" r="0.20" />
+          <circle cx="30.29" cy="2.98" r="0.20" />
+          <circle cx="30.59" cy="1.86" r="0.20" />
+          <circle cx="29.46" cy="1.56" r="0.20" />
+          <circle cx="27.73" cy="1.86" r="0.20" />
+          <circle cx="24.87" cy="4.33" r="0.20" />
+          <ellipse cx="23.32" cy="5.16" rx="0.3" ry="0.2" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="25.59" y="3.09" dx="-0.20" dy="0.20">O</text>
+            <text x="26.30" y="4.33" dx="-0.20" dy="0.20">NH</text>
+            <text x="29.57" y="3.40" dx="-0.20" dy="0.20">F</text>
+            <text x="28.75" y="1.97" dx="-0.20" dy="0.20">F</text>
+            <text x="30.29" y="2.98" dx="-0.20" dy="0.20">F</text>
+            <text x="30.59" y="1.86" dx="-0.20" dy="0.20">F</text>
+            <text x="29.46" y="1.56" dx="-0.20" dy="0.20">F</text>
+            <text x="27.73" y="1.86" dx="-0.20" dy="0.20">F</text>
+            <text x="24.87" y="4.33" dx="-0.20" dy="0.20">O</text>
+            <text x="23.44" y="5.16" dx="-0.35" dy="0.20">Br</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-223a07a5-6381-4b4f-8fff-6860a778cae3)">
+      <line x1="24.16" y1="3.92" x2="23.44" y2="4.33" />
+      <line x1="24.16" y1="3.92" x2="24.16" y2="3.09" />
+      <line x1="24.16" y1="3.92" x2="24.87" y2="4.33" />
+      <line x1="23.44" y1="4.33" x2="22.73" y2="3.92" />
+      <line x1="23.44" y1="4.33" x2="23.44" y2="5.16" />
+      <line x1="22.73" y1="3.92" x2="22.73" y2="3.09" />
+      <line x1="25.59" y1="3.92" x2="24.87" y2="4.33" />
+      <line x1="25.59" y1="3.92" x2="26.30" y2="4.33" />
+      <line x1="25.53" y1="3.92" x2="25.53" y2="3.09" />
+      <line x1="25.65" y1="3.92" x2="25.65" y2="3.09" />
+      <line x1="26.30" y1="4.33" x2="27.02" y2="3.92" />
+      <line x1="27.02" y1="3.92" x2="27.73" y2="4.33" />
+      <line x1="27.02" y1="3.92" x2="27.02" y2="3.09" />
+      <line x1="27.73" y1="4.33" x2="28.44" y2="3.92" />
+      <line x1="28.44" y1="3.92" x2="28.44" y2="3.09" />
+      <line x1="28.44" y1="3.09" x2="29.16" y2="2.68" />
+      <line x1="28.44" y1="3.09" x2="27.73" y2="2.68" />
+      <line x1="29.16" y1="2.68" x2="29.57" y2="3.40" />
+      <line x1="29.16" y1="2.68" x2="28.75" y2="1.97" />
+      <line x1="29.16" y1="2.68" x2="29.87" y2="2.27" />
+      <line x1="29.87" y1="2.27" x2="30.29" y2="2.98" />
+      <line x1="29.87" y1="2.27" x2="30.59" y2="1.86" />
+      <line x1="29.87" y1="2.27" x2="29.46" y2="1.56" />
+      <line x1="27.73" y1="2.68" x2="27.73" y2="1.86" />
+      <line x1="27.73" y1="2.68" x2="27.02" y2="3.09" />
+      <line x1="24.16" y1="3.09" x2="23.44" y2="2.68" />
+      <line x1="23.44" y1="2.68" x2="22.73" y2="3.09" />
+      <line x1="24.02" y1="3.18" x2="23.44" y2="2.84" stroke-dasharray="0.15 0.05" />
+      <line x1="23.44" y1="2.84" x2="22.87" y2="3.18" stroke-dasharray="0.15 0.05" />
+      <line x1="22.87" y1="3.18" x2="22.87" y2="3.84" stroke-dasharray="0.15 0.05" />
+      <line x1="22.87" y1="3.84" x2="23.44" y2="4.17" stroke-dasharray="0.15 0.05" />
+      <line x1="23.44" y1="4.17" x2="24.02" y2="3.84" stroke-dasharray="0.15 0.05" />
+      <line x1="24.02" y1="3.84" x2="24.02" y2="3.18" stroke-dasharray="0.15 0.05" />
+      <line x1="27.16" y1="3.84" x2="27.73" y2="4.17" stroke-dasharray="0.15 0.05" />
+      <line x1="27.73" y1="4.17" x2="28.30" y2="3.84" stroke-dasharray="0.15 0.05" />
+      <line x1="28.30" y1="3.84" x2="28.30" y2="3.18" stroke-dasharray="0.15 0.05" />
+      <line x1="28.30" y1="3.18" x2="27.73" y2="2.84" stroke-dasharray="0.15 0.05" />
+      <line x1="27.73" y1="2.84" x2="27.16" y2="3.18" stroke-dasharray="0.15 0.05" />
+      <line x1="27.16" y1="3.18" x2="27.16" y2="3.84" stroke-dasharray="0.15 0.05" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="25.59" y="3.09" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="26.30" y="4.33" dx="-0.20" dy="0.20" font-size="0.50">NH</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="29.57" y="3.40" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="28.75" y="1.97" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="30.29" y="2.98" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="30.59" y="1.86" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="29.46" y="1.56" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="27.73" y="1.86" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="24.87" y="4.33" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#A62929" font-family="sans-serif">
+        <text x="23.44" y="5.16" dx="-0.35" dy="0.20" font-size="0.50">Br</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="22.128269945883822" y="-5.60723408238698" rx="0.46124985570426724" ry="0.46124985570426724" width="10.073651497463999" height="4.612498557042672" stroke="black" stroke-width=".0025" fill="#F0AB90" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-50394b2d-59d2-406f-8891-12b37a704832" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="24.87" cy="-4.74" r="0.20" />
+          <circle cx="25.59" cy="-3.51" r="0.20" />
+          <circle cx="24.87" cy="-1.44" r="0.20" />
+          <circle cx="27.02" cy="-5.16" r="0.20" />
+          <circle cx="28.44" cy="-3.51" r="0.20" />
+          <circle cx="28.44" cy="-5.16" r="0.20" />
+          <circle cx="29.87" cy="-3.51" r="0.20" />
+          <circle cx="29.16" cy="-4.74" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="24.87" y="-4.74" dx="-0.20" dy="0.20">O</text>
+            <text x="25.59" y="-3.51" dx="-0.20" dy="0.20">N</text>
+            <text x="24.87" y="-1.44" dx="-0.20" dy="0.20">OH</text>
+            <text x="27.02" y="-5.16" dx="-0.20" dy="0.20">O</text>
+            <text x="28.44" y="-3.51" dx="-0.20" dy="0.20">NH</text>
+            <text x="28.44" y="-5.16" dx="-0.20" dy="0.20">OH</text>
+            <text x="29.87" y="-3.51" dx="-0.20" dy="0.20">O</text>
+            <text x="29.16" y="-4.74" dx="-0.20" dy="0.20">O</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-50394b2d-59d2-406f-8891-12b37a704832)">
+      <line x1="31.30" y1="-3.51" x2="30.59" y2="-3.92" />
+      <line x1="30.59" y1="-3.92" x2="31.00" y2="-4.63" />
+      <line x1="30.59" y1="-3.92" x2="30.17" y2="-4.63" />
+      <line x1="30.59" y1="-3.92" x2="29.87" y2="-3.51" />
+      <line x1="29.87" y1="-3.51" x2="29.16" y2="-3.92" />
+      <line x1="29.16" y1="-3.92" x2="28.44" y2="-3.51" />
+      <line x1="29.10" y1="-3.92" x2="29.10" y2="-4.74" />
+      <line x1="29.22" y1="-3.92" x2="29.22" y2="-4.74" />
+      <line x1="28.44" y1="-3.51" x2="27.73" y2="-3.92" />
+      <line x1="27.73" y1="-3.92" x2="27.73" y2="-4.74" />
+      <line x1="27.73" y1="-3.92" x2="27.02" y2="-3.51" />
+      <line x1="22.73" y1="-3.51" x2="23.44" y2="-3.92" />
+      <line x1="23.44" y1="-3.92" x2="24.16" y2="-3.51" />
+      <line x1="24.16" y1="-3.51" x2="24.16" y2="-2.68" />
+      <line x1="24.16" y1="-3.51" x2="24.87" y2="-3.92" />
+      <line x1="24.81" y1="-3.92" x2="24.81" y2="-4.74" />
+      <line x1="24.93" y1="-3.92" x2="24.93" y2="-4.74" />
+      <line x1="24.87" y1="-3.92" x2="25.59" y2="-3.51" />
+      <line x1="25.59" y1="-3.51" x2="25.59" y2="-2.68" />
+      <line x1="25.59" y1="-3.51" x2="26.30" y2="-3.92" />
+      <line x1="25.59" y1="-2.68" x2="24.87" y2="-2.27" />
+      <line x1="24.87" y1="-2.27" x2="24.87" y2="-1.44" />
+      <line x1="27.73" y1="-4.74" x2="28.44" y2="-5.16" />
+      <line x1="27.70" y1="-4.69" x2="26.99" y2="-5.11" />
+      <line x1="27.76" y1="-4.80" x2="27.05" y2="-5.21" />
+      <line x1="27.02" y1="-3.51" x2="26.30" y2="-3.92" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="24.87" y="-4.74" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="25.59" y="-3.51" dx="-0.20" dy="0.20" font-size="0.50">N</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="24.87" y="-1.44" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="27.02" y="-5.16" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="28.44" y="-3.51" dx="-0.20" dy="0.20" font-size="0.50">NH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="28.44" y="-5.16" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="29.87" y="-3.51" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="29.16" y="-4.74" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="35.70192144334782" y="1.3815880512906846" rx="0.5186823897418505" ry="0.5186823897418505" width="9.337500961970207" height="5.186823897418505" stroke="black" stroke-width=".0025" fill="#F0AB90" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-bc23daf9-d43d-4790-9561-70b35108d7f8" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="41.25" cy="4.69" r="0.20" />
+          <circle cx="41.25" cy="3.26" r="0.20" />
+          <circle cx="37.95" cy="2.44" r="0.20" />
+          <circle cx="37.95" cy="4.09" r="0.20" />
+          <circle cx="37.13" cy="4.09" r="0.20" />
+          <circle cx="37.13" cy="2.44" r="0.20" />
+          <circle cx="36.30" cy="3.26" r="0.20" />
+          <circle cx="38.78" cy="1.83" r="0.20" />
+          <circle cx="42.49" cy="3.97" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="41.25" y="4.69" dx="-0.20" dy="0.20">O</text>
+            <text x="41.25" y="3.26" dx="-0.20" dy="0.20">NH</text>
+            <text x="37.95" y="2.44" dx="-0.20" dy="0.20">F</text>
+            <text x="37.95" y="4.09" dx="-0.20" dy="0.20">F</text>
+            <text x="37.13" y="4.09" dx="-0.20" dy="0.20">F</text>
+            <text x="37.13" y="2.44" dx="-0.20" dy="0.20">F</text>
+            <text x="36.30" y="3.26" dx="-0.20" dy="0.20">F</text>
+            <text x="38.78" y="1.83" dx="-0.20" dy="0.20">F</text>
+            <text x="42.49" y="3.97" dx="-0.20" dy="0.20">O</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-bc23daf9-d43d-4790-9561-70b35108d7f8)">
+      <line x1="43.73" y1="4.69" x2="44.14" y2="5.40" />
+      <line x1="43.73" y1="4.69" x2="42.90" y2="4.69" />
+      <line x1="44.14" y1="5.40" x2="43.73" y2="6.12" />
+      <line x1="43.73" y1="6.12" x2="42.90" y2="6.12" />
+      <line x1="42.90" y1="6.12" x2="42.49" y2="5.40" />
+      <line x1="42.49" y1="5.40" x2="42.90" y2="4.69" />
+      <line x1="42.90" y1="4.69" x2="42.49" y2="3.97" />
+      <line x1="42.49" y1="3.97" x2="41.66" y2="3.97" />
+      <line x1="41.66" y1="3.97" x2="41.25" y2="3.26" />
+      <line x1="41.72" y1="4.00" x2="41.30" y2="4.72" />
+      <line x1="41.61" y1="3.94" x2="41.20" y2="4.66" />
+      <line x1="41.25" y1="3.26" x2="40.43" y2="3.26" />
+      <line x1="40.43" y1="3.26" x2="40.01" y2="3.98" />
+      <line x1="40.43" y1="3.26" x2="40.01" y2="2.55" />
+      <line x1="40.01" y1="3.98" x2="39.19" y2="3.98" />
+      <line x1="39.19" y1="3.98" x2="38.78" y2="3.26" />
+      <line x1="38.78" y1="3.26" x2="37.95" y2="3.26" />
+      <line x1="38.78" y1="3.26" x2="39.19" y2="2.55" />
+      <line x1="37.95" y1="3.26" x2="37.95" y2="2.44" />
+      <line x1="37.95" y1="3.26" x2="37.95" y2="4.09" />
+      <line x1="37.95" y1="3.26" x2="37.13" y2="3.26" />
+      <line x1="37.13" y1="3.26" x2="37.13" y2="4.09" />
+      <line x1="37.13" y1="3.26" x2="37.13" y2="2.44" />
+      <line x1="37.13" y1="3.26" x2="36.30" y2="3.26" />
+      <line x1="39.19" y1="2.55" x2="38.78" y2="1.83" />
+      <line x1="39.19" y1="2.55" x2="40.01" y2="2.55" />
+      <line x1="43.65" y1="4.83" x2="43.98" y2="5.40" stroke-dasharray="0.15 0.05" />
+      <line x1="43.98" y1="5.40" x2="43.65" y2="5.98" stroke-dasharray="0.15 0.05" />
+      <line x1="43.65" y1="5.98" x2="42.98" y2="5.98" stroke-dasharray="0.15 0.05" />
+      <line x1="42.98" y1="5.98" x2="42.65" y2="5.40" stroke-dasharray="0.15 0.05" />
+      <line x1="42.65" y1="5.40" x2="42.98" y2="4.83" stroke-dasharray="0.15 0.05" />
+      <line x1="42.98" y1="4.83" x2="43.65" y2="4.83" stroke-dasharray="0.15 0.05" />
+      <line x1="40.27" y1="3.26" x2="39.93" y2="3.84" stroke-dasharray="0.15 0.05" />
+      <line x1="39.93" y1="3.84" x2="39.27" y2="3.84" stroke-dasharray="0.15 0.05" />
+      <line x1="39.27" y1="3.84" x2="38.94" y2="3.26" stroke-dasharray="0.15 0.05" />
+      <line x1="38.94" y1="3.26" x2="39.27" y2="2.69" stroke-dasharray="0.15 0.05" />
+      <line x1="39.27" y1="2.69" x2="39.93" y2="2.69" stroke-dasharray="0.15 0.05" />
+      <line x1="39.93" y1="2.69" x2="40.27" y2="3.26" stroke-dasharray="0.15 0.05" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="41.25" y="4.69" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="41.25" y="3.26" dx="-0.20" dy="0.20" font-size="0.50">NH</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="37.95" y="2.44" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="37.95" y="4.09" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="37.13" y="4.09" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="37.13" y="2.44" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="36.30" y="3.26" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="38.78" y="1.83" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="42.49" y="3.97" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="35.70192144334782" y="-6.5684119487091905" rx="0.5849999999999875" ry="0.5849999999999875" width="6.501297169683511" height="5.849999999999875" stroke="black" stroke-width=".0025" fill="#F0AB90" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-828b1ac3-1517-445f-b114-df24ab512c69" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="38.45" cy="-5.71" r="0.20" />
+          <circle cx="39.16" cy="-4.47" r="0.20" />
+          <circle cx="40.59" cy="-6.12" r="0.20" />
+          <circle cx="40.59" cy="-1.17" r="0.20" />
+          <circle cx="39.16" cy="-1.99" r="0.20" />
+          <circle cx="41.30" cy="-2.41" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="38.45" y="-5.71" dx="-0.20" dy="0.20">O</text>
+            <text x="39.16" y="-4.47" dx="-0.20" dy="0.20">N</text>
+            <text x="40.59" y="-6.12" dx="-0.20" dy="0.20">OH</text>
+            <text x="40.59" y="-1.17" dx="-0.20" dy="0.20">O</text>
+            <text x="39.16" y="-1.99" dx="-0.20" dy="0.20">NH</text>
+            <text x="41.30" y="-2.41" dx="-0.20" dy="0.20">OH</text>
+          </g>
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.03">
+            <text x="39.16" y="-1.99" dx="-0.20" dy="0.20">NH<tspan dy="0.15" font-size="0.35">2</tspan></text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-828b1ac3-1517-445f-b114-df24ab512c69)">
+      <line x1="39.87" y1="-2.41" x2="39.16" y2="-1.99" />
+      <line x1="39.87" y1="-2.41" x2="40.59" y2="-1.99" />
+      <line x1="39.87" y1="-2.41" x2="39.87" y2="-3.23" />
+      <line x1="36.30" y1="-4.47" x2="37.02" y2="-4.88" />
+      <line x1="37.02" y1="-4.88" x2="37.73" y2="-4.47" />
+      <line x1="37.73" y1="-4.47" x2="37.73" y2="-3.64" />
+      <line x1="37.73" y1="-4.47" x2="38.45" y2="-4.88" />
+      <line x1="38.39" y1="-4.88" x2="38.39" y2="-5.71" />
+      <line x1="38.51" y1="-4.88" x2="38.51" y2="-5.71" />
+      <line x1="38.45" y1="-4.88" x2="39.16" y2="-4.47" />
+      <line x1="39.16" y1="-4.47" x2="39.87" y2="-4.88" />
+      <line x1="39.16" y1="-4.47" x2="39.16" y2="-3.64" />
+      <line x1="39.87" y1="-4.88" x2="39.87" y2="-5.71" />
+      <line x1="39.87" y1="-5.71" x2="40.59" y2="-6.12" />
+      <line x1="40.59" y1="-1.99" x2="41.30" y2="-2.41" />
+      <line x1="40.65" y1="-1.99" x2="40.65" y2="-1.17" />
+      <line x1="40.53" y1="-1.99" x2="40.53" y2="-1.17" />
+      <line x1="39.87" y1="-3.23" x2="39.16" y2="-3.64" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="38.45" y="-5.71" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="39.16" y="-4.47" dx="-0.20" dy="0.20" font-size="0.50">N</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="40.59" y="-6.12" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="40.59" y="-1.17" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="39.16" y="-1.99" dx="-0.20" dy="0.20" font-size="0.50">NH<tspan dy="0.15" font-size="0.35">2</tspan></text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="41.30" y="-2.41" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="48.53942240531803" y="-2.8697327319961126" rx="0.5739465463992225" ry="0.5739465463992225" width="12.931536996134632" height="5.739465463992225" stroke="black" stroke-width=".0025" fill="#F0AB90" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-7e9df885-300f-45c8-940e-ab02c9cc8d73" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="51.28" cy="-0.88" r="0.20" />
+          <circle cx="52.00" cy="0.36" r="0.20" />
+          <circle cx="51.28" cy="2.42" r="0.20" />
+          <circle cx="53.43" cy="-1.29" r="0.20" />
+          <circle cx="54.86" cy="0.36" r="0.20" />
+          <circle cx="55.57" cy="-0.88" r="0.20" />
+          <circle cx="56.28" cy="0.36" r="0.20" />
+          <circle cx="58.73" cy="-2.01" r="0.20" />
+          <circle cx="59.55" cy="-0.58" r="0.20" />
+          <circle cx="60.57" cy="-2.12" r="0.20" />
+          <circle cx="59.44" cy="-2.42" r="0.20" />
+          <circle cx="60.27" cy="-0.99" r="0.20" />
+          <circle cx="59.14" cy="0.36" r="0.20" />
+          <circle cx="54.86" cy="-1.29" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="51.28" y="-0.88" dx="-0.20" dy="0.20">O</text>
+            <text x="52.00" y="0.36" dx="-0.20" dy="0.20">N</text>
+            <text x="51.28" y="2.42" dx="-0.20" dy="0.20">OH</text>
+            <text x="53.43" y="-1.29" dx="-0.20" dy="0.20">O</text>
+            <text x="54.86" y="0.36" dx="-0.20" dy="0.20">NH</text>
+            <text x="55.57" y="-0.88" dx="-0.20" dy="0.20">O</text>
+            <text x="56.28" y="0.36" dx="-0.20" dy="0.20">NH</text>
+            <text x="58.73" y="-2.01" dx="-0.20" dy="0.20">F</text>
+            <text x="59.55" y="-0.58" dx="-0.20" dy="0.20">F</text>
+            <text x="60.57" y="-2.12" dx="-0.20" dy="0.20">F</text>
+            <text x="59.44" y="-2.42" dx="-0.20" dy="0.20">F</text>
+            <text x="60.27" y="-0.99" dx="-0.20" dy="0.20">F</text>
+            <text x="59.14" y="0.36" dx="-0.20" dy="0.20">F</text>
+            <text x="54.86" y="-1.29" dx="-0.20" dy="0.20">OH</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-7e9df885-300f-45c8-940e-ab02c9cc8d73)">
+      <line x1="51.28" y1="1.59" x2="51.28" y2="2.42" />
+      <line x1="51.28" y1="1.59" x2="52.00" y2="1.18" />
+      <line x1="54.14" y1="-0.06" x2="54.14" y2="-0.88" />
+      <line x1="54.14" y1="-0.06" x2="54.86" y2="0.36" />
+      <line x1="54.14" y1="-0.06" x2="53.43" y2="0.36" />
+      <line x1="54.14" y1="-0.88" x2="54.86" y2="-1.29" />
+      <line x1="54.11" y1="-0.83" x2="53.40" y2="-1.24" />
+      <line x1="54.17" y1="-0.93" x2="53.46" y2="-1.34" />
+      <line x1="49.14" y1="0.36" x2="49.85" y2="-0.06" />
+      <line x1="49.85" y1="-0.06" x2="50.57" y2="0.36" />
+      <line x1="50.57" y1="0.36" x2="50.57" y2="1.18" />
+      <line x1="50.57" y1="0.36" x2="51.28" y2="-0.06" />
+      <line x1="51.22" y1="-0.06" x2="51.22" y2="-0.88" />
+      <line x1="51.34" y1="-0.06" x2="51.34" y2="-0.88" />
+      <line x1="51.28" y1="-0.06" x2="52.00" y2="0.36" />
+      <line x1="52.00" y1="0.36" x2="52.00" y2="1.18" />
+      <line x1="52.00" y1="0.36" x2="52.71" y2="-0.06" />
+      <line x1="54.86" y1="0.36" x2="55.57" y2="-0.06" />
+      <line x1="55.51" y1="-0.06" x2="55.51" y2="-0.88" />
+      <line x1="55.63" y1="-0.06" x2="55.63" y2="-0.88" />
+      <line x1="55.57" y1="-0.06" x2="56.28" y2="0.36" />
+      <line x1="56.28" y1="0.36" x2="57.00" y2="-0.06" />
+      <line x1="57.00" y1="-0.06" x2="57.00" y2="-0.88" />
+      <line x1="57.00" y1="-0.06" x2="57.71" y2="0.36" />
+      <line x1="57.00" y1="-0.88" x2="57.71" y2="-1.29" />
+      <line x1="57.71" y1="-1.29" x2="58.43" y2="-0.88" />
+      <line x1="58.43" y1="-0.88" x2="59.14" y2="-1.29" />
+      <line x1="58.43" y1="-0.88" x2="58.43" y2="-0.06" />
+      <line x1="59.14" y1="-1.29" x2="58.73" y2="-2.01" />
+      <line x1="59.14" y1="-1.29" x2="59.55" y2="-0.58" />
+      <line x1="59.14" y1="-1.29" x2="59.86" y2="-1.71" />
+      <line x1="59.86" y1="-1.71" x2="60.57" y2="-2.12" />
+      <line x1="59.86" y1="-1.71" x2="59.44" y2="-2.42" />
+      <line x1="59.86" y1="-1.71" x2="60.27" y2="-0.99" />
+      <line x1="58.43" y1="-0.06" x2="59.14" y2="0.36" />
+      <line x1="58.43" y1="-0.06" x2="57.71" y2="0.36" />
+      <line x1="53.43" y1="0.36" x2="52.71" y2="-0.06" />
+      <line x1="57.14" y1="-0.14" x2="57.14" y2="-0.80" stroke-dasharray="0.15 0.05" />
+      <line x1="57.14" y1="-0.80" x2="57.71" y2="-1.13" stroke-dasharray="0.15 0.05" />
+      <line x1="57.71" y1="-1.13" x2="58.29" y2="-0.80" stroke-dasharray="0.15 0.05" />
+      <line x1="58.29" y1="-0.80" x2="58.29" y2="-0.14" stroke-dasharray="0.15 0.05" />
+      <line x1="58.29" y1="-0.14" x2="57.71" y2="0.20" stroke-dasharray="0.15 0.05" />
+      <line x1="57.71" y1="0.20" x2="57.14" y2="-0.14" stroke-dasharray="0.15 0.05" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="51.28" y="-0.88" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="52.00" y="0.36" dx="-0.20" dy="0.20" font-size="0.50">N</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="51.28" y="2.42" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="53.43" y="-1.29" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="54.86" y="0.36" dx="-0.20" dy="0.20" font-size="0.50">NH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="55.57" y="-0.88" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="56.28" y="0.36" dx="-0.20" dy="0.20" font-size="0.50">NH</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="58.73" y="-2.01" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="59.55" y="-0.58" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="60.57" y="-2.12" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="59.44" y="-2.42" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="60.27" y="-0.99" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="59.14" y="0.36" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="54.86" y="-1.29" dx="-0.20" dy="0.20" font-size="0.50">OH</text>
+      </g>
+    </g>
+  </g>
+  <g>
+<rect x="64.97095940145266" y="-3.6234292496658345" rx="0.724685849933167" ry="0.724685849933167" width="10.940089839796585" height="7.246858499331669" stroke="black" stroke-width=".0025" fill="#98EEFF" fill-opacity="0.30" />
+    <defs>
+      <mask id="mask-9fae87ff-074c-4a3a-88e0-b3e71aec755c" maskUnits="userSpaceOnUse" x="-0.62" y="-13.26" width="77.01" height="26.52">
+        <rect x="-0.62" y="-13.26" width="77.01" height="26.52" fill="white" />
+        <g fill="black">
+          <circle cx="67.96" cy="-0.31" r="0.20" />
+          <circle cx="68.33" cy="1.07" r="0.20" />
+          <circle cx="69.09" cy="2.91" r="0.20" />
+          <circle cx="70.44" cy="3.17" r="0.20" />
+          <circle cx="71.00" cy="1.83" r="0.20" />
+          <circle cx="71.00" cy="0.40" r="0.20" />
+          <circle cx="72.23" cy="1.11" r="0.20" />
+          <circle cx="74.60" cy="-1.33" r="0.20" />
+          <circle cx="73.17" cy="-2.16" r="0.20" />
+          <circle cx="74.71" cy="-3.17" r="0.20" />
+          <circle cx="75.01" cy="-2.05" r="0.20" />
+          <circle cx="73.58" cy="-2.87" r="0.20" />
+          <circle cx="72.23" cy="-1.74" r="0.20" />
+        </g>
+        <g font-family="monospace" stroke="black">
+          <g font-family="sans-serif" font-size="0.50" stroke-width="0.05">
+            <text x="67.96" y="-0.31" dx="-0.20" dy="0.20">O</text>
+            <text x="68.33" y="1.07" dx="-0.20" dy="0.20">N</text>
+            <text x="69.09" y="2.91" dx="-0.20" dy="0.20">O</text>
+            <text x="70.44" y="3.17" dx="-0.20" dy="0.20">O</text>
+            <text x="71.00" y="1.83" dx="-0.20" dy="0.20">NH</text>
+            <text x="71.00" y="0.40" dx="-0.20" dy="0.20">O</text>
+            <text x="72.23" y="1.11" dx="-0.20" dy="0.20">NH</text>
+            <text x="74.60" y="-1.33" dx="-0.20" dy="0.20">F</text>
+            <text x="73.17" y="-2.16" dx="-0.20" dy="0.20">F</text>
+            <text x="74.71" y="-3.17" dx="-0.20" dy="0.20">F</text>
+            <text x="75.01" y="-2.05" dx="-0.20" dy="0.20">F</text>
+            <text x="73.58" y="-2.87" dx="-0.20" dy="0.20">F</text>
+            <text x="72.23" y="-1.74" dx="-0.20" dy="0.20">F</text>
+          </g>
+        </g>
+      </mask>
+    </defs>
+    <g fill="none" stroke="black" stroke-width="0.04" mask="url(#mask-9fae87ff-074c-4a3a-88e0-b3e71aec755c)">
+      <line x1="65.57" y1="0.33" x2="66.37" y2="0.11" />
+      <line x1="66.37" y1="0.11" x2="66.95" y2="0.70" />
+      <line x1="66.95" y1="0.70" x2="66.74" y2="1.49" />
+      <line x1="66.95" y1="0.70" x2="67.75" y2="0.48" />
+      <line x1="67.69" y1="0.47" x2="67.90" y2="-0.33" />
+      <line x1="67.81" y1="0.50" x2="68.02" y2="-0.30" />
+      <line x1="67.75" y1="0.48" x2="68.33" y2="1.07" />
+      <line x1="68.33" y1="1.07" x2="68.02" y2="1.83" />
+      <line x1="68.33" y1="1.07" x2="69.09" y2="0.75" />
+      <line x1="68.02" y1="1.83" x2="68.33" y2="2.59" />
+      <line x1="68.33" y1="2.59" x2="69.09" y2="2.91" />
+      <line x1="69.09" y1="2.91" x2="69.86" y2="2.59" />
+      <line x1="69.90" y1="2.55" x2="70.48" y2="3.13" />
+      <line x1="69.81" y1="2.63" x2="70.40" y2="3.22" />
+      <line x1="69.86" y1="2.59" x2="70.17" y2="1.83" />
+      <line x1="70.17" y1="1.83" x2="71.00" y2="1.83" />
+      <line x1="70.17" y1="1.83" x2="69.86" y2="1.07" />
+      <line x1="71.00" y1="1.83" x2="71.41" y2="1.11" />
+      <line x1="71.36" y1="1.14" x2="70.94" y2="0.43" />
+      <line x1="71.46" y1="1.08" x2="71.05" y2="0.37" />
+      <line x1="71.41" y1="1.11" x2="72.23" y2="1.11" />
+      <line x1="72.23" y1="1.11" x2="72.65" y2="0.40" />
+      <line x1="72.65" y1="0.40" x2="73.47" y2="0.40" />
+      <line x1="72.65" y1="0.40" x2="72.23" y2="-0.32" />
+      <line x1="73.47" y1="0.40" x2="73.88" y2="-0.32" />
+      <line x1="73.88" y1="-0.32" x2="73.47" y2="-1.03" />
+      <line x1="73.47" y1="-1.03" x2="73.88" y2="-1.74" />
+      <line x1="73.47" y1="-1.03" x2="72.65" y2="-1.03" />
+      <line x1="73.88" y1="-1.74" x2="74.60" y2="-1.33" />
+      <line x1="73.88" y1="-1.74" x2="73.17" y2="-2.16" />
+      <line x1="73.88" y1="-1.74" x2="74.30" y2="-2.46" />
+      <line x1="74.30" y1="-2.46" x2="74.71" y2="-3.17" />
+      <line x1="74.30" y1="-2.46" x2="75.01" y2="-2.05" />
+      <line x1="74.30" y1="-2.46" x2="73.58" y2="-2.87" />
+      <line x1="72.65" y1="-1.03" x2="72.23" y2="-1.74" />
+      <line x1="72.65" y1="-1.03" x2="72.23" y2="-0.32" />
+      <line x1="69.86" y1="1.07" x2="69.09" y2="0.75" />
+      <line x1="72.73" y1="0.26" x2="73.39" y2="0.26" stroke-dasharray="0.15 0.05" />
+      <line x1="73.39" y1="0.26" x2="73.72" y2="-0.32" stroke-dasharray="0.15 0.05" />
+      <line x1="73.72" y1="-0.32" x2="73.39" y2="-0.89" stroke-dasharray="0.15 0.05" />
+      <line x1="73.39" y1="-0.89" x2="72.73" y2="-0.89" stroke-dasharray="0.15 0.05" />
+      <line x1="72.73" y1="-0.89" x2="72.40" y2="-0.32" stroke-dasharray="0.15 0.05" />
+      <line x1="72.40" y1="-0.32" x2="72.73" y2="0.26" stroke-dasharray="0.15 0.05" />
+    </g>
+    <g font-family="monospace">
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="67.96" y="-0.31" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="68.33" y="1.07" dx="-0.20" dy="0.20" font-size="0.50">N</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="69.09" y="2.91" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="70.44" y="3.17" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="71.00" y="1.83" dx="-0.20" dy="0.20" font-size="0.50">NH</text>
+      </g>
+      <g fill="#FF0D0D" font-family="sans-serif">
+        <text x="71.00" y="0.40" dx="-0.20" dy="0.20" font-size="0.50">O</text>
+      </g>
+      <g fill="#3050F8" font-family="sans-serif">
+        <text x="72.23" y="1.11" dx="-0.20" dy="0.20" font-size="0.50">NH</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="74.60" y="-1.33" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="73.17" y="-2.16" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="74.71" y="-3.17" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="75.01" y="-2.05" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="73.58" y="-2.87" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+      <g fill="#90E050" font-family="sans-serif">
+        <text x="72.23" y="-1.74" dx="-0.20" dy="0.20" font-size="0.50">F</text>
+      </g>
+    </g>
+  </g>
+</svg>

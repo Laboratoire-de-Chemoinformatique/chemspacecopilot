@@ -19,6 +19,7 @@ from .test_utils import (
     S3SessionManager,
     TestValidation,
     create_agent_team_factory,
+    create_single_agent_factory,
 )
 
 # Skip all robustness tests if pytest is not available
@@ -82,6 +83,23 @@ def agent_team_factory(model):
             result = team.run("test prompt")
     """
     return create_agent_team_factory(model)
+
+
+@pytest.fixture
+def single_agent_factory(model):
+    """
+    Create the single-agent baseline (multi-agent-vs-single-agent ablation).
+
+    Returns a factory that builds a fresh flat agent (all toolkits, no team) on
+    the same session-scoped model as ``agent_team_factory``, exposing the same
+    ``.run`` / ``.get_session_state`` interface.
+
+    Usage:
+        def test_something(agent_team_factory, single_agent_factory):
+            team = agent_team_factory()
+            single = single_agent_factory()
+    """
+    return create_single_agent_factory(model)
 
 
 @pytest.fixture

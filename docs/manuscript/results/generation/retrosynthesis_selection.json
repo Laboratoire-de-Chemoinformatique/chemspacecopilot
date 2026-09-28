@@ -1,0 +1,23 @@
+{
+  "declared_at": "2026-09-26T16:11:58.271088+00:00",
+  "source_commit": "bcc3632da20203a8866ea031492078c1bb9882e6",
+  "selection_method": "Sort all pooled unique standardized nonparent candidates by SHA256(UTF8(str(seed) + \"|\" + canonical_smiles)); take the first 10, before route searches.",
+  "selection_seed": 42,
+  "eligible_distinct_candidates": 22,
+  "selected_count": 10,
+  "target_file_sha256": "0d8ef9af43a9fca60db8aea23ba76e7bcc305825f2e2e030c0b59e7a3fc59497",
+  "source_raw_audits": [
+    {
+      "path": "reports/reviewer_revision/generation_3x100/seed_11/raw_audit.json",
+      "sha256": "7a3c4fed97dd82cefbbf23df1a415c8e27175814ca0dc3037c36990f9f2417e1"
+    },
+    {
+      "path": "reports/reviewer_revision/generation_3x100/seed_22/raw_audit.json",
+      "sha256": "d4e77bc3cdc0660bcda56a472c252452eb29ea38cc33a7d7490cd5390df170cd"
+    },
+    {
+      "path": "reports/reviewer_revision/generation_3x100/seed_33/raw_audit.json",
+      "sha256": "66e47eb8feb7afc511f447a06c4d1619ec6d335898efb96b159d3eb755c6e9fd"
+    }
+  ]
+}

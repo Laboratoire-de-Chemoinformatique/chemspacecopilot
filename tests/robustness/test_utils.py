@@ -376,6 +376,32 @@ def create_agent_team_factory(model: Any) -> Callable:
     return _create_team
 
 
+def create_single_agent_factory(model: Any) -> Callable:
+    """
+    Create factory for the single-agent baseline (multi-agent ablation).
+
+    Returns a factory that builds one flat Agno agent holding the union of all
+    specialist toolkits on the SAME model as the team, so the robustness harness
+    can drive either arm through the identical ``.run`` / ``.get_session_state``
+    interface.
+
+    Args:
+        model: LLM model instance (pass the same instance used for the team).
+
+    Returns:
+        Factory function that creates single-agent baselines.
+    """
+    from cs_copilot.agents import get_cs_copilot_single_agent
+
+    def _create_single_agent(**overrides):
+        """Create the single-agent baseline (forwards supported overrides only)."""
+        supported = {"markdown", "debug_mode", "enable_mlflow_tracking"}
+        params = {key: value for key, value in overrides.items() if key in supported}
+        return get_cs_copilot_single_agent(model=model, **params)
+
+    return _create_single_agent
+
+
 class TestValidation:
     """Common validation utilities for robustness tests."""
 

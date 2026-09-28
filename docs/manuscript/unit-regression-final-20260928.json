@@ -1,0 +1,18 @@
+{
+  "tested_git_commit": "da719c1c6ca0b677e31ccb8069084f53e5b6c1ef",
+  "working_tree_clean_at_start": true,
+  "command": "USE_S3=false PYTHONPATH=src:/absolute/isolated/python-deps /absolute/python -m pytest tests/unit -q",
+  "python_executable": "/home/aorlov/Programs/agents/chemspacecopilot/.venv/bin/python",
+  "result": {
+    "passed": 1188,
+    "skipped": 2,
+    "warnings": 2,
+    "duration_seconds": 16.53
+  },
+  "format_and_lint": "Ruff and Black checks pass for all36 Python files changed since8ecdc0b.",
+  "log": {
+    "path": "reports/reviewer_revision/unit-regression-final-20260928.log",
+    "sha256": "f0d4a9bb7c60706295273e616211aaefbd1bd5798059564b6f11b71a86a1dd90"
+  },
+  "scope": "Unit regression at the recorded runtime commit; not autonomous task success or an independent scientific review."
+}
