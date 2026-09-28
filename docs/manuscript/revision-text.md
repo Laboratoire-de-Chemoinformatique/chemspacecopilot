@@ -244,6 +244,46 @@ records model hashes, settings, software, source version and raw-output hashes.
 The revised vector figures show the measured per-batch rates and the parent
 alongside the ten candidates selected before retrosynthesis searches.
 
+## Methods and results: prospective retrosynthetic planning
+
+Before planning, the 22 distinct nonparent generated structures were ranked by
+SHA-256 of `42|<canonical SMILES>`, and the first ten were selected. All ten
+targets were searched once with SynPlanner 1.2.1, the pinned USPTO reaction rules
+and ranking policy, and a pinned 189,144-entry building-block collection. Each
+search used at most 120 s, 100 iterations, depth 9, tree size 10,000 and the top
+50 reaction rules, stopping at its first solution. Retry profiles and language-model
+fallback were disabled. Seeds 42–51 were applied to Python, NumPy and PyTorch;
+the process hash seed was fixed and Torch used one CPU thread and deterministic
+algorithms. A separate 300-s process guard applied to each worker. The backend's
+120-s check occurs between iterations, so it is not a strict process deadline.
+
+Four of ten searches returned a predicted route, containing 6, 9, 5 and 5 reaction
+steps. Their backend scores were 0.119246, 0.041497, 0.152778 and 0.152778,
+respectively. These are uncalibrated search scores, not probabilities of synthesis
+success. The other six searches exhausted the 100-iteration budget without a
+route. There were no worker errors or timeouts. Median worker wall time was
+23.16 s (range 12.68–33.19 s); the ten searches took 226.78 s in total. These
+timings include process startup, loading and rendering and exclude LLM
+orchestration. The [complete outcome table](results/retrosynthesis/targets.csv)
+retains every selected target; failures were neither replaced nor retried.
+
+Recovered step counts describe precursor expansions and need not equal the
+longest linear synthesis. The minimum-molecule-size rule (6) can accept small
+terminal molecules without exact stock membership, so route finding does not
+demonstrate that every precursor is purchasable. No-route outcomes refer only
+to the stated search budget. Predicted routes were not experimentally tested or
+independently assessed by a synthetic chemist. A separately labeled aspirin
+implementation control is excluded from the ten-target denominator. Repeated
+route-search reproducibility was not measured.
+
+The recorded Linux aarch64 runtime used CGRtools 4.1.35 and upstream chython
+3.4 because native distributions of SynPlanner's named fork dependencies were
+unavailable. This is a measured compatibility environment, not an exact lockfile
+installation or demonstrated equivalence to the forked environment. Complete
+distribution versions, unmet named requirements, active module origins, pinned
+assets and reproduction instructions accompany
+[the retrosynthesis results](results/retrosynthesis/README.md).
+
 ## Discussion: scope of the scientific claims
 
 Activity-enriched map regions provide a way to select structures or latent-space

@@ -10,7 +10,7 @@ artifacts have been inspected.
 | 1. Quantitative reliability | Isolated repeated-run harness, content-based validators, timing and usage coverage, human-review packets, 48+12 prospective protocol | Verified input snapshots; completed, retained runs; expert review; numerical results table |
 | 2. Architecture advantage | Same-model flat-agent baseline and paired evaluation; architecture rationale in revision text | Matched measured comparison; report both costs and success; support or moderate advantage claims |
 | 3. sEH and GTM methods | ChEMBL 37 extraction with exact query/filter manifest; 2,212 curated structures; raw/output hashes and identical offline replay; saved GTM parameter audit; finite projections, occupancy diagnostics and vector maps | Apply the completed prospective methods/results to the editable paper; do not attribute them to unrecovered historical runs |
-| 4. Generation and synthesis | Three measured batches (300 raw outputs, 87 valid, 23 unique), seed-repeat check, full properties, vector structures/rate figures; ten route targets predeclared | Actual training-corpus linkage or explicit limitation; completed ten-target searches and inspected routes |
+| 4. Generation and synthesis | Three measured batches (300 raw outputs, 87 valid, 23 unique), exact seed repeat, full properties, MOSES reference comparison; 4/10 predicted routes with all outcomes and corrected vector figures | Preserve unverified training-linkage and chemical-feasibility limits; author/expert review; integrate results into paper |
 | 5. Reproducibility and presentation | Versioned code commits, inference/environment manifests, prompts, correction text and verified RDKit/Sattarov references | Exact measurement release and archive DOI; complete outputs; apply edits in editable paper; replace and visually inspect figures |
 
 ## 1. Reliability
@@ -88,15 +88,24 @@ All 23 unique generated structures were absent from a pinned official MOSES
 train split after standardizing all 1,584,663 reference rows with the same policy.
 This is explicitly a reference-set comparison. Training-set novelty remains
 unavailable pending a traceable exact training corpus; the reference comparison
-cannot resolve that missing provenance. Ten distinct nonparent candidates were selected by a recorded
-hash-based rule before any route searches. Fixed-budget searches retain every
-no-route outcome and exception. Route lengths and scores will be reported as
-computational predictions; proposed replacement text removes unsupported
-experimental activity and synthetic feasibility claims.
+cannot resolve that missing provenance. Ten distinct nonparent candidates were
+selected by a recorded hash-based rule before any route searches. Four returned
+predicted routes (6, 9, 5 and 5 reaction steps); six exhausted the fixed
+100-iteration budget without a route. There were no runtime failures or timeouts.
+The median worker wall time was 23.16 s. The [complete results](results/retrosynthesis/README.md)
+include all ten targets, route scores, raw plans, seeds, exact assets, actual
+runtime dependency deviations and vector diagrams. Original diagrams are
+preserved alongside corrected publication exports that repair clipping without
+changing molecular bonds or route connectors.
 
-**Before submission:** insert the complete ten-target route results and inspected
-figures, preserve the training-provenance limitation, and apply the moderated
-claims in the editable paper.
+These are computational predictions. We explicitly describe the planner's
+small-terminal-molecule stopping rule, the absence of independent synthetic
+expert assessment and the lack of experimental validation. Proposed manuscript
+text removes unsupported experimental activity and synthetic-feasibility claims.
+
+**Before submission:** perform author/chemical expert review and integrate the
+completed tables and figures into the editable paper, preserving the explicit
+training-provenance and experimental-validation limitations.
 
 ## 5. Reproducibility and presentation
 
