@@ -9,15 +9,76 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import subprocess
+import tarfile
 import zipfile
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from audit_release_artifacts import STRONG_SECRET_PATTERNS
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def validate_source_archive(content):
+    """Inspect decompressed Git members; scanning gzip bytes cannot find secrets."""
+    names = set()
+    file_count = 0
+    with tarfile.open(fileobj=io.BytesIO(content), mode="r:gz") as source:
+        for member in source:
+            path = PurePosixPath(member.name)
+            if path.is_absolute() or ".." in path.parts or not path.parts:
+                raise ValueError(f"Unsafe source member: {member.name}")
+            name = path.as_posix()
+            if name in names:
+                raise ValueError(f"Duplicate source member: {name}")
+            names.add(name)
+            if member.issym() or member.islnk():
+                raise ValueError(f"Linked source member is not portable evidence: {name}")
+            if member.isdir():
+                continue
+            if not member.isfile():
+                raise ValueError(f"Unsupported source member type: {name}")
+            parts = tuple(part.lower() for part in path.parts)
+            basename = parts[-1]
+            private_name = (
+                basename == ".env"
+                or (basename.startswith(".env.") and basename != ".env.example")
+                or basename.endswith((".pem", ".key", ".db", ".sqlite", ".sqlite3", ".pyc"))
+                or any(
+                    basename.endswith(suffix + sidecar)
+                    for suffix in (".db", ".sqlite", ".sqlite3")
+                    for sidecar in ("-wal", "-shm", "-journal")
+                )
+                or (
+                    basename.endswith(".json")
+                    and ("credentials" in basename or "client-secret" in basename)
+                )
+            )
+            if private_name or any(
+                part
+                in {
+                    ".git",
+                    ".venv",
+                    ".cache",
+                    ".codex",
+                    ".pytest_cache",
+                    "__pycache__",
+                    "python-deps",
+                }
+                for part in parts
+            ):
+                raise ValueError(f"Private or runtime source member is not evidence: {name}")
+            handle = source.extractfile(member)
+            if handle is None:
+                raise ValueError(f"Cannot read source member: {name}")
+            data = handle.read()
+            if any(pattern.search(data) for pattern in STRONG_SECRET_PATTERNS):
+                raise ValueError(f"Possible credential signature in source member: {name}")
+            file_count += 1
+    return file_count
 
 
 def selected_files(root, selections):
@@ -108,9 +169,17 @@ def package(root, selection_path, output):
                     ["git", "archive", "--format=tar.gz", commit], cwd=root
                 )
                 name = f"source/{commit}.tar.gz"
-                # Snapshot bytes are exactly git archive output; no workspace secrets.
+                # Preserve exact snapshot bytes after inspecting the decompressed members.
+                member_count = validate_source_archive(source)
                 add(name, source)
-                manifest["source_snapshots"].append({"git_commit": commit, "path": name})
+                manifest["source_snapshots"].append(
+                    {
+                        "git_commit": commit,
+                        "path": name,
+                        "validated_source_file_count": member_count,
+                        "decompressed_private_and_secret_scan_passed": True,
+                    }
+                )
             for relative, path in sorted(evidence.items()):
                 before = path.stat()
                 data = path.read_bytes()
@@ -120,7 +189,7 @@ def package(root, selection_path, output):
                 add("evidence/" + relative, data)
             # Include a portable verifier with no third-party dependencies.
             verifier = """import hashlib, json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 root = Path(__file__).resolve().parent
 manifest = json.loads((root / "bundle_manifest.json").read_text())
 for record in manifest["files"]:
