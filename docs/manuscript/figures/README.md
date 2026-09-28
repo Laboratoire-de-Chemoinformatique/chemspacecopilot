@@ -65,3 +65,15 @@ python scripts/render_revision_gtm.py --input-dir docs/manuscript/results/seh
 ```
 
 `seh_figure_manifest.json` records input/output checksums and display conventions.
+
+## Predicted retrosynthetic routes
+
+Four separate vector SVG/PDF pages are available in
+[the route-results directory](../results/retrosynthesis/README.md):
+`publication_routes/target_001`, `target_005`, `target_007` and `target_008`.
+Use the corrected publication exports; the original backend SVGs are retained
+separately. The result README supplies a caption, exact color meanings, search
+limits and the limitation of accepting small terminal molecules. Each figure
+should remain large enough to read individual atom labels. The full ten-target
+table includes the six unsuccessful searches alongside these selected-by-outcome
+illustrations; only the initial target selection was independent of route outcome.

@@ -27,7 +27,9 @@
     "data/sessions/robustness_20260926_181050_923495_single_agent_20260926_181050_p0_v0_40c2d6d6",
     "data/sessions/robustness_20260926_180718_444049_team_20260926_180718_p0_v0_f3627a2e",
     "reports/reviewer_revision/peptide_landscape_smoke",
-    "reports/reviewer_revision/unit-regression-20260928.log"
+    "reports/reviewer_revision/unit-regression-20260928.log",
+    "reports/reviewer_revision/peptide_workflow_smoke",
+    "reports/reviewer_revision/unit-regression-final-20260928.log"
   ],
   "limitations": [
     "Working revision checkpoint, not a submitted or published manuscript release; no archive DOI assigned.",

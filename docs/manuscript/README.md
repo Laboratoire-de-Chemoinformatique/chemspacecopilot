@@ -31,6 +31,12 @@ The compact scientific results are:
 - [Publication figure captions](figures/README.md).
 - [Peptide aggregate-landscape method](peptide-landscape-methods.md).
 
+The full unit regression at runtime commit `da719c1` passed 1,188 tests with
+two skips and two existing warnings. Ruff and Black checks passed for all 36
+Python files changed during this continuation. Exact commands and the log hash
+are in [the validation record](unit-regression-final-20260928.json). These tests
+verify software behavior and are not included in scientific success rates.
+
 The 48 frozen executions are four tasks × two phrasings × three repetitions ×
 two architectures. Six batches counterbalance arm order. Nine additional live
 ChEMBL case/stages form three connected workflows; three independent peptide
