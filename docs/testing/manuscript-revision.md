@@ -39,7 +39,7 @@ published archive. Every repeat and architecture has a separate output prefix.
 |---|---:|---|
 | Four frozen cases × two phrasings × three repetitions × two architectures | 48 | Repeatability and same-model architecture comparison |
 | Three live sEH workflows, each containing three dependent stages | 9 stages | End-to-end retrieval, analysis, generation, planning |
-| Three independent live peptide cases | 3 | Peptide workflow reliability |
+| Three peptide workflows from the pinned public aggregate landscape | 3 | End-to-end orchestration of existing-map inference, analysis, logos and reporting |
 | Missing-input and invalid-input recovery cases | Optional, separate | Recovery behaviour |
 
 The 60 scientific case/stage executions are not 60 API calls or 60 independent
@@ -47,33 +47,63 @@ observations. Report per-case/per-arm denominators; the three sEH stages within 
 workflow share history and state. Recovery cases must not inflate the scientific
 success rate.
 
+The live label denotes end-to-end orchestration: sEH cases include new ChEMBL
+retrieval, whereas peptide cases consume the pinned aggregate public landscape.
+The peptide bundle does not contain raw DBAASP structures; these runs do not
+evaluate fresh DBAASP retrieval, raw-data reconstruction or GTM retraining.
+Conditional WAE sampling from the aggregate nodes is a new revision capability.
+
 Hold model, tools, scientific inputs, computational budgets, and inference settings
 constant between architectures. The single-agent arm is the flat Agno baseline,
 not an external MCP client with a different model and harness. Predeclare arm order
 and counterbalance it across batches using `--arm-order`; retain batch identifiers
 when combining outputs. Do not rerun failures until success and substitute them.
 
-With a locked environment, configured provider credentials, and verified fixtures:
+The declared split is six frozen batches: two prompt variants × three repetitions.
+Each batch contains all four cases and both architectures, for eight executions.
+Batch order is (variant0, repeat0), (variant1, repeat0), (variant0, repeat1),
+(variant1, repeat1), (variant0, repeat2), (variant1, repeat2). Even-indexed batches
+run team first; odd-indexed batches run the flat agent first. Each batch config
+contains one explicit phrasing and one repetition. Keep global variant/repetition
+indices in the plan ledger when combining local runner records. Three subsequent
+live batches each contain the three-stage sEH chain and one peptide workflow.
+Thus the total remains 48 frozen + 12 live case/stage executions.
+
+All runs use predownloaded pinned molecular, peptide and SynPlanner assets, CPU
+scientific computation, one Torch thread, and fresh isolated agent state. Model
+initialization is outside measured agent wall time. The persistent disk cache is
+warm in every arm; no derived state or generated output crosses runs. Both arms
+receive the same SynPlanner configuration: 120 s, 100 iterations, depth 9, 10,000 tree
+nodes, 50 policy rules, min_mol_size 6, top_k 1, retry profiles disabled. Provider caching
+is outside local control and provider-reported cached tokens are retained.
+A separate pilot and all its reanalyses remain outside the 60-run denominator.
+Python, NumPy and Torch ambient RNGs use seeds 11/22/33 by global repetition,
+identically across arms, and are restored after each run. Explicit tool parameters
+can override these ambient states: the peptide conditional sampler defaults to
+random_state=42, recorded separately in the manifest and call trace. No provider
+seed or deterministic LLM behavior is claimed. A timeout stops the current batch;
+attempted failures and unattempted cells are retained separately before any restart.
+
+Prepare the exact matrix offline using the existing validated Python environment:
 
 ```bash
-USE_S3=false uv run --frozen python tests/robustness/robustness_minimal_example.py \
-  --config tests/robustness/manuscript_reliability.yaml \
-  --tier frozen --system both --arm-order team-first \
-  --n-variations 2 --repetitions 3 \
-  --test frozen_case_1_seh_analysis \
-  --test frozen_case_2_seh_generation \
-  --test frozen_case_3_retrosynthesis \
-  --test frozen_case_4_peptide_design
-
-USE_S3=false uv run --frozen python tests/robustness/robustness_minimal_example.py \
-  --config tests/robustness/manuscript_reliability.yaml \
-  --tier live --system team --repetitions 3
+python scripts/plan_revision_reliability.py \
+  --seh-manifest reports/reviewer_revision/frozen_inputs_v1/manifest.json \
+  --peptide-bundle reports/reviewer_revision/scientific_inputs/peptide_landscape \
+  --synplanner-dir reports/reviewer_revision/assets/synplanner \
+  --autoencoder-dir reports/reviewer_revision/assets/autoencoder \
+  --peptide-model-dir reports/reviewer_revision/assets/peptide_designer \
+  --output-dir reports/reviewer_revision/reliability_study
 ```
 
-The first command is the complete 48-execution budget. If splitting it to
-counterbalance order, divide that repetition budget across independently named
-batches rather than running an additional unplanned full study. The study can
-be reduced to one phrasing (24 frozen executions) if declared before measurement.
+This command creates nine batch configs and a `study_plan.json` recording exact
+commands, global indices, expected counts, runtime/input hashes and non-secret
+inference environment settings. It does not call the model provider. Each frozen
+batch invokes the runner with `--n-variations 1 --repetitions 1 --system both`;
+each live batch uses `--system team`. Inspect offline readiness and verify the
+frozen hashes before executing those commands. Do not run an extra unsplit
+48-execution command in addition to these batches. A different reduced protocol
+must be declared before its measured runs.
 
 Use the normalized files in `reliability/` for the manuscript. The older pytest
 robustness paths contain placeholder process scores and incompatible optional
@@ -207,7 +237,8 @@ and revised measurements with their corresponding versions.
 ## Completion criteria
 
 - Measurement and offline-analysis code passes focused tests.
-- The original archive and four fixtures are verified; no synthetic test fixture
+- The historical archive is verified or explicitly identified as unavailable,
+  and four prospective fixtures are verified; no synthetic test fixture
   is used as scientific evidence.
 - A pilot establishes that the predeclared acceptance rules match the requested
   tasks, then the protocol and implementation are frozen.

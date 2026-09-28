@@ -1,12 +1,14 @@
 # Reviewer 1, item 1: small, manuscript-aligned reliability benchmark.
 #
 # Live tier:
-#   Replays the connected sEH Cases 1-3 in one session and Case 4 independently.
+#   Prospective ChEMBL retrieval for Cases 1-3; Case 4 orchestrates a pinned
+#   public aggregate peptide landscape, not fresh DBAASP retrieval or retraining.
+#   Both tiers reuse the same cached checkpoint files; each run has fresh state.
 # Frozen tier:
 #   Uses versioned session-state snapshots to isolate orchestration/tool reliability
 #   from changing ChEMBL/model artifacts. Required fixtures never fall back to live data.
 general:
-  n_variations: 3
+  n_variations: 2
   repetitions: 3
   debug_mode: false
   output_dir: "reports/manuscript_reliability"
@@ -80,17 +82,29 @@ tests:
     enabled: true
     tier: "live"
     validator: "peptide_design"
-    description: "Independent replay of manuscript Case 4"
+    description: "Prospective peptide orchestration from a pinned public aggregate landscape"
+    fixture:
+      required: true
+      session_state_path: "${CS_COPILOT_PEPTIDE_INPUT_FIXTURE}"
+      sha256: "${CS_COPILOT_PEPTIDE_INPUT_SHA256}"
     required_files:
-      - name: "DBAASP antimicrobial activity dataset"
-        env: "DBAASP_DATA_PATH"
-        default_path: "~/.cache/cs_copilot/data/dbaasp_data.csv"
+      - name: "Public peptide landscape metadata"
+        default_path: "${CS_COPILOT_PEPTIDE_BUNDLE}/landscape.json"
+      - name: "Public peptide landscape tensors"
+        default_path: "${CS_COPILOT_PEPTIDE_BUNDLE}/landscape.safetensors"
+      - name: "Public peptide node activity table"
+        default_path: "${CS_COPILOT_PEPTIDE_BUNDLE}/nodes.parquet"
+      - name: "Public peptide sampling configuration"
+        default_path: "${CS_COPILOT_PEPTIDE_BUNDLE}/sampler.json"
     prompt_variants:
       - >-
-        Analyze the antimicrobial peptide activity landscape for Escherichia coli,
-        select enriched active regions, generate new peptide sequences from those
-        regions, assess their similarity and uniqueness, create sequence logos, and
-        prepare a report.
+        Use the session's pinned public aggregate anti-Escherichia coli peptide
+        landscape. Select enriched nodes and generate 20 peptide sequences with
+        the WAE sample_peptides_from_landscape tool. Assess pairwise sequence
+        similarity and exact uniqueness, create sequence logos, and save a grounded
+        report. This is inference from an existing map; raw DBAASP records and a
+        verified training corpus are unavailable. Do not claim raw-data retrieval,
+        retraining, training-set novelty, or experimentally verified activity.
 
   frozen_case_1_seh_analysis:
     enabled: true
@@ -178,20 +192,26 @@ tests:
     enabled: true
     tier: "frozen"
     validator: "peptide_design"
-    description: "Case 4 against frozen DBAASP, WAE, and GTM pointers"
+    description: "Case 4 against pinned public aggregate landscape and WAE inputs"
     fixture:
       required: true
       session_state_path: "${CS_COPILOT_PEPTIDE_INPUT_FIXTURE}"
       sha256: "${CS_COPILOT_PEPTIDE_INPUT_SHA256}"
     prompt_variants:
       - >-
-        Use the preloaded anti-E. coli peptide activity landscape to select enriched
-        nodes, generate peptides, evaluate similarity and uniqueness, create sequence
-        logos, and prepare a report.
+        Use the preloaded aggregate anti-E. coli peptide activity landscape to select
+        enriched nodes and generate 20 WAE peptide sequences with
+        sample_peptides_from_landscape. Evaluate pairwise sequence similarity and
+        exact uniqueness, create sequence logos, and save a grounded report. Raw
+        DBAASP and training structures are unavailable; do not claim training-set
+        novelty or experimentally verified activity.
       - >-
-        Design antimicrobial peptide candidates for Escherichia coli from active
-        regions of the current GTM landscape. Compare sequences, assess uniqueness,
-        generate logos, and summarize the analysis.
+        Design 20 peptide candidates for Escherichia coli from active-enriched
+        regions of the session's aggregate GTM landscape, using WAE conditional
+        sampling with sample_peptides_from_landscape. Quantify pairwise sequence
+        similarity and exact uniqueness, generate sequence logos, and save a report
+        grounded in the generated sequences. Do not infer training-set novelty or
+        verified activity from this existing map.
       - >-
         Explore the session's E. coli AMP landscape, sample new sequences from
         activity-enriched regions, project and compare them, evaluate exact sequence
