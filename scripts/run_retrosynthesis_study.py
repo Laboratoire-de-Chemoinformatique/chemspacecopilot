@@ -93,6 +93,13 @@ def check_planning_imports() -> None:
                 getattr(tree_type, "_rollout_node", None)
             ):
                 raise ImportError("No supported built-in rollout evaluation API")
+        # Import success alone does not show that the native depiction backend
+        # works; reject missing MiniRacer before consuming any target attempts.
+        parsed = importlib.import_module("synplan.chem.utils").mol_from_smiles(
+            "CC(=O)Oc1ccccc1C(=O)O", standardize=True, clean_stereo=True, clean2d=True
+        )
+        if parsed is None or len(parsed) == 0:
+            raise ValueError("CGRtools parsing/2D depiction preflight returned no molecule")
     except Exception as exc:
         raise ValueError(
             f"SynPlanner runtime preflight failed before starting any targets: {type(exc).__name__}: {exc}"
