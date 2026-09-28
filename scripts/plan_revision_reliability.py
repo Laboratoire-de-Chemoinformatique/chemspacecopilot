@@ -37,6 +37,7 @@ def runtime_hashes(root: Path) -> dict[str, str]:
         for path in directory.rglob("*")
         if path.is_file() and path.suffix in {".py", ".md", ".yaml", ".yml", ".json", ".j2", ".txt"}
     ]
+    paths.extend(root / name for name in ("pyproject.toml", "uv.lock") if (root / name).is_file())
     return {str(path.relative_to(root)): sha256(path) for path in sorted(paths)}
 
 
@@ -249,9 +250,7 @@ def prepare(args):
         "runtime_sha256": runtime_hashes(root),
         "input_sha256": {str(path): sha256(path) for path in sorted(input_files)},
         "environment": {
-            "PYTHONPATH": str(root / "src")
-            + ":"
-            + str(root / "reports/reviewer_revision/python-deps"),
+            "PYTHONPATH": str(root / "src"),
             "AUTOENCODER_MODEL_PATH": str(args.autoencoder_dir.resolve()),
             "PEPTIDE_DESIGNER_MODEL_PATH": str(args.peptide_model_dir.resolve()),
             "USE_S3": "false",

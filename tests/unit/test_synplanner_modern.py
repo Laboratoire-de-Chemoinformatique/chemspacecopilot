@@ -65,3 +65,24 @@ def test_modern_loading_does_not_enter_cgrtools_adapter(monkeypatch):
     )
     toolkit._load_synplanner_components()
     assert calls == ["modern"]
+
+
+def test_png_rendering_preserves_atom_label_cutouts(tmp_path, monkeypatch):
+    from PIL import Image
+
+    from cs_copilot.storage import S3
+
+    # A black circle in a luminance mask hides the bond underneath an atom.
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 2">
+      <defs><mask id="atom"><rect width="4" height="2" fill="white"/>
+        <circle cx="2" cy="1" r="0.4" fill="black"/>
+      </mask></defs>
+      <path d="M0 1 H4" stroke="black" stroke-width="0.1" mask="url(#atom)"/>
+    </svg>"""
+    monkeypatch.setattr(S3, "open", lambda name, mode: (tmp_path / name).open(mode))
+    assert SynPlannerToolkit()._export_crisp(svg, "route.png")
+    with Image.open(tmp_path / "route.png") as rendered:
+        rgb = rendered.convert("RGB")
+        assert rgb.size == (400, 200)
+        assert rgb.getpixel((200, 100)) == (255, 255, 255)
+        assert rgb.getpixel((100, 100)) == (0, 0, 0)

@@ -314,12 +314,20 @@ def check_readiness(
         ]
         explicit_folder = config.get("tool_settings", {}).get("synplanner", {}).get("data_folder")
         if explicit_folder:
-            candidates.insert(0, Path(expand(str(explicit_folder), env, home)))
+            candidates = [Path(expand(str(explicit_folder), env, home))]
         relative_files = [
             "building_blocks/building_blocks_em_sa_ln.smi",
             "uspto/uspto_reaction_rules.pickle",
             "uspto/weights/ranking_policy_network.ckpt",
         ]
+        version_parts = re.match(r"(\d+)\.(\d+)", packages.get("SynPlanner") or "0.0")
+        if version_parts and tuple(map(int, version_parts.groups())) >= (1, 6):
+            from cs_copilot.tools.chemistry.synplanner_assets import SYNPLANNER_FILES
+
+            relative_files = list(SYNPLANNER_FILES.values())
+            if not explicit_folder:
+                # The modern runtime uses this one default directory.
+                candidates = [Path.cwd() / "synplan_data"]
         inventory = [
             [
                 artifact(str(folder / filename), base=project_root, env=env, home=home)

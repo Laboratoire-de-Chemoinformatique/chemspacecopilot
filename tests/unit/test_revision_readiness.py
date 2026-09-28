@@ -215,3 +215,35 @@ def test_narrative_and_display_labels_do_not_become_missing_files():
         "dataset_path": "real.csv",
     }
     assert list(readiness.pointers(state)) == ["real.csv"]
+
+
+def test_modern_synplanner_requires_matching_tsv_preset(tmp_path, monkeypatch):
+    from cs_copilot.tools.chemistry.synplanner_assets import SYNPLANNER_FILES
+
+    monkeypatch.setattr(
+        readiness.importlib.metadata,
+        "version",
+        lambda name: {"agno": "2.1.9", "SynPlanner": "1.7.0"}.get(name, "1.0"),
+    )
+    create_models(tmp_path)
+    path = write_config(
+        tmp_path,
+        tests={
+            "planning": {
+                "enabled": True,
+                "validator": "retrosynthesis",
+                "prompt_variants": ["plan"],
+            }
+        },
+    )
+    config = yaml.safe_load(path.read_text())
+    assets = tmp_path / "preset"
+    config["tool_settings"] = {"synplanner": {"data_folder": str(assets)}}
+    path.write_text(yaml.safe_dump(config))
+    kwargs = {"project_root": tmp_path, "env": {"TEST_PROVIDER_KEY": "present"}, "home": tmp_path}
+    assert not readiness.check_readiness(path, **kwargs)["ready_for_pilot"]
+    for relative in SYNPLANNER_FILES.values():
+        target = assets / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"fixture")
+    assert readiness.check_readiness(path, **kwargs)["ready_for_pilot"]
