@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 
@@ -56,7 +56,7 @@ class MolecularDescriptorEncoder:
         self,
         smiles_list: Sequence[str],
         descriptor_type: Optional[str] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> np.ndarray:
         """Encode SMILES strings into descriptor vectors.
 

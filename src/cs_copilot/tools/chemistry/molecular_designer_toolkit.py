@@ -21,6 +21,11 @@ from pydantic import BaseModel, Field
 from rdkit import Chem, DataStructs
 from rdkit.Chem import QED, Descriptors, rdFingerprintGenerator
 
+from cs_copilot.generation_audit import (
+    capture_generation_audit,
+    generation_audit_summary,
+    save_generation_audit,
+)
 from cs_copilot.tools.io.session_memory import (
     compact_candidate_preview,
     register_compounds_from_candidates,
@@ -92,6 +97,7 @@ class MolecularDesignResult:
     engine: str
     candidates: List[MolecularCandidate]
     metadata: Dict[str, Any] = field(default_factory=dict)
+    generation_audit: Optional[Dict[str, Any]] = None
 
     def valid_candidates(self) -> List[MolecularCandidate]:
         """Return valid candidates only."""
@@ -247,6 +253,7 @@ class AutoencoderDesignEngine:
         if not self.supports(mode):
             raise MolecularDesignerError(f"Autoencoder engine does not support mode: {mode}")
 
+        self.toolkit.last_generation_audit = None
         if mode == "interpolate":
             smiles2 = request.constraints.get("smiles2")
             if not request.seed_smiles or not smiles2:
@@ -286,6 +293,13 @@ class AutoencoderDesignEngine:
         return MolecularDesignResult(
             engine=self.engine_name,
             candidates=_dedupe_candidates(candidates),
+            generation_audit=getattr(self.toolkit, "last_generation_audit", None)
+            or capture_generation_audit(
+                raw,
+                source="engine_outputs_backend_capture_unavailable",
+                requested_count=request.n_candidates,
+                raw_outputs_available=False,
+            ),
             metadata={
                 "generation_mode": mode,
                 "n_requested": request.n_candidates,
@@ -344,6 +358,12 @@ class LLMDesignEngine:
         return MolecularDesignResult(
             engine=self.engine_name,
             candidates=_dedupe_candidates(candidates),
+            generation_audit=capture_generation_audit(
+                [item.smiles for item in llm_response.candidates],
+                source="llm_structured_proposals_before_validation",
+                requested_count=request.n_candidates,
+                raw_outputs_available=True,
+            ),
             metadata={
                 "generation_mode": request.generation_mode,
                 "n_requested": request.n_candidates,
@@ -434,6 +454,7 @@ class MolecularDesignerToolkit(Toolkit):
         agent: Optional[Agent] = None,
         session_state: Optional[Dict[str, Any]] = None,
         _source_tool: str = "design_molecules",
+        audit_path: Optional[str] = None,
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """
         Design small-molecule candidates using a selected generative engine.
@@ -454,6 +475,7 @@ class MolecularDesignerToolkit(Toolkit):
             session_key: Session-state key for the artifact pointer in summary mode.
             agent: Agent instance auto-injected by Agno.
             session_state: Shared session state auto-injected by Agno.
+            audit_path: Optional local raw-audit JSON path; session runs save automatically.
 
         Returns:
             Compact summary or a list of candidate dictionaries.
@@ -478,6 +500,29 @@ class MolecularDesignerToolkit(Toolkit):
         candidate_dicts = [candidate.to_dict() for candidate in candidates]
 
         state_targets = update_state_targets(agent, session_state)
+        audit = result.generation_audit or capture_generation_audit(
+            [candidate.original_smiles or candidate.smiles for candidate in result.candidates],
+            source="returned_candidates_backend_capture_unavailable",
+            requested_count=n_candidates,
+            raw_outputs_available=False,
+        )
+        audit["seed_smiles"] = seed_smiles
+        audit["engine"] = result.engine
+        audit["generation_mode"] = generation_mode
+        audit["requested_settings"] = {
+            "temperature": temperature,
+            "decode_mode": decode_mode,
+            "noise_scale": noise_scale,
+            "note": "Requested engine settings; only autoencoder audit settings record decoder arguments actually applied.",
+        }
+        self.last_generation_audit = audit
+        audit_artifact_path = save_generation_audit(
+            audit, session_state=state_targets[0] if state_targets else None, audit_path=audit_path
+        )
+        audit_metadata = generation_audit_summary(audit)
+        audit_metadata["artifact_path"] = audit_artifact_path
+        result.metadata["generation_audit"] = audit_metadata
+        result.metadata["count_attempted_scope"] = "post_deduplication_candidates_legacy"
         registered_compound_ids: List[str] = []
         registered_candidate_set_id: Optional[str] = None
         registered_artifact_path: Optional[str] = None
@@ -560,6 +605,8 @@ class MolecularDesignerToolkit(Toolkit):
         return {
             "engine": result.engine,
             "generation_mode": generation_mode,
+            "generation_audit": audit_metadata,
+            "count_attempted_scope": "post_deduplication_candidates_legacy",
             "count_attempted": len(result.candidates),
             "count_returned": len(candidate_dicts),
             "include_invalid": include_invalid,

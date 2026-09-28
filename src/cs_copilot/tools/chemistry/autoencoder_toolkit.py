@@ -19,6 +19,11 @@ from agno.agent import Agent
 from rdkit import Chem
 from tqdm import tqdm
 
+from cs_copilot.generation_audit import (
+    capture_generation_audit,
+    generation_audit_summary,
+    save_generation_audit,
+)
 from cs_copilot.storage import S3
 from cs_copilot.tools.constants import (
     DEFAULT_AUTOENCODER_MODEL_PATH,
@@ -392,6 +397,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         max_len: int = 100,
         temp: float = 1.0,
         decode: str = "greedy",
+        audit_path: Optional[str] = None,
     ) -> List[str]:
         """
         Sample SMILES from the autoencoder latent space.
@@ -408,6 +414,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             max_len: Maximum length of generated SMILES
             temp: Temperature for sampling (higher = more random, lower = more deterministic)
             decode: 'greedy' for deterministic, 'sample' for stochastic
+            audit_path: Optional local JSON path for unfiltered backend outputs.
 
         Returns:
             List of generated SMILES strings
@@ -418,6 +425,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         self.model.eval()
 
         # If no latent vectors provided, sample from Gaussian prior
+        sampled_from_prior = z is None
         if z is None:
             latent_dim = self.config.d_z
             z = torch.randn(n_samples, latent_dim, device=self.device) * latent_std
@@ -430,6 +438,23 @@ class AutoencoderToolkit(BaseChemistryToolkit):
                 n_batch=z.shape[0], max_len=max_len, z=z, temp=temp, decode=decode
             )
 
+        # Preserve invalid outputs and duplicates before any toolkit standardization.
+        samples = list(samples)
+        self.last_generation_audit = capture_generation_audit(
+            samples,
+            source="autoencoder_backend_outputs_before_standardization",
+            requested_count=int(z.shape[0]),
+            raw_outputs_available=True,
+        )
+        self.last_generation_audit["settings"] = {
+            "temperature": temp,
+            "decode_mode": decode,
+            "max_length": max_len,
+            "latent_std": latent_std if sampled_from_prior else None,
+            "latent_source": "gaussian_prior" if sampled_from_prior else "provided_vectors",
+            "model_path": str(self.model_path),
+        }
+        save_generation_audit(self.last_generation_audit, audit_path=audit_path)
         standardized_smiles = []
         for smi_raw in samples:
             smiles_std = standardize_smiles(smi_raw) if isinstance(smi_raw, str) else None
@@ -471,6 +496,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         session_key: str = "sampled_molecules",
         agent: Optional[Agent] = None,
         session_state: Optional[Dict[str, Any]] = None,
+        audit_path: Optional[str] = None,
     ) -> Union[List[str], Dict[str, Any]]:
         """
         Sample new molecules from the latent space using Gaussian prior.
@@ -495,11 +521,13 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             agent: Agent instance (auto-injected by agno). Required for
                 "summary" format; if None, gracefully falls back to "list".
             session_state: Shared session state auto-injected by Agno.
+            audit_path: Optional local JSON path; otherwise save an audit with session artifacts.
 
         Returns:
             Dict summary (default) or List[str] (when return_format="list" or
             no session state available).
         """
+        self.last_generation_audit = None
         raw = self.sample_from_latent(
             z=None,
             n_samples=n_samples,
@@ -509,9 +537,21 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             max_len=max_length,
         )
 
+        audit = self.last_generation_audit or capture_generation_audit(
+            raw,
+            source="sampling_outputs_backend_capture_unavailable",
+            requested_count=n_samples,
+            raw_outputs_available=False,
+        )
+        self.last_generation_audit = audit
         sampled = _filter_valid_unique_smiles(raw) if filter_valid_unique else list(raw)
 
         state_targets = update_state_targets(agent, session_state)
+        audit_artifact_path = save_generation_audit(
+            audit, session_state=state_targets[0] if state_targets else None, audit_path=audit_path
+        )
+        audit_metadata = generation_audit_summary(audit)
+        audit_metadata["artifact_path"] = audit_artifact_path
         registered_compound_ids: List[str] = []
         registered_candidate_set_id: Optional[str] = None
         registered_artifact_path: Optional[str] = None
@@ -547,6 +587,8 @@ class AutoencoderToolkit(BaseChemistryToolkit):
                 label="Autoencoder sampled candidates",
                 count_attempted=n_samples,
                 metadata={
+                    "generation_audit": audit_metadata,
+                    "count_attempted_scope": "requested_samples_not_backend_attempts",
                     "latent_std": latent_std,
                     "temperature": temperature,
                     "decode_mode": decode_mode,
@@ -587,6 +629,8 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             return sampled
 
         return {
+            "generation_audit": audit_metadata,
+            "count_attempted_scope": "requested_samples_not_backend_attempts",
             "count_attempted": n_samples,
             "count_returned": len(sampled),
             "filter_valid_unique": filter_valid_unique,

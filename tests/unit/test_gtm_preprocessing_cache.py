@@ -271,7 +271,7 @@ def test_data_load_and_prep_reuses_prepared_dataset_cache(monkeypatch, tmp_path)
             )
 
     calls = _patch_fast_gtm_optimization(monkeypatch, tmp_path)
-    monkeypatch.setattr(gtm_operations.dill, "load", lambda _handle: FakeGTM())
+    monkeypatch.setattr(gtm_operations, "load_gtm_model", lambda _path: FakeGTM())
     agent = SimpleNamespace(session_state={})
 
     gtm_operations.data_load_and_prep(str(csv_path), str(gtm_path), agent=agent)

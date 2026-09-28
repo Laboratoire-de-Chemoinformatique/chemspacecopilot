@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import functools
 from typing import Any, Callable
 
 
 def factory(import_path: str) -> Callable[[], Any]:
-    """Return a memoised factory that lazily imports and instantiates a toolkit."""
+    """Return a factory that lazily imports and freshly instantiates a toolkit."""
 
-    @functools.lru_cache(maxsize=1)
     def _build() -> Any:
         module_name, _, class_name = import_path.rpartition(":")
         if not module_name or not class_name:

@@ -2,8 +2,9 @@
 # coding: utf-8
 """
 Configuration module for cs_copilot agents.
-Contains path constants and database configuration settings.
-Agent instructions and prompts are now in prompts.py.
+
+Agent personas and behavioral instructions live in ``descriptions.py`` and
+``instructions.py`` respectively.
 """
 
 # Database Configuration

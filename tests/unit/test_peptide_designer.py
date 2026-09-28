@@ -35,6 +35,24 @@ def test_peptide_designer_toolkit_public_name(monkeypatch, tmp_path):
     assert "design_peptides" in toolkit.functions
 
 
+def test_peptide_designer_toolkit_supports_collision_safe_tool_prefix(monkeypatch, tmp_path):
+    monkeypatch.setattr(PeptideDesignerToolkit, "_ensure_model_exists", lambda self: None)
+    monkeypatch.setattr(PeptideDesignerToolkit, "_load_model", lambda self: None)
+
+    toolkit = PeptideDesignerToolkit(
+        model_path=str(tmp_path),
+        device="cpu",
+        tool_name_prefix="peptide_",
+    )
+
+    assert toolkit.tool_name_prefix == "peptide_"
+    assert "peptide_design_peptides" in toolkit.functions
+    assert "peptide_validate_design_candidates" in toolkit.functions
+    assert "peptide_decode_latent" in toolkit.functions
+    assert "design_peptides" not in toolkit.functions
+    assert all(name.startswith("peptide_") for name in toolkit.functions)
+
+
 def test_peptide_designer_public_exports_replace_peptide_wae():
     """Only the Peptide Designer class should be exported from public tool packages."""
     assert tools.PeptideDesignerToolkit is PeptideDesignerToolkit

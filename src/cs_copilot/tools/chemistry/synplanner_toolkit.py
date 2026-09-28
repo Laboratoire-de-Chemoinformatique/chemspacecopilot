@@ -27,6 +27,8 @@ import importlib
 import json
 import logging
 import re
+import sys
+import types
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -45,6 +47,81 @@ from .base_chemistry import BaseChemistryToolkit, InvalidSMILESError
 from .standardize import standardize_smiles
 
 logger = logging.getLogger(__name__)
+
+
+def _install_cgrtools_miniracer_compatibility() -> None:
+    """Expose the legacy MiniRacer API expected by CGRtools.
+
+    ``cgrtools-stable==4.2.13`` imports
+    ``py_mini_racer.py_mini_racer`` and evaluates JavaScript loaded as bytes.
+    Modern ``mini-racer`` releases expose their public API from the package
+    root and accept source text instead. Install a narrow in-process adapter
+    before importing SynPlanner's CGRtools-backed modules.
+    """
+
+    legacy_module_name = "py_mini_racer.py_mini_racer"
+    if legacy_module_name in sys.modules:
+        return
+
+    try:
+        importlib.import_module(legacy_module_name)
+        return
+    except ModuleNotFoundError as exc:
+        if exc.name not in {legacy_module_name, "py_mini_racer"}:
+            raise
+
+    try:
+        modern_module = importlib.import_module("py_mini_racer")
+        modern_mini_racer = modern_module.MiniRacer
+        js_eval_exception = modern_module.JSEvalException
+    except (ImportError, AttributeError):
+        return
+
+    class CGRToolsMiniRacer(modern_mini_racer):
+        def eval(self, code: Any, *args: Any, **kwargs: Any) -> Any:
+            if isinstance(code, (bytes, bytearray, memoryview)):
+                code = bytes(code).decode("utf-8")
+            return super().eval(code, *args, **kwargs)
+
+    compatibility_module = types.ModuleType(legacy_module_name)
+    compatibility_module.MiniRacer = CGRToolsMiniRacer
+    compatibility_module.JSEvalException = js_eval_exception
+    sys.modules[legacy_module_name] = compatibility_module
+
+
+def _build_rollout_components(tree_options, *, policy_network, reaction_rules, building_blocks):
+    """Use the real rollout API supported by the installed SynPlanner release.
+
+    SynPlanner 1.2.1 implements rollout inside Tree. Later releases expose a
+    separate rollout evaluation config/loader. Never substitute a fake evaluator.
+    """
+    config_module = importlib.import_module("synplan.utils.config")
+    loading_module = importlib.import_module("synplan.utils.loading")
+    rollout_config = getattr(config_module, "RolloutEvaluationConfig", None)
+    load_evaluation = getattr(loading_module, "load_evaluation_function", None)
+    if rollout_config is not None and load_evaluation is not None:
+        config = config_module.TreeConfig(**tree_options)
+        evaluation = load_evaluation(
+            rollout_config(
+                policy_network=policy_network,
+                reaction_rules=reaction_rules,
+                building_blocks=building_blocks,
+                min_mol_size=tree_options["min_mol_size"],
+                max_depth=tree_options["max_depth"],
+            )
+        )
+        return config, evaluation, "external_rollout_evaluator"
+    if rollout_config is not None or load_evaluation is not None:
+        raise SynPlannerError("Incomplete external rollout API in the installed SynPlanner version")
+    try:
+        config = config_module.TreeConfig(**{**tree_options, "evaluation_type": "rollout"})
+    except TypeError as exc:
+        raise SynPlannerError(
+            "Installed SynPlanner provides neither a supported external nor built-in rollout API"
+        ) from exc
+    if getattr(config, "evaluation_type", None) != "rollout":
+        raise SynPlannerError("Installed SynPlanner did not accept built-in rollout evaluation")
+    return config, None, "tree_builtin_rollout"
 
 
 def _session_state_for_outputs(
@@ -191,7 +268,8 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             module = importlib.import_module("synplan")
         except ImportError as exc:  # pragma: no cover - defensive branch
             raise SynPlannerError(
-                "The 'synplanner' package is required. Install it with 'pip install SynPlanner'."
+                "The default SynPlanner dependency is unavailable. "
+                "Reinstall the project with 'uv sync'."
             ) from exc
 
         self._synplanner_module = module
@@ -207,6 +285,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
             return
 
         self._import_synplanner()
+        _install_cgrtools_miniracer_compatibility()
 
         # Import required modules
         try:
@@ -723,6 +802,10 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         }
 
         if tree is not None:
+            summary["evaluation_api"] = getattr(tree, "_cs_copilot_evaluation_api", None)
+            effective_config = getattr(tree, "config", None)
+            if callable(getattr(effective_config, "to_dict", None)):
+                summary["parameters"]["tree"] = effective_config.to_dict()
             summary.update(
                 {
                     "iterations": getattr(tree, "curr_iteration", None),
@@ -1005,8 +1088,6 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         try:
             from synplan.chem.utils import mol_from_smiles as synplan_mol_from_smiles
             from synplan.mcts.tree import Tree
-            from synplan.utils.config import RolloutEvaluationConfig, TreeConfig
-            from synplan.utils.loading import load_evaluation_function
         except ImportError as exc:
             raise SynPlannerError(f"Failed to import SynPlanner Tree components: {exc}") from exc
 
@@ -1020,18 +1101,12 @@ class SynPlannerToolkit(BaseChemistryToolkit):
 
         self._apply_policy_config(profile.policy_config)
 
-        # Create tree configuration
-        tree_config = TreeConfig(**profile.tree_config)
-
-        # Create evaluation function (rollout-based)
-        eval_config = RolloutEvaluationConfig(
+        tree_config, evaluation_function, evaluation_api = _build_rollout_components(
+            profile.tree_config,
             policy_network=self._policy_network,
             reaction_rules=self._reaction_rules,
             building_blocks=self._building_blocks,
-            min_mol_size=profile.tree_config["min_mol_size"],
-            max_depth=profile.tree_config["max_depth"],
         )
-        evaluation_function = load_evaluation_function(eval_config)
 
         # Create and search the tree
         try:
@@ -1043,6 +1118,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                 expansion_function=self._policy_network,
                 evaluation_function=evaluation_function,
             )
+            tree._cs_copilot_evaluation_api = evaluation_api
             # Run the search by iterating over the tree
             # The Tree class implements __iter__ and __next__ to perform MCTS search
             for solved, _node_id in tree:

@@ -23,8 +23,8 @@ from cs_copilot.tools import (
     PeptideDesignerToolkit,
     PointerPandasTools,
     SessionMemoryToolkit,
+    SkillToolkit,
     SynPlannerToolkit,
-    # SessionToolkit,
     save_gtm_landscape_plot,
     save_gtm_plot,
     save_markdown_report,
@@ -32,14 +32,27 @@ from cs_copilot.tools import (
 )
 from cs_copilot.tools.analysis import RobustnessAnalysisToolkit
 
-from .prompts import (
+from .contracts import ROLE_POLICIES, RolePolicy, validate_role_tools
+from .descriptions import (
+    CHEMBL_DESCRIPTION,
+    CHEMOINFORMATICIAN_DESCRIPTION,
+    GTM_AGENT_DESCRIPTION,
+    MOLECULAR_DESIGNER_DESCRIPTION,
+    PEPTIDE_DESIGNER_DESCRIPTION,
+    REPORT_GENERATOR_DESCRIPTION,
+    ROBUSTNESS_EVALUATION_DESCRIPTION,
+    SINGLE_AGENT_DESCRIPTION,
+    SYNPLANNER_DESCRIPTION,
+)
+from .instructions import (
     CHEMBL_INSTRUCTIONS,
-    CHEMOINFORMATICIAN_INSTRUCTIONS,  # Comprehensive chemoinformatics analysis
-    GTM_AGENT_INSTRUCTIONS,  # Unified GTM agent (all GTM operations)
+    CHEMOINFORMATICIAN_INSTRUCTIONS,
+    GTM_AGENT_INSTRUCTIONS,
     MOLECULAR_DESIGNER_INSTRUCTIONS,
-    PEPTIDE_DESIGNER_INSTRUCTIONS,  # Peptide Designer for amino acid sequence generation
-    REPORT_GENERATOR_INSTRUCTIONS,  # Universal presentation layer
+    PEPTIDE_DESIGNER_INSTRUCTIONS,
+    REPORT_GENERATOR_INSTRUCTIONS,
     ROBUSTNESS_EVALUATION_INSTRUCTIONS,
+    SINGLE_AGENT_INSTRUCTIONS,
     SYNPLANNER_INSTRUCTIONS,
 )
 
@@ -53,6 +66,7 @@ class AgentConfig:
     tools: List[Any] = field(default_factory=list)
     instructions: List[str] = field(default_factory=list)
     session_state: Dict[str, Any] = field(default_factory=dict)
+    role_policy: Optional[RolePolicy] = None
 
     def validate(self) -> None:
         """Validate the agent configuration."""
@@ -64,6 +78,8 @@ class AgentConfig:
             raise TypeError("Tools must be a list")
         if not isinstance(self.instructions, list):
             raise TypeError("Instructions must be a list")
+        if self.role_policy is not None:
+            validate_role_tools(self.role_policy, self.tools)
 
 
 class AgentCreationError(Exception):
@@ -99,7 +115,7 @@ class BaseAgentFactory(ABC):
         markdown: bool = True,
         debug_mode: bool = False,
         enable_mlflow_tracking: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> Agent:
         """Create an agent with error handling and validation.
 
@@ -115,6 +131,14 @@ class BaseAgentFactory(ABC):
         """
         try:
             config = self.get_agent_config()
+            agent_type = getattr(self.__class__, "agent_type", None)
+            declared_policy = ROLE_POLICIES.get(agent_type)
+            if config.role_policy is None:
+                config.role_policy = declared_policy
+            elif declared_policy is not None and config.role_policy != declared_policy:
+                raise ValueError(
+                    f"Factory role policy for '{agent_type}' differs from the canonical allowlist"
+                )
             config.validate()
             provided_session_state = kwargs.pop("session_state", None)
 
@@ -147,6 +171,10 @@ class BaseAgentFactory(ABC):
             agent_kwargs.update(kwargs)
 
             agent = Agent(**agent_kwargs)
+            if config.role_policy is not None:
+                # Keep the enforced policy inspectable without placing it in the
+                # shared session state (where one member could overwrite another).
+                agent.role_policy = config.role_policy
 
             # Wrap agent methods with MLflow tracking if enabled
             if enable_mlflow_tracking:
@@ -326,17 +354,11 @@ class ChEMBLDownloaderFactory(BaseAgentFactory):
     def get_agent_config(self) -> AgentConfig:
         return AgentConfig(
             name="chembl_agent",
-            description="""
-            You are a specialized agent for downloading and processing bioactivity data from the ChEMBL database.
-            You support multiple backends: local SQL databases (SQLite, PostgreSQL, or MySQL — used when configured) and the ChEMBL REST API.
-            The backend is selected automatically — you do not need to worry about which one is active.
-            Your role is to query ChEMBL based on user requests (e.g., protein targets, compound types),
-            retrieve relevant bioactivity data, validate data quality, and prepare structured datasets
-            for downstream cheminformatics analysis.
-            """,
+            description=CHEMBL_DESCRIPTION,
             tools=[
                 ChemblToolkit(),
                 PointerPandasTools(),
+                SkillToolkit(),
                 # SessionToolkit(),
             ],
             instructions=CHEMBL_INSTRUCTIONS,
@@ -380,46 +402,12 @@ class ChemoinformaticianFactory(BaseAgentFactory):
     def get_agent_config(self) -> AgentConfig:
         return AgentConfig(
             name="chemoinformatician_agent",
-            description="""
-            You are an expert chemoinformatician specialized in computational chemistry and molecular analysis.
-            Primary use case: Downstream analysis after GTM operations (analyzing molecules in GTM nodes/clusters).
-
-            **Core Competencies**:
-
-            1. **Chemotype & Scaffold Analysis**:
-               - Murcko scaffold decomposition and profiling
-               - Scaffold frequency per cluster/node
-               - Structural diversity metrics
-
-            2. **Clustering & Chemical Space Analysis**:
-               - Works with GTM nodes (primary), or any clustering method
-               - Cluster characterization and comparison
-               - Chemical space coverage analysis
-
-            3. **SAR Analysis (Structure-Activity Relationships)**:
-               - Activity cliff detection
-               - Matched molecular pair (MMP) analysis
-               - Potency distribution across clusters/scaffolds
-
-            4. **Similarity & Diversity**:
-               - Tanimoto/Dice similarity calculations
-               - Diversity analysis (Shannon entropy, coverage)
-               - Nearest neighbor searches
-
-            **Input Format**:
-            - Standardized DataFrame with 'smiles' column
-            - Optional 'cluster_id' (from GTM node_index or other clustering)
-            - Optional 'activity' (for SAR analysis)
-            - Use `normalize_for_analysis` tool to standardize input from any source
-
-            **Output**:
-            - Structured data (DataFrames, dicts) saved to session_state
-            - NO visualizations (handled by Report Generator)
-            """,
+            description=CHEMOINFORMATICIAN_DESCRIPTION,
             tools=[
                 ChemicalSimilarityToolkit(),
                 PointerPandasTools(),
                 GTMToolkit(),  # Enable GTM data access for downstream analysis
+                SkillToolkit(),
                 # Future: QSARToolkit, ClusteringToolkit, DescriptorToolkit
             ],
             instructions=CHEMOINFORMATICIAN_INSTRUCTIONS,
@@ -485,32 +473,14 @@ class MolecularDesignerFactory(BaseAgentFactory):
         autoencoder_toolkit = AutoencoderToolkit()
         return AgentConfig(
             name="molecular_designer_agent",
-            description="""
-            You are a scientific assistant specialized in small-molecule design and analysis.
-            You operate through a molecular design engine facade so new generative engines can
-            be attached without changing agent routing.
-
-            **Autoencoder engine**: Encode molecules to latent representations, generate novel
-            structures by sampling from latent space, interpolate between molecules, and explore
-            chemical-space neighborhoods to understand structure-property relationships.
-
-            **LLM engine**: Propose candidate SMILES from a design objective or constraints, then
-            validate, standardize, deduplicate, and rank candidates before presenting them.
-
-            **GTM-guided mode**: Combine Generative Topographic Mapping (GTM) with autoencoders for
-            targeted molecular generation. Sample molecules from specific regions of GTM maps
-            (by density, activity, or coordinates), encode them to latent space, and generate novel
-            molecules by exploring neighborhoods around regions of interest.
-
-            **Cache-Aware**: Automatically reuses GTM models cached by GTM Agent in session_state,
-            eliminating redundant loading for multi-step workflows (e.g., GTM density → sampling).
-            """,
+            description=MOLECULAR_DESIGNER_DESCRIPTION,
             tools=[
                 MolecularDesignerToolkit(autoencoder_toolkit=autoencoder_toolkit),
                 autoencoder_toolkit,
                 GTMToolkit(),
                 ChemicalSimilarityToolkit(),
                 PointerPandasTools(),
+                SkillToolkit(),
             ],
             instructions=MOLECULAR_DESIGNER_INSTRUCTIONS,
             session_state={
@@ -533,7 +503,7 @@ class GTMAgentFactory(BaseAgentFactory):
     - optimize: Build and optimize new GTM maps
     - load: Load existing GTM models from S3/local/HuggingFace
     - density: Analyze compound distributions and neighborhood preservation
-    - activity: Create activity-density landscapes for SAR analysis
+    - activity: Create activity landscapes for SAR analysis
     - project: Project external datasets onto existing GTM maps
 
     Features smart caching to avoid redundant GTM loading across operations.
@@ -544,28 +514,14 @@ class GTMAgentFactory(BaseAgentFactory):
     def get_agent_config(self) -> AgentConfig:
         return AgentConfig(
             name="gtm_agent",
-            description="""
-            You are a unified scientific assistant for all GTM (Generative Topographic Mapping) operations.
-            Your role is to handle building, loading, and analyzing GTM-based maps of chemical space.
-
-            Capabilities:
-            - **Optimize**: Build and optimize new GTM maps from chemical datasets
-            - **Load**: Retrieve existing GTM models from storage (S3, local, HuggingFace)
-            - **Density**: Analyze compound distributions and neighborhood preservation on GTM maps
-            - **Activity**: Create activity-density landscapes for structure-activity relationship (SAR) exploration
-            - **Project**: Map external datasets onto existing GTM maps for comparative analysis
-
-            Key Features:
-            - Smart caching: Automatically reuses loaded GTM models across operations within the same session
-            - Mode-based dispatch: Detects operation type from user requests and executes appropriate workflow
-            - Session state integration: Shares GTM data with other agents
-            """,
+            description=GTM_AGENT_DESCRIPTION,
             tools=[
                 GTMToolkit(),
                 PointerPandasTools(),
                 SessionMemoryToolkit(),
                 save_gtm_landscape_plot,
                 save_gtm_plot,
+                SkillToolkit(),
             ],
             instructions=GTM_AGENT_INSTRUCTIONS,
             session_state={
@@ -619,39 +575,14 @@ class ReportGeneratorFactory(BaseAgentFactory):
     def get_agent_config(self) -> AgentConfig:
         return AgentConfig(
             name="report_generator_agent",
-            description="""
-            You are a specialized agent for generating reports and visualizations from analysis results.
-            Your role is to create well-formatted, comprehensive reports that present scientific findings
-            in a clear, actionable manner.
-
-            Capabilities:
-            - **Multi-format reports**: Generate image-rich HTML/PDF reports and markdown fallbacks
-            - **Visualization creation**: Produce publication-quality plots and charts
-            - **Template-based formatting**: Consistent structure across different report types
-            - **Flexible input handling**: Works with results from any analysis agent
-
-            Report Types Supported:
-            - Chemotype analysis: Scaffold distributions, similarity heatmaps, cluster comparisons
-            - GTM density: Density overlays, neighborhood preservation, coverage analysis
-            - GTM activity/SAR: Activity landscapes, potency hotspots, structure-activity insights
-            - Analog generation: Generated molecules, map context, diversity metrics, similarity analyses
-            - Combined reports: Multi-analysis integration with comparative visualizations
-
-            Key Features:
-            - **Analysis-agnostic**: Reads structured data from session_state (any analysis type)
-            - **Consistent formatting**: Uniform markdown structure, color schemes, plot styles
-            - **Embedded visualizations**: Inline plots in reports for easy consumption
-            - **Actionable insights**: Highlights key findings and provides recommendations
-
-            This separation enables analysis agents to focus on data processing while Report Generator
-            handles all presentation concerns.
-            """,
+            description=REPORT_GENERATOR_DESCRIPTION,
             tools=[
                 PointerPandasTools(),
                 save_gtm_landscape_plot,  # For saved GTM landscape tables
                 save_gtm_plot,  # For GTM-specific visualizations
                 save_rich_report,  # Persists image-rich HTML/PDF reports
                 save_markdown_report,  # Persists the final markdown report
+                SkillToolkit(),
                 # Plotting libraries (matplotlib, seaborn) available via Python environment
             ],
             instructions=REPORT_GENERATOR_INSTRUCTIONS,
@@ -674,15 +605,11 @@ class RobustnessEvaluationFactory(BaseAgentFactory):
     def get_agent_config(self) -> AgentConfig:
         return AgentConfig(
             name="robustness_evaluator_agent",
-            description="""
-            You are a specialized agent for analyzing robustness test results. Your role is to load
-            test results from S3 or local storage, analyze metrics and score distributions, identify
-            patterns and issues in failing prompts, and generate actionable recommendations for
-            improving system robustness across prompt variations.
-            """,
+            description=ROBUSTNESS_EVALUATION_DESCRIPTION,
             tools=[
                 PointerPandasTools(),
                 RobustnessAnalysisToolkit(),
+                SkillToolkit(),
             ],
             instructions=ROBUSTNESS_EVALUATION_INSTRUCTIONS,
             session_state={
@@ -711,14 +638,11 @@ class SynPlannerFactory(BaseAgentFactory):
     def get_agent_config(self) -> AgentConfig:
         return AgentConfig(
             name="synplanner_agent",
-            description=(
-                "You are a retrosynthetic planning assistant powered by SynPlanner. "
-                "Given a target molecule (as a SMILES string or common name), you "
-                "identify the canonical structure, run the SynPlanner retrosynthesis "
-                "engine, and present the best synthetic routes with step-by-step "
-                "descriptions and visualizations."
-            ),
-            tools=[SynPlannerToolkit()],
+            description=SYNPLANNER_DESCRIPTION,
+            tools=[
+                SynPlannerToolkit(),
+                SkillToolkit(),
+            ],
             instructions=SYNPLANNER_INSTRUCTIONS,
         )
 
@@ -750,54 +674,141 @@ class PeptideDesignerFactory(BaseAgentFactory):
     def get_agent_config(self) -> AgentConfig:
         return AgentConfig(
             name="peptide_designer_agent",
-            description="""
-            You are a scientific assistant specialized in peptide sequence generation and analysis
-            through Peptide Designer. You operate through a peptide design engine facade so new
-            generative engines can be attached without changing agent routing.
-
-            **WAE engine**: Encode peptides to latent representations, generate novel sequences
-            by sampling from latent space, interpolate between peptides, and explore neighborhoods
-            around seed sequences.
-
-            **LLM engine**: Propose peptide sequences from design objectives or constraints, then
-            validate, normalize, deduplicate, and rank candidates before presenting them.
-
-            Amino acid sequences are represented as space-separated single-letter codes
-            (e.g., "M L L L L L A L A L L A L L L").
-
-            **Core Capabilities**:
-            - **Design peptides**: Generate peptide candidates through WAE or LLM engines
-            - **Encode peptides**: Convert peptide sequences to 100-dimensional latent representations
-            - **Decode latent vectors**: Generate peptide sequences from latent space
-            - **Sample new peptides**: Generate novel peptides from Gaussian prior
-            - **Interpolate**: Create smooth transitions between peptides in latent space
-            - **Explore neighborhoods**: Generate peptide analogs with controlled diversity
-            - **GTM on latent space**: Train Generative Topographic Maps on WAE latent vectors
-            - **Activity landscapes**: Create per-organism antimicrobial activity landscapes from DBAASP data
-
-            **Key Parameters**:
-            - Max sequence length: 25 amino acids
-            - Latent dimension: 100
-            - Supported amino acids: A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, U, V, W, Y, Z
-
-            **Use Cases**:
-            - Generate novel peptide candidates (any peptides)
-            - Generate novel antimicrobial peptide candidates
-            - Explore peptide chemical space around active sequences
-            - Interpolate between peptides to understand structure-activity relationships
-            - Test sequence reconstruction for model quality assessment
-            - Build GTM maps of peptide latent space for visualization
-            - Analyze antimicrobial activity patterns using DBAASP data on GTM landscapes
-            - Sample peptides from specific GTM regions and decode to sequences
-
-            **Note**: Activity landscapes use DBAASP data and are specific to antimicrobial peptides.
-            """,
+            description=PEPTIDE_DESIGNER_DESCRIPTION,
             tools=[
                 PeptideDesignerToolkit(),
                 GTMToolkit(),
                 PointerPandasTools(),
                 save_gtm_landscape_plot,
                 save_gtm_plot,
+                SkillToolkit(),
             ],
             instructions=PEPTIDE_DESIGNER_INSTRUCTIONS,
+        )
+
+
+class SingleAgentFactory(BaseAgentFactory):
+    """Factory for the single-agent baseline used in the multi-agent ablation.
+
+    One flat Agno ``Agent`` that holds the UNION of the seven team specialists'
+    toolkits (ChEMBL, GTM, chemoinformatics, molecular + peptide design,
+    retrosynthesis, reporting) with no coordinator, no routing, and no
+    per-specialist context isolation. It is deliberately NOT added to the runtime
+    team (``teams.py`` stays 7 members); it is constructed separately for the
+    robustness comparison so the only variable vs the team is the agentic
+    structure (same model, same tools, same tasks).
+
+    Agno registers toolkit methods by name and keeps the first-registered on a
+    clash. The peptide toolkit is therefore registered under its MCP-style
+    ``peptide_*`` namespace in this flat context. Specialist agents retain their
+    native unprefixed names because their tool contexts are already isolated.
+    """
+
+    agent_type = "single_agent"
+
+    def get_agent_config(self) -> AgentConfig:
+        autoencoder_toolkit = AutoencoderToolkit()
+        return AgentConfig(
+            name="single_agent",
+            description=SINGLE_AGENT_DESCRIPTION,
+            tools=[
+                # Data + space
+                ChemblToolkit(),
+                GTMToolkit(),
+                ChemicalSimilarityToolkit(),
+                # Design engines. The peptide namespace prevents its chemically
+                # distinct methods from colliding with the molecular toolkits.
+                MolecularDesignerToolkit(autoencoder_toolkit=autoencoder_toolkit),
+                autoencoder_toolkit,
+                PeptideDesignerToolkit(tool_name_prefix="peptide_"),
+                SynPlannerToolkit(),
+                # Shared infrastructure (one instance each).
+                SessionMemoryToolkit(),
+                PointerPandasTools(),
+                SkillToolkit(),
+                # Plot / report callables.
+                save_gtm_landscape_plot,
+                save_gtm_plot,
+                save_rich_report,
+                save_markdown_report,
+            ],
+            instructions=SINGLE_AGENT_INSTRUCTIONS,
+            # Union of the team members' session_state defaults so the flat agent
+            # carries the same artifact/analysis slots the team accumulates. Keys
+            # mirror ChEMBL/MolecularDesigner (data_file_paths), Chemoinformatician
+            # (analysis_input, chemotype_analysis, clustering_results, sar_analysis,
+            # similarity_analysis, analysis_outputs), GTM (gtm_cache, gtm_file_paths,
+            # analysis_results, landscape_files), and Report (report_outputs).
+            # A drift guard in tests/unit/test_single_agent_factory.py checks these
+            # stay in sync with the member factories.
+            session_state={
+                "data_file_paths": {
+                    "dataset_path": None,  # Backward-compatible alias for clean_dataset_path.
+                    "raw_dataset_path": None,
+                    "clean_dataset_path": None,
+                    "filtered_dataset_path": None,
+                    "descriptor_parquet_path": None,
+                    "standardization_report_path": None,
+                },
+                "analysis_input": None,
+                "chemotype_analysis": {
+                    "scaffolds_per_cluster": None,
+                    "similarity_matrix": None,
+                    "summary_stats": None,
+                    "metadata": {},
+                    "output_paths": {
+                        "scaffolds_csv": None,
+                        "similarity_csv": None,
+                    },
+                },
+                "clustering_results": {
+                    "cluster_assignments": None,
+                    "cluster_metrics": None,
+                    "cluster_centroids": None,
+                    "method": None,
+                },
+                "sar_analysis": {
+                    "activity_cliffs": None,
+                    "mmps": None,
+                    "series_analysis": None,
+                    "potency_trends": None,
+                },
+                "similarity_analysis": {
+                    "similarity_matrix": None,
+                    "diversity_metrics": None,
+                    "nearest_neighbors": None,
+                },
+                "gtm_cache": {
+                    "model": None,
+                    "dataset": None,
+                    "metadata": {
+                        "optimization_strategy": None,
+                    },
+                },
+                "gtm_file_paths": {
+                    "gtm_path": None,
+                    "dataset_path": None,
+                    "gtm_plot_path": None,
+                },
+                "analysis_results": {
+                    "density_csv": None,
+                    "activity_csv": None,
+                    "projection_csv": None,
+                    "plots": [],
+                },
+                "landscape_files": {
+                    "landscape_data_csv": None,
+                    "landscape_plot": None,
+                },
+                "report_outputs": {
+                    "report_path": None,
+                    "report_paths": {},
+                    "plots": [],
+                    "report_type": None,
+                },
+                "analysis_outputs": {
+                    "primary_data_csv": None,
+                    "supplementary_data": [],
+                },
+            },
         )

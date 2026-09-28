@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 from typing import Any
 
 
@@ -36,13 +35,14 @@ class PointerPandasFacade:
         function_parameters: Any | None = None,
     ) -> dict[str, Any]:
         """Create a DataFrame and store it in the pandas registry."""
-        return dict(
-            self._toolkit.create_pandas_dataframe(
-                dataframe_name=dataframe_name,
-                create_using_function=create_using_function,
-                function_parameters=function_parameters,
-            )
+        result = self._toolkit.create_pandas_dataframe(
+            dataframe_name=dataframe_name,
+            create_using_function=create_using_function,
+            function_parameters=function_parameters,
         )
+        if not isinstance(result, dict):
+            raise TypeError("pandas creation did not return a structured result")
+        return dict(result)
 
     def run_operation(
         self,
@@ -81,6 +81,5 @@ class PointerPandasFacade:
         )
 
 
-@functools.lru_cache(maxsize=1)
 def pointer_pandas_facade() -> PointerPandasFacade:
     return PointerPandasFacade()

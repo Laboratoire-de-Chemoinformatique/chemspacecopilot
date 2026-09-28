@@ -53,7 +53,10 @@ async def _list_capabilities() -> None:
 
             resources = await session.list_resources()
             resource_uris = {str(r.uri) for r in resources.resources}
-            assert "cscopilot://session/manifest.json" in resource_uris
+            assert any(
+                uri.startswith("cscopilot://runs/") and uri.endswith("/manifest.json")
+                for uri in resource_uris
+            )
 
 
 def test_list_capabilities():
