@@ -29,7 +29,8 @@
     "reports/reviewer_revision/peptide_landscape_smoke",
     "reports/reviewer_revision/unit-regression-20260928.log",
     "reports/reviewer_revision/peptide_workflow_smoke",
-    "reports/reviewer_revision/unit-regression-final-20260928.log"
+    "reports/reviewer_revision/unit-regression-final-20260928.log",
+    "reports/reviewer_revision/reliability_study_frozen_v2"
   ],
   "limitations": [
     "Working revision checkpoint, not a submitted or published manuscript release; no archive DOI assigned.",

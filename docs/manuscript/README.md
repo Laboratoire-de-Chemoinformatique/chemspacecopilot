@@ -37,6 +37,18 @@ Python files changed during this continuation. Exact commands and the log hash
 are in [the validation record](unit-regression-final-20260928.json). These tests
 verify software behavior and are not included in scientific success rates.
 
+All nine planned batches pass offline prerequisite checks, and all four frozen
+snapshots stage successfully. The final plan is
+`reports/reviewer_revision/reliability_study_frozen_v2/study_plan.json`;
+[the readiness record](results/reliability-readiness.json) pins its checksum
+and source version. Verify runtime, input and configuration hashes before any
+provider execution:
+
+```bash
+python scripts/plan_revision_reliability.py --verify-plan \
+  reports/reviewer_revision/reliability_study_frozen_v2/study_plan.json
+```
+
 The 48 frozen executions are four tasks × two phrasings × three repetitions ×
 two architectures. Six batches counterbalance arm order. Nine additional live
 ChEMBL case/stages form three connected workflows; three independent peptide
