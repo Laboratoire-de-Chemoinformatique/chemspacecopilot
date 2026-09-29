@@ -320,6 +320,7 @@ def save_candidate_set_dataset(
     table = pd.DataFrame(row_list)
     if table.empty:
         table = pd.DataFrame(columns=["smi", "rank", "candidate_set_id", "source"])
+    rel_path = S3.first_free_path(rel_path)
     with S3.open(rel_path, "w") as handle:
         table.to_csv(handle, index=False)
     return S3.path(rel_path)
@@ -344,6 +345,7 @@ def save_candidate_set_artifact(
         "candidates": _json_safe(candidate_list, max_items=max(max_items, 1000)),
     }
     rel_path = _candidate_artifact_rel_path(candidate_set_id, session_state=session_state)
+    rel_path = S3.first_free_path(rel_path)
     with S3.open(rel_path, "w") as handle:
         json.dump(payload, handle, sort_keys=True)
     return S3.path(rel_path)
@@ -871,7 +873,7 @@ def register_generated_candidate_set(
             metadata=artifact_metadata,
             session_state=session_state,
         )
-        artifact_rel_path = _candidate_artifact_rel_path(
+        artifact_rel_path = S3.session_relative(artifact_path) or _candidate_artifact_rel_path(
             candidate_set_id,
             session_state=session_state,
         )
@@ -915,7 +917,9 @@ def register_generated_candidate_set(
             session_state=session_state,
         )
         csv_count = len(csv_rows)
-        csv_rel_path = _candidate_dataset_rel_path(candidate_set_id, session_state=session_state)
+        csv_rel_path = S3.session_relative(csv_path) or _candidate_dataset_rel_path(
+            candidate_set_id, session_state=session_state
+        )
         pointer = session_state.get(session_key)
         if not isinstance(pointer, dict):
             pointer = {
@@ -1177,7 +1181,9 @@ def materialize_candidate_set_dataset(
     }
 
     if top_n is None:
-        csv_rel_path = _candidate_dataset_rel_path(candidate_set_id, session_state=session_state)
+        csv_rel_path = S3.session_relative(csv_path) or _candidate_dataset_rel_path(
+            candidate_set_id, session_state=session_state
+        )
         update_session_object(
             session_state,
             candidate_set_id,

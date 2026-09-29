@@ -235,6 +235,8 @@ def test_agentic_state_updates_cannot_replace_run_identity(chat):
 
 def test_execution_mode_resolution(monkeypatch):
     monkeypatch.delenv("CS_COPILOT_AGNO_EXECUTION", raising=False)
+    assert execution_mode_from_env() is ExecutionMode.ENFORCE
+    monkeypatch.setenv("CS_COPILOT_AGNO_EXECUTION", "Observe")
     assert execution_mode_from_env() is ExecutionMode.OBSERVE
     monkeypatch.setenv("CS_COPILOT_AGNO_EXECUTION", "OFF")
     assert execution_mode_from_env() is ExecutionMode.OFF

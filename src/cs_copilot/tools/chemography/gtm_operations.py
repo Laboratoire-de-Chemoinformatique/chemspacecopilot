@@ -1850,6 +1850,7 @@ def project_data_on_gtm(
 
     logger.debug(f"Saving preprocessed dataset to {output_filename}")
 
+    output_filename = S3.first_free_path(output_filename)
     with S3.open(output_filename, "w") as f:
         df_valid.to_csv(f, sep="\t", index=True)
 
@@ -2556,6 +2557,7 @@ def preprocess_gtm_activity_data(
         # Save regression landscape
         path_reg = activity_landscape_csv_path(gtm_model, "regression", agent=agent)
         logger.info(f"Saving regression activity landscape to {path_reg}")
+        path_reg = S3.first_free_path(path_reg)
         with S3.open(path_reg, "w") as f:
             source_activity_reg.to_csv(f)
         logger.debug(
@@ -2658,6 +2660,7 @@ def preprocess_gtm_activity_data(
             # Save classification landscape
             path_class = activity_landscape_csv_path(gtm_model, "classification", agent=agent)
             logger.info(f"Saving classification activity landscape to {path_class}")
+            path_class = S3.first_free_path(path_class)
             with S3.open(path_class, "w") as f:
                 source_activity_class.to_csv(f)
             logger.debug(
@@ -3267,6 +3270,8 @@ def optimize_gtm_model(
             "models",
             agent=agent,
         )
+        # The name the next save of this map will use.
+        optimized_model_path = S3.first_free_path(optimized_model_path)
         set_session_gtm_model(agent, gtm, optimized_model_path)
 
         logger.info(f"GTM optimization completed with entropy: {best_score:.1f}")
@@ -3390,6 +3395,10 @@ def save_gtm_and_dataset(dataset_name: str, gtm_name: str, agent: Agent) -> str:
             "models",
             agent=agent,
         )
+
+        # Re-saving a map writes a new version: registered outputs are immutable.
+        saved_df_path = S3.first_free_path(saved_df_path)
+        saved_gtm_path = S3.first_free_path(saved_gtm_path)
 
         # Save dataset
         logger.debug(f"Saving dataset to {saved_df_path}")
@@ -3533,7 +3542,9 @@ def create_activity_landscape_artifact(
             agent=agent,
         )
         detected_type = _detect_activity_landscape_type(source_activity)
-        landscape_csv = activity_landscape_csv_path(gtm_model, detected_type, agent=agent)
+        landscape_csv = S3.latest_version_path(
+            activity_landscape_csv_path(gtm_model, detected_type, agent=agent)
+        )
 
         # Generate output paths (embed renderer + detected type so altair/plotly
         # variants produced in the same run do not collide).
@@ -3555,6 +3566,8 @@ def create_activity_landscape_artifact(
             agent=agent,
         )
 
+        s3_html = S3.first_free_path(s3_html)
+        s3_png = S3.first_free_path(s3_png)
         logger.debug(
             f"Saving {normalized_renderer} {detected_type} activity landscape to "
             f"{s3_html} and {s3_png}"
@@ -3756,6 +3769,8 @@ def save_gtm_plot(
         )
 
         # Save files
+        s3_html = S3.first_free_path(s3_html)
+        s3_png = S3.first_free_path(s3_png)
         logger.debug(f"Saving GTM plot to {s3_html} and {s3_png}")
         _write_chart_outputs(chart, s3_html, s3_png)
         metadata = _gtm_figure_metadata(
@@ -3862,6 +3877,8 @@ def save_gtm_landscape_plot(
             agent=agent,
         )
 
+        html_path = S3.first_free_path(html_path)
+        png_path = S3.first_free_path(png_path)
         logger.debug(
             f"Saving {normalized_renderer} {normalized_type} landscape plot to "
             f"{html_path} and {png_path}"
@@ -5269,6 +5286,9 @@ def create_peptide_activity_landscapes_tool(
                 agent=agent,
             )
 
+            html_path = S3.first_free_path(html_path)
+            png_path = S3.first_free_path(png_path)
+            csv_path = S3.first_free_path(csv_path)
             _write_chart_outputs(chart, html_path, png_path)
 
             with S3.open(csv_path, "w") as sf:

@@ -255,12 +255,14 @@ def _rich_report_basename(filename: Optional[str], report_type: Optional[str]) -
 
 
 def _write_text_report(content: str, rel_path: str) -> str:
+    rel_path = S3.first_free_path(rel_path)
     with S3.open(rel_path, "w") as fh:
         fh.write(content)
     return S3.path(rel_path)
 
 
 def _write_binary_report(content: bytes, rel_path: str) -> str:
+    rel_path = S3.first_free_path(rel_path)
     with S3.open(rel_path, "wb") as fh:
         fh.write(content)
     return S3.path(rel_path)

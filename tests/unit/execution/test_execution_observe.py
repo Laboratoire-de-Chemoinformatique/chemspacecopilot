@@ -9,6 +9,7 @@ import pytest
 
 from cs_copilot.execution.runner import observe_sync
 from cs_copilot.execution.scope import _InvocationScope
+from cs_copilot.execution.spec import ToolSpec
 from cs_copilot.storage import S3
 
 from ._kernel_helpers import make_spec, payloads, tool_events
@@ -183,4 +184,40 @@ def test_observe_uses_the_supplied_attribution(bound_context):
 
     assert {(p["role"], p["profile"]) for p in payloads(ctx, "tool_progress")} == {
         ("gtm_agent", "gtm-analysis")
+    }
+
+
+class _GTMSaver:
+    def save(self, root: str) -> str:
+        dataset, model = f"{root}/gtm/datasets/ds.csv", f"{root}/gtm/models/map.pkl.gz"
+        for path in (dataset, model):
+            with S3.open(path, "w") as handle:
+                handle.write("data")
+        return f"dataset_path: {dataset}; gtm_path: {model}"
+
+
+def test_observe_registers_typed_result_paths_first(bound_context):
+    ctx = bound_context("observe-typed")
+    spec = ToolSpec(
+        mcp_name="gtm_save_model_and_data",
+        toolkit_factory=_GTMSaver,
+        method="save",
+        summary="Save a GTM model and dataset.",
+        write_scope="session",
+    )
+
+    observe_sync(
+        spec,
+        ctx,
+        {},
+        invoke=lambda arguments: _GTMSaver().save(ctx.run_context.layout.run_root),
+    )
+
+    types = {
+        record.relative_path: record.artifact_type
+        for record in ctx.run_context.run.artifacts.values()
+    }
+    assert types == {
+        "gtm/datasets/ds.csv": "projected_dataset_path",
+        "gtm/models/map.pkl.gz": "gtm_model_path",
     }

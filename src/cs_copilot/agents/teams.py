@@ -69,7 +69,7 @@ def get_cs_copilot_agent_team(
                      immediately; otherwise ``ensure_agno_session_run`` attaches
                      the chat's run before the first message.
         execution_mode: ``off``, ``observe``, or ``enforce``. Defaults to
-                     ``CS_COPILOT_AGNO_EXECUTION`` (``observe`` when unset).
+                     ``CS_COPILOT_AGNO_EXECUTION`` (``enforce`` when unset).
 
     Returns:
         Team: Configured Cs_copilot team
