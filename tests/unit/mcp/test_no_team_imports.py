@@ -56,11 +56,8 @@ NEUTRAL_GLOBS = (
     "tracking/**/*.py",
     "execution/**/*.py",
 )
-# Temporary, explicit debt: replay derives optional-tool allowlists from the MCP
-# registry until the shared capability table replaces that lookup.
-NEUTRAL_EXCEPTIONS = {
-    "tracking/replay.py": frozenset({"cs_copilot.mcp.tools_registry.all_specs"}),
-}
+# Explicit, reviewed exceptions to the neutral-core rule (currently none).
+NEUTRAL_EXCEPTIONS: dict[str, frozenset[str]] = {}
 
 # Modules whose non-constant dynamic imports are reviewed by other means. The
 # MCP tool-spec factory resolves ``factory("module:Class")`` literals, which

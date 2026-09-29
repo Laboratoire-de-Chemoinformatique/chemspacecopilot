@@ -1,16 +1,25 @@
 """Static MCP capability profiles and workflow compatibility checks.
 
-Profiles are intentionally defined in Python beside the MCP registry.  They
-are an execution boundary, not a second scientific workflow catalog: a
-profile only decides which deterministic tools a client may discover and
-invoke.  Workflow procedures and their required tools remain owned by
-``workflow_catalog``.
+Profiles are declared in the shared capability table
+(:mod:`cs_copilot.capabilities`), together with the role grants that both
+runtimes derive from. They are an execution boundary, not a second scientific
+workflow catalog: a profile only decides which deterministic tools a client
+may discover and invoke. Workflow procedures and their required tools remain
+owned by ``workflow_catalog``.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Iterable, Mapping
+
+from cs_copilot.capabilities import (
+    ALL_GROUPS,
+    CORE_GROUPS,
+    DISCOVERY_TOOLS,
+    PROFILES,
+    CapabilityProfile,
+    profiles_for_tool,
+)
 
 if TYPE_CHECKING:
     from .tool_adapter import ToolSpec
@@ -20,109 +29,12 @@ class MCPProfileError(ValueError):
     """Raised when a profile or workflow/profile selection is invalid."""
 
 
-@dataclass(frozen=True)
-class MCPProfile:
-    """One immutable MCP tool allowlist."""
-
-    name: str
-    description: str
-    groups: frozenset[str] = frozenset()
-    tools: frozenset[str] = frozenset()
-
-    def allows(self, spec: "ToolSpec") -> bool:
-        """Return whether this profile exposes ``spec``."""
-
-        return spec.mcp_name in self.tools or (spec.group or "") in self.groups
-
-
-_DISCOVERY_TOOLS = frozenset(
-    {
-        "mcp_bootstrap",
-        "workflow_list",
-        "workflow_search",
-        "workflow_fetch",
-        "skill_list",
-        "skill_search",
-        "skill_fetch",
-        "chembl_prepare_retrieval",
-        "chemspace_plan_analysis",
-    }
-)
-_CORE_GROUPS = frozenset({"workflow", "skills", "session", "llm"})
-_ALL_GROUPS = frozenset(
-    {
-        "chembl",
-        "gtm",
-        "chem",
-        "session",
-        "report",
-        "workflow",
-        "llm",
-        "robustness",
-        "skills",
-        "pandas",
-        "molecular_design",
-        "peptide_design",
-        "synplanner",
-    }
-)
-
-
-PROFILES: dict[str, MCPProfile] = {
-    "bootstrap": MCPProfile(
-        name="bootstrap",
-        description=(
-            "Catalog discovery, workflow selection, and plan-artifact-recording "
-            "scientific preflight tools."
-        ),
-        tools=_DISCOVERY_TOOLS,
-    ),
-    "standard": MCPProfile(
-        name="standard",
-        description="All stable tools required by the published workflow catalog.",
-        groups=_ALL_GROUPS,
-    ),
-    "chembl-retrieval": MCPProfile(
-        name="chembl-retrieval",
-        description="ChEMBL retrieval, external judging, and session artifact handling.",
-        groups=_CORE_GROUPS | {"chembl"},
-    ),
-    "gtm-analysis": MCPProfile(
-        name="gtm-analysis",
-        description="GTM fitting, projection, landscapes, tabular preparation, and reporting.",
-        groups=_CORE_GROUPS | {"gtm", "pandas", "report"},
-    ),
-    "chemoinformatics": MCPProfile(
-        name="chemoinformatics",
-        description="Similarity analysis, tabular normalization, session data, and reporting.",
-        groups=_CORE_GROUPS | {"chem", "pandas", "report"},
-    ),
-    "reporting": MCPProfile(
-        name="reporting",
-        description="Session inspection and report artifact generation.",
-        groups=_CORE_GROUPS | {"report"},
-    ),
-    "molecular-design": MCPProfile(
-        name="molecular-design",
-        description="Small-molecule design, validation, analysis, GTM projection, and artifacts.",
-        groups=_CORE_GROUPS | {"molecular_design", "chem", "pandas", "gtm", "report"},
-    ),
-    "peptide-design": MCPProfile(
-        name="peptide-design",
-        description="Peptide design, validation, latent-space analysis, GTM, and artifacts.",
-        groups=_CORE_GROUPS | {"peptide_design", "chem", "pandas", "gtm", "report"},
-    ),
-    "retrosynthesis": MCPProfile(
-        name="retrosynthesis",
-        description="Candidate resolution, SynPlanner retrosynthesis, and report artifacts.",
-        groups=_CORE_GROUPS | {"synplanner", "report"},
-    ),
-    "robustness": MCPProfile(
-        name="robustness",
-        description="Robustness result analysis and report export.",
-        groups=_CORE_GROUPS | {"robustness", "report"},
-    ),
-}
+# Profiles are declared once in the shared capability table; MCPProfile keeps
+# its historical name for callers and isinstance checks.
+MCPProfile = CapabilityProfile
+_DISCOVERY_TOOLS = DISCOVERY_TOOLS
+_CORE_GROUPS = CORE_GROUPS
+_ALL_GROUPS = ALL_GROUPS
 
 
 def profile_names() -> tuple[str, ...]:
@@ -149,7 +61,7 @@ def get_profile(profile: str | MCPProfile) -> MCPProfile:
 def profiles_for_spec(spec: "ToolSpec") -> tuple[str, ...]:
     """Return every static profile that exposes ``spec``."""
 
-    return tuple(profile.name for profile in PROFILES.values() if profile.allows(spec))
+    return profiles_for_tool(spec.mcp_name, spec.group)
 
 
 def validate_profile_registry(specs: Iterable["ToolSpec"]) -> None:
