@@ -40,6 +40,17 @@ refresh cannot change run truth. SQLite stores conversation history, while
 workflow events and artifacts provide reproducible scientific state.
 Cross-session agent memory remains disabled.
 
+Every tool call appends three to four events, so appends stay constant-cost
+as a run grows. A context that already holds the stream checks that its last
+known event is unchanged and reads newer events by their exact sequence names,
+so an append needs no directory listing and no replay of the known prefix;
+every 256 catch-ups a single listing confirms that no known event disappeared,
+and a missing or rewritten event still fails with `EventReplayError`. The
+replaceable snapshots are rewritten only for state-changing events, not for
+the observational `tool_progress`, `tool_call_recorded`, and `task_progress`
+events. `scripts/benchmark_run_ledger.py --check` measures append latency
+against the configured storage backend.
+
 Registered artifacts must remain inside their run root and record SHA-256, MIME type, producer task/tool, size, trust classification, and creation time. Local
 artifact verification and reads use no-follow, descriptor-relative traversal;
 MCP session-write arguments are normalized into the active run, and the
