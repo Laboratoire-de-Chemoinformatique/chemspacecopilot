@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Iterable, List, Sequence
 
+from cs_copilot import capabilities
+
 from .profiles import (
     MCPProfile,
     get_profile,
@@ -26,55 +28,6 @@ from .tool_specs import (
     synplanner,
     workflow,
 )
-
-_GROUP_ROLES: dict[str, tuple[str, ...]] = {
-    "chembl": ("chembl_downloader", "single_agent"),
-    "gtm": ("gtm_agent", "single_agent"),
-    "chem": ("chemoinformatician", "single_agent"),
-    "session": (
-        "supervisor",
-        "chembl_downloader",
-        "chemoinformatician",
-        "molecular_designer",
-        "gtm_agent",
-        "report_generator",
-        "robustness_evaluation",
-        "synplanner",
-        "peptide_designer",
-        "single_agent",
-    ),
-    "report": ("report_generator", "single_agent"),
-    "workflow": ("supervisor", "single_agent"),
-    "llm": (
-        "supervisor",
-        "chembl_downloader",
-        "chemoinformatician",
-        "molecular_designer",
-        "gtm_agent",
-        "report_generator",
-        "robustness_evaluation",
-        "synplanner",
-        "peptide_designer",
-        "single_agent",
-    ),
-    "robustness": ("robustness_evaluation", "single_agent"),
-    "skills": (
-        "supervisor",
-        "chembl_downloader",
-        "chemoinformatician",
-        "molecular_designer",
-        "gtm_agent",
-        "report_generator",
-        "robustness_evaluation",
-        "synplanner",
-        "peptide_designer",
-        "single_agent",
-    ),
-    "pandas": ("chemoinformatician", "gtm_agent", "single_agent"),
-    "molecular_design": ("molecular_designer", "single_agent"),
-    "peptide_design": ("peptide_designer", "single_agent"),
-    "synplanner": ("synplanner", "single_agent"),
-}
 
 _COMPUTE_GROUPS = frozenset({"chem", "gtm", "pandas", "robustness"})
 _ARTIFACT_READ_PERMISSION = "artifact:read"
@@ -107,8 +60,13 @@ def _base_specs() -> Iterable[ToolSpec]:
 def _enrich(spec: ToolSpec) -> ToolSpec:
     """Fill capability policy defaults without duplicating tool declarations."""
 
-    profiles = spec.profiles or profiles_for_spec(spec)
-    roles = spec.roles or _GROUP_ROLES.get(spec.group or "", ("single_agent",))
+    if spec.roles or spec.profiles:
+        raise ValueError(
+            f"{spec.mcp_name}: declare role and profile grants in cs_copilot/capabilities.py, "
+            "not on the tool spec"
+        )
+    profiles = profiles_for_spec(spec)
+    roles = capabilities.mcp_roles_for_tool(spec.mcp_name, spec.group)
     write_scope = spec.write_scope
     if write_scope == "none" and not spec.read_only:
         write_scope = "session"
@@ -164,6 +122,11 @@ def validate_registry(specs: Iterable[ToolSpec] | None = None) -> None:
     for spec in materialized:
         if not spec.group:
             raise ValueError(f"{spec.mcp_name}: group is required")
+        if capabilities.group_for_tool(spec.mcp_name) != spec.group:
+            raise ValueError(
+                f"{spec.mcp_name}: tool names must start with their group's prefix "
+                f"(group {spec.group!r}); see cs_copilot/capabilities.py"
+            )
         if not spec.roles:
             raise ValueError(f"{spec.mcp_name}: at least one role is required")
         if not spec.profiles:

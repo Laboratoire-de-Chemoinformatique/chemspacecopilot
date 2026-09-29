@@ -14,6 +14,8 @@ from agno.exceptions import RetryAgentRun
 from agno.team import Team
 from agno.utils.team import get_member_id
 
+from cs_copilot import capabilities as _capabilities
+
 from .contracts import (
     ROLE_POLICIES,
     ExecutionBudget,
@@ -23,7 +25,7 @@ from .contracts import (
 
 DELEGATE_TOOL_NAME = "delegate_task_to_member"
 DELEGATE_ALL_TOOL_NAME = "delegate_task_to_members"
-COORDINATOR_ROLE = "coordinator"
+COORDINATOR_ROLE = _capabilities.COORDINATOR_ROLE
 _RESERVED_DELEGATE_TOOL_NAMES = frozenset({DELEGATE_TOOL_NAME, DELEGATE_ALL_TOOL_NAME})
 
 _REQUIRED_HANDOFF_FIELDS = frozenset(

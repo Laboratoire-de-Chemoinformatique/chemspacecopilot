@@ -101,8 +101,11 @@ rules are enforced by `tests/unit/mcp/test_no_team_imports.py` and
 
 `cscopilot-mcp --profile <name>` registers only the selected profile's tools. The shipped profiles are `bootstrap`, `standard`, `chembl-retrieval`, `gtm-analysis`, `chemoinformatics`, `reporting`, `molecular-design`, `peptide-design`, `retrosynthesis`, and `robustness`. Unknown profiles and workflows whose required tools are unavailable fail before execution.
 
-Parallel role policies enforce per-role toolkit allowlists for the in-process
-coordinator and every specialist. For catalog workflows with a task DAG—currently the
+One capability table (`src/cs_copilot/capabilities.py`) declares the role
+grants and profiles for both runtimes: the in-process role policies that
+enforce per-role toolkit allowlists for the coordinator and every specialist,
+and the roles and profiles of every MCP tool, are derived from it. For catalog
+workflows with a task DAG—currently the
 `chembl-to-gtm-report` pilot—the MCP adapter also requires an active running
 task and enforces its role, profile, and tool allowlist before domain
 execution. Tool contracts include read/write,

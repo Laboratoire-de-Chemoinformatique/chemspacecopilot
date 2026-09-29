@@ -7,6 +7,8 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
+from cs_copilot.capabilities import allowed_tools_for
+
 
 @dataclass(frozen=True)
 class GoldenTrajectory:
@@ -80,15 +82,10 @@ def golden_for_workflow(
     # Optional tools are valid workflow capabilities too. Attribute each one
     # only to task roles whose declared profile and tool metadata both allow it.
     if workflow.tasks and workflow.optional_tools:
-        from cs_copilot.mcp.tools_registry import all_specs
-
-        optional_specs = {
-            spec.mcp_name: spec for spec in all_specs() if spec.mcp_name in workflow.optional_tools
-        }
         for task in workflow.tasks:
-            for tool_name, spec in optional_specs.items():
-                if task.profile in spec.profiles and task.role in spec.roles:
-                    role_tools.setdefault(task.role, set()).add(tool_name)
+            role_tools.setdefault(task.role, set()).update(
+                allowed_tools_for(task.role, task.profile, workflow.optional_tools)
+            )
 
     preflight_tools = set(workflow.preflight_tools)
     preflight_requirements: dict[str, tuple[str, ...]] = {}
