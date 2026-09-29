@@ -325,14 +325,20 @@ def _save_peptide_design_artifact(
     candidates: Sequence[Dict[str, Any]],
     metadata: Dict[str, Any],
 ) -> Dict[str, Any]:
-    counter = int(session_state.get("_peptide_design_run_counter", 0)) + 1
+    counter = int(session_state.get("_peptide_design_run_counter", 0))
+    while True:
+        # Candidate-set artifacts are immutable; skip ids whose file already
+        # exists (the counter can lag when state is restored from history).
+        counter += 1
+        run_id = f"pep_cset_{counter:03d}"
+        rel_path = _peptide_design_artifact_rel_path(
+            session_key,
+            run_id,
+            session_state=session_state,
+        )
+        if not S3.exists(rel_path):
+            break
     session_state["_peptide_design_run_counter"] = counter
-    run_id = f"pep_cset_{counter:03d}"
-    rel_path = _peptide_design_artifact_rel_path(
-        session_key,
-        run_id,
-        session_state=session_state,
-    )
     payload = {
         "peptide_candidate_set_id": run_id,
         "candidates": list(candidates),
@@ -929,6 +935,7 @@ class PeptideDesignerToolkit(Toolkit):
             landscape_path = artifact["artifact_rel_path"].removesuffix(".json") + "_activity.csv"
             table = bundle.nodes[bundle.nodes["organism"] == organism].copy()
             table = table.rename(columns={"activity_mean": "active_prob"})
+            landscape_path = S3.first_free_path(landscape_path)
             with S3.open(landscape_path, "w") as handle:
                 table.to_csv(handle, index=False)
             pointer = {
@@ -1025,7 +1032,7 @@ class PeptideDesignerToolkit(Toolkit):
         artifacts, manifest = {}, []
 
         def save(suffix, data):
-            path = base + suffix
+            path = S3.first_free_path(base + suffix)
             with S3.open(path, "wb") as handle:
                 handle.write(data)
             absolute = S3.path(path)

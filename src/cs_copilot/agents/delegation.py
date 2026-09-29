@@ -633,13 +633,32 @@ def _record_delegation(team: Any, runtime: Any, envelope: HandoffEnvelope) -> Ha
     if run is None or not is_ad_hoc_run(run):
         record_handoff(runtime, envelope)
         return envelope
+    binding = getattr(team, BINDING_ATTRIBUTE, None)
+    known_artifacts = set(runtime.refresh().artifacts)
+    unknown_inputs = [item for item in envelope.input_artifact_ids if item not in known_artifacts]
+    if unknown_inputs:
+        # The coordinator of a free-form chat often names session objects
+        # (dataset or map ids) here; only registered run artifacts can be
+        # verified inputs of a durable handoff.
+        logger.info(
+            "Dropping unknown input artifacts from ad-hoc handoff %s: %s",
+            envelope.task_id,
+            ", ".join(unknown_inputs),
+        )
+        if binding is not None:
+            binding.note_problem(
+                f"handoff {envelope.task_id}: dropped unknown input artifacts "
+                + ", ".join(unknown_inputs)
+            )
     envelope = replace(
         envelope,
         run_id=run.run_id,
         workflow_slug=run.workflow_slug,
         trace_id=run.trace_id,
+        input_artifact_ids=tuple(
+            item for item in envelope.input_artifact_ids if item in known_artifacts
+        ),
     )
-    binding = getattr(team, BINDING_ATTRIBUTE, None)
     try:
         created = _ensure_ad_hoc_task(runtime, envelope)
         try:

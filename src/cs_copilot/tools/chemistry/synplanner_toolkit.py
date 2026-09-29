@@ -984,6 +984,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         )
         try:
             payload = {key: value for key, value in report_plan.items() if key != "plan_path"}
+            rel_path = S3.first_free_path(rel_path)
             with S3.open(rel_path, "w") as handle:
                 json.dump(payload, handle, indent=2, sort_keys=True, default=str)
             return S3.path(rel_path)
@@ -1013,6 +1014,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                 session_state=session_state,
             )
             try:
+                rel_path = S3.first_free_path(rel_path)
                 with S3.open(rel_path, "w") as handle:
                     json.dump(route, handle, indent=2, sort_keys=True, default=str)
                 route["route_json_path"] = S3.path(rel_path)
@@ -1465,6 +1467,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                     )
                     try:
                         svg_bytes = svg_string.encode("utf-8")
+                        svg_path = S3.first_free_path(svg_path)
                         with S3.open(svg_path, "wb") as f:
                             f.write(svg_bytes)
                         svg_s3_path = S3.path(svg_path)
@@ -1486,6 +1489,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                         session_state=session_state,
                     )
 
+                    png_path = S3.first_free_path(png_path)
                     if self._convert_svg_to_png(svg_string, png_path):
                         # Get the full S3 path for storage in session state
                         png_s3_path = S3.path(png_path)

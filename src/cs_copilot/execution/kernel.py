@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Callable, Mapping
 
-from .artifacts import _register_result_artifacts, _rollback_unregistered_publications
+from .artifacts import (
+    _register_published_artifacts,
+    _register_result_artifacts,
+    _rollback_unregistered_publications,
+)
 from .context import ExecutionContext, _active_output_layout, resolve_runtime
 from .envelopes import (
     _cached_envelope,
@@ -54,6 +58,7 @@ def _record_tool_start(
     trace: Mapping[str, str | None],
     max_attempts: int,
     invocation_scope: _InvocationScope,
+    extra: Mapping[str, Any] | None = None,
 ) -> None:
     """Reserve one observable task tool-call budget before execution."""
 
@@ -75,6 +80,7 @@ def _record_tool_start(
         execution_scope=invocation_scope.as_dict(),
         precondition=reserve_budget if invocation_scope.catalog_task else None,
         required=invocation_scope.catalog_task,
+        extra=extra,
     )
     if invocation_scope.catalog_task and event_path is None:
         raise ToolExecutionError(
@@ -116,7 +122,7 @@ def _record_tool_acceptance(
 
 
 @contextmanager
-def _tool_write_scope(spec: ToolSpec, ctx: ExecutionContext):
+def _tool_write_scope(spec: ToolSpec, ctx: ExecutionContext, *, commit_policy: str = "on_exit"):
     """Pin artifact reads and stage bounded writes around domain tool code."""
 
     publications: dict[str, dict[str, Any]] = {}
@@ -149,6 +155,7 @@ def _tool_write_scope(spec: ToolSpec, ctx: ExecutionContext):
                     layout.run_root,
                     protected_paths=protected_paths,
                     publication_receipt=publications,
+                    commit_policy=commit_policy,
                 )
             )
         yield publications
@@ -192,6 +199,12 @@ class ToolInvocation:
     reservation: _IdempotencyReservation | None = None
     session_view: dict[str, Any] | None = None
     attempts: int = 0
+    # Runtime policies (MCP defaults): register only result paths, re-hash all
+    # artifacts when the run lock is taken, derive attribution from state.
+    publication_policy: str = "result_paths"
+    verify_artifacts_on_lock: bool = True
+    scope_override: _InvocationScope | None = None
+    extra: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -251,13 +264,29 @@ class InvocationOutcome:
 Injector = Callable[[dict[str, Any], "dict[str, Any] | None"], None]
 
 
+PUBLICATION_POLICIES = frozenset({"result_paths", "all_published"})
+
+
 def begin_invocation(
     spec: ToolSpec,
     ctx: ExecutionContext,
     arguments: Mapping[str, Any],
+    *,
+    publication_policy: str = "result_paths",
+    verify_artifacts_on_lock: bool = True,
+    scope: _InvocationScope | None = None,
+    extra: Mapping[str, Any] | None = None,
 ) -> ToolInvocation:
-    """Start timing and capture attribution before anything can await or fail."""
+    """Start timing and capture attribution before anything can await or fail.
 
+    ``publication_policy="all_published"`` registers every file the call wrote
+    (for runtimes whose tools record outputs outside their return value) and
+    never deletes unregistered bytes; ``scope`` supplies explicit attribution
+    for runtimes that do not mirror task scope into session state.
+    """
+
+    if publication_policy not in PUBLICATION_POLICIES:
+        raise ValueError(f"unknown publication policy: {publication_policy!r}")
     started = perf_counter()
     trace = _new_tool_trace(ctx)
     public_args: dict[str, Any] = dict(arguments)
@@ -270,8 +299,12 @@ def begin_invocation(
         max_attempts=spec.max_retries + 1,
         public_args=public_args,
         manifest_args=dict(public_args),
-        scope=_capture_invocation_scope(spec, ctx),
+        scope=scope if scope is not None else _capture_invocation_scope(spec, ctx),
         supplied_idempotency_key=supplied_idempotency_key,
+        publication_policy=publication_policy,
+        verify_artifacts_on_lock=verify_artifacts_on_lock,
+        scope_override=scope,
+        extra=extra,
     )
 
 
@@ -283,7 +316,10 @@ def prepare_invocation(inv: ToolInvocation) -> Admission:
     """
 
     spec, ctx = inv.spec, inv.ctx
-    inv.scope = _authorize_invocation(spec, ctx)
+    authorized = _authorize_invocation(spec, ctx)
+    inv.scope = (
+        authorized if inv.scope_override is None or authorized.catalog_task else inv.scope_override
+    )
     if inv.scope.catalog_task:
         ctx.run_context.verify_task_inputs(inv.scope.task_id)
     _record_tool_start(
@@ -292,6 +328,7 @@ def prepare_invocation(inv: ToolInvocation) -> Admission:
         trace=inv.trace,
         max_attempts=inv.max_attempts,
         invocation_scope=inv.scope,
+        extra=inv.extra,
     )
     read_boundary = _enforce_read_boundary(spec, inv.public_args, ctx)
     inv.session_view = read_boundary.session_state
@@ -367,7 +404,7 @@ def revalidate_after_lock(inv: ToolInvocation) -> None:
 
     run_context = getattr(inv.ctx, "run_context", None)
     if run_context is not None and hasattr(run_context, "refresh"):
-        run_context.refresh(verify_artifacts=True)
+        run_context.refresh(verify_artifacts=inv.verify_artifacts_on_lock)
     # Scope may have changed while this invocation waited for another
     # artifact-producing call to commit.
     _assert_invocation_epoch_current(inv.spec, inv.ctx, inv.scope)
@@ -424,6 +461,7 @@ def commit_result(
         **local_publications,
         **(dict(deferred.publications) if deferred is not None else {}),
     }
+    register_all = inv.publication_policy == "all_published"
     artifact_ids, artifact_warnings = _register_result_artifacts(
         spec,
         accepted.coerced,
@@ -431,8 +469,20 @@ def commit_result(
         active_task_id=inv.scope.task_id,
         invocation_span_id=inv.trace.get("span_id"),
         publication_leases=publication_leases,
+        strict_result_paths=not register_all,
     )
-    _rollback_unregistered_publications(ctx, publication_leases)
+    if register_all:
+        published_ids, published_warnings = _register_published_artifacts(
+            spec,
+            ctx,
+            publication_leases,
+            active_task_id=inv.scope.task_id,
+            invocation_span_id=inv.trace.get("span_id"),
+        )
+        artifact_ids = list(dict.fromkeys([*artifact_ids, *published_ids]))
+        artifact_warnings = list(dict.fromkeys([*artifact_warnings, *published_warnings]))
+    else:
+        _rollback_unregistered_publications(ctx, publication_leases)
     _record_tool_acceptance(
         spec=spec,
         ctx=ctx,

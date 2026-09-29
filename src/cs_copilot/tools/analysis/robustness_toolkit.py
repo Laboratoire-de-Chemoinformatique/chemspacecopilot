@@ -568,6 +568,7 @@ class RobustnessAnalysisToolkit(Toolkit):
                 output_path = f"{output_path}.{ext}"
 
             try:
+                output_path = S3.first_free_path(output_path)
                 with S3.open(output_path, "w") as f:
                     f.write(content)
                 logger.info(f"✅ Report exported to {S3.path(output_path)}")

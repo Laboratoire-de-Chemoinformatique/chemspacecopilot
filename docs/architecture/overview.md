@@ -72,7 +72,7 @@ The default team has:
 Chainlit and the CLI give every chat a durable ad-hoc `agno-session` workflow
 run: tool calls, delegated tasks, handoffs, uploads, and files produced by
 tools are recorded in it through the same execution kernel the MCP server uses
-(observe mode by default, see
+(enforced by default, see
 [Agentic Runtime v2](agentic-runtime-v2.md#capability-profiles)). A caller that
 supplies a catalog `RunContext` also receives pinned task-contract validation.
 

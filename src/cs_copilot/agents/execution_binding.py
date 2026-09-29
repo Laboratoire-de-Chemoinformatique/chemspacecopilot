@@ -7,14 +7,17 @@ durable workflow run like an MCP tool call: same event protocol, same tool
 identity (via :mod:`cs_copilot.agents.execution_contracts`), same artifact
 registration.
 
-The mode comes from ``CS_COPILOT_AGNO_EXECUTION`` (default ``observe``):
+The mode comes from ``CS_COPILOT_AGNO_EXECUTION`` (default ``enforce``):
 
 * ``off``: no wrapping; behaviour and storage are exactly as before.
 * ``observe``: calls run unchanged; events, artifact registration, and an
   audit of what enforcement would rewrite or deny are recorded
   (:func:`cs_copilot.execution.runner.observe_sync`).
-* ``enforce``: reserved for full kernel enforcement; until it is enabled for
-  the in-process runtime, it behaves like ``observe``.
+* ``enforce`` (default): the full kernel (:func:`cs_copilot.execution.runner.execute_sync`):
+  output paths are rewritten into the chat's run, writes are confined and
+  create-only, declared file inputs must be registered artifacts, every file
+  a call writes is registered, and a call's files are rolled back if it fails.
+  Denials reach the model as tool errors.
 
 Agno hooks are deliberately not used: ``Team.tool_hooks`` would also wrap the
 async-generator delegation tool, hooks cannot rewrite arguments, and they do
@@ -24,6 +27,7 @@ not know which toolkit a call belongs to.
 from __future__ import annotations
 
 import contextvars
+import dataclasses
 import functools
 import inspect
 import logging
@@ -37,8 +41,10 @@ from typing import Any, Callable, Iterable, Mapping
 
 from cs_copilot import capabilities
 from cs_copilot.execution.context import AGNO_RUNTIME, BasicExecutionContext
-from cs_copilot.execution.runner import observe_sync
+from cs_copilot.execution.errors import ToolExecutionError
+from cs_copilot.execution.runner import execute_sync, observe_sync
 from cs_copilot.execution.scope import _InvocationScope
+from cs_copilot.execution.spec import ToolSpec
 from cs_copilot.storage import OUTPUT_CONTEXT_KEY, S3
 
 from .contracts import ROLE_POLICIES
@@ -69,7 +75,7 @@ class ExecutionMode(str, Enum):
     ENFORCE = "enforce"
 
 
-DEFAULT_EXECUTION_MODE = ExecutionMode.OBSERVE
+DEFAULT_EXECUTION_MODE = ExecutionMode.ENFORCE
 
 
 def execution_mode_from_env(value: str | ExecutionMode | None = None) -> ExecutionMode:
@@ -157,6 +163,8 @@ class ExecutionBinding:
         with self._lock:
             self._in_flight += 1
         try:
+            if self.mode is ExecutionMode.ENFORCE:
+                return self._enforce(function, owner, args, kwargs, dict(context or {}))
             return self._observe(function, owner, args, kwargs, dict(context or {}))
         finally:
             _IN_BOUND_CALL.reset(token)
@@ -205,6 +213,56 @@ class ExecutionBinding:
                 scope=scope,
                 extra={"owner": PROCESS_OWNER, "execution_mode": self.mode.value},
             )
+
+    def _enforce(
+        self,
+        function: Callable[..., Any],
+        owner: Any,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        context: dict[str, Any],
+    ) -> Any:
+        run_context = self.run_context
+        contract, _source = resolve_contract(function, owner=owner)
+        contract = _in_process_contract(contract, function)
+        known = {**context, **{key: kwargs[key] for key in _WRAPPER_INJECTED if key in kwargs}}
+        state = known.get("session_state")
+        if not isinstance(state, dict):
+            state = self.team_state()
+        self._ensure_bound(state)
+        ctx = BasicExecutionContext(
+            execution_runtime=AGNO_RUNTIME,
+            session_state=state,
+            run_context=run_context,
+        )
+        public = {key: value for key, value in kwargs.items() if key not in _AGNO_INJECTED}
+        injected = {key: value for key, value in kwargs.items() if key in _AGNO_INJECTED}
+
+        def inject(call_kwargs: dict[str, Any], session_view: dict[str, Any] | None) -> None:
+            call_kwargs.update(injected)
+            if session_view is not None and "session_state" in injected:
+                call_kwargs["session_state"] = session_view
+
+        def call(call_kwargs: dict[str, Any]) -> Any:
+            return function(*args, **call_kwargs)
+
+        with S3.scoped_session_prefix(f"sessions/{run_context.run.session_id}"):
+            outcome = execute_sync(
+                contract,
+                ctx,
+                public,
+                invoke=call,
+                inject=inject,
+                publication_policy="all_published",
+                verify_artifacts_on_lock=False,
+                scope=self._scope(known.get("agent")),
+                extra={"owner": PROCESS_OWNER, "execution_mode": self.mode.value},
+            )
+        if outcome.ok:
+            return outcome.value
+        if outcome.error is not None:
+            raise outcome.error
+        raise ToolExecutionError(str((outcome.envelope.get("error") or {}).get("message")))
 
     def team_state(self) -> dict[str, Any]:
         state = getattr(self.team, "session_state", None)
@@ -260,6 +318,12 @@ def attach_execution(
     """
 
     selected = execution_mode_from_env(mode)
+    run = getattr(run_context, "run", None)
+    if selected is ExecutionMode.ENFORCE and run is not None and not _is_ad_hoc(run):
+        raise ValueError(
+            "enforce mode supports ad-hoc chat runs only; catalog workflow runs "
+            "need MCP task scope"
+        )
     existing: ExecutionBinding | None = getattr(team, BINDING_ATTRIBUTE, None)
     if selected is ExecutionMode.OFF:
         if existing is not None:
@@ -332,6 +396,19 @@ def _wrap_callable(
     parameters[insert_at:insert_at] = [
         inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, default=None) for name in extra
     ]
+    real_state = binding.mode is ExecutionMode.ENFORCE
+    if real_state:
+        # Agno validates arguments with pydantic, which hands an annotated
+        # ``session_state`` parameter a copy; enforce mode passes the live
+        # dict so top-level state writes persist, as on the MCP path.
+        parameters = [
+            (
+                parameter.replace(annotation=inspect.Parameter.empty)
+                if parameter.name == "session_state"
+                else parameter
+            )
+            for parameter in parameters
+        ]
 
     @functools.wraps(function)
     def entrypoint(*args: Any, **kwargs: Any) -> Any:
@@ -341,8 +418,39 @@ def _wrap_callable(
         return binding.invoke(function, owner, args, kwargs, context=context)
 
     entrypoint.__signature__ = signature.replace(parameters=parameters)  # type: ignore[attr-defined]
+    if real_state:
+        entrypoint.__annotations__ = {
+            key: value
+            for key, value in getattr(function, "__annotations__", {}).items()
+            if key != "session_state"
+        }
     entrypoint.__cs_execution_binding__ = binding  # type: ignore[attr-defined]
     return entrypoint
+
+
+def _in_process_contract(contract: ToolSpec, function: Callable[..., Any]) -> ToolSpec:
+    """Adapt an MCP contract to an in-process synchronous call.
+
+    Agno tools always run in this process: worker dispatch, cancellable
+    timeouts, and kernel retries (Agno's model loop retries instead) are
+    dropped, and forced arguments apply only to parameters the function takes.
+    """
+
+    parameters = inspect.signature(function).parameters
+    return dataclasses.replace(
+        contract,
+        run_in_worker_process=False,
+        worker_timeout_s=None,
+        timeout_s=None,
+        max_retries=0,
+        forces={key: value for key, value in contract.forces.items() if key in parameters},
+    )
+
+
+def _is_ad_hoc(run: Any) -> bool:
+    from cs_copilot.execution.context import is_ad_hoc_run
+
+    return is_ad_hoc_run(run)
 
 
 def _guard_agentic_state(entity: Any) -> None:

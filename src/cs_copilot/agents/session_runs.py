@@ -18,6 +18,7 @@ from typing import Any, Mapping
 from cs_copilot.execution.context import AGNO_RUNTIME
 from cs_copilot.storage import OUTPUT_CONTEXT_KEY, S3
 from cs_copilot.workflows import (
+    ArtifactIntegrityError,
     EventReplayError,
     RunContext,
     RunStatus,
@@ -66,7 +67,8 @@ def ensure_agno_session_run(
         return binding.run_context
 
     state = _team_state(team)
-    run_context = _load_chat_run(state, session_id)
+    enforce = selected is ExecutionMode.ENFORCE
+    run_context = _load_chat_run(state, session_id, verify_artifacts=enforce)
     if run_context is None:
         previous = state.pop(OUTPUT_CONTEXT_KEY, None)
         if isinstance(previous, Mapping):
@@ -82,6 +84,8 @@ def ensure_agno_session_run(
     else:
         run_context.bind_session_state(state)
         reconcile_interrupted_work(run_context)
+    if enforce:
+        adopt_session_uploads(run_context, state)
 
     _publish_run_identity(team, state, run_context)
     attach_execution(team, run_context=run_context, mode=selected)
@@ -217,7 +221,42 @@ def store_chat_upload(
     return S3.path(storage_key), record.artifact_id
 
 
-def _load_chat_run(state: Mapping[str, Any], session_id: str) -> RunContext | None:
+def adopt_session_uploads(run_context: RunContext, state: dict[str, Any]) -> list[str]:
+    """Move uploads stored outside the run (older chats) into it as artifacts.
+
+    In enforce mode tools may only read registered artifacts, so uploads that
+    predate the chat's run are copied into it and registered; the original
+    files are left in place.
+    """
+
+    uploaded = state.get("uploaded_files")
+    if not isinstance(uploaded, dict):
+        return []
+    artifacts = state.setdefault("uploaded_artifacts", {})
+    run_prefix = S3.path(run_context.layout.run_root).rstrip("/") + "/"
+    adopted: list[str] = []
+    for name, path in list(uploaded.items()):
+        if not isinstance(path, str) or path.startswith(run_prefix) or name in artifacts:
+            continue
+        try:
+            with S3.open(path, "rb") as handle:
+                content = handle.read()
+            stored, artifact_id = store_chat_upload(run_context, filename=name, content=content)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not adopt upload %s into the chat run: %s", name, exc)
+            continue
+        uploaded[name] = stored
+        artifacts[name] = artifact_id
+        adopted.append(name)
+    return adopted
+
+
+def _load_chat_run(
+    state: Mapping[str, Any],
+    session_id: str,
+    *,
+    verify_artifacts: bool = False,
+) -> RunContext | None:
     output_context = state.get(OUTPUT_CONTEXT_KEY)
     if not isinstance(output_context, Mapping):
         return None
@@ -229,8 +268,12 @@ def _load_chat_run(state: Mapping[str, Any], session_id: str) -> RunContext | No
     if not run_id:
         return None
     try:
-        run_context = RunContext.load(run_id, session_id=session_id)
-    except (FileNotFoundError, EventReplayError, ValueError) as exc:
+        run_context = RunContext.load(
+            run_id,
+            session_id=session_id,
+            verify_artifacts=verify_artifacts,
+        )
+    except (FileNotFoundError, EventReplayError, ArtifactIntegrityError, ValueError) as exc:
         logger.warning("Could not resume chat run %s; starting a new run: %s", run_id, exc)
         return None
     if run_context.run.status in _TERMINAL_RUN_STATUSES:

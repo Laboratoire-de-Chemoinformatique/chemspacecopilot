@@ -99,6 +99,11 @@ _EXTERNAL_STAGED_PUBLICATIONS: contextvars.ContextVar[dict[str, str] | None] = (
         default=None,
     )
 )
+_COMMITTED_ON_CLOSE: contextvars.ContextVar[list[Any] | None] = contextvars.ContextVar(
+    "cs_copilot_storage_committed_on_close",
+    default=None,
+)
+_COMPOUND_SUFFIXES = (".pkl.gz", ".csv.gz", ".tsv.gz", ".json.gz", ".sdf.gz", ".tar.gz")
 _WRITE_OBSERVATION: contextvars.ContextVar["WriteObservation | None"] = contextvars.ContextVar(
     "cs_copilot_storage_write_observation",
     default=None,
@@ -397,6 +402,7 @@ class _AtomicLocalCreateFile:
                 staged[self._staged_key] = self
         else:
             self._commit()
+            _note_committed_on_close(self)
         self._closed = True
 
     def _prepare(self) -> None:
@@ -581,9 +587,12 @@ class _AtomicS3CreateFile:
                 if staged is not None and self._staged_key is not None:
                     staged[self._staged_key] = self
             else:
+                if _COMMITTED_ON_CLOSE.get() is not None:
+                    self._capture_integrity()
                 self._published = True
                 self._finalized = True
                 self._mirror.close()
+                _note_committed_on_close(self)
         except (FileExistsError, IsADirectoryError) as exc:
             self._abort()
             raise PermissionError(
@@ -680,6 +689,23 @@ class _AtomicS3CreateFile:
             digest, size = _stream_digest(source)
         self._expected_sha256 = digest
         self._expected_size = size
+
+
+def _versioned_name(rel: str, version: int) -> str:
+    head, separator, name = str(rel).rpartition("/")
+    lowered = name.lower()
+    suffix = next(
+        (item for item in _COMPOUND_SUFFIXES if lowered.endswith(item) and len(name) > len(item)),
+        PurePosixPath(name).suffix,
+    )
+    stem = name[: len(name) - len(suffix)] if suffix else name
+    return f"{head}{separator}{stem}-v{version}{suffix}"
+
+
+def _note_committed_on_close(writer: Any) -> None:
+    committed = _COMMITTED_ON_CLOSE.get()
+    if committed is not None:
+        committed.append(writer)
 
 
 class ScopedWriteDenied(PermissionError):
@@ -902,6 +928,7 @@ class S3(metaclass=_S3Meta):
         *,
         protected_paths: Iterable[str] = (),
         publication_receipt: dict[str, dict[str, Any]] | None = None,
+        commit_policy: str = "on_exit",
     ) -> Iterator[None]:
         """Confine relative writes to one session subtree for this execution context.
 
@@ -910,7 +937,24 @@ class S3(metaclass=_S3Meta):
         enforced again by the worker process. Existing registered artifacts
         can be supplied as protected paths so a tool cannot mutate immutable
         scientific evidence. Reads remain unaffected.
+
+        ``commit_policy="on_exit"`` (default) keeps every write private until
+        the scope exits cleanly. ``"on_close"`` publishes each file as soon as
+        it is closed, so code that reads its own outputs through other APIs
+        keeps working; the files are still recorded in ``publication_receipt``
+        and rolled back if the scope exits with an exception.
         """
+
+        if commit_policy == "on_close":
+            with cls._confine_writes_on_close(
+                boundary,
+                protected_paths=protected_paths,
+                publication_receipt=publication_receipt,
+            ):
+                yield
+            return
+        if commit_policy != "on_exit":
+            raise ValueError(f"unknown commit policy: {commit_policy!r}")
 
         normalized = cls._normalize_relative_path(boundary, allow_empty=True)
         boundary_path = PurePosixPath(normalized) if normalized else PurePosixPath()
@@ -990,6 +1034,127 @@ class S3(metaclass=_S3Meta):
             _PENDING_ARTIFACT_WRITES.reset(pending_token)
             _WRITE_PROTECTED_PATHS.reset(protected_token)
             _WRITE_BOUNDARY.reset(boundary_token)
+
+    @classmethod
+    @contextmanager
+    def _confine_writes_on_close(
+        cls,
+        boundary: str,
+        *,
+        protected_paths: Iterable[str],
+        publication_receipt: dict[str, dict[str, Any]] | None,
+    ) -> Iterator[None]:
+        if _PENDING_ARTIFACT_WRITES.get() is not None:
+            raise RuntimeError("on-close confinement cannot nest inside a deferred transaction")
+        normalized = cls._normalize_relative_path(boundary, allow_empty=True)
+        boundary_path = PurePosixPath(normalized) if normalized else PurePosixPath()
+        protected: set[str] = set()
+        for path in protected_paths:
+            protected_path = cls._normalize_relative_path(path)
+            try:
+                PurePosixPath(protected_path).relative_to(boundary_path)
+            except ValueError as exc:
+                raise ValueError(
+                    "protected write path must remain inside the active boundary"
+                ) from exc
+            protected.add(protected_path)
+        committed: list[Any] = []
+        boundary_token = _WRITE_BOUNDARY.set(normalized)
+        protected_token = _WRITE_PROTECTED_PATHS.set(frozenset(protected))
+        committed_token = _COMMITTED_ON_CLOSE.set(committed)
+        try:
+            yield
+        except BaseException:
+            cleanup_errors: list[BaseException] = []
+            for writer in reversed(committed):
+                try:
+                    writer._rollback_published()
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
+                    logger.warning(
+                        "Refused or failed to roll back a published artifact",
+                        exc_info=True,
+                    )
+            if cleanup_errors:
+                raise RuntimeError(
+                    "artifact transaction failed and could not be fully rolled back"
+                ) from cleanup_errors[0]
+            raise
+        else:
+            if publication_receipt is not None:
+                for writer in committed:
+                    key = getattr(writer, "_staged_key", None)
+                    if key is None or writer._expected_sha256 is None:
+                        continue
+                    publication_receipt[key] = {
+                        "staged_path": key,
+                        "sha256": writer._expected_sha256,
+                        "size_bytes": writer._expected_size,
+                    }
+        finally:
+            _COMMITTED_ON_CLOSE.reset(committed_token)
+            _WRITE_PROTECTED_PATHS.reset(protected_token)
+            _WRITE_BOUNDARY.reset(boundary_token)
+
+    @classmethod
+    def exists(cls, rel: str) -> bool:
+        """Return whether a storage path (relative, local, or S3 URL) exists."""
+
+        candidate = str(rel).strip()
+        if cls._is_explicit_local_path(candidate):
+            local = (
+                unquote(urlsplit(candidate).path) if candidate.startswith("file://") else candidate
+            )
+            return Path(local).exists()
+        if not cls._is_s3_url(candidate) and not is_s3_enabled():
+            return cls._local_session_path(candidate).exists()
+        url = candidate if cls._is_s3_url(candidate) else cls.path(candidate)
+        filesystem, filesystem_path = fsspec.core.url_to_fs(
+            url, **get_s3_config().to_storage_options()
+        )
+        filesystem.invalidate_cache(filesystem_path.rsplit("/", 1)[0])
+        return bool(filesystem.exists(filesystem_path))
+
+    @classmethod
+    def first_free_path(cls, rel: str) -> str:
+        """Return ``rel``, or its first free ``<stem>-v<N><suffix>`` sibling.
+
+        Workflow outputs are immutable once registered and confined writes are
+        create-only, so re-running a step writes a new version of each output
+        instead of overwriting the previous one. The same spelling (relative,
+        local, or S3 URL) is returned.
+        """
+
+        if not cls.exists(rel):
+            return rel
+        version = 2
+        while cls.exists(_versioned_name(rel, version)):
+            version += 1
+        return _versioned_name(rel, version)
+
+    @classmethod
+    def latest_version_path(cls, rel: str) -> str:
+        """Return the newest existing version of ``rel`` written by :meth:`first_free_path`.
+
+        Readers that locate an output by its deterministic name use this to
+        find the most recent re-run. ``rel`` itself is returned when it has no
+        later version (or does not exist).
+        """
+
+        latest = rel
+        if not cls.exists(rel):
+            return rel
+        version = 2
+        while cls.exists(_versioned_name(rel, version)):
+            latest = _versioned_name(rel, version)
+            version += 1
+        return latest
+
+    @classmethod
+    def session_relative(cls, path: str) -> str | None:
+        """Return the session-relative key of a path in the active session, if any."""
+
+        return cls._verified_read_key(path)
 
     @staticmethod
     def _pending_writer_metadata(writer: Any, final_key: str) -> dict[str, Any]:

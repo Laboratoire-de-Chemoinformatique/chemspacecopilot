@@ -36,6 +36,7 @@ def _register_result_artifacts(
     active_task_id: str | None,
     invocation_span_id: str | None,
     publication_leases: Mapping[str, Mapping[str, Any]],
+    strict_result_paths: bool = True,
 ) -> tuple[list[str], list[str]]:
     from cs_copilot.workflows import ArtifactIntegrityError
 
@@ -94,9 +95,14 @@ def _register_result_artifacts(
             warnings.append(warning)
             logger.warning("%s: %s", spec.mcp_name, warning)
 
-    for field_name, candidate in _result_paths(value):
+    # A read-only tool publishes nothing, so paths in its result only refer to
+    # existing files; so does a path registered by another call when every
+    # published file is registered anyway (``strict_result_paths=False``).
+    for field_name, candidate in () if spec.read_only else _result_paths(value):
         relative = _run_relative_result_path(run_context, candidate)
         if relative is None:
+            continue
+        if not strict_result_paths and relative in existing_by_path:
             continue
         artifact_type = _infer_artifact_type(spec, field_name, relative)
         try:
@@ -113,8 +119,10 @@ def _register_result_artifacts(
                 publication_leases=owned_publications,
             )
             artifact_ids.append(artifact_id)
-        except ArtifactIntegrityError:
-            raise
+        except ArtifactIntegrityError as exc:
+            if strict_result_paths:
+                raise
+            warnings.append(f"Result path {relative!r} was not registered: {exc}")
         except Exception as exc:  # noqa: BLE001
             if artifact_type in required_output_types:
                 raise ToolExecutionError(
@@ -229,6 +237,60 @@ def _register_result_path(
     )
     existing_by_path[record.relative_path] = record.artifact_id
     return record.artifact_id
+
+
+def _register_published_artifacts(
+    spec: ToolSpec,
+    ctx: ExecutionContext,
+    publication_leases: Mapping[str, Mapping[str, Any]],
+    *,
+    active_task_id: str | None,
+    invocation_span_id: str | None,
+) -> tuple[list[str], list[str]]:
+    """Register every file this invocation published that is not yet registered."""
+
+    run_context = getattr(ctx, "run_context", None)
+    run = getattr(run_context, "run", None)
+    layout = getattr(run_context, "layout", None)
+    if run_context is None or run is None or layout is None:
+        return [], []
+    registered = {
+        layout.artifact_rel_path(record.relative_path) for record in run.artifacts.values()
+    }
+    if active_task_id not in run.tasks:
+        active_task_id = None
+    run_root = PurePosixPath(layout.run_root)
+    artifact_ids: list[str] = []
+    warnings: list[str] = []
+    for key in publication_leases:
+        if key in registered:
+            continue
+        try:
+            relative = PurePosixPath(key).relative_to(run_root).as_posix()
+        except ValueError:
+            continue
+        try:
+            record = run_context.register_artifact(
+                relative,
+                artifact_type=_infer_artifact_type(spec, "path", relative),
+                mime_type=_infer_mime_type(relative),
+                producer_task_id=active_task_id,
+                active_task_id=active_task_id,
+                producer_tool=spec.mcp_name,
+                provenance={
+                    "registration": "automatic",
+                    "result_field": "published_write",
+                    "invocation_span_id": invocation_span_id,
+                },
+                trust="external" if spec.requires_network else "internal",
+            )
+        except Exception as exc:  # noqa: BLE001 - keep the bytes; report the gap
+            warning = f"Could not register published file {relative!r}: {exc}"
+            warnings.append(warning)
+            logger.warning("%s: %s", spec.mcp_name, warning)
+            continue
+        artifact_ids.append(record.artifact_id)
+    return artifact_ids, warnings
 
 
 def _register_observed_writes(
