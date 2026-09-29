@@ -15,6 +15,7 @@ from .profiles import (
 )
 from .tool_adapter import ToolSpec
 from .tool_specs import (
+    agno_twins,
     chembl,
     chemistry,
     design,
@@ -67,6 +68,7 @@ def _enrich(spec: ToolSpec) -> ToolSpec:
         )
     profiles = profiles_for_spec(spec)
     roles = capabilities.mcp_roles_for_tool(spec.mcp_name, spec.group)
+    agno_bindings = _agno_bindings(spec)
     write_scope = spec.write_scope
     if write_scope == "none" and not spec.read_only:
         write_scope = "session"
@@ -84,7 +86,22 @@ def _enrich(spec: ToolSpec) -> ToolSpec:
         roles=tuple(dict.fromkeys(roles)),
         profiles=tuple(dict.fromkeys(profiles)),
         write_scope=write_scope,
+        agno_bindings=agno_bindings,
     )
+
+
+def _agno_bindings(spec: ToolSpec) -> tuple[str, ...]:
+    """Name the in-process implementations of one MCP operation."""
+
+    bindings = list(spec.agno_bindings)
+    toolkit_path = getattr(spec.toolkit_factory, "toolkit_import_path", None)
+    if isinstance(toolkit_path, str) and not toolkit_path.startswith("cs_copilot.mcp."):
+        bindings.append(f"{toolkit_path}.{spec.method}")
+    group_toolkit = agno_twins.FACADE_GROUP_TOOLKITS.get(spec.group or "")
+    if group_toolkit is not None:
+        bindings.append(f"{group_toolkit}.{spec.method}")
+    bindings.extend(agno_twins.AGNO_TWINS.get(spec.mcp_name, ()))
+    return tuple(dict.fromkeys(bindings))
 
 
 def _materialized_specs() -> tuple[ToolSpec, ...]:

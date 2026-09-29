@@ -131,9 +131,36 @@ broadcasting is disabled, role factories reject tools outside their allowlists,
 and the delegation guard validates handoff schema, private-context exclusion,
 receiver role, and declared budgets. When the caller supplies a v2
 `RunContext`, Agno additionally records the handoff through that runtime and
-therefore receives its durable pinned-task validation. The default Chainlit
-and CLI team constructors do not supply a `RunContext`; their structured
-handoffs are ad hoc and process-local rather than durable workflow events.
+therefore receives its durable pinned-task validation.
+
+Chainlit and the CLI give every chat one durable ad-hoc `agno-session` run,
+created before the first message is processed and reused when a chat resumes
+(`cs_copilot.agents.session_runs`). The coordinator invents task ids for
+free-form chats, so for ad-hoc runs the delegation guard stamps the real run
+identity onto each handoff, creates the task if it does not exist, records the
+handoff, and starts the task; tasks started during a turn are completed (or
+failed) when the turn ends. Tool spans and running tasks left behind by a
+previous chat process are reconciled as abandoned or interrupted on resume.
+Uploads are stored inside the run and registered as untrusted `user_upload`
+artifacts.
+
+Every toolkit call of the team goes through the shared kernel
+(`cs_copilot.agents.execution_binding`). The mode is set by
+`CS_COPILOT_AGNO_EXECUTION`:
+
+- `observe` (default): calls run exactly as before, while the kernel records
+  the same event protocol as MCP (labelled `runtime: "agno"`, attributed to
+  the calling role and delegated task), registers every file a call created
+  inside the run, and adds an `execution_audit` block to `tool_call_recorded`
+  describing how the write and read boundaries would have rewritten or denied
+  the call and how each write would be classified under confined writes;
+- `off`: no recording; storage behaves exactly as before;
+- `enforce`: reserved for full enforcement; until it is enabled for the
+  in-process runtime it behaves like `observe`.
+
+In-process calls are recorded under the identity of their MCP twin tool when
+one exists (`ToolSpec.agno_bindings`, merged from
+`mcp/tool_specs/agno_twins.py`), and as `agno.<Toolkit>.<function>` otherwise.
 
 For the MCP task-DAG pilot, handoffs are validated against the pinned task role
 and exact capability, selected-input, output, and acceptance-criteria

@@ -347,6 +347,15 @@ def group_for_tool(tool_name: str) -> str | None:
     return None
 
 
+def group_for_toolkit(class_name: str) -> str | None:
+    """Return the group implemented by an Agno toolkit class name, if any."""
+
+    for group in GROUPS.values():
+        if class_name in group.agno_toolkits:
+            return group.name
+    return None
+
+
 def _twin_tools(role: RoleCapabilities) -> frozenset[str]:
     return frozenset(AGNO_FUNCTION_TWINS[function] for function in role.functions)
 

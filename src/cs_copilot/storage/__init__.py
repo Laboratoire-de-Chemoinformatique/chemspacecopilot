@@ -28,7 +28,7 @@ Usage:
     path = S3.path("results/model.pkl.gz")
 """
 
-from .client import S3, SESSION_ID
+from .client import S3, SESSION_ID, ScopedWriteDenied, WriteObservation
 from .config import S3Config, StorageConfigError, get_s3_config, is_s3_enabled
 from .layout import (
     LAYOUT_VERSION,
@@ -47,6 +47,8 @@ from .layout import (
 )
 
 __all__ = [
+    "ScopedWriteDenied",
+    "WriteObservation",
     "S3",
     "SESSION_ID",
     "S3Config",
