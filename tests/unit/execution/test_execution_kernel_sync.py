@@ -12,6 +12,7 @@ import pytest
 
 from cs_copilot.execution.errors import ToolExecutionError
 from cs_copilot.execution.runner import bind_sync_invoker, execute_sync
+from cs_copilot.execution.tracing import current_tool_span_id
 from cs_copilot.storage import S3
 
 from ._kernel_helpers import make_spec, payloads, tool_events
@@ -56,6 +57,9 @@ class _Toolkit:
 
     async def coroutine(self) -> str:
         return "never"
+
+    def own_span(self) -> str | None:
+        return current_tool_span_id()
 
 
 def _invoke(toolkit: _Toolkit, method: str):
@@ -293,3 +297,18 @@ def test_nested_session_write_on_the_same_run_is_refused(bound_context):
     assert "re-enter" in inner[0].envelope["error"]["message"]
     assert isinstance(inner[0].error, ToolExecutionError)
     assert inner_toolkit.calls == 0
+
+
+def test_a_running_tool_can_read_its_own_span_id(bound_context):
+    ctx = bound_context("sync-own-span")
+    toolkit = _Toolkit()
+
+    outcome = execute_sync(
+        make_spec("own_span", _Toolkit),
+        ctx,
+        {},
+        invoke=_invoke(toolkit, "own_span"),
+    )
+
+    assert outcome.value == outcome.envelope["trace"]["span_id"]
+    assert current_tool_span_id() is None

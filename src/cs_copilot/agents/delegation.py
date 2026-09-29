@@ -695,14 +695,22 @@ def _ensure_ad_hoc_task(runtime: Any, envelope: HandoffEnvelope) -> bool:
     return True
 
 
+_STARTABLE_AD_HOC_RUN_STATUSES = frozenset(
+    {RunStatus.SUBMITTED, RunStatus.PLANNING, RunStatus.INPUT_REQUIRED}
+)
+
+
 def _start_ad_hoc_task(runtime: Any, task_id: str) -> None:
     run = runtime.refresh()
     task = run.tasks[task_id]
-    if run.status is RunStatus.RUNNING and task.status in {
-        TaskStatus.PENDING,
-        TaskStatus.FAILED,
-        TaskStatus.INPUT_REQUIRED,
-    }:
+    if task.status not in {TaskStatus.PENDING, TaskStatus.FAILED, TaskStatus.INPUT_REQUIRED}:
+        return
+    if run.status in _STARTABLE_AD_HOC_RUN_STATUSES:
+        # Tasks only run in a running workflow. An ad-hoc run that has not
+        # started yet (an MCP session delegating to the team) starts with its
+        # first delegated task.
+        run = runtime.transition_run(RunStatus.RUNNING, reason=f"task {task_id} delegated")
+    if run.status is RunStatus.RUNNING:
         runtime.transition_task(task_id, TaskStatus.RUNNING)
 
 

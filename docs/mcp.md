@@ -474,13 +474,35 @@ By default the MCP server keeps external-client reasoning separate from the
 Agno team. Trusted private deployments can opt into one coarse delegation tool:
 
 ```sh
-cscopilot-mcp-serve --enable-agno-team-tool
+cscopilot-mcp-serve --enable-agno-team-tool --llm-policy agno-model
 ```
 
-This registers `agno_team_run(prompt)`, which loads the configured Agno model
-and delegates the prompt to the cs_copilot Agno team. Prefer fine-grained MCP
-skills and tools for normal external clients; use this flag only where the
-client is trusted and model/API access is intentional.
+This registers `agno_team_run(prompt)` (supervisor role, `standard` profile
+only), which delegates the prompt to the cs_copilot Agno team. The team
+reasons with the server's own configured model, so the flag requires
+`--llm-policy agno-model`, and calls are refused under the `external` and
+`disabled` policies. Prefer fine-grained MCP skills and tools for normal
+external clients; use this flag only where the client is trusted and
+model/API access is intentional.
+
+The tool is governed by the execution kernel like any other tool:
+
+- the team runs in the session's ad-hoc run (catalog workflow runs must be
+  driven task by task and are refused) with in-process execution enforced:
+  every tool the team calls is confined to the run, recorded with
+  `runtime: "agno"` and a `parent_span_id` pointing at the `agno_team_run`
+  span, and its files are registered as artifacts;
+- the team sees a JSON snapshot of the session state plus the session's
+  in-memory objects (data frames, fitted models) by reference, as an
+  in-process tool would; its JSON-serializable changes are merged back with
+  the same optimistic concurrency as worker-process tools, while in-memory
+  objects it creates or replaces stay with the team and are reported in
+  `warnings`;
+- the result carries the team's answer as `content`, plus `run_id`, the new
+  `artifact_ids`, and `warnings`;
+- one team run at a time per session; the call times out after 30 minutes,
+  and a cancelled or timed-out run is stopped and its in-flight tool calls
+  are drained before the session can be used again.
 
 ## What the server exposes
 

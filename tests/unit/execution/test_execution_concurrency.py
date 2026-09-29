@@ -16,6 +16,7 @@ from cs_copilot.execution.idempotency import (
     _IdempotencyReservation,
     _wait_for_idempotent_owner,
 )
+from cs_copilot.execution.locks import _async_run_write_locks, _sync_run_write_lock
 from cs_copilot.execution.runner import bind_sync_invoker, execute_sync
 from cs_copilot.mcp.context import MCPAgentContext
 from cs_copilot.mcp.tool_adapter import build_tool
@@ -155,3 +156,73 @@ def test_session_writes_on_one_run_are_serialized_across_threads(bound_context):
     assert len(intervals) == 3
     for (_, previous_end), (next_begin, _) in zip(intervals, intervals[1:], strict=False):
         assert next_begin >= previous_end
+
+
+def test_async_and_thread_writers_on_one_run_exclude_each_other(bound_context):
+    ctx = bound_context("concurrency-mixed", workflow_slug="mcp-session", runtime=MCP_RUNTIME)
+    mcp_ctx = MCPAgentContext(session_state=ctx.session_state)
+    mcp_ctx.run_context = ctx.run_context
+    toolkit = _Toolkit()
+    spec = make_spec("slow_write", _Toolkit, write_scope="session")
+    tool = build_tool(spec, toolkit, mcp_ctx)
+    invoke = bind_sync_invoker(spec, toolkit.slow_write)
+
+    async def scenario() -> list[dict[str, Any]]:
+        # Thread-based callers (the in-process Agno team) and async MCP calls
+        # share the run's thread lock.
+        threads = [
+            threading.Thread(
+                target=execute_sync,
+                args=(spec, ctx, {"output_path": f"sync-{index}.txt"}),
+                kwargs={"invoke": invoke},
+            )
+            for index in range(2)
+        ]
+        for thread in threads:
+            thread.start()
+        envelopes = await asyncio.gather(
+            *(tool(output_path=f"async-{index}.txt") for index in range(2))
+        )
+        for thread in threads:
+            await asyncio.to_thread(thread.join)
+        return list(envelopes)
+
+    envelopes = asyncio.run(scenario())
+
+    assert [envelope["status"] for envelope in envelopes] == ["success", "success"]
+    intervals = sorted(toolkit.intervals)
+    assert len(intervals) == 4
+    for (_, previous_end), (next_begin, _) in zip(intervals, intervals[1:], strict=False):
+        assert next_begin >= previous_end
+
+
+def test_a_cancelled_lock_waiter_does_not_keep_the_run_locked(bound_context):
+    ctx = bound_context("concurrency-cancelled", workflow_slug="mcp-session", runtime=MCP_RUNTIME)
+    spec = make_spec("slow_write", _Toolkit, write_scope="session")
+    held, release = threading.Event(), threading.Event()
+
+    def hold_like_an_agno_call() -> None:
+        with _sync_run_write_lock(spec, ctx):
+            held.set()
+            release.wait(5)
+
+    holder = threading.Thread(target=hold_like_an_agno_call)
+    holder.start()
+    assert held.wait(5)
+
+    async def enter() -> bool:
+        async with _async_run_write_locks(spec, ctx) as locked:
+            return locked
+
+    async def scenario() -> bool:
+        waiter = asyncio.create_task(enter())
+        await asyncio.sleep(0.05)
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter
+        release.set()
+        await asyncio.to_thread(holder.join)
+        # The cancelled waiter's late acquisition is released again.
+        return await asyncio.wait_for(enter(), timeout=2)
+
+    assert asyncio.run(scenario()) is True

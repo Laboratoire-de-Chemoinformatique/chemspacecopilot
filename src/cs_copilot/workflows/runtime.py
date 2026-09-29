@@ -2619,7 +2619,11 @@ def _pending_tool_invocations(
             continue
         span_id = str(payload.get("span_id") or "")
         tool_name = str(payload.get("tool_name") or "unknown_tool")
-        if domain_only and tool_name.startswith("workflow_"):
+        # Control-plane calls and calls that only delegate to other tools (whose
+        # own spans are tracked) do no domain work themselves.
+        if domain_only and (
+            tool_name.startswith("workflow_") or payload.get("delegates_execution") is True
+        ):
             continue
         key = span_id or f"{event_task_id}:{tool_name}"
         stage = str(payload.get("stage") or "")
