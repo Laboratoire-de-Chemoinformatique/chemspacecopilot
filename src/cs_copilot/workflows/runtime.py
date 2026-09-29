@@ -22,6 +22,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 import fsspec
 
+from cs_copilot.execution.errors import ToolErrorCode
 from cs_copilot.storage import (
     LAYOUT_VERSION,
     OUTPUT_CONTEXT_KEY,
@@ -106,18 +107,6 @@ class TaskStatus(str, Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
     SKIPPED = "skipped"
-
-
-class ToolErrorCode(str, Enum):
-    """Stable error taxonomy shared by workflow and tool envelopes."""
-
-    INVALID_INPUT = "invalid_input"
-    PERMISSION_DENIED = "permission_denied"
-    TRANSIENT_EXTERNAL = "transient_external"
-    TIMEOUT = "timeout"
-    RESOURCE_LIMIT = "resource_limit"
-    SCIENTIFIC_VALIDATION = "scientific_validation"
-    INTERNAL = "internal"
 
 
 class ArtifactTrust(str, Enum):

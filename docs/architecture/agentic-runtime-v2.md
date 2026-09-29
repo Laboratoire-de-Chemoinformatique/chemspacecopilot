@@ -64,6 +64,39 @@ supervisor-confirmed `abandoned`. The later `completed` observation is
 best-effort because result acceptance has already linearized publication and
 registration. This prevents status changes from racing an in-flight mutation.
 
+## Shared execution kernel
+
+The pipeline that enforces these guarantees for every tool call lives in
+`cs_copilot.execution`, not in the MCP package, so every runtime that lets a
+reasoner call cs_copilot toolkits can use it:
+
+- `execution.kernel` defines the invocation phases: attribution capture,
+  catalog-task authorization and budgets, the durable `started` event, read
+  and write boundaries, idempotency reservation, the run write lock, execution
+  inside the write scope, result acceptance, artifact registration and
+  rollback, and the terminal events and v2 envelope.
+- `execution.runner.execute_async` drives those phases on an event loop; the
+  MCP adapter (`mcp/tool_adapter.py`) wraps it with the public tool signature,
+  the `idempotency_key` parameter, MCP context injection, and subprocess
+  worker dispatch.
+- `execution.runner.execute_sync` drives the same phases on a worker thread for
+  runtimes without a running event loop. Any interruption still records a
+  terminal `cancelled` event, so a run is never left with an open tool span.
+- `execution.events` writes the `tool_progress` and `tool_call_recorded`
+  events. Their `runtime` field and the slug of a lazily created ad-hoc run
+  come from the execution context's runtime profile (`mcp` / `mcp-session`,
+  `agno` / `agno-session`). Both ad-hoc slugs are exempt from catalog-task
+  authorization.
+- `execution.errors` owns the seven-code error taxonomy shared with
+  `cs_copilot.workflows` (`ToolErrorCode`); `execution.llm` gives toolkits a
+  runtime-neutral way to require an in-process model.
+
+The kernel never imports `agno`, `cs_copilot.agents`, `cs_copilot.mcp`, or the
+`mcp` SDK, and it imports storage, workflows, and toolkit helpers only inside
+functions, because `cs_copilot.storage` reads `SESSION_ID` at import time. Both
+rules are enforced by `tests/unit/mcp/test_no_team_imports.py` and
+`tests/unit/test_runtime_import_isolation.py`.
+
 ## Capability profiles
 
 `cscopilot-mcp --profile <name>` registers only the selected profile's tools. The shipped profiles are `bootstrap`, `standard`, `chembl-retrieval`, `gtm-analysis`, `chemoinformatics`, `reporting`, `molecular-design`, `peptide-design`, `retrosynthesis`, and `robustness`. Unknown profiles and workflows whose required tools are unavailable fail before execution.

@@ -23,6 +23,7 @@ from agno.models.base import Model
 from agno.tools.toolkit import Toolkit
 from pydantic import BaseModel, Field
 
+from cs_copilot.execution.llm import LLMUnavailableError, require_model
 from cs_copilot.storage import S3, OutputOperation, operation_rel_path
 from cs_copilot.tools.constants import (
     DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH,
@@ -1784,13 +1785,12 @@ class PeptideDesignerToolkit(Toolkit):
         if engine_key == "wae":
             return self.wae_engine
         if engine_key == "llm":
-            model = getattr(agent, "model", None) if agent is not None else None
-            if model is None:
+            try:
+                model = require_model(agent, "LLM peptide design")
+            except LLMUnavailableError as exc:
                 raise PeptideDesignerError(
-                    "LLM peptide design requires an agent with a model. In default MCP, "
-                    "MCPAgentContext.model is None; use agno_team_run or the Agno "
-                    "team runtime for internal-model design, or choose engine='wae'."
-                )
+                    f"{exc} Choose engine='wae' for deterministic generation."
+                ) from exc
             return LLMPeptideDesignEngine(model)
         raise PeptideDesignerError(
             f"Unknown peptide design engine: {engine}. Available engines: wae, llm."

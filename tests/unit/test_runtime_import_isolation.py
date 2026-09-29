@@ -126,3 +126,33 @@ def test_mcp_server_build_does_not_load_the_agno_team(tmp_path):
     )
 
     assert not _loaded_from(modules, TEAM_RUNTIME_MODULES)
+
+
+def test_execution_kernel_imports_no_runtime_or_storage(tmp_path):
+    modules = _loaded_modules(
+        """
+        import importlib
+        import pkgutil
+
+        import cs_copilot.execution as package
+
+        for info in pkgutil.walk_packages(package.__path__, prefix=package.__name__ + "."):
+            importlib.import_module(info.name)
+        """,
+        tmp_path,
+    )
+
+    assert not _loaded_from(
+        modules,
+        TEAM_RUNTIME_MODULES
+        + (
+            "agno",
+            "mcp",
+            "cs_copilot.agents",
+            "cs_copilot.mcp",
+            "cs_copilot.storage",
+            "cs_copilot.workflows",
+            "cs_copilot.tools",
+            "pandas",
+        ),
+    )

@@ -219,6 +219,105 @@ def test_neutral_core_has_no_runtime_imports(path: Path):
     assert not violations, f"{_rel(path)} imports a runtime from the neutral core: {violations}"
 
 
+# The execution kernel is imported by the MCP adapter at module level, before
+# the server applies SESSION_ID. Storage reads SESSION_ID at import time, so the
+# kernel may only reach these dependencies from inside functions.
+EXECUTION_LAZY_ONLY = (
+    "cs_copilot.storage",
+    "cs_copilot.workflows",
+    "cs_copilot.tools",
+    "pandas",
+    "numpy",
+    "fsspec",
+)
+
+
+def _is_type_checking_guard(test: ast.expr) -> bool:
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+        isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+    )
+
+
+def _module_level_imports(path: Path) -> list[tuple[int, str]]:
+    """Return fully qualified imports executed when ``path`` is imported."""
+
+    return _module_level_imports_in(
+        path.read_text(encoding="utf-8"),
+        package=_package_name(path),
+        filename=str(path),
+    )
+
+
+def _module_level_imports_in(
+    source: str, *, package: str, filename: str = "<unknown>"
+) -> list[tuple[int, str]]:
+    found: list[tuple[int, str]] = []
+
+    def visit(statements: list[ast.stmt]) -> None:
+        for node in statements:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if isinstance(node, ast.If) and _is_type_checking_guard(node.test):
+                visit(node.orelse)
+                continue
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                source = ast.unparse(node)
+                found.extend(
+                    (ref.lineno + node.lineno - 1, ref.name)
+                    for ref in iter_import_refs(source, package=package)
+                )
+                continue
+            for field_name in ("body", "orelse", "finalbody", "handlers"):
+                nested = getattr(node, field_name, None)
+                if isinstance(nested, list):
+                    visit([item for item in nested if isinstance(item, ast.stmt)])
+                    for handler in nested:
+                        if isinstance(handler, ast.ExceptHandler):
+                            visit(handler.body)
+
+    visit(ast.parse(source, filename=filename).body)
+    return found
+
+
+def _execution_files() -> list[Path]:
+    return sorted((PACKAGE_ROOT / "execution").rglob("*.py"))
+
+
+@pytest.mark.parametrize("path", _execution_files(), ids=_rel)
+def test_execution_kernel_imports_heavy_dependencies_lazily(path: Path):
+    eager = [
+        f"line {lineno}: {name!r}"
+        for lineno, name in _module_level_imports(path)
+        if any(_matches(name, prefix) for prefix in EXECUTION_LAZY_ONLY)
+    ]
+    assert not eager, f"{_rel(path)} imports heavy dependencies at module level: {eager}"
+
+
+def test_execution_kernel_has_no_packaging_excluded_directories():
+    excluded = {"runs", "events", "artifacts", "sessions", ".staging"}
+    directories = {path.name for path in (PACKAGE_ROOT / "execution").rglob("*") if path.is_dir()}
+    assert not directories & excluded
+
+
+def test_module_level_import_scan_skips_functions_and_type_checking():
+    assert _module_level_imports(PACKAGE_ROOT / "execution" / "__init__.py") == []
+    source = (
+        "from typing import TYPE_CHECKING\n"
+        "import pandas\n"
+        "if TYPE_CHECKING:\n"
+        "    import numpy\n"
+        "def lazy():\n"
+        "    import fsspec\n"
+        "try:\n"
+        "    from cs_copilot.storage import S3\n"
+        "except ImportError:\n"
+        "    import cs_copilot.workflows\n"
+    )
+    names = {name for _, name in _module_level_imports_in(source, package="cs_copilot.execution")}
+    assert {"pandas", "cs_copilot.storage.S3", "cs_copilot.workflows"} <= names
+    assert "numpy" not in names and "fsspec" not in names
+
+
 @pytest.mark.parametrize(
     ("exceptions", "kind"),
     [(MCP_DYNAMIC_EXCEPTIONS, "dynamic"), (NEUTRAL_EXCEPTIONS, None)],
