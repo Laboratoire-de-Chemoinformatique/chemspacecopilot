@@ -7,8 +7,8 @@ import json
 import logging
 import mimetypes
 import re
-from pathlib import Path
-from typing import Any, Mapping
+from pathlib import Path, PurePosixPath
+from typing import Any, Iterable, Mapping
 
 from .context import ExecutionContext
 from .envelopes import _artifact_ids
@@ -229,6 +229,57 @@ def _register_result_path(
     )
     existing_by_path[record.relative_path] = record.artifact_id
     return record.artifact_id
+
+
+def _register_observed_writes(
+    spec: ToolSpec,
+    ctx: ExecutionContext,
+    created_paths: Iterable[str],
+    *,
+    producer_task_id: str | None,
+    invocation_span_id: str | None,
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Register files an observed call created inside its run; never raise.
+
+    ``created_paths`` are session-relative keys reported by
+    ``S3.observe_writes``. Files outside the run root and files that no longer
+    exist are skipped; registration failures are returned for the audit.
+    """
+
+    run_context = getattr(ctx, "run_context", None)
+    layout = getattr(run_context, "layout", None)
+    if run_context is None or layout is None:
+        return [], []
+    run_root = PurePosixPath(layout.run_root)
+    artifact_ids: list[str] = []
+    problems: list[dict[str, str]] = []
+    for key in created_paths:
+        try:
+            relative = PurePosixPath(key).relative_to(run_root).as_posix()
+        except ValueError:
+            continue
+        try:
+            record = run_context.register_artifact(
+                relative,
+                artifact_type=_infer_artifact_type(spec, "path", relative),
+                mime_type=_infer_mime_type(relative),
+                producer_task_id=producer_task_id,
+                active_task_id=producer_task_id,
+                producer_tool=spec.mcp_name,
+                provenance={
+                    "registration": "automatic",
+                    "result_field": "observed_write",
+                    "invocation_span_id": invocation_span_id,
+                },
+                trust="external" if spec.requires_network else "internal",
+            )
+        except FileNotFoundError:
+            continue
+        except Exception as exc:  # noqa: BLE001 - observation never fails the call
+            problems.append({"path": relative, "error": str(exc)[:300]})
+            continue
+        artifact_ids.append(record.artifact_id)
+    return list(dict.fromkeys(artifact_ids)), problems
 
 
 def _required_task_output_types(run: Any, task_id: str | None) -> frozenset[str]:

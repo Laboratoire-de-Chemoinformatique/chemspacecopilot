@@ -45,8 +45,21 @@ class ToolSpec:
     result_artifact_type: str | None = None
     run_in_worker_process: bool = False
     worker_timeout_s: Optional[float] = None
+    # In-process implementations of this operation, as "module:Class.method" or
+    # "module:function". Specs whose factory builds a toolkit (not an MCP
+    # facade) are bound to ``<toolkit>.<method>`` automatically.
+    agno_bindings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        bindings = tuple(dict.fromkeys(str(item).strip() for item in self.agno_bindings))
+        if any(
+            item.count(":") != 1 or item.startswith(":") or item.endswith(":") for item in bindings
+        ):
+            raise ValueError(
+                f"{self.mcp_name}: agno_bindings entries must be 'module:Class.method' "
+                "or 'module:function'"
+            )
+        object.__setattr__(self, "agno_bindings", bindings)
         if self.risk not in _RISK_LEVELS:
             raise ValueError(f"{self.mcp_name}: invalid risk {self.risk!r}")
         if self.write_scope not in _WRITE_SCOPES:

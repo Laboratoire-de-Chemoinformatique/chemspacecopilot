@@ -51,6 +51,7 @@ def record_tool_call(
     result: Any = None,
     error: str | None = None,
     execution_scope: Mapping[str, Any] | None = None,
+    extra: Mapping[str, Any] | None = None,
 ) -> str | None:
     """Append one redacted ``tool_call_recorded`` v2 workflow event.
 
@@ -99,6 +100,7 @@ def record_tool_call(
         payload["idempotency_fingerprint"] = str(idempotency_fingerprint)
     if error:
         payload["error"] = _short_text(error, max_chars=1000)
+    _merge_extra(payload, extra)
 
     try:
         from cs_copilot.storage import S3
@@ -123,6 +125,7 @@ def record_tool_progress(
     execution_scope: Mapping[str, Any] | None = None,
     precondition: Callable[[Any, Sequence[Any]], None] | None = None,
     required: bool = False,
+    extra: Mapping[str, Any] | None = None,
 ) -> str | None:
     """Append an observational execution-progress event for one tool invocation."""
 
@@ -158,6 +161,7 @@ def record_tool_progress(
         payload["handoff_id"] = execution_scope.get("handoff_id")
     if message:
         payload["message"] = _short_text(message, max_chars=1000)
+    _merge_extra(payload, extra)
 
     span_id = str(payload.get("span_id") or "")
     try:
@@ -186,6 +190,15 @@ def record_tool_progress(
             raise
         logger.warning("Failed to record tool progress event for %s: %s", tool_name, exc)
         return None
+
+
+def _merge_extra(payload: dict[str, Any], extra: Mapping[str, Any] | None) -> None:
+    """Add runtime-specific fields without overriding any protocol field."""
+
+    if not extra:
+        return
+    for key, value in _json_safe(extra, redact=True).items():
+        payload.setdefault(str(key), value)
 
 
 def _resolve_run_context(ctx: Any):
