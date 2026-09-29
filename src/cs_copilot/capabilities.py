@@ -21,7 +21,7 @@ its MCP twin tool, so holding one callable never grants its whole group.
 The canonical grants are the in-process Agno factory grants. On the MCP side
 every role additionally receives the universal ``llm`` and ``session`` groups,
 and the coordinator (spelled ``supervisor`` on MCP) receives the control-plane
-``workflow`` group. Every role's grants must fit inside its assigned profile;
+``workflow`` group and the opt-in ``agno`` delegation group. Every role's grants must fit inside its assigned profile;
 the table is validated at import time.
 
 This module only depends on the standard library.
@@ -100,6 +100,8 @@ GROUPS: Mapping[str, CapabilityGroup] = MappingProxyType(
             # MCP-only control plane and LLM task broker.
             _group("workflow", "workflow_"),
             _group("llm", "llm_"),
+            # MCP-only, opt-in: delegation into the in-process Agno team.
+            _group("agno", "agno_"),
             _group("robustness", "robustness_", ("RobustnessAnalysisToolkit",)),
             _group("skills", "skill_", ("SkillToolkit",)),
             _group("pandas", "pandas_", ("PointerPandasTools",)),
@@ -168,7 +170,12 @@ ROLES: Mapping[str, RoleCapabilities] = MappingProxyType(
     {
         role.role: role
         for role in (
-            _role(COORDINATOR_ROLE, "standard", ("session", "skills"), mcp_groups=("workflow",)),
+            _role(
+                COORDINATOR_ROLE,
+                "standard",
+                ("session", "skills"),
+                mcp_groups=("workflow", "agno"),
+            ),
             _role("chembl_downloader", "chembl-retrieval", ("chembl", "pandas", "skills")),
             _role(
                 "gtm_agent",

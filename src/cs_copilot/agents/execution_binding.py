@@ -131,6 +131,11 @@ class ExecutionBinding:
         with self._lock:
             self.problems = [*self.problems[-49:], message]
 
+    def take_problems(self) -> list[str]:
+        with self._lock:
+            problems, self.problems = self.problems, []
+            return problems
+
     def in_flight(self) -> int:
         with self._lock:
             return self._in_flight

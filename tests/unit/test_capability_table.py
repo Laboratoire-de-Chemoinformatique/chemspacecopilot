@@ -23,7 +23,7 @@ _TOOLKIT_NAMES = sorted(
 # Canonical grants (the Agno factory grants). Changing a role's capabilities is
 # a deliberate decision that affects both runtimes, so it is pinned here.
 EXPECTED_ROLES = {
-    "coordinator": ("standard", {"session", "skills"}, set(), {"workflow"}),
+    "coordinator": ("standard", {"session", "skills"}, set(), {"workflow", "agno"}),
     "chembl_downloader": ("chembl-retrieval", {"chembl", "pandas", "skills"}, set(), set()),
     "gtm_agent": (
         "gtm-analysis",
@@ -129,11 +129,17 @@ def test_role_spellings_round_trip():
         ("skill_fetch", "skills"),
         ("mcp_bootstrap", "workflow"),
         ("chemspace_plan_analysis", "workflow"),
+        ("agno_team_run", "agno"),
         ("unknown_tool", None),
     ],
 )
 def test_group_for_tool_uses_prefixes_and_exceptions(tool_name, group):
     assert capabilities.group_for_tool(tool_name) == group
+
+
+def test_team_delegation_is_a_supervisor_tool_of_the_standard_profile():
+    assert capabilities.mcp_roles_for_tool("agno_team_run") == ("supervisor",)
+    assert capabilities.profiles_for_tool("agno_team_run") == ("standard",)
 
 
 def test_computed_tool_role_rules():

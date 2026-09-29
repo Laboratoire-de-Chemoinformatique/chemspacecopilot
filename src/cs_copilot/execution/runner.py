@@ -52,11 +52,11 @@ from .kernel import (
     record_failure,
     revalidate_after_lock,
 )
-from .locks import _run_write_lock, _sync_run_write_lock
+from .locks import _async_run_write_locks, _sync_run_write_lock
 from .read_boundary import _enforce_read_boundary
 from .scope import _handoff_timeout_error, _InvocationScope
 from .spec import ToolSpec
-from .tracing import _refresh_tool_trace
+from .tracing import _bind_tool_span, _refresh_tool_trace
 from .write_boundary import _enforce_write_boundary
 
 logger = logging.getLogger(__name__)
@@ -92,12 +92,8 @@ async def execute_async(
             return InvocationOutcome(envelope=complete_from_shared(inv, shared))
 
         call_kwargs = build_call_arguments(inv, inject=inject)
-        write_lock = _run_write_lock(spec, ctx)
-        lock_acquired = False
-        try:
-            if write_lock is not None:
-                await write_lock.acquire()
-                lock_acquired = True
+        async with _async_run_write_locks(spec, ctx) as locked:
+            if locked:
                 revalidate_after_lock(inv)
 
             while True:
@@ -109,7 +105,8 @@ async def execute_async(
                     with _tool_write_scope(spec, ctx) as local_publications:
                         # The executor's task or thread must be created inside
                         # the write scope so it inherits the confinement.
-                        executed = await executor(call_kwargs, attempt)
+                        with _bind_tool_span(inv.trace):
+                            executed = await executor(call_kwargs, attempt)
                         deferred = executed.deferred
                         accepted = accept_result(inv, executed)
                     committed = commit_result(
@@ -130,9 +127,6 @@ async def execute_async(
                         raise
                     if delay_s:
                         await asyncio.sleep(delay_s)
-        finally:
-            if lock_acquired:
-                write_lock.release()
     except asyncio.CancelledError:
         record_cancellation(inv, message="client cancelled the tool invocation")
         raise
@@ -199,7 +193,8 @@ def execute_sync(
                     with _tool_write_scope(
                         spec, ctx, commit_policy=commit_policy
                     ) as local_publications:
-                        executed = _as_executed_call(invoke(call_kwargs))
+                        with _bind_tool_span(inv.trace):
+                            executed = _as_executed_call(invoke(call_kwargs))
                         deferred = executed.deferred
                         accepted = accept_result(inv, executed)
                     committed = commit_result(
@@ -283,7 +278,8 @@ def observe_sync(
         if inv is not None:
             inv.attempts = 1
         try:
-            value = invoke(call_arguments)
+            with _bind_tool_span(inv.trace if inv is not None else {}):
+                value = invoke(call_arguments)
         except BaseException as exc:
             _observe_failure(spec, ctx, inv, exc, audit, observation)
             raise

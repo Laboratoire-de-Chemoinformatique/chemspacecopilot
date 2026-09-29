@@ -55,8 +55,8 @@ def test_registration_shares_instances_within_server_and_isolates_servers(monkey
         ),
     )
 
-    def fake_iter_specs(profile=None):
-        del profile
+    def fake_iter_specs(profile=None, opt_in_groups=()):
+        del profile, opt_in_groups
         return iter(specs)
 
     def fake_build_tool(spec, instance, ctx):

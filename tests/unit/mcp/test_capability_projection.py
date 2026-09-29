@@ -5,13 +5,13 @@ from __future__ import annotations
 from cs_copilot import capabilities
 from cs_copilot.mcp import profiles as mcp_profiles
 from cs_copilot.mcp.facades.bootstrap import _task_actions
-from cs_copilot.mcp.tools_registry import all_specs
+from cs_copilot.mcp.tools_registry import OPT_IN_GROUPS, all_specs
 from cs_copilot.tracking.replay import golden_for_workflow
 from cs_copilot.workflows import list_workflows
 
 
 def test_spec_groups_roles_and_profiles_come_from_the_table():
-    specs = all_specs()
+    specs = all_specs(opt_in_groups=OPT_IN_GROUPS)
     assert {spec.group for spec in specs} == set(capabilities.GROUPS)
     for spec in specs:
         assert capabilities.group_for_tool(spec.mcp_name) == spec.group, spec.mcp_name
@@ -20,7 +20,7 @@ def test_spec_groups_roles_and_profiles_come_from_the_table():
 
 
 def test_every_role_can_use_its_tools_within_its_own_profile():
-    for spec in all_specs():
+    for spec in all_specs(opt_in_groups=OPT_IN_GROUPS):
         for role in spec.roles:
             profile = capabilities.ROLES[capabilities.canonical_role(role)].profile
             assert profile in spec.profiles, (spec.mcp_name, role, profile)

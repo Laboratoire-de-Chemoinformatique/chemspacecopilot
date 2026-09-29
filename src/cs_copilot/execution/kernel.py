@@ -17,6 +17,7 @@ from .artifacts import (
 )
 from .context import ExecutionContext, _active_output_layout, resolve_runtime
 from .envelopes import (
+    _artifact_ids,
     _cached_envelope,
     _coerce_return_value,
     _enforce_output_limit,
@@ -61,6 +62,11 @@ def _record_tool_start(
     extra: Mapping[str, Any] | None = None,
 ) -> None:
     """Reserve one observable task tool-call budget before execution."""
+
+    if spec.delegates_execution:
+        # Run-lifecycle and artifact guards watch the delegated calls' own
+        # spans; this span only orchestrates them.
+        extra = {**(extra or {}), "delegates_execution": True}
 
     def reserve_budget(_run: Any, events: typing.Sequence[Any]) -> None:
         _assert_invocation_epoch_current(spec, ctx, invocation_scope)
@@ -126,7 +132,8 @@ def _tool_write_scope(spec: ToolSpec, ctx: ExecutionContext, *, commit_policy: s
     """Pin artifact reads and stage bounded writes around domain tool code."""
 
     publications: dict[str, dict[str, Any]] = {}
-    if _is_control_plane_spec(spec):
+    if _is_control_plane_spec(spec) or spec.delegates_execution:
+        # Delegated tool calls set up their own read and write scopes.
         yield publications
         return
     from cs_copilot.storage import S3
@@ -462,27 +469,31 @@ def commit_result(
         **(dict(deferred.publications) if deferred is not None else {}),
     }
     register_all = inv.publication_policy == "all_published"
-    artifact_ids, artifact_warnings = _register_result_artifacts(
-        spec,
-        accepted.coerced,
-        ctx,
-        active_task_id=inv.scope.task_id,
-        invocation_span_id=inv.trace.get("span_id"),
-        publication_leases=publication_leases,
-        strict_result_paths=not register_all,
-    )
-    if register_all:
-        published_ids, published_warnings = _register_published_artifacts(
+    if spec.delegates_execution:
+        # The delegated calls registered their own outputs.
+        artifact_ids, artifact_warnings = _artifact_ids(accepted.coerced), []
+    else:
+        artifact_ids, artifact_warnings = _register_result_artifacts(
             spec,
+            accepted.coerced,
             ctx,
-            publication_leases,
             active_task_id=inv.scope.task_id,
             invocation_span_id=inv.trace.get("span_id"),
+            publication_leases=publication_leases,
+            strict_result_paths=not register_all,
         )
-        artifact_ids = list(dict.fromkeys([*artifact_ids, *published_ids]))
-        artifact_warnings = list(dict.fromkeys([*artifact_warnings, *published_warnings]))
-    else:
-        _rollback_unregistered_publications(ctx, publication_leases)
+        if register_all:
+            published_ids, published_warnings = _register_published_artifacts(
+                spec,
+                ctx,
+                publication_leases,
+                active_task_id=inv.scope.task_id,
+                invocation_span_id=inv.trace.get("span_id"),
+            )
+            artifact_ids = list(dict.fromkeys([*artifact_ids, *published_ids]))
+            artifact_warnings = list(dict.fromkeys([*artifact_warnings, *published_warnings]))
+        else:
+            _rollback_unregistered_publications(ctx, publication_leases)
     _record_tool_acceptance(
         spec=spec,
         ctx=ctx,
