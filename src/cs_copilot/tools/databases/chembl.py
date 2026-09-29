@@ -16,6 +16,7 @@ import pandas as pd
 from agno.agent import Agent
 from pydantic import BaseModel, Field
 
+from cs_copilot.execution.llm import require_model
 from cs_copilot.storage import S3, OutputOperation, scoped_artifact_path
 from cs_copilot.tools.chemistry.activity_schema import build_compound_memory_preview
 from cs_copilot.tools.chemistry.clean_dataset import prepare_clean_dataset
@@ -1268,9 +1269,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         keywords: Sequence[str],
         agent: Optional[Agent],
     ) -> Dict[str, _ChemblJudgeDecision]:
-        model = getattr(agent, "model", None)
-        if model is None:
-            raise RuntimeError("No agent model is available for ChEMBL short-keyword judging.")
+        model = require_model(agent, "ChEMBL short-keyword judging")
 
         prompt = self._build_retrieval_judge_prompt(
             judge_items,
@@ -1312,9 +1311,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         keywords: Sequence[str],
         agent: Optional[Agent],
     ) -> Dict[str, _ChemblJudgeDecision]:
-        model = getattr(agent, "model", None)
-        if model is None:
-            raise RuntimeError("No agent model is available for ChEMBL metadata judging.")
+        model = require_model(agent, "ChEMBL metadata judging")
 
         prompt = self._build_metadata_judge_prompt(
             judge_items,

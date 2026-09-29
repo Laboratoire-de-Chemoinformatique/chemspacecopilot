@@ -6,6 +6,8 @@ import json
 import logging
 from typing import Any, Optional, Sequence
 
+from cs_copilot.execution.llm import resolve_model
+
 from ..errors import MCPToolError
 from ..llm import normalize_llm_policy
 
@@ -75,7 +77,7 @@ class ChemblMCPFacade:
         """Fetch ChEMBL compounds with judge behavior controlled by MCP LLM policy."""
 
         policy = normalize_llm_policy(getattr(agent, "llm_policy", "external"))
-        use_internal_judge = policy == "agno-model" and getattr(agent, "model", None) is not None
+        use_internal_judge = policy == "agno-model" and resolve_model(agent) is not None
         result = self._toolkit().fetch_compounds(
             query=query,
             organism=organism,
