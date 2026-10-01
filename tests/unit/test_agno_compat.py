@@ -94,3 +94,45 @@ def test_async_pre_hook_retry_is_returned_to_the_model():
 
     assert output.content == "recovered"
     assert any("pass a structured handoff" in message for message in model.seen[-1])
+
+
+def test_literal_parameters_reach_the_model_as_enums_not_opaque_objects():
+    """Agno 2.1.9 has no Literal branch, so such parameters lose their values.
+
+    The model is then rejected at runtime for a constraint it was never shown,
+    and a model that obeys the advertised object schema sends a dict and fails
+    the same way. Nested Optional/List forms resolve through the same function,
+    so they are covered too.
+    """
+    from typing import Literal, Optional
+
+    from agno.utils import json_schema as agno_json_schema
+
+    from cs_copilot.agents.agno_compat import patch_literal_enum_schema
+
+    assert patch_literal_enum_schema()
+
+    assert agno_json_schema.get_json_schema_for_arg(Literal["text", "dataframe"]) == {
+        "type": "string",
+        "enum": ["text", "dataframe"],
+    }
+    assert agno_json_schema.get_json_schema_for_arg(Literal[1, 2]) == {
+        "type": "integer",
+        "enum": [1, 2],
+    }
+    optional = agno_json_schema.get_json_schema_for_arg(Optional[Literal["a", "b"]])
+    assert {"type": "string", "enum": ["a", "b"]} in optional["anyOf"]
+
+    # Non-Literal hints keep agno's own behaviour.
+    assert agno_json_schema.get_json_schema_for_arg(str) == {"type": "string"}
+
+
+def test_the_literal_patch_is_idempotent():
+    from agno.utils import json_schema as agno_json_schema
+
+    from cs_copilot.agents.agno_compat import patch_literal_enum_schema
+
+    assert patch_literal_enum_schema()
+    once = agno_json_schema.get_json_schema_for_arg
+    assert patch_literal_enum_schema()
+    assert agno_json_schema.get_json_schema_for_arg is once

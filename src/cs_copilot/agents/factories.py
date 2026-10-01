@@ -32,6 +32,7 @@ from cs_copilot.tools import (
 )
 from cs_copilot.tools.analysis import RobustnessAnalysisToolkit
 
+from .agno_compat import patch_literal_enum_schema
 from .contracts import ROLE_POLICIES, RolePolicy, validate_role_tools
 from .descriptions import (
     CHEMBL_DESCRIPTION,
@@ -55,6 +56,11 @@ from .instructions import (
     SINGLE_AGENT_INSTRUCTIONS,
     SYNPLANNER_INSTRUCTIONS,
 )
+
+# Toolkit schemas are built when an agent registers its tools, so the Literal
+# fix has to be in place before any agent is created, on the team path and the
+# flat single-agent path alike.
+patch_literal_enum_schema()
 
 
 @dataclass
@@ -358,8 +364,8 @@ class ChEMBLDownloaderFactory(BaseAgentFactory):
             tools=[
                 ChemblToolkit(),
                 PointerPandasTools(),
+                SessionMemoryToolkit(),
                 SkillToolkit(),
-                # SessionToolkit(),
             ],
             instructions=CHEMBL_INSTRUCTIONS,
             session_state={
@@ -406,6 +412,7 @@ class ChemoinformaticianFactory(BaseAgentFactory):
             tools=[
                 ChemicalSimilarityToolkit(),
                 PointerPandasTools(),
+                SessionMemoryToolkit(),
                 GTMToolkit(),  # Enable GTM data access for downstream analysis
                 SkillToolkit(),
                 # Future: QSARToolkit, ClusteringToolkit, DescriptorToolkit
@@ -480,6 +487,7 @@ class MolecularDesignerFactory(BaseAgentFactory):
                 GTMToolkit(),
                 ChemicalSimilarityToolkit(),
                 PointerPandasTools(),
+                SessionMemoryToolkit(),
                 SkillToolkit(),
             ],
             instructions=MOLECULAR_DESIGNER_INSTRUCTIONS,
@@ -578,6 +586,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
             description=REPORT_GENERATOR_DESCRIPTION,
             tools=[
                 PointerPandasTools(),
+                SessionMemoryToolkit(),
                 save_gtm_landscape_plot,  # For saved GTM landscape tables
                 save_gtm_plot,  # For GTM-specific visualizations
                 save_rich_report,  # Persists image-rich HTML/PDF reports
@@ -608,6 +617,7 @@ class RobustnessEvaluationFactory(BaseAgentFactory):
             description=ROBUSTNESS_EVALUATION_DESCRIPTION,
             tools=[
                 PointerPandasTools(),
+                SessionMemoryToolkit(),
                 RobustnessAnalysisToolkit(),
                 SkillToolkit(),
             ],
@@ -679,6 +689,7 @@ class PeptideDesignerFactory(BaseAgentFactory):
                 PeptideDesignerToolkit(),
                 GTMToolkit(),
                 PointerPandasTools(),
+                SessionMemoryToolkit(),
                 save_gtm_landscape_plot,
                 save_gtm_plot,
                 SkillToolkit(),

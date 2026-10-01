@@ -24,34 +24,49 @@ _TOOLKIT_NAMES = sorted(
 # a deliberate decision that affects both runtimes, so it is pinned here.
 EXPECTED_ROLES = {
     "coordinator": ("standard", {"session", "skills"}, set(), {"workflow", "agno"}),
-    "chembl_downloader": ("chembl-retrieval", {"chembl", "pandas", "skills"}, set(), set()),
+    "chembl_downloader": (
+        "chembl-retrieval",
+        {"chembl", "pandas", "skills", "session"},
+        set(),
+        set(),
+    ),
     "gtm_agent": (
         "gtm-analysis",
         {"gtm", "pandas", "session", "skills"},
         {"save_gtm_landscape_plot", "save_gtm_plot"},
         set(),
     ),
-    "chemoinformatician": ("chemoinformatics", {"chem", "gtm", "pandas", "skills"}, set(), set()),
+    "chemoinformatician": (
+        "chemoinformatics",
+        {"chem", "gtm", "pandas", "skills", "session"},
+        set(),
+        set(),
+    ),
     "report_generator": (
         "reporting",
-        {"pandas", "report", "skills"},
+        {"pandas", "report", "skills", "session"},
         {"save_gtm_landscape_plot", "save_gtm_plot", "save_rich_report", "save_markdown_report"},
         set(),
     ),
     "molecular_designer": (
         "molecular-design",
-        {"molecular_design", "gtm", "chem", "pandas", "skills"},
+        {"molecular_design", "gtm", "chem", "pandas", "skills", "session"},
         set(),
         set(),
     ),
     "peptide_designer": (
         "peptide-design",
-        {"peptide_design", "gtm", "pandas", "skills"},
+        {"peptide_design", "gtm", "pandas", "skills", "session"},
         {"save_gtm_landscape_plot", "save_gtm_plot"},
         set(),
     ),
     "synplanner": ("retrosynthesis", {"synplanner", "skills"}, set(), set()),
-    "robustness_evaluation": ("robustness", {"pandas", "robustness", "skills"}, set(), set()),
+    "robustness_evaluation": (
+        "robustness",
+        {"pandas", "robustness", "skills", "session"},
+        set(),
+        set(),
+    ),
     "single_agent": (
         "standard",
         {

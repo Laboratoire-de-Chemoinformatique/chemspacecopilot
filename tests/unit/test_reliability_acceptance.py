@@ -414,3 +414,73 @@ def test_model_artifact_sniffs_compression_without_unpickling(tmp_path, compress
     path = tmp_path / f"model{suffix}"
     path.write_bytes(gzip.compress(payload) if compressed else payload)
     assert _model_artifact({}, str(path))
+
+
+def _check_of(result, name):
+    return next(c for c in result["checks"] if c["name"] == name)
+
+
+def test_a_thousands_separator_still_grounds_the_reported_count(tmp_path):
+    """ "2,212 compounds" reports the observed count as truthfully as "2212"."""
+    base = seh_output(tmp_path)
+    many = tmp_path / "many.csv"
+    pd.DataFrame({"smiles": ["CCO"] * 1234, "assay_chembl_id": ["CHEMBL1"] * 1234}).to_csv(
+        many, index=False
+    )
+    base["session_state"]["data_file_paths"]["dataset_path"] = str(many)
+    del base["session_state"]["data_file_paths"]["descriptor_parquet_path"]
+    base["session_state"]["session_objects"].pop("reports")
+    base["response"] = (
+        "The curated set contains 1,234 compounds across assays; "
+        "active and inactive classes separate cleanly."
+    )
+    assert _check_of(evaluate_run("seh_analysis", base), "assay_and_class_separation_reported")[
+        "passed"
+    ]
+
+
+def test_an_assay_id_inside_a_grouped_list_cell_counts_as_grounding(tmp_path):
+    """Grouped datasets store several assay ids per row, often as a JSON list."""
+    base = seh_output(tmp_path)
+    grouped = tmp_path / "grouped.csv"
+    pd.DataFrame(
+        {
+            "smiles": ["CCO", "CCN"],
+            "assay_chembl_ids": ['["CHEMBL777", "CHEMBL888"]', '["CHEMBL999"]'],
+        }
+    ).to_csv(grouped, index=False)
+    base["session_state"]["data_file_paths"]["dataset_path"] = str(grouped)
+    del base["session_state"]["data_file_paths"]["descriptor_parquet_path"]
+    base["session_state"]["session_objects"].pop("reports")
+    base["response"] = (
+        "Assay CHEMBL777 dominates; active and inactive compounds separate on the map."
+    )
+    assert _check_of(evaluate_run("seh_analysis", base), "assay_and_class_separation_reported")[
+        "passed"
+    ]
+
+
+def test_in_session_descriptors_satisfy_the_check_when_nothing_persists_them(tmp_path):
+    """Projecting onto a cached map computes descriptors but writes no table.
+
+    Demanding a file there scores a configuration choice as a scientific
+    failure. A run that never reaches a descriptor-persisting stage is judged
+    on whether descriptors existed at all.
+    """
+    base = seh_output(tmp_path)
+    del base["session_state"]["data_file_paths"]["descriptor_parquet_path"]
+    base["session_state"][
+        "_gtm_prepared_dataset_cache"
+    ] = "_PreparedGTMData(df=... autoencoder_embedding [[-0.27, 0.42]] ...)"
+    assert _check_of(evaluate_run("seh_analysis", base), "descriptor_artifact_registered")["passed"]
+
+
+def test_a_persisting_stage_still_requires_a_readable_descriptor_table(tmp_path):
+    """Retrieval and normalization do persist descriptors, so still demand them."""
+    base = seh_output(tmp_path)
+    del base["session_state"]["data_file_paths"]["descriptor_parquet_path"]
+    base["session_state"]["_gtm_prepared_dataset_cache"] = "autoencoder_embedding"
+    base["telemetry"] = {"tool_calls": [call("normalize_for_analysis")]}
+    assert not _check_of(evaluate_run("seh_analysis", base), "descriptor_artifact_registered")[
+        "passed"
+    ]
