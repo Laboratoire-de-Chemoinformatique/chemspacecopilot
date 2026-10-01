@@ -346,3 +346,65 @@ def test_session_memory_toolkit_resolves_candidate_set(monkeypatch, tmp_path):
     assert materialized["csv_path"].endswith(
         "02_analog_generation/candidate_sets/cset_001/candidates.csv"
     )
+
+
+class TestBareLeafSessionKeys:
+    """The instructions name leaf keys; the values live nested.
+
+    `instructions.py` and the skills tell the agent to use `clean_dataset_path`,
+    while it is stored at `data_file_paths.clean_dataset_path`. Rejecting the
+    documented spelling cost a round trip and taught nothing.
+    """
+
+    STATE = {
+        "data_file_paths": {"clean_dataset_path": "/x/clean.csv", "dataset_path": None},
+        "landscape_files": {"landscape_data_csv": "/x/landscape.csv"},
+        "session_objects": {
+            "datasets": {
+                "ds_001": {"clean_dataset_path": "/x/clean.csv"},
+                "ds_002": {"clean_dataset_path": "/y/other.csv"},
+            }
+        },
+    }
+
+    def test_the_full_dotted_path_still_resolves(self):
+        from cs_copilot.tools.io.session_memory import _resolve_dotted_session_key
+
+        assert _resolve_dotted_session_key(self.STATE, "data_file_paths.clean_dataset_path") == (
+            True,
+            "/x/clean.csv",
+        )
+
+    def test_the_documented_leaf_name_resolves_to_the_canonical_home(self):
+        from cs_copilot.tools.io.session_memory import _resolve_dotted_session_key
+
+        # Two objects also hold this key with different values; data_file_paths wins.
+        assert _resolve_dotted_session_key(self.STATE, "clean_dataset_path") == (
+            True,
+            "/x/clean.csv",
+        )
+
+    def test_a_unique_nested_leaf_resolves(self):
+        from cs_copilot.tools.io.session_memory import _resolve_dotted_session_key
+
+        assert _resolve_dotted_session_key(self.STATE, "landscape_data_csv") == (
+            True,
+            "/x/landscape.csv",
+        )
+
+    def test_the_same_path_recorded_twice_is_not_an_ambiguity(self):
+        from cs_copilot.tools.io.session_memory import _resolve_dotted_session_key
+
+        state = {"session_objects": {"a": {"p": "/same.csv"}, "b": {"p": "/same.csv"}}}
+        assert _resolve_dotted_session_key(state, "p") == (True, "/same.csv")
+
+    def test_genuinely_conflicting_values_still_fail_rather_than_guess(self):
+        from cs_copilot.tools.io.session_memory import _resolve_dotted_session_key
+
+        state = {"session_objects": {"a": {"p": "/one.csv"}, "b": {"p": "/two.csv"}}}
+        assert _resolve_dotted_session_key(state, "p") == (False, None)
+
+    def test_an_unset_value_does_not_resolve(self):
+        from cs_copilot.tools.io.session_memory import _resolve_dotted_session_key
+
+        assert _resolve_dotted_session_key(self.STATE, "dataset_path") == (False, None)
