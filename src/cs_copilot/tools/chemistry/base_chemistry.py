@@ -68,8 +68,11 @@ class BaseChemistryToolkit(Toolkit):
         super().__init__(name)
         # Register all chemistry tools
         self.register(self.validate_smiles)
-        self.register(self.smiles_to_mol)
-        self.register(self.mol_to_smiles)
+        # smiles_to_mol/mol_to_smiles stay Python helpers and are deliberately
+        # not exposed: an RDKit Mol cannot cross JSON, so the model can neither
+        # supply one nor use one it is handed. Offering them only produces
+        # "Input should be an instance of Mol" errors. Use canonicalize_smiles.
+        self.register(self.canonicalize_smiles)
         self.register(self.get_molecular_weight)
         self.register(self.get_molecular_formula)
         self.register(self.get_lipinski_descriptors)
@@ -141,6 +144,21 @@ class BaseChemistryToolkit(Toolkit):
             return Chem.MolToSmiles(mol)
         else:
             return Chem.MolToSmiles(mol, canonical=False)
+
+    def canonicalize_smiles(self, smiles: str, canonical: bool = True) -> str:
+        """
+        Rewrite a SMILES string in RDKit's canonical form.
+
+        Args:
+            smiles: SMILES string to rewrite.
+            canonical: Whether to canonicalize atom ordering. Pass False to
+                keep the input ordering while still round-tripping through
+                RDKit.
+
+        Returns:
+            The rewritten SMILES string.
+        """
+        return self.mol_to_smiles(self.smiles_to_mol(smiles), canonical=canonical)
 
     def get_molecular_weight(self, smiles: str) -> float:
         """

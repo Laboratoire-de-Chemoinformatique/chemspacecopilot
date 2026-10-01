@@ -97,3 +97,56 @@ def patch_async_function_call_retry() -> bool:
     setattr(arun_function_call, _PATCH_MARKER, True)
     Model.arun_function_call = arun_function_call
     return True
+
+
+_LITERAL_PATCH_MARKER = "__cs_copilot_literal_enum_fix__"
+
+
+def patch_literal_enum_schema() -> bool:
+    """Advertise ``Literal`` parameters to the model as string enums.
+
+    Agno 2.1.9's schema builder has no branch for :data:`typing.Literal`, so
+    every such parameter falls through to the generic object case and reaches
+    the model as ``{"type": "object", "properties": {}}`` -- no values, no
+    default. Pydantic then rejects the call at runtime with "Input should be
+    'x' or 'y'", penalising the model for a constraint it was never shown, and
+    a model that obeys the advertised schema sends a dict and fails the same
+    way.
+
+    Returns whether the patch is active.
+    """
+
+    import typing
+
+    from agno.utils import json_schema as agno_json_schema
+
+    original = agno_json_schema.get_json_schema_for_arg
+    if getattr(original, _LITERAL_PATCH_MARKER, False):
+        return True
+    try:
+        installed = version("agno")
+    except PackageNotFoundError:  # pragma: no cover - agno is a hard dependency
+        return False
+    if installed not in PATCHED_AGNO_VERSIONS:
+        logger.warning(
+            "Not applying the Literal enum schema fix for agno %s (validated for %s); "
+            "check whether get_json_schema_for_arg still needs it.",
+            installed,
+            ", ".join(sorted(PATCHED_AGNO_VERSIONS)),
+        )
+        return False
+
+    _JSON_TYPES = ((str, "string"), (bool, "boolean"), (int, "integer"), (float, "number"))
+
+    def get_json_schema_for_arg(type_hint, *args, **kwargs):
+        if typing.get_origin(type_hint) is typing.Literal:
+            values = list(typing.get_args(type_hint))
+            for python_type, json_type in _JSON_TYPES:
+                # bool before int: bool is a subclass of int.
+                if values and all(isinstance(value, python_type) for value in values):
+                    return {"type": json_type, "enum": values}
+        return original(type_hint, *args, **kwargs)
+
+    setattr(get_json_schema_for_arg, _LITERAL_PATCH_MARKER, True)
+    agno_json_schema.get_json_schema_for_arg = get_json_schema_for_arg
+    return True
