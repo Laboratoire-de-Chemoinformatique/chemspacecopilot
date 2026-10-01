@@ -96,18 +96,21 @@ def _preview(df: pd.DataFrame) -> str:
     )
 
 
-def _normalize_csv(params: dict) -> dict:
-    """Map legacy aliases -> path_or_buf."""
-    for old in (
-        "path",
-        "path_or_buffer",
-        "filepath",
-        "filepath_or_buffer",
-        "file_path",
-        "filename",
-    ):
+_PATH_ALIASES = (
+    "path",
+    "path_or_buffer",
+    "filepath",
+    "filepath_or_buffer",
+    "file_path",
+    "filename",
+)
+
+
+def _normalize_csv(params: dict, canonical: str = "path_or_buf") -> dict:
+    """Map legacy aliases -> the writer's own path parameter."""
+    for old in _PATH_ALIASES:
         if old in params:
-            params["path_or_buf"] = params.pop(old)
+            params[canonical] = params.pop(old)
     return params
 
 
@@ -531,12 +534,31 @@ class PointerPandasTools(PandasTools):
         operation_parameters: Optional[Union[Dict[str, Any], str]] = None,
         function_parameters: Optional[Union[Dict[str, Any], str]] = None,
     ) -> Union[pd.DataFrame, pd.Series, Dict, str, float, int]:
-        """Run operations on existing DataFrames.
+        """Run a pandas operation on a registered DataFrame.
 
         Args:
-            dataframe_name: Name of the DataFrame to operate on
-            operation: Operation to perform
-            operation_parameters: Parameters for the operation
+            dataframe_name: Name of the DataFrame to operate on.
+            operation: pandas DataFrame method to run. Supported, grouped by the
+                parameter that selects columns:
+                - single column via ``column``: describe, unique, value_counts,
+                  mean, median, min, max, sum, std, var, count, nunique, mode,
+                  isnull, isna, notna, notnull, fillna, quantile, idxmax,
+                  idxmin, transform, explode, agg/aggregate
+                - several columns via ``columns``: select, drop, nlargest,
+                  nsmallest
+                - ``by``: groupby, sort_values
+                - ``subset``: dropna, drop_duplicates
+                Also: head, tail, sample, query, loc, iloc, to_csv, to_json,
+                to_parquet, to_markdown.
+            operation_parameters: Parameters for the operation, as a mapping.
+                Use the column selector named above for your operation, plus the
+                operation's own arguments, for example
+                ``{"column": "pIC50", "q": [0.25, 0.5]}`` for quantile,
+                ``{"columns": "density", "n": 5}`` for nlargest,
+                ``{"column": "pIC50", "func": ["min", "max"]}`` for agg, or
+                ``{"expr": "pIC50 > 7"}`` for query. Destination paths for the
+                ``to_*`` writers may be given as ``path``. Results are stored
+                under a generated name that the return value reports.
             function_parameters: Backwards-compatible alias for operation_parameters.
 
         Returns:
@@ -824,8 +846,45 @@ class PointerPandasTools(PandasTools):
                 result = getattr(series, operation)(**params)
                 return _serialize_series(result) if isinstance(result, pd.Series) else result
 
+            # ``column`` is the column selector for 13 operations above, so the
+            # model reasonably reuses it here. pandas spells it differently (or
+            # not at all) for these, which used to surface as a bare
+            # "unexpected keyword argument".
+            if operation in ("nlargest", "nsmallest"):
+                _normalize_param_aliases(params, "columns", ("column", "col", "by"))
+                if "columns" in params:
+                    columns = _coerce_columns(params["columns"], param_name="columns")
+                    _validate_columns(df, columns, param_name="columns")
+                    params["columns"] = columns
+                _normalize_param_aliases(params, "n", ("top_n", "count", "k"))
+
+            if operation in ("quantile", "idxmax", "idxmin", "transform"):
+                # These take no column selector; subset the frame instead.
+                _normalize_param_aliases(params, "column", ("columns", "col", "subset"))
+                if "column" in params:
+                    columns = _coerce_columns(params.pop("column"), param_name="column")
+                    _validate_columns(df, columns, param_name="column")
+                    df = df[columns[0]] if len(columns) == 1 else df[columns]
+                if operation == "quantile":
+                    _normalize_param_aliases(params, "q", ("quantiles", "percentiles"))
+
+            if operation == "explode":
+                # pandas spells this one singular, the inverse of drop/dropna.
+                _normalize_param_aliases(params, "column", ("columns", "col", "subset"))
+
+            # to_csv is intercepted earlier; the other writers spell their
+            # destination "path" or "path_or_buf" depending on the format.
+            if operation in ("to_json", "to_html", "to_markdown"):
+                params = _normalize_csv(params, "path_or_buf")
+            elif operation in ("to_parquet", "to_excel", "to_feather", "to_pickle"):
+                params = _normalize_csv(params, "path")
+
             # Special handling for aggregate/agg operations
             if operation in ("agg", "aggregate"):
+                if "column" in params:
+                    columns = _coerce_columns(params.pop("column"), param_name="column")
+                    _validate_columns(df, columns, param_name="column")
+                    df = df[columns[0]] if len(columns) == 1 else df[columns]
                 func = params.get("func")
                 if func is None:
                     # LLM might pass it as a list of functions
@@ -833,6 +892,12 @@ class PointerPandasTools(PandasTools):
                         func = params.pop("operation_parameters")
                     elif "functions" in params:
                         func = params.pop("functions")
+                    elif "funcs" in params:
+                        func = params.pop("funcs")
+                    elif "aggregations" in params:
+                        func = params.pop("aggregations")
+                    elif "agg_func" in params:
+                        func = params.pop("agg_func")
                     else:
                         raise ValueError(
                             f"'{operation}' requires 'func' parameter with aggregation functions. "

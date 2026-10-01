@@ -490,3 +490,60 @@ class TestPointerPandasTools:
 
         assert "smiles" not in result["columns_mapped"]
         assert normalized["smiles"].tolist() == ["CCO"]
+
+
+class TestColumnSelectorConsistency:
+    """`column` selects a column for 13 operations, so the model reuses it.
+
+    pandas spells it differently for nlargest/nsmallest and does not accept it
+    at all for quantile/idxmax/agg, which surfaced as bare "unexpected keyword
+    argument" errors after the toolkit had taught the convention.
+    """
+
+    def _tools(self):
+        tools = PointerPandasTools()
+        tools.dataframes["t"] = pd.DataFrame(
+            {"density": [0.1, 0.9, 0.5, 0.3], "pIC50": [5.0, 7.5, 6.1, 8.2]}
+        )
+        return tools
+
+    def test_nlargest_accepts_the_singular_column_alias(self):
+        tools = self._tools()
+        result = tools.run_dataframe_operation("t", "nlargest", {"column": "density", "n": 2})
+        rows = tools.dataframes[result["dataframe_name"]]
+        assert rows["density"].tolist() == [0.9, 0.5]
+
+    def test_nsmallest_accepts_the_singular_column_alias(self):
+        tools = self._tools()
+        result = tools.run_dataframe_operation("t", "nsmallest", {"column": "density", "n": 2})
+        rows = tools.dataframes[result["dataframe_name"]]
+        assert rows["density"].tolist() == [0.1, 0.3]
+
+    def test_quantile_subsets_the_frame_instead_of_rejecting_column(self):
+        tools = self._tools()
+        result = tools.run_dataframe_operation(
+            "t", "quantile", {"column": "pIC50", "q": [0.0, 1.0]}
+        )
+        assert result["sample"][0.0] == 5.0
+        assert result["sample"][1.0] == 8.2
+
+    def test_idxmax_subsets_the_frame_instead_of_rejecting_column(self):
+        tools = self._tools()
+        assert tools.run_dataframe_operation("t", "idxmax", {"column": "pIC50"}) == 3
+
+    def test_agg_accepts_a_column_selector_and_the_funcs_spelling(self):
+        tools = self._tools()
+        by_func = tools.run_dataframe_operation(
+            "t", "agg", {"column": "pIC50", "func": ["min", "max"]}
+        )
+        by_funcs = tools.run_dataframe_operation(
+            "t", "agg", {"column": "pIC50", "funcs": ["min", "max"]}
+        )
+        assert by_func["sample"] == {"min": 5.0, "max": 8.2}
+        assert by_funcs["sample"] == by_func["sample"]
+
+    def test_a_writer_destination_may_be_given_as_path(self, tmp_path):
+        tools = self._tools()
+        target = tmp_path / "out.json"
+        tools.run_dataframe_operation("t", "to_json", {"path": str(target)})
+        assert target.exists()
