@@ -4,6 +4,8 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 import cs_copilot.tools as tools
 import cs_copilot.tools.chemistry as chemistry
 import cs_copilot.tools.chemistry.peptide_designer_toolkit as peptide_designer_module
@@ -239,3 +241,47 @@ def test_llm_design_engine_parses_json_string_response():
 
     assert result.candidates[0].sequence == "A C D"
     assert result.candidates[0].score == 0.7
+
+
+class TestPeptideCandidateReferences:
+    """The dataframe loader teaches a dotted convention this loader rejected.
+
+    A dotted guess such as ``peptide_candidate_sets.ecoli_landscape_sample``
+    became a file-not-found against a literal path of that name, and a bare
+    candidate-set id did too.
+    """
+
+    def _state(self, tmp_path):
+        import json as _json
+
+        artifact = tmp_path / "peptides.json"
+        artifact.write_text(
+            _json.dumps(
+                {"peptide_candidate_set_id": "pep_cset_001", "candidates": [{"sequence": "GIGK"}]}
+            )
+        )
+        return {
+            "peptide_candidate_sets": {"ecoli_landscape_sample": {"artifact_path": str(artifact)}},
+            "session_objects": {
+                "peptide_candidate_sets": {"pep_cset_001": {"artifact_path": str(artifact)}}
+            },
+        }
+
+    def test_a_dotted_session_path_resolves(self, tmp_path):
+        toolkit = PeptideDesignerToolkit()
+        result = toolkit.load_peptide_design_candidates(
+            "peptide_candidate_sets.ecoli_landscape_sample", session_state=self._state(tmp_path)
+        )
+        assert result["status"] == "loaded"
+
+    def test_a_registered_candidate_set_id_resolves(self, tmp_path):
+        toolkit = PeptideDesignerToolkit()
+        result = toolkit.load_peptide_design_candidates(
+            "pep_cset_001", session_state=self._state(tmp_path)
+        )
+        assert result["status"] == "loaded"
+
+    def test_an_unknown_reference_names_what_is_available(self, tmp_path):
+        toolkit = PeptideDesignerToolkit()
+        with pytest.raises(FileNotFoundError, match="Available in this session"):
+            toolkit.load_peptide_design_candidates("nope", session_state=self._state(tmp_path))

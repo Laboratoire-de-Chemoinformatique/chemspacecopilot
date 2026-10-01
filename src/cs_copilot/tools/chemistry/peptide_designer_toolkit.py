@@ -1238,6 +1238,35 @@ class PeptideDesignerToolkit(Toolkit):
             reverse=True,
         )
 
+    @staticmethod
+    def _lookup_peptide_candidate_set(session_state: Dict[str, Any], reference: str):
+        """Find a registered peptide candidate set by its id."""
+
+        registry = (session_state.get("session_objects") or {}).get("peptide_candidate_sets") or {}
+        entry = registry.get(reference)
+        if isinstance(entry, dict):
+            return entry
+        for value in session_state.values():
+            if isinstance(value, dict) and value.get("peptide_candidate_set_id") == reference:
+                return value
+        return None
+
+    @staticmethod
+    def _available_peptide_references(session_state) -> str:
+        """Names the model could have used, for a failed lookup."""
+
+        if not isinstance(session_state, dict):
+            return ""
+        names = [
+            key
+            for key, value in session_state.items()
+            if isinstance(value, dict)
+            and (value.get("peptide_candidate_set_id") or "peptide" in key.lower())
+        ]
+        registry = (session_state.get("session_objects") or {}).get("peptide_candidate_sets") or {}
+        names.extend(registry)
+        return ", ".join(sorted(set(names)))
+
     def load_peptide_design_candidates(
         self,
         reference: str = "designed_peptides",
@@ -1248,17 +1277,27 @@ class PeptideDesignerToolkit(Toolkit):
         Load peptide design candidates from a session pointer or artifact path.
 
         Args:
-            reference: Session key, artifact path, or artifact-relative path.
+            reference: How to find the candidates. Accepts a top-level session
+                key, a dotted session path such as
+                ``peptide_candidate_sets.ecoli_landscape_sample``, a registered
+                candidate-set id, or an artifact path. Call
+                ``list_loadable_session_data`` to see what this session holds.
             include_candidates: Whether to include the full candidate list.
             session_state: Shared session state auto-injected by Agno.
 
         Returns:
             Artifact metadata and optionally full peptide candidate dictionaries.
         """
+        from cs_copilot.tools.io.session_memory import _resolve_dotted_session_key
+
         artifact_path = reference
         pointer = None
         if isinstance(session_state, dict):
-            raw_pointer = session_state.get(reference)
+            # A flat lookup rejected the dotted spelling that the dataframe
+            # loader teaches, turning a reasonable guess into a file-not-found.
+            found, raw_pointer = _resolve_dotted_session_key(session_state, reference)
+            if not found:
+                raw_pointer = self._lookup_peptide_candidate_set(session_state, reference)
             if isinstance(raw_pointer, dict):
                 pointer = raw_pointer
                 artifact_path = (
@@ -1266,9 +1305,19 @@ class PeptideDesignerToolkit(Toolkit):
                     or pointer.get("artifact_path")
                     or artifact_path
                 )
+            elif isinstance(raw_pointer, str) and raw_pointer:
+                artifact_path = raw_pointer
 
-        with S3.open(str(artifact_path), "r") as handle:
-            payload = json.load(handle)
+        try:
+            with S3.open(str(artifact_path), "r") as handle:
+                payload = json.load(handle)
+        except FileNotFoundError as exc:
+            available = self._available_peptide_references(session_state)
+            raise FileNotFoundError(
+                f"No peptide candidates for reference {reference!r}. "
+                f"Available in this session: {available or 'none'}. "
+                "Use list_loadable_session_data to inspect the session."
+            ) from exc
 
         candidates = list(payload.get("candidates") or [])
         result = {
