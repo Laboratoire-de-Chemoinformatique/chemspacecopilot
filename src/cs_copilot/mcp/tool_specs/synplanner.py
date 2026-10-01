@@ -27,7 +27,10 @@ _METHODS = [
     (
         "synplanner_plan_synthesis",
         "plan_synthesis",
-        "Run SynPlanner retrosynthesis planning for a SMILES string or molecule name.",
+        "Run SynPlanner retrosynthesis planning for a SMILES string or molecule name. "
+        "For a generated candidate pass candidate_reference (such as cset_001 or "
+        "cset_001#3) rather than retyping its SMILES, which can silently alter the "
+        "structure; the result reports candidate_provenance.",
         False,
         True,
     ),
