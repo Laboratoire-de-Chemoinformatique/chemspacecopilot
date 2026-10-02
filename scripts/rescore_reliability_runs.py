@@ -47,7 +47,9 @@ def _load_output(run_dir: Path) -> dict | None:
     output = json.loads(metadata_path.read_text(encoding="utf-8"))
 
     response = run_dir / "response.txt"
-    output["response"] = response.read_text(encoding="utf-8", errors="replace") if response.exists() else ""
+    output["response"] = (
+        response.read_text(encoding="utf-8", errors="replace") if response.exists() else ""
+    )
 
     state = run_dir / "session_state.json"
     output["session_state"] = {}
@@ -91,7 +93,9 @@ def main() -> None:
         try:
             rescored = evaluate_run(validator, output)
         except Exception as exc:  # a validator crash is itself a finding
-            rows.append({"run": str(run_dir), "case": case, "error": f"{type(exc).__name__}: {exc}"})
+            rows.append(
+                {"run": str(run_dir), "case": case, "error": f"{type(exc).__name__}: {exc}"}
+            )
             continue
 
         rescored_checks = {c["name"]: c["passed"] for c in rescored.get("checks") or []}
@@ -129,7 +133,8 @@ def main() -> None:
         "stored_task_success": sum(1 for r in scored if r["stored_task_success"]),
         "rescored_task_success": sum(1 for r in scored if r["rescored_task_success"]),
         "verdict_transitions": {
-            f"{'pass' if a else 'fail'}->{'pass' if b else 'fail'}": n for (a, b), n in flips.items()
+            f"{'pass' if a else 'fail'}->{'pass' if b else 'fail'}": n
+            for (a, b), n in flips.items()
         },
         "per_check_changes": {k: dict(v) for k, v in sorted(per_check.items())},
         "validator_errors": [r for r in rows if "error" in r],
@@ -144,7 +149,16 @@ def main() -> None:
 
     print(
         json.dumps(
-            {k: report[k] for k in ("runs_rescored", "stored_task_success", "rescored_task_success", "verdict_transitions", "per_check_changes")},
+            {
+                k: report[k]
+                for k in (
+                    "runs_rescored",
+                    "stored_task_success",
+                    "rescored_task_success",
+                    "verdict_transitions",
+                    "per_check_changes",
+                )
+            },
             indent=2,
         )
     )
