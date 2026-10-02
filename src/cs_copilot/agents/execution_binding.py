@@ -41,7 +41,6 @@ from typing import Any, Callable, Iterable, Mapping
 
 from cs_copilot import capabilities
 from cs_copilot.execution.context import AGNO_RUNTIME, BasicExecutionContext
-from cs_copilot.execution.envelopes import _coerce_return_value
 from cs_copilot.execution.errors import ToolExecutionError
 from cs_copilot.execution.runner import execute_sync, observe_sync
 from cs_copilot.execution.scope import _InvocationScope
@@ -68,19 +67,6 @@ _IN_BOUND_CALL: contextvars.ContextVar[bool] = contextvars.ContextVar(
 # Identifies this process in "started" events so a later process can recognise
 # spans orphaned by a crash or restart.
 PROCESS_OWNER = {"host": socket.gethostname(), "pid": os.getpid(), "boot": uuid.uuid4().hex}
-
-
-def _llm_safe(value: Any) -> Any:
-    """Return a tool result Agno can render without truth-testing it.
-
-    Agno 2.1.9 evaluates ``str(result) if result else ""`` for every tool call
-    (``agno/models/base.py``), which raises ``ValueError`` for a DataFrame and
-    aborts the whole run, losing work the agent had already completed. The MCP
-    runtime already coerces the same values, so this keeps both runtimes
-    returning the same shape to their reasoner.
-    """
-
-    return _coerce_return_value(value)
 
 
 class ExecutionMode(str, Enum):
@@ -176,19 +162,15 @@ class ExecutionBinding:
         declare them; they inform the recording but are never passed on.
         """
 
-        if _IN_BOUND_CALL.get():
-            # A nested call from inside another tool: its consumer is our own
-            # code, which may rely on the concrete return type.
+        if not self.enabled or _IN_BOUND_CALL.get():
             return function(*args, **kwargs)
-        if not self.enabled:
-            return _llm_safe(function(*args, **kwargs))
         token = _IN_BOUND_CALL.set(True)
         with self._lock:
             self._in_flight += 1
         try:
             if self.mode is ExecutionMode.ENFORCE:
-                return _llm_safe(self._enforce(function, owner, args, kwargs, dict(context or {})))
-            return _llm_safe(self._observe(function, owner, args, kwargs, dict(context or {})))
+                return self._enforce(function, owner, args, kwargs, dict(context or {}))
+            return self._observe(function, owner, args, kwargs, dict(context or {}))
         finally:
             _IN_BOUND_CALL.reset(token)
             with self._idle:

@@ -32,7 +32,7 @@ from cs_copilot.tools import (
 )
 from cs_copilot.tools.analysis import RobustnessAnalysisToolkit
 
-from .agno_compat import patch_literal_enum_schema
+from .agno_compat import patch_literal_enum_schema, patch_tool_result_coercion
 from .contracts import ROLE_POLICIES, RolePolicy, validate_role_tools
 from .descriptions import (
     CHEMBL_DESCRIPTION,
@@ -61,6 +61,9 @@ from .instructions import (
 # fix has to be in place before any agent is created, on the team path and the
 # flat single-agent path alike.
 patch_literal_enum_schema()
+# Agno renders every tool result with a truth test that a DataFrame cannot
+# satisfy; this covers the team and the flat baseline alike.
+patch_tool_result_coercion()
 
 
 @dataclass
