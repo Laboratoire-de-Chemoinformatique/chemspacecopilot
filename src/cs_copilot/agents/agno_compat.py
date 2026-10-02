@@ -99,6 +99,82 @@ def patch_async_function_call_retry() -> bool:
     return True
 
 
+_RESULT_PATCH_MARKER = "__cs_copilot_tool_result_fix__"
+
+
+def patch_tool_result_coercion() -> bool:
+    """Stop Agno truth-testing a tool result it cannot truth-test.
+
+    Agno 2.1.9 renders every tool result with
+    ``str(result) if result else ""`` (``agno/models/base.py``). A pandas
+    DataFrame raises ``ValueError`` there, aborting a run the agent had already
+    largely completed, and a NumPy array raises the same way.
+
+    Patching :meth:`FunctionCall.execute` covers every caller -- the team path,
+    the flat single-agent baseline, and tool calls a member makes while a
+    delegation is in flight -- because that is where Agno collects the value.
+    The execution kernel has already seen the raw value by then, so artifact
+    registration is unaffected.
+
+    Returns whether the patch is active.
+    """
+
+    from agno.tools.function import FunctionCall
+
+    if getattr(FunctionCall.execute, _RESULT_PATCH_MARKER, False):
+        return True
+    try:
+        installed = version("agno")
+    except PackageNotFoundError:  # pragma: no cover - agno is a hard dependency
+        return False
+    if installed not in PATCHED_AGNO_VERSIONS:
+        logger.warning(
+            "Not applying the tool-result coercion fix for agno %s (validated for %s); "
+            "check whether run_function_call still truth-tests its result.",
+            installed,
+            ", ".join(sorted(PATCHED_AGNO_VERSIONS)),
+        )
+        return False
+
+    from cs_copilot.execution.envelopes import _coerce_return_value
+
+    def _truth_testable(value) -> bool:
+        try:
+            bool(value)
+        except Exception:
+            return False
+        return True
+
+    def _coerce(outcome):
+        value = getattr(outcome, "result", None)
+        if value is None or _truth_testable(value):
+            return outcome
+        try:
+            coerced = _coerce_return_value(value)
+        except Exception:  # never fail a completed call over rendering
+            coerced = value
+        if not _truth_testable(coerced):
+            # Anything else whose __bool__ raises, such as a NumPy array.
+            coerced = coerced.tolist() if hasattr(coerced, "tolist") else repr(coerced)
+        outcome.result = coerced
+        return outcome
+
+    original_execute = FunctionCall.execute
+    original_aexecute = FunctionCall.aexecute
+
+    def execute(self, *args, **kwargs):
+        return _coerce(original_execute(self, *args, **kwargs))
+
+    async def aexecute(self, *args, **kwargs):
+        return _coerce(await original_aexecute(self, *args, **kwargs))
+
+    setattr(execute, _RESULT_PATCH_MARKER, True)
+    setattr(aexecute, _RESULT_PATCH_MARKER, True)
+    FunctionCall.execute = execute
+    FunctionCall.aexecute = aexecute
+    return True
+
+
 _LITERAL_PATCH_MARKER = "__cs_copilot_literal_enum_fix__"
 
 
