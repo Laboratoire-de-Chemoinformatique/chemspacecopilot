@@ -1,0 +1,1128 @@
+{
+  "architecture_paired": {
+    "both_succeeded": 14,
+    "discordant_pairs": 6,
+    "exact_mcnemar_note": "With 6 discordant pairs a two-sided exact binomial test has no useful power; the direction is reported descriptively, not as a significant difference.",
+    "incomplete_pairs": 0,
+    "interpretation_guard": "Paired but exploratory. Delegation overhead and failure propagation are measured tradeoffs at this sample size, not evidence of superiority.",
+    "neither": 4,
+    "paired_cells": 24,
+    "single_agent_only": 2,
+    "team_minus_single_total_tokens": {
+      "iqr_high": 1179577.0,
+      "iqr_low": 16207.75,
+      "max": 4114058.0,
+      "median": 141056.5,
+      "min": -5213058.0,
+      "n": 24
+    },
+    "team_minus_single_wall_seconds": {
+      "iqr_high": 344.345,
+      "iqr_low": 25.335,
+      "max": 794.851,
+      "median": 86.869,
+      "min": -43.716,
+      "n": 24
+    },
+    "team_only": 4
+  },
+  "by_arm_pooled_across_tiers": {
+    "single_agent": {
+      "cache_read_tokens": {
+        "coverage": "24/24",
+        "iqr_high": 1301248.0,
+        "iqr_low": 122816.0,
+        "max": 7139200.0,
+        "median": 465472.0,
+        "min": 25216.0,
+        "n": 24
+      },
+      "completed_without_agent_exception": 24,
+      "completion_rate": 1.0,
+      "executions": 24,
+      "failed_tool_call_fraction": 0.0816,
+      "failed_tool_calls_observed": 56,
+      "failure_categories": {
+        "missing_artifact": 5,
+        "missing_provenance": 3,
+        "missing_scientific_outcome": 3,
+        "tool_exception": 14
+      },
+      "task_success": 16,
+      "task_success_ci95": {
+        "high": 0.8203,
+        "low": 0.4671
+      },
+      "task_success_rate": 0.6667,
+      "tool_calls_observed": 686,
+      "tool_telemetry_coverage": "24/24",
+      "total_tokens": {
+        "coverage": "24/24",
+        "iqr_high": 1440093.0,
+        "iqr_low": 152571.5,
+        "max": 7557790.0,
+        "median": 541646.0,
+        "min": 49343.0,
+        "n": 24
+      },
+      "wall_time_seconds": {
+        "coverage": "24/24",
+        "iqr_high": 162.238,
+        "iqr_low": 46.626,
+        "max": 242.642,
+        "median": 72.444,
+        "min": 16.261,
+        "n": 24
+      }
+    },
+    "team": {
+      "cache_read_tokens": {
+        "coverage": "36/36",
+        "iqr_high": 2108288.0,
+        "iqr_low": 390464.0,
+        "max": 6321664.0,
+        "median": 854528.0,
+        "min": 76672.0,
+        "n": 36
+      },
+      "completed_without_agent_exception": 36,
+      "completion_rate": 1.0,
+      "executions": 36,
+      "failed_tool_call_fraction": 0.1125,
+      "failed_tool_calls_observed": 292,
+      "failure_categories": {
+        "missing_artifact": 4,
+        "missing_provenance": 3,
+        "missing_scientific_outcome": 2,
+        "tool_exception": 32
+      },
+      "task_success": 29,
+      "task_success_ci95": {
+        "high": 0.9025,
+        "low": 0.6497
+      },
+      "task_success_rate": 0.8056,
+      "tool_calls_observed": 2595,
+      "tool_telemetry_coverage": "36/36",
+      "total_tokens": {
+        "coverage": "36/36",
+        "iqr_high": 2611949.25,
+        "iqr_low": 548818.5,
+        "max": 7258250.0,
+        "median": 1013029.0,
+        "min": 100524.0,
+        "n": 36
+      },
+      "wall_time_seconds": {
+        "coverage": "36/36",
+        "iqr_high": 523.039,
+        "iqr_low": 62.208,
+        "max": 1407.576,
+        "median": 168.481,
+        "min": 41.549,
+        "n": 36
+      }
+    }
+  },
+  "by_case_and_arm": {
+    "case_1_seh_analysis|team": {
+      "cache_read_tokens": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 6321664.0,
+        "median": 4979968.0,
+        "min": 4039424.0,
+        "n": 3
+      },
+      "completed_without_agent_exception": 3,
+      "completion_rate": 1.0,
+      "executions": 3,
+      "failed_tool_call_fraction": 0.1254,
+      "failed_tool_calls_observed": 72,
+      "failure_categories": {
+        "tool_exception": 3
+      },
+      "task_success": 3,
+      "task_success_ci95": {
+        "high": 1.0,
+        "low": 0.4385
+      },
+      "task_success_rate": 1.0,
+      "tool_calls_observed": 574,
+      "tool_telemetry_coverage": "3/3",
+      "total_tokens": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 7258250.0,
+        "median": 5866396.0,
+        "min": 4814312.0,
+        "n": 3
+      },
+      "wall_time_seconds": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 1407.576,
+        "median": 1055.269,
+        "min": 713.67,
+        "n": 3
+      }
+    },
+    "case_2_seh_generation|team": {
+      "cache_read_tokens": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 825344.0,
+        "median": 527872.0,
+        "min": 525824.0,
+        "n": 3
+      },
+      "completed_without_agent_exception": 3,
+      "completion_rate": 1.0,
+      "executions": 3,
+      "failed_tool_call_fraction": 0.0364,
+      "failed_tool_calls_observed": 2,
+      "failure_categories": {
+        "tool_exception": 2
+      },
+      "task_success": 3,
+      "task_success_ci95": {
+        "high": 1.0,
+        "low": 0.4385
+      },
+      "task_success_rate": 1.0,
+      "tool_calls_observed": 55,
+      "tool_telemetry_coverage": "3/3",
+      "total_tokens": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 1021029.0,
+        "median": 734656.0,
+        "min": 632707.0,
+        "n": 3
+      },
+      "wall_time_seconds": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 91.141,
+        "median": 61.57,
+        "min": 59.931,
+        "n": 3
+      }
+    },
+    "case_3_retrosynthesis|team": {
+      "cache_read_tokens": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 561280.0,
+        "median": 387968.0,
+        "min": 352384.0,
+        "n": 3
+      },
+      "completed_without_agent_exception": 3,
+      "completion_rate": 1.0,
+      "executions": 3,
+      "failed_tool_call_fraction": 0.1064,
+      "failed_tool_calls_observed": 5,
+      "failure_categories": {
+        "missing_provenance": 1,
+        "tool_exception": 3
+      },
+      "task_success": 2,
+      "task_success_ci95": {
+        "high": 0.9385,
+        "low": 0.2077
+      },
+      "task_success_rate": 0.6667,
+      "tool_calls_observed": 47,
+      "tool_telemetry_coverage": "3/3",
+      "total_tokens": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 771240.0,
+        "median": 621579.0,
+        "min": 566205.0,
+        "n": 3
+      },
+      "wall_time_seconds": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 50.247,
+        "median": 49.347,
+        "min": 41.549,
+        "n": 3
+      }
+    },
+    "frozen_case_1_seh_analysis|single_agent": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 2721344.0,
+        "iqr_low": 1465792.0,
+        "max": 7139200.0,
+        "median": 2188608.0,
+        "min": 1283840.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.063,
+      "failed_tool_calls_observed": 25,
+      "failure_categories": {
+        "missing_artifact": 5,
+        "tool_exception": 6
+      },
+      "task_success": 1,
+      "task_success_ci95": {
+        "high": 0.5635,
+        "low": 0.0301
+      },
+      "task_success_rate": 0.1667,
+      "tool_calls_observed": 397,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 2915435.75,
+        "iqr_low": 1606107.5,
+        "max": 7557790.0,
+        "median": 2352557.0,
+        "min": 1424046.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 197.867,
+        "iqr_low": 186.547,
+        "max": 242.642,
+        "median": 193.1,
+        "min": 175.022,
+        "n": 6
+      }
+    },
+    "frozen_case_1_seh_analysis|team": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 3240992.0,
+        "iqr_low": 2901728.0,
+        "max": 3766656.0,
+        "median": 2970368.0,
+        "min": 1849088.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.0864,
+      "failed_tool_calls_observed": 71,
+      "failure_categories": {
+        "missing_artifact": 4,
+        "tool_exception": 6
+      },
+      "task_success": 2,
+      "task_success_ci95": {
+        "high": 0.7,
+        "low": 0.0968
+      },
+      "task_success_rate": 0.3333,
+      "tool_calls_observed": 822,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 3844993.25,
+        "iqr_low": 3438264.5,
+        "max": 4264302.0,
+        "median": 3626523.5,
+        "min": 2344732.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 612.065,
+        "iqr_low": 556.564,
+        "max": 740.018,
+        "median": 579.664,
+        "min": 512.585,
+        "n": 6
+      }
+    },
+    "frozen_case_2_seh_generation|single_agent": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 1099392.0,
+        "iqr_low": 158688.0,
+        "max": 1826688.0,
+        "median": 427200.0,
+        "min": 110720.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.1348,
+      "failed_tool_calls_observed": 19,
+      "failure_categories": {
+        "missing_provenance": 3,
+        "missing_scientific_outcome": 3,
+        "tool_exception": 3
+      },
+      "task_success": 3,
+      "task_success_ci95": {
+        "high": 0.8124,
+        "low": 0.1876
+      },
+      "task_success_rate": 0.5,
+      "tool_calls_observed": 141,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 1215406.75,
+        "iqr_low": 187501.25,
+        "max": 1973362.0,
+        "median": 475501.5,
+        "min": 151868.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 120.825,
+        "iqr_low": 37.385,
+        "max": 157.977,
+        "median": 80.24,
+        "min": 16.261,
+        "n": 6
+      }
+    },
+    "frozen_case_2_seh_generation|team": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 711648.0,
+        "iqr_low": 403616.0,
+        "max": 1180544.0,
+        "median": 520960.0,
+        "min": 242432.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.0476,
+      "failed_tool_calls_observed": 9,
+      "failure_categories": {
+        "missing_provenance": 2,
+        "missing_scientific_outcome": 2,
+        "tool_exception": 4
+      },
+      "task_success": 4,
+      "task_success_ci95": {
+        "high": 0.9032,
+        "low": 0.3
+      },
+      "task_success_rate": 0.6667,
+      "tool_calls_observed": 189,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 813205.25,
+        "iqr_low": 462290.25,
+        "max": 1500808.0,
+        "median": 581408.5,
+        "min": 285488.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 125.467,
+        "iqr_low": 89.948,
+        "max": 269.266,
+        "median": 102.27,
+        "min": 50.835,
+        "n": 6
+      }
+    },
+    "frozen_case_3_retrosynthesis|single_agent": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 105184.0,
+        "iqr_low": 58464.0,
+        "max": 135424.0,
+        "median": 90944.0,
+        "min": 25216.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.0,
+      "failed_tool_calls_observed": 0,
+      "failure_categories": {},
+      "task_success": 6,
+      "task_success_ci95": {
+        "high": 1.0,
+        "low": 0.6097
+      },
+      "task_success_rate": 1.0,
+      "tool_calls_observed": 28,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 132085.0,
+        "iqr_low": 84636.0,
+        "max": 164659.0,
+        "median": 118274.0,
+        "min": 49343.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 47.585,
+        "iqr_low": 27.63,
+        "max": 54.801,
+        "median": 37.964,
+        "min": 22.23,
+        "n": 6
+      }
+    },
+    "frozen_case_3_retrosynthesis|team": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 124896.0,
+        "iqr_low": 98048.0,
+        "max": 147584.0,
+        "median": 109312.0,
+        "min": 76672.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.0619,
+      "failed_tool_calls_observed": 6,
+      "failure_categories": {
+        "tool_exception": 5
+      },
+      "task_success": 6,
+      "task_success_ci95": {
+        "high": 1.0,
+        "low": 0.6097
+      },
+      "task_success_rate": 1.0,
+      "tool_calls_observed": 97,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 156351.75,
+        "iqr_low": 125281.0,
+        "max": 188589.0,
+        "median": 141714.5,
+        "min": 100524.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 71.444,
+        "iqr_low": 60.255,
+        "max": 103.215,
+        "median": 61.425,
+        "min": 51.274,
+        "n": 6
+      }
+    },
+    "frozen_case_4_peptide_design|single_agent": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 523008.0,
+        "iqr_low": 426752.0,
+        "max": 862848.0,
+        "median": 465472.0,
+        "min": 363648.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.1,
+      "failed_tool_calls_observed": 12,
+      "failure_categories": {
+        "tool_exception": 5
+      },
+      "task_success": 6,
+      "task_success_ci95": {
+        "high": 1.0,
+        "low": 0.6097
+      },
+      "task_success_rate": 1.0,
+      "tool_calls_observed": 120,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 602903.75,
+        "iqr_low": 495340.25,
+        "max": 951206.0,
+        "median": 541646.0,
+        "min": 428278.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 83.455,
+        "iqr_low": 51.143,
+        "max": 94.775,
+        "median": 66.743,
+        "min": 48.331,
+        "n": 6
+      }
+    },
+    "frozen_case_4_peptide_design|team": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 1435744.0,
+        "iqr_low": 941728.0,
+        "max": 4272384.0,
+        "median": 1049728.0,
+        "min": 597504.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.1701,
+      "failed_tool_calls_observed": 98,
+      "failure_categories": {
+        "tool_exception": 6
+      },
+      "task_success": 6,
+      "task_success_ci95": {
+        "high": 1.0,
+        "low": 0.6097
+      },
+      "task_success_rate": 1.0,
+      "tool_calls_observed": 576,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 1635142.0,
+        "iqr_low": 1069736.75,
+        "max": 4596160.0,
+        "median": 1204093.5,
+        "min": 683248.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 442.034,
+        "iqr_low": 186.012,
+        "max": 850.413,
+        "median": 243.772,
+        "min": 163.892,
+        "n": 6
+      }
+    },
+    "live_peptide_design|team": {
+      "cache_read_tokens": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 1289472.0,
+        "median": 1269504.0,
+        "min": 883712.0,
+        "n": 3
+      },
+      "completed_without_agent_exception": 3,
+      "completion_rate": 1.0,
+      "executions": 3,
+      "failed_tool_call_fraction": 0.1234,
+      "failed_tool_calls_observed": 29,
+      "failure_categories": {
+        "tool_exception": 3
+      },
+      "task_success": 3,
+      "task_success_ci95": {
+        "high": 1.0,
+        "low": 0.4385
+      },
+      "task_success_rate": 1.0,
+      "tool_calls_observed": 235,
+      "tool_telemetry_coverage": "3/3",
+      "total_tokens": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 1465535.0,
+        "median": 1408148.0,
+        "min": 1005029.0,
+        "n": 3
+      },
+      "wall_time_seconds": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 329.69,
+        "median": 222.03,
+        "min": 184.89,
+        "n": 3
+      }
+    }
+  },
+  "by_tier": {
+    "frozen": {
+      "cache_read_tokens": {
+        "coverage": "48/48",
+        "iqr_high": 1599520.0,
+        "iqr_low": 133280.0,
+        "max": 7139200.0,
+        "median": 598848.0,
+        "min": 25216.0,
+        "n": 48
+      },
+      "completed_without_agent_exception": 48,
+      "completion_rate": 1.0,
+      "executions": 48,
+      "failed_tool_call_fraction": 0.1013,
+      "failed_tool_calls_observed": 240,
+      "failure_categories": {
+        "missing_artifact": 9,
+        "missing_provenance": 5,
+        "missing_scientific_outcome": 5,
+        "tool_exception": 35
+      },
+      "task_success": 34,
+      "task_success_ci95": {
+        "high": 0.8176,
+        "low": 0.5682
+      },
+      "task_success_rate": 0.7083,
+      "tool_calls_observed": 2370,
+      "tool_telemetry_coverage": "48/48",
+      "total_tokens": {
+        "coverage": "48/48",
+        "iqr_high": 1797604.25,
+        "iqr_low": 162653.0,
+        "max": 7557790.0,
+        "median": 662787.0,
+        "min": 49343.0,
+        "n": 48
+      },
+      "wall_time_seconds": {
+        "coverage": "48/48",
+        "iqr_high": 204.98,
+        "iqr_low": 55.371,
+        "max": 850.413,
+        "median": 98.995,
+        "min": 16.261,
+        "n": 48
+      }
+    },
+    "live": {
+      "cache_read_tokens": {
+        "coverage": "12/12",
+        "iqr_high": 1976960.0,
+        "iqr_low": 527360.0,
+        "max": 6321664.0,
+        "median": 854528.0,
+        "min": 352384.0,
+        "n": 12
+      },
+      "completed_without_agent_exception": 12,
+      "completion_rate": 1.0,
+      "executions": 12,
+      "failed_tool_call_fraction": 0.1186,
+      "failed_tool_calls_observed": 108,
+      "failure_categories": {
+        "missing_provenance": 1,
+        "tool_exception": 11
+      },
+      "task_success": 11,
+      "task_success_ci95": {
+        "high": 0.9851,
+        "low": 0.6461
+      },
+      "task_success_rate": 0.9167,
+      "tool_calls_observed": 911,
+      "tool_telemetry_coverage": "12/12",
+      "total_tokens": {
+        "coverage": "12/12",
+        "iqr_high": 2302729.25,
+        "iqr_low": 709168.75,
+        "max": 7258250.0,
+        "median": 1013029.0,
+        "min": 566205.0,
+        "n": 12
+      },
+      "wall_time_seconds": {
+        "coverage": "12/12",
+        "iqr_high": 425.685,
+        "iqr_low": 57.51,
+        "max": 1407.576,
+        "median": 138.015,
+        "min": 41.549,
+        "n": 12
+      }
+    }
+  },
+  "by_tier_and_arm": {
+    "frozen|single_agent": {
+      "cache_read_tokens": {
+        "coverage": "24/24",
+        "iqr_high": 1301248.0,
+        "iqr_low": 122816.0,
+        "max": 7139200.0,
+        "median": 465472.0,
+        "min": 25216.0,
+        "n": 24
+      },
+      "completed_without_agent_exception": 24,
+      "completion_rate": 1.0,
+      "executions": 24,
+      "failed_tool_call_fraction": 0.0816,
+      "failed_tool_calls_observed": 56,
+      "failure_categories": {
+        "missing_artifact": 5,
+        "missing_provenance": 3,
+        "missing_scientific_outcome": 3,
+        "tool_exception": 14
+      },
+      "task_success": 16,
+      "task_success_ci95": {
+        "high": 0.8203,
+        "low": 0.4671
+      },
+      "task_success_rate": 0.6667,
+      "tool_calls_observed": 686,
+      "tool_telemetry_coverage": "24/24",
+      "total_tokens": {
+        "coverage": "24/24",
+        "iqr_high": 1440093.0,
+        "iqr_low": 152571.5,
+        "max": 7557790.0,
+        "median": 541646.0,
+        "min": 49343.0,
+        "n": 24
+      },
+      "wall_time_seconds": {
+        "coverage": "24/24",
+        "iqr_high": 162.238,
+        "iqr_low": 46.626,
+        "max": 242.642,
+        "median": 72.444,
+        "min": 16.261,
+        "n": 24
+      }
+    },
+    "frozen|team": {
+      "cache_read_tokens": {
+        "coverage": "24/24",
+        "iqr_high": 2108288.0,
+        "iqr_low": 218720.0,
+        "max": 4272384.0,
+        "median": 843392.0,
+        "min": 76672.0,
+        "n": 24
+      },
+      "completed_without_agent_exception": 24,
+      "completion_rate": 1.0,
+      "executions": 24,
+      "failed_tool_call_fraction": 0.1093,
+      "failed_tool_calls_observed": 184,
+      "failure_categories": {
+        "missing_artifact": 4,
+        "missing_provenance": 2,
+        "missing_scientific_outcome": 2,
+        "tool_exception": 21
+      },
+      "task_success": 18,
+      "task_success_ci95": {
+        "high": 0.88,
+        "low": 0.551
+      },
+      "task_success_rate": 0.75,
+      "tool_calls_observed": 1684,
+      "tool_telemetry_coverage": "24/24",
+      "total_tokens": {
+        "coverage": "24/24",
+        "iqr_high": 2611949.25,
+        "iqr_low": 261263.25,
+        "max": 4596160.0,
+        "median": 961217.0,
+        "min": 100524.0,
+        "n": 24
+      },
+      "wall_time_seconds": {
+        "coverage": "24/24",
+        "iqr_high": 523.039,
+        "iqr_low": 85.991,
+        "max": 850.413,
+        "median": 168.481,
+        "min": 50.835,
+        "n": 24
+      }
+    },
+    "live|team": {
+      "cache_read_tokens": {
+        "coverage": "12/12",
+        "iqr_high": 1976960.0,
+        "iqr_low": 527360.0,
+        "max": 6321664.0,
+        "median": 854528.0,
+        "min": 352384.0,
+        "n": 12
+      },
+      "completed_without_agent_exception": 12,
+      "completion_rate": 1.0,
+      "executions": 12,
+      "failed_tool_call_fraction": 0.1186,
+      "failed_tool_calls_observed": 108,
+      "failure_categories": {
+        "missing_provenance": 1,
+        "tool_exception": 11
+      },
+      "task_success": 11,
+      "task_success_ci95": {
+        "high": 0.9851,
+        "low": 0.6461
+      },
+      "task_success_rate": 0.9167,
+      "tool_calls_observed": 911,
+      "tool_telemetry_coverage": "12/12",
+      "total_tokens": {
+        "coverage": "12/12",
+        "iqr_high": 2302729.25,
+        "iqr_low": 709168.75,
+        "max": 7258250.0,
+        "median": 1013029.0,
+        "min": 566205.0,
+        "n": 12
+      },
+      "wall_time_seconds": {
+        "coverage": "12/12",
+        "iqr_high": 425.685,
+        "iqr_low": 57.51,
+        "max": 1407.576,
+        "median": 138.015,
+        "min": 41.549,
+        "n": 12
+      }
+    }
+  },
+  "limitations": [
+    "Task fulfilment is judged by automated artifact validators; this is not independent chemical or factual expert review.",
+    "Missing telemetry is reported as coverage and excluded from efficiency statistics rather than counted as zero.",
+    "Token counts are provider/Agno usage records, not a cost estimate; cache-hit counts are retained separately.",
+    "No provider seed exists; repeated runs are not claimed deterministic.",
+    "Counts include delegation overhead for the team arm by construction."
+  ],
+  "overall": {
+    "cache_read_tokens": {
+      "coverage": "60/60",
+      "iqr_high": 1599520.0,
+      "iqr_low": 251264.0,
+      "max": 7139200.0,
+      "median": 600768.0,
+      "min": 25216.0,
+      "n": 60
+    },
+    "completed_without_agent_exception": 60,
+    "completion_rate": 1.0,
+    "executions": 60,
+    "failed_tool_call_fraction": 0.1061,
+    "failed_tool_calls_observed": 348,
+    "failure_categories": {
+      "missing_artifact": 9,
+      "missing_provenance": 6,
+      "missing_scientific_outcome": 5,
+      "tool_exception": 46
+    },
+    "task_success": 45,
+    "task_success_ci95": {
+      "high": 0.8422,
+      "low": 0.6277
+    },
+    "task_success_rate": 0.75,
+    "tool_calls_observed": 3281,
+    "tool_telemetry_coverage": "60/60",
+    "total_tokens": {
+      "coverage": "60/60",
+      "iqr_high": 1797604.25,
+      "iqr_low": 290062.25,
+      "max": 7557790.0,
+      "median": 752948.0,
+      "min": 49343.0,
+      "n": 60
+    },
+    "wall_time_seconds": {
+      "coverage": "60/60",
+      "iqr_high": 229.29,
+      "iqr_low": 55.371,
+      "max": 1407.576,
+      "median": 98.995,
+      "min": 16.261,
+      "n": 60
+    }
+  },
+  "plan_commit_at_planning": "f69c62b4c7d399c9da69fb8239fed6237cd54c5d",
+  "planned_total_executions": 60,
+  "provider": {
+    "model_id": "deepseek-flash",
+    "provider": "DeepSeek"
+  },
+  "purpose": "Retained-run summary of the predeclared reliability and architecture study",
+  "repeatability": {
+    "cells": 16,
+    "detail": {
+      "frozen_case_1_seh_analysis|single_agent|0": {
+        "outcomes": [
+          false,
+          false,
+          false
+        ],
+        "repetitions": 3,
+        "successes": 0
+      },
+      "frozen_case_1_seh_analysis|single_agent|1": {
+        "outcomes": [
+          false,
+          false,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 1
+      },
+      "frozen_case_1_seh_analysis|team|0": {
+        "outcomes": [
+          true,
+          true,
+          false
+        ],
+        "repetitions": 3,
+        "successes": 2
+      },
+      "frozen_case_1_seh_analysis|team|1": {
+        "outcomes": [
+          false,
+          false,
+          false
+        ],
+        "repetitions": 3,
+        "successes": 0
+      },
+      "frozen_case_2_seh_generation|single_agent|0": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_2_seh_generation|single_agent|1": {
+        "outcomes": [
+          false,
+          false,
+          false
+        ],
+        "repetitions": 3,
+        "successes": 0
+      },
+      "frozen_case_2_seh_generation|team|0": {
+        "outcomes": [
+          true,
+          true,
+          false
+        ],
+        "repetitions": 3,
+        "successes": 2
+      },
+      "frozen_case_2_seh_generation|team|1": {
+        "outcomes": [
+          false,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 2
+      },
+      "frozen_case_3_retrosynthesis|single_agent|0": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_3_retrosynthesis|single_agent|1": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_3_retrosynthesis|team|0": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_3_retrosynthesis|team|1": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_4_peptide_design|single_agent|0": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_4_peptide_design|single_agent|1": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_4_peptide_design|team|0": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_4_peptide_design|team|1": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      }
+    },
+    "unanimous_cells": 12,
+    "unanimous_fraction": 0.75
+  },
+  "retained_executions": 60
+}

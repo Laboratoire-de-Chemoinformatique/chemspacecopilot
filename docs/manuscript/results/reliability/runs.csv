@@ -1,0 +1,61 @@
+batch_id,tier,case_name,system_under_test,global_prompt_variant,global_repetition,arm_order,task_success,execution_status,wall_time_seconds,tool_call_count,failed_tool_call_count,total_tokens,input_tokens,output_tokens,reasoning_tokens,cache_read_tokens,telemetry_status,token_metrics_status,error
+frozen_p0_r0,frozen,frozen_case_1_seh_analysis,team,0,0,team-first,False,failed,153.34347812109627,0,0,0,0,0,0,0,partial,partial,"The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+frozen_p0_r0,frozen,frozen_case_2_seh_generation,team,0,0,team-first,False,failed,199.27107978099957,0,0,0,0,0,0,0,partial,partial,"The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+frozen_p0_r0,frozen,frozen_case_3_retrosynthesis,team,0,0,team-first,True,success,57.93775651999749,16,3,176472,169217,7255,1529,141312,complete,complete,
+frozen_p0_r0,frozen,frozen_case_4_peptide_design,team,0,0,team-first,True,success,247.68833385105245,79,17,1451829,1396539,55290,27520,1297152,complete,complete,
+frozen_p0_r0,frozen,frozen_case_1_seh_analysis,single_agent,0,0,team-first,False,success,241.6682263740804,73,6,2864031,2817535,46496,24839,2687232,complete,complete,
+frozen_p0_r0,frozen,frozen_case_2_seh_generation,single_agent,0,0,team-first,True,success,140.7155078148935,43,12,1192793,1168406,24387,15136,1117056,complete,complete,
+frozen_p0_r0,frozen,frozen_case_3_retrosynthesis,single_agent,0,0,team-first,True,success,28.475002061808482,7,0,153360,151526,1834,692,126592,complete,complete,
+frozen_p0_r0,frozen,frozen_case_4_peptide_design,single_agent,0,0,team-first,False,success,80.25554555514827,22,2,617043,601499,15544,13909,545152,complete,complete,
+frozen_p0_r1,frozen,frozen_case_1_seh_analysis,team,0,1,team-first,False,failed,374.61058838292956,49,11,1446390,1404788,41602,33837,1346816,partial,partial,"The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+frozen_p0_r1,frozen,frozen_case_2_seh_generation,team,0,1,team-first,True,success,168.7061948350165,33,10,679572,642374,37198,22900,599936,complete,complete,
+frozen_p0_r1,frozen,frozen_case_3_retrosynthesis,team,0,1,team-first,True,success,43.357804151950404,12,0,101243,97091,4152,1171,74624,complete,complete,
+frozen_p0_r1,frozen,frozen_case_4_peptide_design,team,0,1,team-first,True,success,254.30623156693764,72,17,1428355,1369123,59232,30416,1269888,complete,complete,
+frozen_p0_r1,frozen,frozen_case_1_seh_analysis,single_agent,0,1,team-first,False,success,79.35626496491022,35,3,547617,533487,14130,11092,480640,complete,complete,
+frozen_p0_r1,frozen,frozen_case_2_seh_generation,single_agent,0,1,team-first,True,success,232.84659679909237,72,14,2697389,2657400,39989,23959,2497792,complete,complete,
+frozen_p0_r1,frozen,frozen_case_3_retrosynthesis,single_agent,0,1,team-first,True,success,28.130843184888363,7,0,154631,152767,1864,712,128256,complete,complete,
+frozen_p0_r1,frozen,frozen_case_4_peptide_design,single_agent,0,1,team-first,True,success,51.70175497792661,25,2,651139,641338,9801,4634,581376,complete,complete,
+frozen_p0_r2,frozen,frozen_case_1_seh_analysis,team,0,2,team-first,False,failed,523.8363618308213,58,12,1755456,1679772,75684,68469,1571840,partial,partial,The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+frozen_p0_r2,frozen,frozen_case_2_seh_generation,team,0,2,team-first,True,success,99.72518524201587,35,7,618402,595620,22782,10809,506752,complete,complete,
+frozen_p0_r2,frozen,frozen_case_3_retrosynthesis,team,0,2,team-first,True,success,52.43522366415709,16,2,133153,127075,6078,2086,103680,complete,complete,
+frozen_p0_r2,frozen,frozen_case_4_peptide_design,team,0,2,team-first,True,success,235.3545984160155,57,8,1081032,1023765,57267,29132,941696,complete,complete,
+frozen_p0_r2,frozen,frozen_case_1_seh_analysis,single_agent,0,2,team-first,False,failed,121.15363620896824,0,0,0,0,0,0,0,partial,partial,"The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+frozen_p0_r2,frozen,frozen_case_2_seh_generation,single_agent,0,2,team-first,True,success,58.30025668698363,16,2,465655,452757,12898,6163,420352,complete,complete,
+frozen_p0_r2,frozen,frozen_case_3_retrosynthesis,single_agent,0,2,team-first,True,success,27.203614081954584,7,0,153439,151855,1584,416,127104,complete,complete,
+frozen_p0_r2,frozen,frozen_case_4_peptide_design,single_agent,0,2,team-first,True,success,94.28327923011966,29,6,973456,952294,21162,11242,881280,complete,complete,
+frozen_p1_r0,frozen,frozen_case_1_seh_analysis,single_agent,1,0,single-agent-first,False,failed,87.7225727092009,0,0,0,0,0,0,0,partial,partial,"The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+frozen_p1_r0,frozen,frozen_case_2_seh_generation,single_agent,1,0,single-agent-first,True,success,34.29382333694957,11,0,281981,274548,7433,1795,242048,complete,complete,
+frozen_p1_r0,frozen,frozen_case_3_retrosynthesis,single_agent,1,0,single-agent-first,True,success,37.381264724070206,6,0,129636,127216,2420,1268,103168,complete,complete,
+frozen_p1_r0,frozen,frozen_case_4_peptide_design,single_agent,1,0,single-agent-first,True,success,67.746660039993,26,2,664986,650287,14699,6300,584448,complete,complete,
+frozen_p1_r0,frozen,frozen_case_1_seh_analysis,team,1,0,single-agent-first,False,failed,162.328563015908,0,0,0,0,0,0,0,partial,partial,"The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+frozen_p1_r0,frozen,frozen_case_2_seh_generation,team,1,0,single-agent-first,False,success,124.31032238900661,26,3,668651,642499,26152,15265,566784,complete,complete,
+frozen_p1_r0,frozen,frozen_case_3_retrosynthesis,team,1,0,single-agent-first,True,success,34.88758332608268,11,0,79724,75963,3761,1113,58240,complete,complete,
+frozen_p1_r0,frozen,frozen_case_4_peptide_design,team,1,0,single-agent-first,True,success,667.1816535571124,134,50,1961345,1818343,143002,106928,1672064,complete,complete,
+frozen_p1_r1,frozen,frozen_case_1_seh_analysis,single_agent,1,1,single-agent-first,False,success,194.89242089004256,63,9,2032870,2003013,29857,17632,1927552,complete,complete,
+frozen_p1_r1,frozen,frozen_case_2_seh_generation,single_agent,1,1,single-agent-first,True,success,52.51464490010403,18,0,408604,396413,12191,6744,329472,complete,complete,
+frozen_p1_r1,frozen,frozen_case_3_retrosynthesis,single_agent,1,1,single-agent-first,True,success,32.09579210798256,6,0,101302,99557,1745,695,75648,complete,complete,
+frozen_p1_r1,frozen,frozen_case_4_peptide_design,single_agent,1,1,single-agent-first,True,success,101.74119541491382,32,4,1278976,1258814,20162,11337,1188736,complete,complete,
+frozen_p1_r1,frozen,frozen_case_1_seh_analysis,team,1,1,single-agent-first,False,failed,271.86805522907525,38,5,867827,837851,29976,22905,774784,partial,partial,"The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+frozen_p1_r1,frozen,frozen_case_2_seh_generation,team,1,1,single-agent-first,True,success,96.55652324785478,28,2,580464,560298,20166,9744,506880,complete,complete,
+frozen_p1_r1,frozen,frozen_case_3_retrosynthesis,team,1,1,single-agent-first,False,success,38.59203888918273,15,1,130134,125269,4865,1227,104832,complete,complete,
+frozen_p1_r1,frozen,frozen_case_4_peptide_design,team,1,1,single-agent-first,True,success,244.59568238793872,87,15,1204183,1152033,52150,30048,1044224,complete,complete,
+frozen_p1_r2,frozen,frozen_case_1_seh_analysis,single_agent,1,2,single-agent-first,False,failed,145.93737378786318,0,0,0,0,0,0,0,partial,partial,"The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+frozen_p1_r2,frozen,frozen_case_2_seh_generation,single_agent,1,2,single-agent-first,False,success,19.345011368161067,9,0,186626,183286,3340,780,158208,complete,complete,
+frozen_p1_r2,frozen,frozen_case_3_retrosynthesis,single_agent,1,2,single-agent-first,True,success,34.76212921179831,7,0,153955,152203,1752,555,127616,complete,complete,
+frozen_p1_r2,frozen,frozen_case_4_peptide_design,single_agent,1,2,single-agent-first,True,success,86.82416772097349,33,5,839633,821105,18528,7529,756096,complete,complete,
+frozen_p1_r2,frozen,frozen_case_1_seh_analysis,team,1,2,single-agent-first,False,success,698.1254010950215,141,20,2244882,2096016,148866,116705,1837440,complete,complete,
+frozen_p1_r2,frozen,frozen_case_2_seh_generation,team,1,2,single-agent-first,True,success,82.77191730285995,24,0,489355,469235,20120,9323,391296,complete,complete,
+frozen_p1_r2,frozen,frozen_case_3_retrosynthesis,team,1,2,single-agent-first,True,success,37.7537408019416,12,0,101130,96943,4187,1141,78720,complete,complete,
+frozen_p1_r2,frozen,frozen_case_4_peptide_design,team,1,2,single-agent-first,True,success,146.77512544719502,48,9,962577,927620,34957,13342,842880,complete,complete,
+live_r0,live,case_1_seh_analysis,team,0,0,team-first,True,success,645.2474669730291,141,16,2501250,2396597,104653,66160,2103808,complete,complete,
+live_r0,live,case_2_seh_generation,team,0,0,team-first,True,success,68.46021355991252,21,2,743904,729182,14722,4251,588672,complete,complete,
+live_r0,live,case_3_retrosynthesis,team,0,0,team-first,True,success,38.63621571008116,11,0,735826,730578,5248,1478,514560,complete,complete,
+live_r0,live,live_peptide_design,team,0,0,team-first,True,success,552.9615811049007,125,31,1800432,1681229,119203,80333,1540352,complete,complete,
+live_r1,live,case_1_seh_analysis,team,0,1,team-first,True,success,967.4828544619959,219,95,3863748,3713735,150013,88737,3367808,complete,complete,
+live_r1,live,case_2_seh_generation,team,0,1,team-first,True,success,81.95031324308366,19,1,833798,814184,19614,7928,642048,complete,complete,
+live_r1,live,case_3_retrosynthesis,team,0,1,team-first,True,success,37.967232461087406,13,0,555383,550297,5086,1372,349952,complete,complete,
+live_r1,live,live_peptide_design,team,0,1,team-first,True,success,504.64260052121244,114,37,1929306,1824240,105066,80266,1688448,complete,complete,
+live_r2,live,case_1_seh_analysis,team,0,2,team-first,False,failed,397.3207799301017,50,4,751291,706671,44620,36533,592000,partial,partial,"The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+live_r2,live,case_2_seh_generation,team,0,2,team-first,False,blocked,2.1088169887661934e-05,,,,,,,,unavailable,unavailable,A preceding stage failed; dependent stage was not executed
+live_r2,live,case_3_retrosynthesis,team,0,2,team-first,False,blocked,6.160000339150429e-06,,,,,,,,unavailable,unavailable,A preceding stage failed; dependent stage was not executed
+live_r2,live,live_peptide_design,team,0,2,team-first,True,success,369.886540541891,146,86,2142201,2060529,81672,46023,1938560,complete,complete,

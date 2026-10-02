@@ -1,0 +1,674 @@
+{
+  "limitations": [
+    "Re-scoring corrects how evidence was judged; it does not change what the agent did.",
+    "Runs that crashed before producing artifacts cannot be recovered by re-scoring."
+  ],
+  "per_check_changes": {
+    "assay_and_class_separation_reported": {
+      "recovered": 3
+    },
+    "candidate_count_and_provenance_linked": {
+      "recovered": 3
+    },
+    "descriptor_artifact_registered": {
+      "recovered": 9
+    },
+    "valid_candidates_returned": {
+      "recovered": 3
+    }
+  },
+  "purpose": "Retained runs re-scored with current validators; no model calls",
+  "rescored_task_success": 39,
+  "runs": [
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r0",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r0/20260930_174845_512255_team/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r0",
+      "case": "frozen_case_2_seh_generation",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "candidate_count_and_provenance_linked",
+        "valid_candidates_returned"
+      ],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r0/20260930_174845_512255_team/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": false,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r0",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r0/20260930_174845_512255_team/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": true,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r0",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r0/20260930_174845_512255_team/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r0",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": true,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "assay_and_class_separation_reported",
+        "descriptor_artifact_registered"
+      ],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r0/20260930_175944_586932_single_agent/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r0",
+      "case": "frozen_case_2_seh_generation",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r0/20260930_175944_586932_single_agent/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": true,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r0",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r0/20260930_175944_586932_single_agent/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": true,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r0",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r0/20260930_175944_586932_single_agent/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": false,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r1",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "descriptor_artifact_registered"
+      ],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r1/20260930_182915_430025_team/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r1",
+      "case": "frozen_case_2_seh_generation",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r1/20260930_182915_430025_team/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": true,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r1",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r1/20260930_182915_430025_team/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": true,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r1",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r1/20260930_182915_430025_team/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r1",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "assay_and_class_separation_reported",
+        "descriptor_artifact_registered"
+      ],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r1/20260930_184317_068224_single_agent/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r1",
+      "case": "frozen_case_2_seh_generation",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r1/20260930_184317_068224_single_agent/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": true,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r1",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r1/20260930_184317_068224_single_agent/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": true,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r1",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r1/20260930_184317_068224_single_agent/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r2",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "descriptor_artifact_registered"
+      ],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r2/20260930_190733_233413_team/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r2",
+      "case": "frozen_case_2_seh_generation",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r2/20260930_190733_233413_team/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": true,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r2",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r2/20260930_190733_233413_team/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": true,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p0_r2",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r2/20260930_190733_233413_team/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r2",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "descriptor_artifact_registered"
+      ],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r2/20260930_192245_230065_single_agent/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r2",
+      "case": "frozen_case_2_seh_generation",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r2/20260930_192245_230065_single_agent/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": true,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r2",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r2/20260930_192245_230065_single_agent/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": true,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p0_r2",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p0_r2/20260930_192245_230065_single_agent/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r0",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "descriptor_artifact_registered"
+      ],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r0/20260930_180853_050865_single_agent/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r0",
+      "case": "frozen_case_2_seh_generation",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r0/20260930_180853_050865_single_agent/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": true,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r0",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r0/20260930_180853_050865_single_agent/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": true,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r0",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r0/20260930_180853_050865_single_agent/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r0",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r0/20260930_181240_732013_team/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r0",
+      "case": "frozen_case_2_seh_generation",
+      "changed": true,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "candidate_count_and_provenance_linked",
+        "valid_candidates_returned"
+      ],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r0/20260930_181240_732013_team/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": false,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r0",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r0/20260930_181240_732013_team/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": true,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r0",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r0/20260930_181240_732013_team/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r1",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": true,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "descriptor_artifact_registered"
+      ],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r1/20260930_184954_919079_single_agent/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r1",
+      "case": "frozen_case_2_seh_generation",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r1/20260930_184954_919079_single_agent/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": true,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r1",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r1/20260930_184954_919079_single_agent/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": true,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r1",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r1/20260930_184954_919079_single_agent/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r1",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r1/20260930_185617_598012_team/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r1",
+      "case": "frozen_case_2_seh_generation",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r1/20260930_185617_598012_team/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": true,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r1",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r1/20260930_185617_598012_team/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": false,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r1",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r1/20260930_185617_598012_team/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r2",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "descriptor_artifact_registered"
+      ],
+      "rescored_task_success": false,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r2/20260930_192752_057068_single_agent/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r2",
+      "case": "frozen_case_2_seh_generation",
+      "changed": true,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "candidate_count_and_provenance_linked",
+        "valid_candidates_returned"
+      ],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r2/20260930_192752_057068_single_agent/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": false,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r2",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r2/20260930_192752_057068_single_agent/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": true,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "agent",
+      "batch": "frozen_p1_r2",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r2/20260930_192752_057068_single_agent/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r2",
+      "case": "frozen_case_1_seh_analysis",
+      "changed": true,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [
+        "assay_and_class_separation_reported",
+        "descriptor_artifact_registered"
+      ],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r2/20260930_193239_447981_team/frozen_case_1_seh_analysis/run_0",
+      "stored_task_success": false,
+      "validator": "seh_analysis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r2",
+      "case": "frozen_case_2_seh_generation",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r2/20260930_193239_447981_team/frozen_case_2_seh_generation/run_0",
+      "stored_task_success": true,
+      "validator": "molecular_generation"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r2",
+      "case": "frozen_case_3_retrosynthesis",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r2/20260930_193239_447981_team/frozen_case_3_retrosynthesis/run_0",
+      "stored_task_success": true,
+      "validator": "retrosynthesis"
+    },
+    {
+      "arm": "team",
+      "batch": "frozen_p1_r2",
+      "case": "frozen_case_4_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/frozen_p1_r2/20260930_193239_447981_team/frozen_case_4_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "team",
+      "batch": "live_r0",
+      "case": "live_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/live_r0/20260930_195709_086496_team/live_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "team",
+      "batch": "live_r1",
+      "case": "live_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/live_r1/20260930_201918_942278_team/live_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    },
+    {
+      "arm": "team",
+      "batch": "live_r2",
+      "case": "live_peptide_design",
+      "changed": false,
+      "newly_failing_checks": [],
+      "newly_passing_checks": [],
+      "rescored_task_success": true,
+      "run": "reports/reviewer_revision/reliability_study_frozen_v2/runs/live_r2/20260930_204558_280960_team/live_peptide_design/run_0",
+      "stored_task_success": true,
+      "validator": "peptide_design"
+    }
+  ],
+  "runs_rescored": 51,
+  "stored_task_success": 34,
+  "validator_errors": [],
+  "verdict_transitions": {
+    "fail->fail": 12,
+    "fail->pass": 5,
+    "pass->pass": 34
+  }
+}

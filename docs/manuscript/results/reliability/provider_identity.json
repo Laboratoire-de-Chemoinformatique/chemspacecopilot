@@ -1,0 +1,23 @@
+{
+  "all_listed_model_ids": [
+    "deepseek-flash",
+    "deepseek-v4-pro"
+  ],
+  "configured_model_id": "deepseek-flash",
+  "context_window": 1048576,
+  "endpoint": "https://api.deepseek.com",
+  "fingerprint_probe_note": "From a 4-token probe before execution; provider may change the served snapshot without changing the alias",
+  "inference_settings": {
+    "max_tokens": 8192,
+    "temperature": 0.0
+  },
+  "limitations": [
+    "Alias resolution and fingerprint are observations, not a provider guarantee",
+    "No provider seed is available; outputs are not claimed deterministic"
+  ],
+  "max_output_tokens": 393216,
+  "observed_utc": "2026-09-30T15:49:19.421688+00:00",
+  "purpose": "Provider identity observed at execution time; an alias is not an immutable snapshot",
+  "resolved_name": "DeepSeek-V4.1-Flash",
+  "system_fingerprint_probe": "aeb56401ca74e127821c4f9126dcb669"
+}

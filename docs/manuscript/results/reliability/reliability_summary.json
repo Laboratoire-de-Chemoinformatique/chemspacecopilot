@@ -1,0 +1,1200 @@
+{
+  "architecture_paired": {
+    "both_succeeded": 13,
+    "discordant_pairs": 5,
+    "exact_mcnemar_note": "With 5 discordant pairs a two-sided exact binomial test has no useful power; the direction is reported descriptively, not as a significant difference.",
+    "incomplete_pairs": 0,
+    "interpretation_guard": "Paired but exploratory. Delegation overhead and failure propagation are measured tradeoffs at this sample size, not evidence of superiority.",
+    "neither": 6,
+    "paired_cells": 24,
+    "single_agent_only": 3,
+    "team_minus_single_total_tokens": {
+      "iqr_high": 302729.0,
+      "iqr_low": -49912.0,
+      "max": 1296359.0,
+      "median": 107576.0,
+      "min": -2017817.0,
+      "n": 17
+    },
+    "team_minus_single_wall_seconds": {
+      "iqr_high": 141.071,
+      "iqr_low": 15.227,
+      "max": 599.435,
+      "median": 44.042,
+      "min": -64.14,
+      "n": 17
+    },
+    "team_only": 2
+  },
+  "by_arm_pooled_across_tiers": {
+    "single_agent": {
+      "cache_read_tokens": {
+        "coverage": "21/24",
+        "iqr_high": 881280.0,
+        "iqr_low": 128256.0,
+        "max": 2687232.0,
+        "median": 480640.0,
+        "min": 75648.0,
+        "n": 21
+      },
+      "completed_without_agent_exception": 21,
+      "completion_rate": 0.875,
+      "executions": 24,
+      "failed_tool_call_fraction": 0.1225,
+      "failed_tool_calls_observed": 67,
+      "failure_categories": {
+        "agent_exception": 3,
+        "missing_artifact": 7,
+        "missing_provenance": 1,
+        "missing_scientific_outcome": 1,
+        "missing_task_requirement": 4,
+        "telemetry_unavailable": 3,
+        "tool_exception": 12,
+        "unsupported_claim": 5
+      },
+      "task_success": 16,
+      "task_success_ci95": {
+        "high": 0.8203,
+        "low": 0.4671
+      },
+      "task_success_rate": 0.6667,
+      "tool_calls_observed": 547,
+      "tool_telemetry_coverage": "21/24",
+      "total_tokens": {
+        "coverage": "21/24",
+        "iqr_high": 973456.0,
+        "iqr_low": 154631.0,
+        "max": 2864031.0,
+        "median": 547617.0,
+        "min": 101302.0,
+        "n": 21
+      },
+      "wall_time_seconds": {
+        "coverage": "21/24",
+        "iqr_high": 94.283,
+        "iqr_low": 34.294,
+        "max": 241.668,
+        "median": 58.3,
+        "min": 19.345,
+        "n": 21
+      }
+    },
+    "team": {
+      "cache_read_tokens": {
+        "coverage": "27/36",
+        "iqr_high": 1418752.0,
+        "iqr_low": 370624.0,
+        "max": 3367808.0,
+        "median": 599936.0,
+        "min": 58240.0,
+        "n": 27
+      },
+      "completed_without_agent_exception": 27,
+      "completion_rate": 0.75,
+      "executions": 36,
+      "failed_tool_call_fraction": 0.261,
+      "failed_tool_calls_observed": 432,
+      "failure_categories": {
+        "agent_exception": 7,
+        "execution_failure": 2,
+        "missing_artifact": 8,
+        "missing_provenance": 5,
+        "missing_required_call": 3,
+        "missing_scientific_outcome": 4,
+        "missing_task_requirement": 6,
+        "telemetry_unavailable": 5,
+        "tool_exception": 25,
+        "unsupported_claim": 7
+      },
+      "task_success": 24,
+      "task_success_ci95": {
+        "high": 0.7979,
+        "low": 0.5033
+      },
+      "task_success_rate": 0.6667,
+      "tool_calls_observed": 1655,
+      "tool_telemetry_coverage": "27/36",
+      "total_tokens": {
+        "coverage": "27/36",
+        "iqr_high": 1626130.5,
+        "iqr_low": 522369.0,
+        "max": 3863748.0,
+        "median": 743904.0,
+        "min": 79724.0,
+        "n": 27
+      },
+      "wall_time_seconds": {
+        "coverage": "27/36",
+        "iqr_high": 312.096,
+        "iqr_low": 55.186,
+        "max": 967.483,
+        "median": 124.31,
+        "min": 34.888,
+        "n": 27
+      }
+    }
+  },
+  "by_case_and_arm": {
+    "case_1_seh_analysis|team": {
+      "cache_read_tokens": {
+        "coverage": "2/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 3367808.0,
+        "median": 2735808.0,
+        "min": 2103808.0,
+        "n": 2
+      },
+      "completed_without_agent_exception": 2,
+      "completion_rate": 0.6667,
+      "executions": 3,
+      "failed_tool_call_fraction": 0.3083,
+      "failed_tool_calls_observed": 111,
+      "failure_categories": {
+        "agent_exception": 1,
+        "missing_artifact": 1,
+        "missing_task_requirement": 1,
+        "tool_exception": 3,
+        "unsupported_claim": 1
+      },
+      "task_success": 2,
+      "task_success_ci95": {
+        "high": 0.9385,
+        "low": 0.2077
+      },
+      "task_success_rate": 0.6667,
+      "tool_calls_observed": 360,
+      "tool_telemetry_coverage": "2/3",
+      "total_tokens": {
+        "coverage": "2/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 3863748.0,
+        "median": 3182499.0,
+        "min": 2501250.0,
+        "n": 2
+      },
+      "wall_time_seconds": {
+        "coverage": "2/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 967.483,
+        "median": 806.365,
+        "min": 645.247,
+        "n": 2
+      }
+    },
+    "case_2_seh_generation|team": {
+      "cache_read_tokens": {
+        "coverage": "2/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 642048.0,
+        "median": 615360.0,
+        "min": 588672.0,
+        "n": 2
+      },
+      "completed_without_agent_exception": 2,
+      "completion_rate": 0.6667,
+      "executions": 3,
+      "failed_tool_call_fraction": 0.075,
+      "failed_tool_calls_observed": 3,
+      "failure_categories": {
+        "execution_failure": 1,
+        "missing_artifact": 1,
+        "missing_provenance": 1,
+        "missing_required_call": 1,
+        "missing_scientific_outcome": 1,
+        "telemetry_unavailable": 1,
+        "tool_exception": 2
+      },
+      "task_success": 2,
+      "task_success_ci95": {
+        "high": 0.9385,
+        "low": 0.2077
+      },
+      "task_success_rate": 0.6667,
+      "tool_calls_observed": 40,
+      "tool_telemetry_coverage": "2/3",
+      "total_tokens": {
+        "coverage": "2/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 833798.0,
+        "median": 788851.0,
+        "min": 743904.0,
+        "n": 2
+      },
+      "wall_time_seconds": {
+        "coverage": "2/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 81.95,
+        "median": 75.205,
+        "min": 68.46,
+        "n": 2
+      }
+    },
+    "case_3_retrosynthesis|team": {
+      "cache_read_tokens": {
+        "coverage": "2/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 514560.0,
+        "median": 432256.0,
+        "min": 349952.0,
+        "n": 2
+      },
+      "completed_without_agent_exception": 2,
+      "completion_rate": 0.6667,
+      "executions": 3,
+      "failed_tool_call_fraction": 0.0,
+      "failed_tool_calls_observed": 0,
+      "failure_categories": {
+        "execution_failure": 1,
+        "missing_provenance": 1,
+        "missing_required_call": 1,
+        "missing_scientific_outcome": 1,
+        "telemetry_unavailable": 1
+      },
+      "task_success": 2,
+      "task_success_ci95": {
+        "high": 0.9385,
+        "low": 0.2077
+      },
+      "task_success_rate": 0.6667,
+      "tool_calls_observed": 24,
+      "tool_telemetry_coverage": "2/3",
+      "total_tokens": {
+        "coverage": "2/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 735826.0,
+        "median": 645604.5,
+        "min": 555383.0,
+        "n": 2
+      },
+      "wall_time_seconds": {
+        "coverage": "2/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 38.636,
+        "median": 38.302,
+        "min": 37.967,
+        "n": 2
+      }
+    },
+    "frozen_case_1_seh_analysis|single_agent": {
+      "cache_read_tokens": {
+        "coverage": "3/6",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 2687232.0,
+        "median": 1927552.0,
+        "min": 480640.0,
+        "n": 3
+      },
+      "completed_without_agent_exception": 3,
+      "completion_rate": 0.5,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.1053,
+      "failed_tool_calls_observed": 18,
+      "failure_categories": {
+        "agent_exception": 3,
+        "missing_artifact": 6,
+        "missing_task_requirement": 4,
+        "telemetry_unavailable": 3,
+        "tool_exception": 3,
+        "unsupported_claim": 5
+      },
+      "task_success": 0,
+      "task_success_ci95": {
+        "high": 0.3903,
+        "low": 0.0
+      },
+      "task_success_rate": 0.0,
+      "tool_calls_observed": 171,
+      "tool_telemetry_coverage": "3/6",
+      "total_tokens": {
+        "coverage": "3/6",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 2864031.0,
+        "median": 2032870.0,
+        "min": 547617.0,
+        "n": 3
+      },
+      "wall_time_seconds": {
+        "coverage": "3/6",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 241.668,
+        "median": 194.892,
+        "min": 79.356,
+        "n": 3
+      }
+    },
+    "frozen_case_1_seh_analysis|team": {
+      "cache_read_tokens": {
+        "coverage": "1/6",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 1837440.0,
+        "median": 1837440.0,
+        "min": 1837440.0,
+        "n": 1
+      },
+      "completed_without_agent_exception": 1,
+      "completion_rate": 0.1667,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.1418,
+      "failed_tool_calls_observed": 20,
+      "failure_categories": {
+        "agent_exception": 5,
+        "missing_artifact": 6,
+        "missing_task_requirement": 5,
+        "telemetry_unavailable": 2,
+        "tool_exception": 4,
+        "unsupported_claim": 6
+      },
+      "task_success": 0,
+      "task_success_ci95": {
+        "high": 0.3903,
+        "low": 0.0
+      },
+      "task_success_rate": 0.0,
+      "tool_calls_observed": 141,
+      "tool_telemetry_coverage": "1/6",
+      "total_tokens": {
+        "coverage": "1/6",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 2244882.0,
+        "median": 2244882.0,
+        "min": 2244882.0,
+        "n": 1
+      },
+      "wall_time_seconds": {
+        "coverage": "1/6",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 698.125,
+        "median": 698.125,
+        "min": 698.125,
+        "n": 1
+      }
+    },
+    "frozen_case_2_seh_generation|single_agent": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 942880.0,
+        "iqr_low": 263904.0,
+        "max": 2497792.0,
+        "median": 374912.0,
+        "min": 158208.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.1657,
+      "failed_tool_calls_observed": 28,
+      "failure_categories": {
+        "missing_provenance": 1,
+        "missing_scientific_outcome": 1,
+        "tool_exception": 3
+      },
+      "task_success": 5,
+      "task_success_ci95": {
+        "high": 0.9699,
+        "low": 0.4365
+      },
+      "task_success_rate": 0.8333,
+      "tool_calls_observed": 169,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 1011008.5,
+        "iqr_low": 313636.75,
+        "max": 2697389.0,
+        "median": 437129.5,
+        "min": 186626.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 120.112,
+        "iqr_low": 38.849,
+        "max": 232.847,
+        "median": 55.407,
+        "min": 19.345,
+        "n": 6
+      }
+    },
+    "frozen_case_2_seh_generation|team": {
+      "cache_read_tokens": {
+        "coverage": "5/6",
+        "iqr_high": 566784.0,
+        "iqr_low": 506752.0,
+        "max": 599936.0,
+        "median": 506880.0,
+        "min": 391296.0,
+        "n": 5
+      },
+      "completed_without_agent_exception": 5,
+      "completion_rate": 0.8333,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.1507,
+      "failed_tool_calls_observed": 22,
+      "failure_categories": {
+        "agent_exception": 1,
+        "missing_provenance": 2,
+        "missing_required_call": 1,
+        "missing_scientific_outcome": 2,
+        "telemetry_unavailable": 1,
+        "tool_exception": 4
+      },
+      "task_success": 4,
+      "task_success_ci95": {
+        "high": 0.9032,
+        "low": 0.3
+      },
+      "task_success_rate": 0.6667,
+      "tool_calls_observed": 146,
+      "tool_telemetry_coverage": "5/6",
+      "total_tokens": {
+        "coverage": "5/6",
+        "iqr_high": 668651.0,
+        "iqr_low": 580464.0,
+        "max": 679572.0,
+        "median": 618402.0,
+        "min": 489355.0,
+        "n": 5
+      },
+      "wall_time_seconds": {
+        "coverage": "5/6",
+        "iqr_high": 124.31,
+        "iqr_low": 96.557,
+        "max": 168.706,
+        "median": 99.725,
+        "min": 82.772,
+        "n": 5
+      }
+    },
+    "frozen_case_3_retrosynthesis|single_agent": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 127488.0,
+        "iqr_low": 109024.0,
+        "max": 128256.0,
+        "median": 126848.0,
+        "min": 75648.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.0,
+      "failed_tool_calls_observed": 0,
+      "failure_categories": {},
+      "task_success": 6,
+      "task_success_ci95": {
+        "high": 1.0,
+        "low": 0.6097
+      },
+      "task_success_rate": 1.0,
+      "tool_calls_observed": 40,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 153826.0,
+        "iqr_low": 135567.0,
+        "max": 154631.0,
+        "median": 153399.5,
+        "min": 101302.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 34.096,
+        "iqr_low": 28.217,
+        "max": 37.381,
+        "median": 30.285,
+        "min": 27.204,
+        "n": 6
+      }
+    },
+    "frozen_case_3_retrosynthesis|team": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 104544.0,
+        "iqr_low": 75648.0,
+        "max": 141312.0,
+        "median": 91200.0,
+        "min": 58240.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.0732,
+      "failed_tool_calls_observed": 6,
+      "failure_categories": {
+        "missing_provenance": 1,
+        "tool_exception": 3
+      },
+      "task_success": 5,
+      "task_success_ci95": {
+        "high": 0.9699,
+        "low": 0.4365
+      },
+      "task_success_rate": 0.8333,
+      "tool_calls_observed": 82,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 132398.25,
+        "iqr_low": 101158.25,
+        "max": 176472.0,
+        "median": 115688.5,
+        "min": 79724.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 50.166,
+        "iqr_low": 37.963,
+        "max": 57.938,
+        "median": 40.975,
+        "min": 34.888,
+        "n": 6
+      }
+    },
+    "frozen_case_4_peptide_design|single_agent": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 849984.0,
+        "iqr_low": 582144.0,
+        "max": 1188736.0,
+        "median": 670272.0,
+        "min": 545152.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.1257,
+      "failed_tool_calls_observed": 21,
+      "failure_categories": {
+        "missing_artifact": 1,
+        "tool_exception": 6
+      },
+      "task_success": 5,
+      "task_success_ci95": {
+        "high": 0.9699,
+        "low": 0.4365
+      },
+      "task_success_rate": 0.8333,
+      "tool_calls_observed": 167,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 940000.25,
+        "iqr_low": 654600.75,
+        "max": 1278976.0,
+        "median": 752309.5,
+        "min": 617043.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 92.419,
+        "iqr_low": 70.874,
+        "max": 101.741,
+        "median": 83.54,
+        "min": 51.702,
+        "n": 6
+      }
+    },
+    "frozen_case_4_peptide_design|team": {
+      "cache_read_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 1290336.0,
+        "iqr_low": 967328.0,
+        "max": 1672064.0,
+        "median": 1157056.0,
+        "min": 842880.0,
+        "n": 6
+      },
+      "completed_without_agent_exception": 6,
+      "completion_rate": 1.0,
+      "executions": 6,
+      "failed_tool_call_fraction": 0.2432,
+      "failed_tool_calls_observed": 116,
+      "failure_categories": {
+        "tool_exception": 6
+      },
+      "task_success": 6,
+      "task_success_ci95": {
+        "high": 1.0,
+        "low": 0.6097
+      },
+      "task_success_rate": 1.0,
+      "tool_calls_observed": 477,
+      "tool_telemetry_coverage": "6/6",
+      "total_tokens": {
+        "coverage": "6/6",
+        "iqr_high": 1445960.5,
+        "iqr_low": 1111819.75,
+        "max": 1961345.0,
+        "median": 1316269.0,
+        "min": 962577.0,
+        "n": 6
+      },
+      "wall_time_seconds": {
+        "coverage": "6/6",
+        "iqr_high": 252.652,
+        "iqr_low": 237.665,
+        "max": 667.182,
+        "median": 246.142,
+        "min": 146.775,
+        "n": 6
+      }
+    },
+    "live_peptide_design|team": {
+      "cache_read_tokens": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 1938560.0,
+        "median": 1688448.0,
+        "min": 1540352.0,
+        "n": 3
+      },
+      "completed_without_agent_exception": 3,
+      "completion_rate": 1.0,
+      "executions": 3,
+      "failed_tool_call_fraction": 0.4,
+      "failed_tool_calls_observed": 154,
+      "failure_categories": {
+        "tool_exception": 3
+      },
+      "task_success": 3,
+      "task_success_ci95": {
+        "high": 1.0,
+        "low": 0.4385
+      },
+      "task_success_rate": 1.0,
+      "tool_calls_observed": 385,
+      "tool_telemetry_coverage": "3/3",
+      "total_tokens": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 2142201.0,
+        "median": 1929306.0,
+        "min": 1800432.0,
+        "n": 3
+      },
+      "wall_time_seconds": {
+        "coverage": "3/3",
+        "iqr_high": null,
+        "iqr_low": null,
+        "max": 552.962,
+        "median": 504.643,
+        "min": 369.887,
+        "n": 3
+      }
+    }
+  },
+  "by_tier": {
+    "frozen": {
+      "cache_read_tokens": {
+        "coverage": "39/48",
+        "iqr_high": 992960.0,
+        "iqr_low": 127936.0,
+        "max": 2687232.0,
+        "median": 506880.0,
+        "min": 58240.0,
+        "n": 39
+      },
+      "completed_without_agent_exception": 39,
+      "completion_rate": 0.8125,
+      "executions": 48,
+      "failed_tool_call_fraction": 0.1658,
+      "failed_tool_calls_observed": 231,
+      "failure_categories": {
+        "agent_exception": 9,
+        "missing_artifact": 13,
+        "missing_provenance": 4,
+        "missing_required_call": 1,
+        "missing_scientific_outcome": 3,
+        "missing_task_requirement": 9,
+        "telemetry_unavailable": 6,
+        "tool_exception": 29,
+        "unsupported_claim": 11
+      },
+      "task_success": 31,
+      "task_success_ci95": {
+        "high": 0.7657,
+        "low": 0.5044
+      },
+      "task_success_rate": 0.6458,
+      "tool_calls_observed": 1393,
+      "tool_telemetry_coverage": "39/48",
+      "total_tokens": {
+        "coverage": "39/48",
+        "iqr_high": 1136912.5,
+        "iqr_low": 154293.0,
+        "max": 2864031.0,
+        "median": 617043.0,
+        "min": 79724.0,
+        "n": 39
+      },
+      "wall_time_seconds": {
+        "coverage": "39/48",
+        "iqr_high": 157.741,
+        "iqr_low": 38.173,
+        "max": 698.125,
+        "median": 80.256,
+        "min": 19.345,
+        "n": 39
+      }
+    },
+    "live": {
+      "cache_read_tokens": {
+        "coverage": "9/12",
+        "iqr_high": 1938560.0,
+        "iqr_low": 588672.0,
+        "max": 3367808.0,
+        "median": 1540352.0,
+        "min": 349952.0,
+        "n": 9
+      },
+      "completed_without_agent_exception": 9,
+      "completion_rate": 0.75,
+      "executions": 12,
+      "failed_tool_call_fraction": 0.3313,
+      "failed_tool_calls_observed": 268,
+      "failure_categories": {
+        "agent_exception": 1,
+        "execution_failure": 2,
+        "missing_artifact": 2,
+        "missing_provenance": 2,
+        "missing_required_call": 2,
+        "missing_scientific_outcome": 2,
+        "missing_task_requirement": 1,
+        "telemetry_unavailable": 2,
+        "tool_exception": 8,
+        "unsupported_claim": 1
+      },
+      "task_success": 9,
+      "task_success_ci95": {
+        "high": 0.9111,
+        "low": 0.4677
+      },
+      "task_success_rate": 0.75,
+      "tool_calls_observed": 809,
+      "tool_telemetry_coverage": "9/12",
+      "total_tokens": {
+        "coverage": "9/12",
+        "iqr_high": 2142201.0,
+        "iqr_low": 743904.0,
+        "max": 3863748.0,
+        "median": 1800432.0,
+        "min": 555383.0,
+        "n": 9
+      },
+      "wall_time_seconds": {
+        "coverage": "9/12",
+        "iqr_high": 552.962,
+        "iqr_low": 68.46,
+        "max": 967.483,
+        "median": 369.887,
+        "min": 37.967,
+        "n": 9
+      }
+    }
+  },
+  "by_tier_and_arm": {
+    "frozen|single_agent": {
+      "cache_read_tokens": {
+        "coverage": "21/24",
+        "iqr_high": 881280.0,
+        "iqr_low": 128256.0,
+        "max": 2687232.0,
+        "median": 480640.0,
+        "min": 75648.0,
+        "n": 21
+      },
+      "completed_without_agent_exception": 21,
+      "completion_rate": 0.875,
+      "executions": 24,
+      "failed_tool_call_fraction": 0.1225,
+      "failed_tool_calls_observed": 67,
+      "failure_categories": {
+        "agent_exception": 3,
+        "missing_artifact": 7,
+        "missing_provenance": 1,
+        "missing_scientific_outcome": 1,
+        "missing_task_requirement": 4,
+        "telemetry_unavailable": 3,
+        "tool_exception": 12,
+        "unsupported_claim": 5
+      },
+      "task_success": 16,
+      "task_success_ci95": {
+        "high": 0.8203,
+        "low": 0.4671
+      },
+      "task_success_rate": 0.6667,
+      "tool_calls_observed": 547,
+      "tool_telemetry_coverage": "21/24",
+      "total_tokens": {
+        "coverage": "21/24",
+        "iqr_high": 973456.0,
+        "iqr_low": 154631.0,
+        "max": 2864031.0,
+        "median": 547617.0,
+        "min": 101302.0,
+        "n": 21
+      },
+      "wall_time_seconds": {
+        "coverage": "21/24",
+        "iqr_high": 94.283,
+        "iqr_low": 34.294,
+        "max": 241.668,
+        "median": 58.3,
+        "min": 19.345,
+        "n": 21
+      }
+    },
+    "frozen|team": {
+      "cache_read_tokens": {
+        "coverage": "18/24",
+        "iqr_high": 1018592.0,
+        "iqr_low": 113952.0,
+        "max": 1837440.0,
+        "median": 536832.0,
+        "min": 58240.0,
+        "n": 18
+      },
+      "completed_without_agent_exception": 18,
+      "completion_rate": 0.75,
+      "executions": 24,
+      "failed_tool_call_fraction": 0.1939,
+      "failed_tool_calls_observed": 164,
+      "failure_categories": {
+        "agent_exception": 6,
+        "missing_artifact": 6,
+        "missing_provenance": 3,
+        "missing_required_call": 1,
+        "missing_scientific_outcome": 2,
+        "missing_task_requirement": 5,
+        "telemetry_unavailable": 3,
+        "tool_exception": 17,
+        "unsupported_claim": 6
+      },
+      "task_success": 15,
+      "task_success_ci95": {
+        "high": 0.7884,
+        "low": 0.4271
+      },
+      "task_success_rate": 0.625,
+      "tool_calls_observed": 846,
+      "tool_telemetry_coverage": "18/24",
+      "total_tokens": {
+        "coverage": "18/24",
+        "iqr_high": 1173395.25,
+        "iqr_low": 143982.75,
+        "max": 2244882.0,
+        "median": 643526.5,
+        "min": 79724.0,
+        "n": 18
+      },
+      "wall_time_seconds": {
+        "coverage": "18/24",
+        "iqr_high": 242.285,
+        "iqr_low": 53.811,
+        "max": 698.125,
+        "median": 112.018,
+        "min": 34.888,
+        "n": 18
+      }
+    },
+    "live|team": {
+      "cache_read_tokens": {
+        "coverage": "9/12",
+        "iqr_high": 1938560.0,
+        "iqr_low": 588672.0,
+        "max": 3367808.0,
+        "median": 1540352.0,
+        "min": 349952.0,
+        "n": 9
+      },
+      "completed_without_agent_exception": 9,
+      "completion_rate": 0.75,
+      "executions": 12,
+      "failed_tool_call_fraction": 0.3313,
+      "failed_tool_calls_observed": 268,
+      "failure_categories": {
+        "agent_exception": 1,
+        "execution_failure": 2,
+        "missing_artifact": 2,
+        "missing_provenance": 2,
+        "missing_required_call": 2,
+        "missing_scientific_outcome": 2,
+        "missing_task_requirement": 1,
+        "telemetry_unavailable": 2,
+        "tool_exception": 8,
+        "unsupported_claim": 1
+      },
+      "task_success": 9,
+      "task_success_ci95": {
+        "high": 0.9111,
+        "low": 0.4677
+      },
+      "task_success_rate": 0.75,
+      "tool_calls_observed": 809,
+      "tool_telemetry_coverage": "9/12",
+      "total_tokens": {
+        "coverage": "9/12",
+        "iqr_high": 2142201.0,
+        "iqr_low": 743904.0,
+        "max": 3863748.0,
+        "median": 1800432.0,
+        "min": 555383.0,
+        "n": 9
+      },
+      "wall_time_seconds": {
+        "coverage": "9/12",
+        "iqr_high": 552.962,
+        "iqr_low": 68.46,
+        "max": 967.483,
+        "median": 369.887,
+        "min": 37.967,
+        "n": 9
+      }
+    }
+  },
+  "limitations": [
+    "Task fulfilment is judged by automated artifact validators; this is not independent chemical or factual expert review.",
+    "Missing telemetry is reported as coverage and excluded from efficiency statistics rather than counted as zero.",
+    "Token counts are provider/Agno usage records, not a cost estimate; cache-hit counts are retained separately.",
+    "No provider seed exists; repeated runs are not claimed deterministic.",
+    "Counts include delegation overhead for the team arm by construction."
+  ],
+  "overall": {
+    "cache_read_tokens": {
+      "coverage": "48/60",
+      "iqr_high": 1209024.0,
+      "iqr_low": 153984.0,
+      "max": 3367808.0,
+      "median": 574080.0,
+      "min": 58240.0,
+      "n": 48
+    },
+    "completed_without_agent_exception": 48,
+    "completion_rate": 0.8,
+    "executions": 60,
+    "failed_tool_call_fraction": 0.2266,
+    "failed_tool_calls_observed": 499,
+    "failure_categories": {
+      "agent_exception": 10,
+      "execution_failure": 2,
+      "missing_artifact": 15,
+      "missing_provenance": 6,
+      "missing_required_call": 3,
+      "missing_scientific_outcome": 5,
+      "missing_task_requirement": 10,
+      "telemetry_unavailable": 8,
+      "tool_exception": 37,
+      "unsupported_claim": 12
+    },
+    "task_success": 40,
+    "task_success_ci95": {
+      "high": 0.7727,
+      "low": 0.5406
+    },
+    "task_success_rate": 0.6667,
+    "tool_calls_observed": 2202,
+    "tool_telemetry_coverage": "48/60",
+    "total_tokens": {
+      "coverage": "48/60",
+      "iqr_high": 1316320.75,
+      "iqr_low": 184087.5,
+      "max": 3863748.0,
+      "median": 666818.5,
+      "min": 79724.0,
+      "n": 48
+    },
+    "wall_time_seconds": {
+      "coverage": "48/60",
+      "iqr_high": 233.474,
+      "iqr_low": 38.625,
+      "max": 967.483,
+      "median": 82.361,
+      "min": 19.345,
+      "n": 48
+    }
+  },
+  "plan_commit_at_planning": "55863a39ce93faa3dd8d6cb879dab4423710be69",
+  "planned_total_executions": 60,
+  "provider": {
+    "model_id": "deepseek-flash",
+    "provider": "DeepSeek"
+  },
+  "purpose": "Retained-run summary of the predeclared reliability and architecture study",
+  "repeatability": {
+    "cells": 16,
+    "detail": {
+      "frozen_case_1_seh_analysis|single_agent|0": {
+        "outcomes": [
+          false,
+          false,
+          false
+        ],
+        "repetitions": 3,
+        "successes": 0
+      },
+      "frozen_case_1_seh_analysis|single_agent|1": {
+        "outcomes": [
+          false,
+          false,
+          false
+        ],
+        "repetitions": 3,
+        "successes": 0
+      },
+      "frozen_case_1_seh_analysis|team|0": {
+        "outcomes": [
+          false,
+          false,
+          false
+        ],
+        "repetitions": 3,
+        "successes": 0
+      },
+      "frozen_case_1_seh_analysis|team|1": {
+        "outcomes": [
+          false,
+          false,
+          false
+        ],
+        "repetitions": 3,
+        "successes": 0
+      },
+      "frozen_case_2_seh_generation|single_agent|0": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_2_seh_generation|single_agent|1": {
+        "outcomes": [
+          true,
+          true,
+          false
+        ],
+        "repetitions": 3,
+        "successes": 2
+      },
+      "frozen_case_2_seh_generation|team|0": {
+        "outcomes": [
+          false,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 2
+      },
+      "frozen_case_2_seh_generation|team|1": {
+        "outcomes": [
+          false,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 2
+      },
+      "frozen_case_3_retrosynthesis|single_agent|0": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_3_retrosynthesis|single_agent|1": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_3_retrosynthesis|team|0": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_3_retrosynthesis|team|1": {
+        "outcomes": [
+          true,
+          false,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 2
+      },
+      "frozen_case_4_peptide_design|single_agent|0": {
+        "outcomes": [
+          false,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 2
+      },
+      "frozen_case_4_peptide_design|single_agent|1": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_4_peptide_design|team|0": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      },
+      "frozen_case_4_peptide_design|team|1": {
+        "outcomes": [
+          true,
+          true,
+          true
+        ],
+        "repetitions": 3,
+        "successes": 3
+      }
+    },
+    "unanimous_cells": 11,
+    "unanimous_fraction": 0.6875
+  },
+  "retained_executions": 60
+}
