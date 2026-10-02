@@ -228,11 +228,28 @@ def _in_session_descriptors(output) -> bool:
     stage ran.
     """
 
-    try:
-        blob = json.dumps(_state(output), default=str)
-    except (TypeError, ValueError):
-        return False
-    return any(token in blob.lower() for token in _DESCRIPTOR_TOKENS)
+    # Serialising the whole state is not safe here: a live GTM session holds a
+    # node lookup keyed by coordinate tuples, which json rejects, and swallowing
+    # that silently turns this check into a constant False.
+    def search(node, depth: int = 0) -> bool:
+        if depth > 8:
+            return False
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if any(token in str(key).lower() for token in _DESCRIPTOR_TOKENS):
+                    return True
+                if search(value, depth + 1):
+                    return True
+            return False
+        if isinstance(node, (list, tuple, set)):
+            return any(search(item, depth + 1) for item in list(node)[:200])
+        try:
+            text = node if isinstance(node, str) else repr(node)
+        except Exception:
+            return False
+        return any(token in text.lower() for token in _DESCRIPTOR_TOKENS)
+
+    return search(_state(output))
 
 
 def _normalize_digit_separators(text: str) -> str:
