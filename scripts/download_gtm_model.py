@@ -9,6 +9,7 @@ from pathlib import Path
 
 # Add the src directory to the path
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from cs_copilot.tools.constants import HUGGINGFACE_GTM_REPO, DEFAULT_GTM_MODEL_PATH
@@ -31,6 +32,7 @@ def download_gtm_model(target_dir: str = None):
     print("Checking if huggingface_hub is installed...")
     try:
         from huggingface_hub import snapshot_download, get_token
+
         print("✓ huggingface_hub is installed")
     except ImportError:
         print("✗ huggingface_hub not found")
@@ -103,14 +105,12 @@ def download_gtm_model(target_dir: str = None):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Download GTM model from HuggingFace"
-    )
+    parser = argparse.ArgumentParser(description="Download GTM model from HuggingFace")
     parser.add_argument(
         "--target-dir",
         type=str,
         default=None,
-        help=f"Directory to save the model (default: {DEFAULT_GTM_MODEL_PATH})"
+        help=f"Directory to save the model (default: {DEFAULT_GTM_MODEL_PATH})",
     )
 
     args = parser.parse_args()
