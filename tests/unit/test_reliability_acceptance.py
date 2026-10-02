@@ -484,3 +484,24 @@ def test_a_persisting_stage_still_requires_a_readable_descriptor_table(tmp_path)
     assert not _check_of(evaluate_run("seh_analysis", base), "descriptor_artifact_registered")[
         "passed"
     ]
+
+
+def test_descriptor_evidence_survives_state_that_cannot_be_json_serialised(tmp_path):
+    """A live GTM session holds a node lookup keyed by coordinate tuples.
+
+    Serialising the whole state to find descriptor evidence raised TypeError on
+    those keys; swallowing it made the check a constant False, and every run in
+    the cached-map configuration failed on it. The saved artifact has string
+    keys, so the bug was invisible when replaying from disk.
+    """
+    base = seh_output(tmp_path)
+    del base["session_state"]["data_file_paths"]["descriptor_parquet_path"]
+    base["session_state"][
+        "_gtm_prepared_dataset_cache"
+    ] = "_PreparedGTMData(df=... autoencoder_embedding ...)"
+    base["session_state"]["node_lookup_by_coords"] = {(3, 4): "n1", (5, 6): "n2"}
+
+    with pytest.raises(TypeError):
+        json.dumps(base["session_state"]["node_lookup_by_coords"])
+
+    assert _check_of(evaluate_run("seh_analysis", base), "descriptor_artifact_registered")["passed"]
