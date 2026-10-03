@@ -36,7 +36,13 @@ MCP_FORBIDDEN = ("cs_copilot.agents", "cs_copilot.model_config", "chainlit_app")
 MCP_ALLOWED = ("cs_copilot.agents.instructions",)
 # Dynamic imports that deliberately reach the Agno runtime from opt-in MCP paths.
 MCP_DYNAMIC_EXCEPTIONS = {
-    "mcp/agno_delegate.py": frozenset({"cs_copilot.model_config", "cs_copilot.agents.teams"}),
+    "mcp/agno_delegate.py": frozenset(
+        {
+            "cs_copilot.agents.execution_binding",
+            "cs_copilot.agents.session_runs",
+            "cs_copilot.agents.teams",
+        }
+    ),
     "mcp/llm/agno_model.py": frozenset({"cs_copilot.model_config"}),
 }
 

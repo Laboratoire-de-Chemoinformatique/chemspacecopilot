@@ -93,6 +93,19 @@ reasoner call cs_copilot toolkits can use it:
 - `execution.runner.execute_sync` drives the same phases on a worker thread for
   runtimes without a running event loop. Any interruption still records a
   terminal `cancelled` event, so a run is never left with an open tool span.
+- The run write lock is shared by both drivers: async callers take an
+  event-loop lock and then the run's thread lock, which is the lock
+  thread-based callers take, so MCP tools and in-process Agno tools writing to
+  the same run never interleave.
+- A tool that runs other tools declares `delegates_execution=True` (the MCP
+  `agno_team_run` tool). Its own invocation only records events: it takes no
+  write lock, sets up no read or write confinement, and registers no result
+  artifacts, because each delegated call goes through the kernel itself and
+  records the delegating span (`execution.tracing.current_tool_span_id()`) as
+  its `parent_span_id`. Its `started` event carries `delegates_execution:
+  true`, so the ledger's in-flight guards on run transitions and artifact
+  registration watch only the delegated calls' spans; crash recovery can
+  still abandon an orphaned delegating span.
 - `execution.events` writes the `tool_progress` and `tool_call_recorded`
   events. Their `runtime` field and the slug of a lazily created ad-hoc run
   come from the execution context's runtime profile (`mcp` / `mcp-session`,

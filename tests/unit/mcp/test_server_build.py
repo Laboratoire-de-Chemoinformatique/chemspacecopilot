@@ -197,7 +197,14 @@ def test_agno_team_tool_is_opt_in(tmp_path, monkeypatch):
     tools = {tool.name: tool for tool in server._tool_manager.list_tools()}
 
     assert "agno_team_run" in tools
-    assert tools["agno_team_run"].annotations.readOnlyHint is False
+    annotations = tools["agno_team_run"].annotations
+    assert annotations.readOnlyHint is False
+    assert annotations.openWorldHint is True
+    assert annotations.idempotentHint is False
+    assert "prompt" in tools["agno_team_run"].parameters["properties"]
+
+    reporting = build_server(ctx, profile="reporting", enable_agno_team_tool=True)
+    assert "agno_team_run" not in {tool.name for tool in reporting._tool_manager.list_tools()}
 
 
 def test_prompts_registered(server):

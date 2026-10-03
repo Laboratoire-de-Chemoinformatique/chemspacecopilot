@@ -6,8 +6,8 @@ import asyncio
 import threading
 import typing
 import weakref
-from contextlib import contextmanager
-from typing import Iterator
+from contextlib import asynccontextmanager, contextmanager
+from typing import AsyncIterator, Iterator
 
 from .context import ExecutionContext, _active_output_layout
 from .errors import ToolErrorCode, ToolExecutionError
@@ -43,15 +43,8 @@ def _run_write_lock_key(spec: ToolSpec, ctx: ExecutionContext) -> tuple[str, str
     return (layout.session_id, layout.run_id)
 
 
-def _run_write_lock(
-    spec: ToolSpec,
-    ctx: ExecutionContext,
-) -> asyncio.Lock | None:
-    """Return an event-loop-local lock for one artifact-producing workflow run."""
-
-    key = _run_write_lock_key(spec, ctx)
-    if key is None:
-        return None
+def _loop_run_lock(key: tuple[str, str]) -> asyncio.Lock:
+    """Return the running event loop's lock for one workflow run."""
 
     loop = asyncio.get_running_loop()
     with _RUN_WRITE_LOCKS_GUARD:
@@ -79,16 +72,59 @@ _SYNC_RUN_WRITE_LOCKS: weakref.WeakValueDictionary[tuple[str, str], _SyncRunLock
 _SYNC_LOCKS_HELD = threading.local()
 
 
+def _sync_run_lock_holder(key: tuple[str, str]) -> _SyncRunLock:
+    with _SYNC_RUN_WRITE_LOCKS_GUARD:
+        holder = _SYNC_RUN_WRITE_LOCKS.get(key)
+        if holder is None:
+            holder = _SyncRunLock()
+            _SYNC_RUN_WRITE_LOCKS[key] = holder
+        return holder
+
+
+@asynccontextmanager
+async def _async_run_write_locks(spec: ToolSpec, ctx: ExecutionContext) -> AsyncIterator[bool]:
+    """Serialize an async invocation with every other writer of its run.
+
+    Yields whether locks were taken. The event-loop lock orders async callers;
+    the run's thread lock, taken next, also excludes synchronous runtimes (the
+    in-process Agno team) writing to the same run from worker threads. The
+    thread lock is acquired off the event loop, and a waiter cancelled before
+    it acquires releases the lock as soon as it does.
+    """
+
+    key = _run_write_lock_key(spec, ctx)
+    if key is None:
+        yield False
+        return
+    async with _loop_run_lock(key):
+        holder = _sync_run_lock_holder(key)
+        acquiring = asyncio.ensure_future(asyncio.to_thread(holder.lock.acquire))
+        try:
+            await asyncio.shield(acquiring)
+        except asyncio.CancelledError:
+            acquiring.add_done_callback(lambda done: _release_if_acquired(holder, done))
+            raise
+        try:
+            yield True
+        finally:
+            holder.lock.release()
+
+
+def _release_if_acquired(holder: _SyncRunLock, acquiring: asyncio.Future) -> None:
+    if not acquiring.cancelled() and acquiring.exception() is None and acquiring.result():
+        holder.lock.release()
+
+
 @contextmanager
 def _sync_run_write_lock(spec: ToolSpec, ctx: ExecutionContext) -> Iterator[bool]:
     """Serialize artifact-producing calls for one run across threads.
 
     Yields whether a lock was taken. This is the blocking counterpart of
-    :func:`_run_write_lock` for runtimes that execute tools on worker threads.
-    It does not exclude a concurrent async writer on the same run in the same
-    process; the durable ledger's own preconditions still keep artifact
-    attribution sound in that case. Re-entering the lock of the same run from
-    the same thread raises instead of deadlocking.
+    :func:`_async_run_write_locks` for runtimes that execute tools on worker
+    threads, and shares its thread lock, so in-process Agno calls and
+    concurrent async MCP calls on the same run exclude each other.
+    Re-entering the lock of the same run from the same thread raises instead
+    of deadlocking.
     """
 
     key = _run_write_lock_key(spec, ctx)
@@ -104,11 +140,7 @@ def _sync_run_write_lock(spec: ToolSpec, ctx: ExecutionContext) -> Iterator[bool
             "a tool invocation cannot re-enter the write lock of its own workflow run",
             code=ToolErrorCode.INTERNAL,
         )
-    with _SYNC_RUN_WRITE_LOCKS_GUARD:
-        holder = _SYNC_RUN_WRITE_LOCKS.get(key)
-        if holder is None:
-            holder = _SyncRunLock()
-            _SYNC_RUN_WRITE_LOCKS[key] = holder
+    holder = _sync_run_lock_holder(key)
     with holder.lock:
         held.add(key)
         try:

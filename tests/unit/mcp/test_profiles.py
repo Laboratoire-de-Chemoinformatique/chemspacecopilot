@@ -12,7 +12,7 @@ from cs_copilot.mcp.profiles import (
     validate_profile_registry,
     validate_workflow_profile,
 )
-from cs_copilot.mcp.tools_registry import all_specs
+from cs_copilot.mcp.tools_registry import OPT_IN_GROUPS, all_specs
 from cs_copilot.workflows import list_workflows
 
 EXPECTED_PROFILES = (
@@ -31,7 +31,7 @@ EXPECTED_PROFILES = (
 
 def test_profile_names_are_stable_and_registry_is_valid():
     assert profile_names() == EXPECTED_PROFILES
-    validate_profile_registry(all_specs())
+    validate_profile_registry(all_specs(opt_in_groups=OPT_IN_GROUPS))
 
 
 def test_bootstrap_is_a_strict_subset_of_standard():

@@ -49,6 +49,10 @@ class ToolSpec:
     # "module:function". Specs whose factory builds a toolkit (not an MCP
     # facade) are bound to ``<toolkit>.<method>`` automatically.
     agno_bindings: tuple[str, ...] = ()
+    # The tool runs other tools, each through the kernel itself (the MCP
+    # ``agno_team_run`` delegation). Its own invocation only records events:
+    # no run write lock, no read or write confinement, no result artifacts.
+    delegates_execution: bool = False
 
     def __post_init__(self) -> None:
         bindings = tuple(dict.fromkeys(str(item).strip() for item in self.agno_bindings))
@@ -103,6 +107,18 @@ class ToolSpec:
             raise ValueError(f"{self.mcp_name}: a result artifact cannot be declared read-only")
         if self.result_artifact_type is not None and self.write_scope == "none":
             object.__setattr__(self, "write_scope", "session")
+        if self.delegates_execution and (
+            self.read_only
+            or self.write_scope != "none"
+            or self.read_artifact_fields
+            or self.result_artifact_type is not None
+            or self.run_in_worker_process
+        ):
+            raise ValueError(
+                f"{self.mcp_name}: a delegating tool writes only through the tools it "
+                "runs; it cannot be read-only, declare a write scope, artifact inputs, "
+                "a result artifact, or a worker process"
+            )
 
 
 def _resolve_annotations(method: Callable[..., Any]) -> Dict[str, Any]:

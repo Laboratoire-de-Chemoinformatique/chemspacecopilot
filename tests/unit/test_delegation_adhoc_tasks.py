@@ -75,6 +75,29 @@ def _delegate(team, payload, *, guard=None):
     return call.execute()
 
 
+def test_the_first_delegated_task_starts_a_submitted_ad_hoc_run(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    S3.set_session_prefix("sessions/adhoc-mcp")
+    state: dict = {}
+    run = RunContext.create("mcp-session", session_state=state, session_id="adhoc-mcp")
+    member = SimpleNamespace(
+        name="gtm_agent_agent",
+        agentic_role="gtm_agent",
+        add_history_to_context=True,
+        add_session_state_to_context=True,
+        add_dependencies_to_context=True,
+        tools=[],
+    )
+    team = SimpleNamespace(members=[member], tools=[], session_state=state, run_context=run)
+    attach_execution(team, run_context=run, mode="enforce")
+
+    assert _delegate(team, _payload()).status == "success"
+
+    run.refresh()
+    assert run.run.status.value == "running"
+    assert run.run.tasks["map-egfr"].status is TaskStatus.RUNNING
+
+
 def test_invented_tasks_are_created_started_and_attributed(chat):
     team, run = chat
     attach_execution(team, run_context=run, mode="observe")

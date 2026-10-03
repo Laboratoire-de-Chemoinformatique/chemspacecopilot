@@ -15,6 +15,7 @@ from .profiles import (
 )
 from .tool_adapter import ToolSpec
 from .tool_specs import (
+    agno,
     agno_twins,
     chembl,
     chemistry,
@@ -31,6 +32,9 @@ from .tool_specs import (
 )
 
 _COMPUTE_GROUPS = frozenset({"chem", "gtm", "pandas", "robustness"})
+# Groups whose tools are registered only when a deployment opts in
+# (``build_server(enable_agno_team_tool=True)``).
+OPT_IN_GROUPS = frozenset({"agno"})
 _ARTIFACT_READ_PERMISSION = "artifact:read"
 _ARTIFACT_WRITE_PERMISSION = "artifact:write"
 _COMPUTE_PERMISSION = "compute:execute"
@@ -56,6 +60,7 @@ def _base_specs() -> Iterable[ToolSpec]:
     yield from _with_group(design.MOLECULAR_SPECS, "molecular_design")
     yield from _with_group(design.PEPTIDE_SPECS, "peptide_design")
     yield from _with_group(synplanner.SPECS, "synplanner")
+    yield from _with_group(agno.SPECS, "agno")
 
 
 def _enrich(spec: ToolSpec) -> ToolSpec:
@@ -70,7 +75,7 @@ def _enrich(spec: ToolSpec) -> ToolSpec:
     roles = capabilities.mcp_roles_for_tool(spec.mcp_name, spec.group)
     agno_bindings = _agno_bindings(spec)
     write_scope = spec.write_scope
-    if write_scope == "none" and not spec.read_only:
+    if write_scope == "none" and not spec.read_only and not spec.delegates_execution:
         write_scope = "session"
     open_world = spec.open_world or spec.requires_network
     risk = spec.risk
@@ -111,10 +116,26 @@ def _materialized_specs() -> tuple[ToolSpec, ...]:
     return specs
 
 
-def iter_specs(profile: str | MCPProfile | None = None) -> Iterable[ToolSpec]:
-    """Yield tools, optionally restricted to one strict static profile."""
+def iter_specs(
+    profile: str | MCPProfile | None = None,
+    *,
+    opt_in_groups: Iterable[str] = (),
+) -> Iterable[ToolSpec]:
+    """Yield tools, optionally restricted to one strict static profile.
 
-    specs = _materialized_specs()
+    Tools of :data:`OPT_IN_GROUPS` are included only for the groups named in
+    ``opt_in_groups``.
+    """
+
+    enabled = frozenset(opt_in_groups)
+    unknown = sorted(enabled - OPT_IN_GROUPS)
+    if unknown:
+        raise ValueError(f"Unknown opt-in tool groups: {', '.join(unknown)}")
+    specs = tuple(
+        spec
+        for spec in _materialized_specs()
+        if spec.group not in OPT_IN_GROUPS or spec.group in enabled
+    )
     if profile is None:
         yield from specs
         return
@@ -122,10 +143,14 @@ def iter_specs(profile: str | MCPProfile | None = None) -> Iterable[ToolSpec]:
     yield from (spec for spec in specs if selected.name in spec.profiles)
 
 
-def all_specs(profile: str | MCPProfile | None = None) -> List[ToolSpec]:
+def all_specs(
+    profile: str | MCPProfile | None = None,
+    *,
+    opt_in_groups: Iterable[str] = (),
+) -> List[ToolSpec]:
     """Return registered tools, optionally restricted to ``profile``."""
 
-    return list(iter_specs(profile=profile))
+    return list(iter_specs(profile=profile, opt_in_groups=opt_in_groups))
 
 
 def validate_registry(specs: Iterable[ToolSpec] | None = None) -> None:
@@ -161,7 +186,11 @@ def required_permissions_for_spec(spec: ToolSpec) -> frozenset[str]:
         permissions.add(_NETWORK_PERMISSION)
     if spec.read_artifact_fields:
         permissions.add(_ARTIFACT_READ_PERMISSION)
-    if spec.write_scope == "session" or spec.result_artifact_type is not None:
+    if (
+        spec.write_scope == "session"
+        or spec.result_artifact_type is not None
+        or spec.delegates_execution
+    ):
         permissions.add(_ARTIFACT_WRITE_PERMISSION)
     if spec.group in _COMPUTE_GROUPS:
         permissions.add(_COMPUTE_PERMISSION)
