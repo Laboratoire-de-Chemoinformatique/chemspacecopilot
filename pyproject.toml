@@ -195,6 +195,26 @@ docs = [
     "mkdocstrings[python]>=0.24",
 ]
 
+# PyPI's Linux aarch64 torch wheels are CPU-only, so ARM GPU hosts (e.g. NVIDIA GB10)
+# take torch from PyTorch's CUDA 13.0 index. Other platforms stay on PyPI. That index's
+# torchaudio wheels declare no torch pin, so keep the trio on the versions PyPI resolves.
+[tool.uv]
+constraint-dependencies = [
+    "torch==2.10.0; sys_platform == 'linux' and platform_machine == 'aarch64'",
+    "torchvision==0.25.0; sys_platform == 'linux' and platform_machine == 'aarch64'",
+    "torchaudio==2.10.0; sys_platform == 'linux' and platform_machine == 'aarch64'",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" }]
+torchvision = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" }]
+torchaudio = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" }]
+
 [tool.black]
 line-length = 100
 target-version = ['py311']
