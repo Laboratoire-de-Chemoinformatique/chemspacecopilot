@@ -293,6 +293,20 @@ class TestSqlChemblFetcher:
         with pytest.raises(DatabaseError, match="ChEMBL MySQL connection failed"):
             fetcher.connect()
 
+    def test_query_against_unreachable_server_says_how_to_recover(self):
+        from sqlalchemy.exc import OperationalError
+
+        engine = MagicMock()
+        engine.connect.side_effect = OperationalError(
+            "SELECT 1", {}, Exception("(1045, \"Access denied for user 'chembl'\")")
+        )
+        fetcher = SqlChemblFetcher(engine, backend_label="MySQL")
+        with pytest.raises(DatabaseError, match="MySQL database could not be reached") as err:
+            fetcher.fetch_assays("kinase")
+        assert "Access denied" in str(err.value)
+        assert "REST API" in str(err.value)
+        assert "sqlalche.me" not in str(err.value)
+
     def test_close_disposes_engine(self):
         engine = MagicMock()
         fetcher = SqlChemblFetcher(engine)

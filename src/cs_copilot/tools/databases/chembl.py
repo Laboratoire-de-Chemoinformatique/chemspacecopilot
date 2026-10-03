@@ -227,7 +227,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
             config: Database configuration (optional, uses defaults if not provided)
             backend: Data source backend. One of:
                 - "auto": Auto-detect from env vars (SQLite > PostgreSQL > MySQL > REST).
-                  If an optional SQL driver is missing, fall back to the next candidate.
+                  If a configured database cannot be loaded or reached, fall back to the
+                  next candidate.
                 - "rest": Force REST API (chembl_webresource_client)
                 - "mysql": Force MySQL database
                 - "postgresql": Force PostgreSQL database
@@ -364,24 +365,35 @@ class ChemblToolkit(BaseDatabaseToolkit):
     def _create_auto_fetcher(self) -> tuple[str, ChemblDataFetcher]:
         """Create the first usable backend for auto mode.
 
-        Optional SQL backends are tried in priority order. Missing database
-        driver packages do not abort startup; they trigger a fallback to the
-        next candidate, ending with the REST API.
+        Optional SQL backends are tried in priority order. A missing database
+        driver, or a database server that is down or rejects the login, does
+        not abort startup; it triggers a fallback to the next candidate,
+        ending with the REST API.
         """
         candidates = self._auto_backend_candidates()
         configured = [name for name in candidates if name != "rest"]
         skipped: list[str] = []
 
         for candidate in candidates:
+            fetcher = None
             try:
                 fetcher = self._create_fetcher(candidate)
-            except ImportError as exc:
-                skipped.append(f"{candidate} ({exc})")
+                if candidate in ("mysql", "postgresql"):
+                    # Engines connect lazily, so without this check a server
+                    # that refuses us is still chosen and fails on the first
+                    # query. SQLite is not probed: connecting would create an
+                    # empty file at a mistyped path.
+                    fetcher.connect()
+            except (ImportError, DatabaseError) as exc:
+                if fetcher is not None:
+                    fetcher.close()
+                reason = str(exc).splitlines()[0]
+                skipped.append(f"{candidate} ({reason})")
                 logger.warning(
                     "ChEMBL backend %s unavailable during auto-detection (%s). "
                     "Trying the next backend.",
                     candidate,
-                    exc,
+                    reason,
                 )
                 continue
             if candidate == "rest" and configured:
