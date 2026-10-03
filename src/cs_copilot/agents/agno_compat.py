@@ -97,3 +97,132 @@ def patch_async_function_call_retry() -> bool:
     setattr(arun_function_call, _PATCH_MARKER, True)
     Model.arun_function_call = arun_function_call
     return True
+
+
+_RESULT_PATCH_MARKER = "__cs_copilot_tool_result_fix__"
+
+
+def patch_tool_result_coercion() -> bool:
+    """Stop Agno truth-testing a tool result it cannot truth-test.
+
+    Agno 2.1.9 renders every tool result with
+    ``str(result) if result else ""`` (``agno/models/base.py``). A pandas
+    DataFrame raises ``ValueError`` there, aborting a run the agent had already
+    largely completed, and a NumPy array raises the same way.
+
+    Patching :meth:`FunctionCall.execute` covers every caller -- the team path,
+    the flat single-agent baseline, and tool calls a member makes while a
+    delegation is in flight -- because that is where Agno collects the value.
+    The execution kernel has already seen the raw value by then, so artifact
+    registration is unaffected.
+
+    Returns whether the patch is active.
+    """
+
+    from agno.tools.function import FunctionCall
+
+    if getattr(FunctionCall.execute, _RESULT_PATCH_MARKER, False):
+        return True
+    try:
+        installed = version("agno")
+    except PackageNotFoundError:  # pragma: no cover - agno is a hard dependency
+        return False
+    if installed not in PATCHED_AGNO_VERSIONS:
+        logger.warning(
+            "Not applying the tool-result coercion fix for agno %s (validated for %s); "
+            "check whether run_function_call still truth-tests its result.",
+            installed,
+            ", ".join(sorted(PATCHED_AGNO_VERSIONS)),
+        )
+        return False
+
+    from cs_copilot.execution.envelopes import _coerce_return_value
+
+    def _truth_testable(value) -> bool:
+        try:
+            bool(value)
+        except Exception:
+            return False
+        return True
+
+    def _coerce(outcome):
+        value = getattr(outcome, "result", None)
+        if value is None or _truth_testable(value):
+            return outcome
+        try:
+            coerced = _coerce_return_value(value)
+        except Exception:  # never fail a completed call over rendering
+            coerced = value
+        if not _truth_testable(coerced):
+            # Anything else whose __bool__ raises, such as a NumPy array.
+            coerced = coerced.tolist() if hasattr(coerced, "tolist") else repr(coerced)
+        outcome.result = coerced
+        return outcome
+
+    original_execute = FunctionCall.execute
+    original_aexecute = FunctionCall.aexecute
+
+    def execute(self, *args, **kwargs):
+        return _coerce(original_execute(self, *args, **kwargs))
+
+    async def aexecute(self, *args, **kwargs):
+        return _coerce(await original_aexecute(self, *args, **kwargs))
+
+    setattr(execute, _RESULT_PATCH_MARKER, True)
+    setattr(aexecute, _RESULT_PATCH_MARKER, True)
+    FunctionCall.execute = execute
+    FunctionCall.aexecute = aexecute
+    return True
+
+
+_LITERAL_PATCH_MARKER = "__cs_copilot_literal_enum_fix__"
+
+
+def patch_literal_enum_schema() -> bool:
+    """Advertise ``Literal`` parameters to the model as string enums.
+
+    Agno 2.1.9's schema builder has no branch for :data:`typing.Literal`, so
+    every such parameter falls through to the generic object case and reaches
+    the model as ``{"type": "object", "properties": {}}`` -- no values, no
+    default. Pydantic then rejects the call at runtime with "Input should be
+    'x' or 'y'", penalising the model for a constraint it was never shown, and
+    a model that obeys the advertised schema sends a dict and fails the same
+    way.
+
+    Returns whether the patch is active.
+    """
+
+    import typing
+
+    from agno.utils import json_schema as agno_json_schema
+
+    original = agno_json_schema.get_json_schema_for_arg
+    if getattr(original, _LITERAL_PATCH_MARKER, False):
+        return True
+    try:
+        installed = version("agno")
+    except PackageNotFoundError:  # pragma: no cover - agno is a hard dependency
+        return False
+    if installed not in PATCHED_AGNO_VERSIONS:
+        logger.warning(
+            "Not applying the Literal enum schema fix for agno %s (validated for %s); "
+            "check whether get_json_schema_for_arg still needs it.",
+            installed,
+            ", ".join(sorted(PATCHED_AGNO_VERSIONS)),
+        )
+        return False
+
+    _JSON_TYPES = ((str, "string"), (bool, "boolean"), (int, "integer"), (float, "number"))
+
+    def get_json_schema_for_arg(type_hint, *args, **kwargs):
+        if typing.get_origin(type_hint) is typing.Literal:
+            values = list(typing.get_args(type_hint))
+            for python_type, json_type in _JSON_TYPES:
+                # bool before int: bool is a subclass of int.
+                if values and all(isinstance(value, python_type) for value in values):
+                    return {"type": json_type, "enum": values}
+        return original(type_hint, *args, **kwargs)
+
+    setattr(get_json_schema_for_arg, _LITERAL_PATCH_MARKER, True)
+    agno_json_schema.get_json_schema_for_arg = get_json_schema_for_arg
+    return True

@@ -6,6 +6,7 @@ import asyncio
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
+import pandas as pd
 import pytest
 from agno.agent import Agent
 from agno.tools import Toolkit
@@ -28,6 +29,11 @@ class ProbeToolkit(Toolkit):
         self.seen: list[dict[str, Any]] = []
         self.register(self.echo)
         self.register(self.remember)
+        self.register(self.table)
+
+    def table(self) -> "pd.DataFrame":
+        """Return a pointer-backed table the way the chemistry toolkits do."""
+        return pd.DataFrame({"smiles": ["CCO", "CCN"]})
 
     def echo(self, text: str, repeat: int = 1) -> str:
         """Repeat text.
@@ -243,3 +249,22 @@ def test_execution_mode_resolution(monkeypatch):
     monkeypatch.setenv("CS_COPILOT_AGNO_EXECUTION", "sometimes")
     with pytest.raises(ValueError, match="CS_COPILOT_AGNO_EXECUTION"):
         execution_mode_from_env()
+
+
+@pytest.mark.parametrize("mode", ["enforce", "observe"])
+def test_dataframe_results_survive_agno_truth_testing(chat, mode):
+    """Agno 2.1.9 truth-tests every tool result, which raises for a DataFrame.
+
+    An unfixed result aborts the whole run inside ``agent.run``, discarding work
+    the agent had already completed. It hit the team arm far more often than the
+    flat baseline, so it skewed the architecture comparison as well as the
+    success rate.
+    """
+    attach_execution(chat.team, run_context=chat.run, mode=mode)
+
+    outcome = _execute(chat.toolkit.functions["table"], {}, agent=chat.member, state=chat.state)
+
+    assert not isinstance(outcome.result, pd.DataFrame)
+    # The exact expression Agno applies to every tool result.
+    rendered = str(outcome.result) if outcome.result else ""
+    assert "CCO" in rendered

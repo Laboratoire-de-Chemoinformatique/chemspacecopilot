@@ -197,6 +197,11 @@ SYNPLANNER_INSTRUCTIONS = [
     "labeling, and report handoff.",
     "If SynPlanner cannot resolve a molecule name, ask for a SMILES string or a "
     "clearer target instead of guessing.",
+    "To plan a generated candidate, pass `candidate_reference` to `plan_synthesis` "
+    "(for example `cset_001` for its first candidate, or `cset_001#3`) instead of "
+    "copying the SMILES into `query`. Retyping a long SMILES can drop a fragment "
+    "and yield a valid but different molecule, which would be planned and reported "
+    "as if it were the candidate. Check `candidate_provenance` in the result.",
     "If no SynPlanner route is found and an LLM fallback is allowed, clearly label "
     "the fallback as not SynPlanner-validated and do not present it as a tool result.",
     *CATALOG_SOURCE_OF_TRUTH_INSTRUCTIONS,

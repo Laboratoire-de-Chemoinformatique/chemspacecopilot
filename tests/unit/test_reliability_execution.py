@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 ROBUSTNESS_DIR = Path(__file__).parents[1] / "robustness"
@@ -18,6 +19,7 @@ from reliability.telemetry import normalize_agno_output  # noqa: E402
 from robustness_minimal_example import (  # noqa: E402
     RobustnessConfig,
     RobustnessRunner,
+    response_text_of,
 )
 from robustness_minimal_example import (  # noqa: E402
     TestConfig as RunnerTestConfig,
@@ -442,3 +444,18 @@ def test_timeout_retains_first_run_and_does_not_start_more_repetitions(tmp_path,
     records = harness._run_independent_test(case(), ["run", "again"])
     assert attempts == [0]
     assert records == [{"status": "timeout", "run_id": 0}]
+
+
+def test_dataframe_content_renders_instead_of_failing_the_completed_run():
+    """A coordinator may return a pointer-backed table as its content.
+
+    Truth-testing one raises, which previously discarded a run the agent had
+    already completed and wiped its telemetry. This affected the team arm far
+    more than the flat baseline, biasing the architecture comparison.
+    """
+    frame = pd.DataFrame({"smiles": ["CCO", "CCN"]})
+    rendered = response_text_of(frame)
+    assert "smiles" in rendered
+    assert response_text_of(pd.DataFrame()) == str(pd.DataFrame())
+    assert response_text_of(None) == ""
+    assert response_text_of("") == ""

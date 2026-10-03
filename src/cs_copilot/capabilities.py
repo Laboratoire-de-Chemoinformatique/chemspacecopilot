@@ -176,33 +176,45 @@ ROLES: Mapping[str, RoleCapabilities] = MappingProxyType(
                 ("session", "skills"),
                 mcp_groups=("workflow", "agno"),
             ),
-            _role("chembl_downloader", "chembl-retrieval", ("chembl", "pandas", "skills")),
+            _role(
+                "chembl_downloader",
+                "chembl-retrieval",
+                ("chembl", "pandas", "session", "skills"),
+            ),
             _role(
                 "gtm_agent",
                 "gtm-analysis",
                 ("gtm", "pandas", "session", "skills"),
                 _GTM_PLOTS,
             ),
-            _role("chemoinformatician", "chemoinformatics", ("chem", "gtm", "pandas", "skills")),
+            _role(
+                "chemoinformatician",
+                "chemoinformatics",
+                ("chem", "gtm", "pandas", "session", "skills"),
+            ),
             _role(
                 "report_generator",
                 "reporting",
-                ("pandas", "report", "skills"),
+                ("pandas", "report", "session", "skills"),
                 _GTM_PLOTS + _REPORT_WRITERS,
             ),
             _role(
                 "molecular_designer",
                 "molecular-design",
-                ("molecular_design", "gtm", "chem", "pandas", "skills"),
+                ("molecular_design", "gtm", "chem", "pandas", "session", "skills"),
             ),
             _role(
                 "peptide_designer",
                 "peptide-design",
-                ("peptide_design", "gtm", "pandas", "skills"),
+                ("peptide_design", "gtm", "pandas", "session", "skills"),
                 _GTM_PLOTS,
             ),
             _role("synplanner", "retrosynthesis", ("synplanner", "skills")),
-            _role("robustness_evaluation", "robustness", ("pandas", "robustness", "skills")),
+            _role(
+                "robustness_evaluation",
+                "robustness",
+                ("pandas", "robustness", "session", "skills"),
+            ),
             # The flat ablation baseline deliberately excludes robustness tools.
             _role(
                 "single_agent",

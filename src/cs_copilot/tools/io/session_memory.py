@@ -624,8 +624,45 @@ def _resolve_dotted_session_key(
             if 0 <= index < len(current):
                 current = current[index]
                 continue
-        return False, None
+        return _resolve_unique_leaf(session_state, session_key)
     return True, current
+
+
+def _resolve_unique_leaf(session_state: Dict[str, Any], session_key: str) -> Tuple[bool, Any]:
+    """Resolve a bare leaf name when exactly one nested key matches.
+
+    The agent instructions and skills name leaf keys such as
+    ``clean_dataset_path``, while the value lives at
+    ``data_file_paths.clean_dataset_path``. Rejecting the documented spelling
+    costs a round trip and teaches nothing; an ambiguous name still fails, so
+    this never guesses between two candidates.
+    """
+
+    leaf = str(session_key).rsplit(".", 1)[-1]
+
+    # ``data_file_paths`` is the documented home for the dataset pointers the
+    # instructions name, so it wins over copies held by individual objects.
+    canonical = session_state.get("data_file_paths")
+    if isinstance(canonical, dict) and canonical.get(leaf) is not None:
+        return True, canonical[leaf]
+
+    matches: list[Any] = []
+
+    def walk(node: Any, depth: int = 0) -> None:
+        if depth > 6:
+            return
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == leaf and value is not None:
+                    matches.append(value)
+                walk(value, depth + 1)
+
+    walk(session_state)
+    # Several objects may record the same path; that is not an ambiguity.
+    distinct = {repr(value) for value in matches}
+    if len(distinct) == 1:
+        return True, matches[0]
+    return False, None
 
 
 def _loadable_sort_key(entry: Dict[str, Any]) -> tuple[int, str]:

@@ -694,7 +694,10 @@ class GTMToolkit(BaseDRToolkit):
         return gtm_operations.get_node_id_from_coords(lookup_table, x_int, y_int)
 
     def get_density_summary(self, head: int = 10) -> str:
-        """Return a formatted preview of the cached GTM density table."""
+        """Return a formatted preview of the cached GTM density table.
+
+        Requires ``load_and_prep_data`` to have run first in this session.
+        """
 
         if self._gtm_data is None or self._gtm_data.source is None:
             raise AttributeError("Data not loaded. Call load_and_prep_data() first.")
@@ -713,7 +716,11 @@ class GTMToolkit(BaseDRToolkit):
         landscape_type: Optional[Literal["classification", "regression"]] = None,
         head: int = 10,
     ) -> str:
-        """Return a formatted preview of a cached GTM node-level activity landscape."""
+        """Return a formatted preview of a cached GTM node-level activity landscape.
+
+        Requires ``load_and_prep_data`` first, then an activity landscape from
+        ``create_activity_landscapes`` or ``load_activity_landscape_csv``.
+        """
 
         _, table = self._get_activity_landscape(landscape_type)
 
@@ -721,7 +728,10 @@ class GTMToolkit(BaseDRToolkit):
         return gtm_operations.df_as_str(table.head(head))
 
     def get_node_lookup_summary(self, head: int = 10) -> str:
-        """Return a formatted preview of cached node coordinate lookup tables."""
+        """Return a formatted preview of cached node coordinate lookup tables.
+
+        Requires ``load_and_prep_data`` to have run first in this session.
+        """
 
         if (
             self._gtm_data is None
@@ -923,7 +933,10 @@ class GTMToolkit(BaseDRToolkit):
         agent: Agent | None = None,
         session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[str, pd.DataFrame, List[str]]:
-        """Sample molecules assigned to the provided GTM node identifiers."""
+        """Sample molecules assigned to the provided GTM node identifiers.
+
+        Requires ``load_and_prep_data`` to have run first in this session.
+        """
 
         self._require_source_mols()
 
@@ -961,7 +974,10 @@ class GTMToolkit(BaseDRToolkit):
         agent: Agent | None = None,
         session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[str, pd.DataFrame, List[str]]:
-        """Sample molecules from the densest GTM nodes."""
+        """Sample molecules from the densest GTM nodes.
+
+        Requires ``load_and_prep_data`` to have run first in this session.
+        """
 
         self._require_source_mols()
         self._require_density_table()
@@ -1015,7 +1031,11 @@ class GTMToolkit(BaseDRToolkit):
         agent: Agent | None = None,
         session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[str, pd.DataFrame, List[str]]:
-        """Sample molecules from GTM nodes ranked by a node-level activity landscape metric."""
+        """Sample molecules from GTM nodes ranked by a node-level activity landscape metric.
+
+        Requires ``load_and_prep_data`` first, then an activity landscape from
+        ``create_activity_landscapes`` or ``load_activity_landscape_csv``.
+        """
 
         self._require_source_mols()
         _, landscape = self._get_activity_landscape(landscape_type)
@@ -1067,7 +1087,10 @@ class GTMToolkit(BaseDRToolkit):
         agent: Agent | None = None,
         session_state: Optional[Dict[str, Any]] = None,
     ) -> Union[str, pd.DataFrame, List[str]]:
-        """Sample top molecule rows by an explicit row-level activity column."""
+        """Sample top molecule rows by an explicit row-level activity column.
+
+        Requires ``load_and_prep_data`` to have run first in this session.
+        """
 
         self._require_source_mols()
 

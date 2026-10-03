@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+import pytest
 from agno.agent import Agent
 from agno.exceptions import RetryAgentRun
 from agno.models.base import Model
@@ -94,3 +95,101 @@ def test_async_pre_hook_retry_is_returned_to_the_model():
 
     assert output.content == "recovered"
     assert any("pass a structured handoff" in message for message in model.seen[-1])
+
+
+def test_literal_parameters_reach_the_model_as_enums_not_opaque_objects():
+    """Agno 2.1.9 has no Literal branch, so such parameters lose their values.
+
+    The model is then rejected at runtime for a constraint it was never shown,
+    and a model that obeys the advertised object schema sends a dict and fails
+    the same way. Nested Optional/List forms resolve through the same function,
+    so they are covered too.
+    """
+    from typing import Literal, Optional
+
+    from agno.utils import json_schema as agno_json_schema
+
+    from cs_copilot.agents.agno_compat import patch_literal_enum_schema
+
+    assert patch_literal_enum_schema()
+
+    assert agno_json_schema.get_json_schema_for_arg(Literal["text", "dataframe"]) == {
+        "type": "string",
+        "enum": ["text", "dataframe"],
+    }
+    assert agno_json_schema.get_json_schema_for_arg(Literal[1, 2]) == {
+        "type": "integer",
+        "enum": [1, 2],
+    }
+    optional = agno_json_schema.get_json_schema_for_arg(Optional[Literal["a", "b"]])
+    assert {"type": "string", "enum": ["a", "b"]} in optional["anyOf"]
+
+    # Non-Literal hints keep agno's own behaviour.
+    assert agno_json_schema.get_json_schema_for_arg(str) == {"type": "string"}
+
+
+def test_the_literal_patch_is_idempotent():
+    from agno.utils import json_schema as agno_json_schema
+
+    from cs_copilot.agents.agno_compat import patch_literal_enum_schema
+
+    assert patch_literal_enum_schema()
+    once = agno_json_schema.get_json_schema_for_arg
+    assert patch_literal_enum_schema()
+    assert agno_json_schema.get_json_schema_for_arg is once
+
+
+def _executed(value):
+    """Run a tool returning `value` the way Agno does, and give back its result."""
+    from agno.tools.function import Function, FunctionCall
+
+    from cs_copilot.agents.agno_compat import patch_tool_result_coercion
+
+    assert patch_tool_result_coercion()
+
+    holder = {"value": value}
+
+    def tool() -> str:
+        """Return a value."""
+        return holder["value"]
+
+    function = Function.from_callable(tool)
+    function.process_entrypoint()
+    return FunctionCall(function=function, arguments={}).execute().result
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: __import__("pandas").DataFrame({"smiles": ["CCO", "CCN"]}),
+        lambda: __import__("pandas").DataFrame(),
+        lambda: __import__("pandas").Series([1, 2, 3]),
+        lambda: __import__("numpy").array([1.0, 2.0, 3.0]),
+    ],
+)
+def test_results_agno_cannot_truth_test_are_made_renderable(factory):
+    """Agno renders every result with `str(result) if result else ""`.
+
+    A DataFrame or NumPy array raises there, aborting a run the agent had
+    already largely completed. It reached that line through delegation too, so
+    the fix has to sit where Agno collects the value rather than in the team
+    binding.
+    """
+    result = _executed(factory())
+    assert str(result) if result else ""  # the exact expression, must not raise
+
+
+@pytest.mark.parametrize("value", ["hello", "", 0, 7, None, {"k": "v"}, [1, 2]])
+def test_ordinary_results_are_passed_through_untouched(value):
+    assert _executed(value) == value
+
+
+def test_the_result_patch_is_idempotent():
+    from agno.tools.function import FunctionCall
+
+    from cs_copilot.agents.agno_compat import patch_tool_result_coercion
+
+    assert patch_tool_result_coercion()
+    once = FunctionCall.execute
+    assert patch_tool_result_coercion()
+    assert FunctionCall.execute is once
