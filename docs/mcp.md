@@ -600,6 +600,12 @@ The MCP package is intentionally isolated from the Agno team:
 - The runtime-neutral core (`cs_copilot.routing`, `cs_copilot.workflows`,
   `cs_copilot.skills`, `cs_copilot.storage`, `cs_copilot.tracking`) imports
   neither runtime: no `agno`, `cs_copilot.agents`, or `cs_copilot.mcp`.
+- The execution pipeline behind every tool call (authorization, boundaries,
+  idempotency, artifact registration, durable events, and the v2 envelope)
+  lives in the runtime-neutral `cs_copilot.execution` package. The MCP adapter
+  only adds the public tool signature, MCP context injection, and subprocess
+  worker dispatch; see
+  [Shared execution kernel](architecture/agentic-runtime-v2.md#shared-execution-kernel).
 - Importing `cs_copilot` or `cs_copilot.tools.*` does not require the `mcp`
   extra to be installed.
 - The MCP server runs as one OS process per stdio session. Concurrent
