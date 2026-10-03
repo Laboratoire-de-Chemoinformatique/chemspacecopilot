@@ -41,6 +41,21 @@ def runtime_hashes(root: Path) -> dict[str, str]:
     return {str(path.relative_to(root)): sha256(path) for path in sorted(paths)}
 
 
+def _python_path(root: Path) -> str:
+    """Runtime import path, including vendored dependencies when present.
+
+    Some platforms have no SynPlanner wheel, so the study ships it under
+    ``reports/reviewer_revision/python-deps``. Omitting that directory makes
+    every route search fail for a reason unrelated to what is being measured.
+    """
+
+    entries = [root / "src"]
+    vendored = root / "reports" / "reviewer_revision" / "python-deps"
+    if vendored.is_dir():
+        entries.append(vendored.resolve())
+    return ":".join(str(entry) for entry in entries)
+
+
 def verify_plan(plan: dict, root: Path) -> list[str]:
     """Verify frozen source, scientific inputs and batch configs without inference."""
     mismatches = []
@@ -250,7 +265,7 @@ def prepare(args):
         "runtime_sha256": runtime_hashes(root),
         "input_sha256": {str(path): sha256(path) for path in sorted(input_files)},
         "environment": {
-            "PYTHONPATH": str(root / "src"),
+            "PYTHONPATH": _python_path(root),
             "AUTOENCODER_MODEL_PATH": str(args.autoencoder_dir.resolve()),
             "PEPTIDE_DESIGNER_MODEL_PATH": str(args.peptide_model_dir.resolve()),
             "USE_S3": "false",

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from cs_copilot.execution.llm import DEFAULT_LLM_POLICY, llm_policy_of, resolve_model
+
 from ..errors import MCPToolError
 
 
@@ -18,9 +20,9 @@ def ensure_llm_engine_available(
 
     if str(engine or "").strip().lower() != "llm":
         return False
-    if getattr(agent, "model", None) is not None:
+    if resolve_model(agent) is not None:
         return False
-    policy = str(getattr(agent, "llm_policy", "external") or "external").strip().lower()
+    policy = llm_policy_of(agent) or DEFAULT_LLM_POLICY
     if policy == "external" and getattr(agent, "llm", None) is not None:
         return True
     if policy == "disabled":

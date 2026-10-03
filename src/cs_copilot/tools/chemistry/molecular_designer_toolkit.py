@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from rdkit import Chem, DataStructs
 from rdkit.Chem import QED, Descriptors, rdFingerprintGenerator
 
+from cs_copilot.execution.llm import LLMUnavailableError, require_model
 from cs_copilot.generation_audit import (
     capture_generation_audit,
     generation_audit_summary,
@@ -931,14 +932,12 @@ class MolecularDesignerToolkit(Toolkit):
         if engine_key == "autoencoder":
             return self.autoencoder_engine
         if engine_key == "llm":
-            model = getattr(agent, "model", None) if agent is not None else None
-            if model is None:
+            try:
+                model = require_model(agent, "LLM design")
+            except LLMUnavailableError as exc:
                 raise MolecularDesignerError(
-                    "LLM design requires an agent with a model. In default MCP, "
-                    "MCPAgentContext.model is None; use agno_team_run or the Agno "
-                    "team runtime for internal-model design, or choose "
-                    "engine='autoencoder'."
-                )
+                    f"{exc} Choose engine='autoencoder' for deterministic generation."
+                ) from exc
             return LLMDesignEngine(model)
         raise MolecularDesignerError(
             f"Unknown molecular design engine: {engine}. Available engines: autoencoder, llm."

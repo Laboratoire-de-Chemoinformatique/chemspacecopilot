@@ -151,9 +151,13 @@ def build_server(
     if include_tools:
         if include_chatgpt_compat:
             _register_chatgpt_compat_tools(server, ToolAnnotations)
-        _register_tools(server, ctx, ToolAnnotations, profile=selected_profile.name)
-        if enable_agno_team_tool:
-            _register_agno_team_tool(server, ctx, ToolAnnotations)
+        _register_tools(
+            server,
+            ctx,
+            ToolAnnotations,
+            profile=selected_profile.name,
+            opt_in_groups=("agno",) if enable_agno_team_tool else (),
+        )
     if include_prompts:
         _register_prompts(server, Prompt)
 
@@ -166,13 +170,14 @@ def _register_tools(
     tool_annotations_cls: Any,
     *,
     profile: str,
+    opt_in_groups: tuple[str, ...] = (),
 ) -> None:
     from .tool_adapter import build_tool
     from .tools_registry import iter_specs
 
     registered: set[str] = set()
     instances: dict[int, Any] = {}
-    for spec in iter_specs(profile=profile):
+    for spec in iter_specs(profile=profile, opt_in_groups=opt_in_groups):
         if spec.mcp_name in registered:
             logger.warning("Duplicate MCP tool name skipped: %s", spec.mcp_name)
             continue
@@ -285,26 +290,6 @@ def _register_chatgpt_compat_tools(server: Any, tool_annotations_cls: Any) -> No
             tool_annotations_cls,
             read_only=True,
             idempotent=True,
-        ),
-        structured_output=True,
-    )
-
-
-def _register_agno_team_tool(server: Any, ctx: MCPAgentContext, tool_annotations_cls: Any) -> None:
-    from .agno_delegate import build_agno_team_tool
-
-    server.add_tool(
-        build_agno_team_tool(ctx),
-        name="agno_team_run",
-        description=(
-            "Private trusted-client escape hatch: delegate one prompt to the "
-            "cs_copilot Agno team, using the configured Agno model. Disabled "
-            "by default; prefer fine-grained MCP skills and tools for external clients."
-        ),
-        annotations=_tool_annotations(
-            tool_annotations_cls,
-            read_only=False,
-            idempotent=False,
         ),
         structured_output=True,
     )

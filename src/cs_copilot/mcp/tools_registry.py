@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Iterable, List, Sequence
 
+from cs_copilot import capabilities
+
 from .profiles import (
     MCPProfile,
     get_profile,
@@ -13,6 +15,8 @@ from .profiles import (
 )
 from .tool_adapter import ToolSpec
 from .tool_specs import (
+    agno,
+    agno_twins,
     chembl,
     chemistry,
     design,
@@ -27,56 +31,10 @@ from .tool_specs import (
     workflow,
 )
 
-_GROUP_ROLES: dict[str, tuple[str, ...]] = {
-    "chembl": ("chembl_downloader", "single_agent"),
-    "gtm": ("gtm_agent", "single_agent"),
-    "chem": ("chemoinformatician", "single_agent"),
-    "session": (
-        "supervisor",
-        "chembl_downloader",
-        "chemoinformatician",
-        "molecular_designer",
-        "gtm_agent",
-        "report_generator",
-        "robustness_evaluation",
-        "synplanner",
-        "peptide_designer",
-        "single_agent",
-    ),
-    "report": ("report_generator", "single_agent"),
-    "workflow": ("supervisor", "single_agent"),
-    "llm": (
-        "supervisor",
-        "chembl_downloader",
-        "chemoinformatician",
-        "molecular_designer",
-        "gtm_agent",
-        "report_generator",
-        "robustness_evaluation",
-        "synplanner",
-        "peptide_designer",
-        "single_agent",
-    ),
-    "robustness": ("robustness_evaluation", "single_agent"),
-    "skills": (
-        "supervisor",
-        "chembl_downloader",
-        "chemoinformatician",
-        "molecular_designer",
-        "gtm_agent",
-        "report_generator",
-        "robustness_evaluation",
-        "synplanner",
-        "peptide_designer",
-        "single_agent",
-    ),
-    "pandas": ("chemoinformatician", "gtm_agent", "single_agent"),
-    "molecular_design": ("molecular_designer", "single_agent"),
-    "peptide_design": ("peptide_designer", "single_agent"),
-    "synplanner": ("synplanner", "single_agent"),
-}
-
 _COMPUTE_GROUPS = frozenset({"chem", "gtm", "pandas", "robustness"})
+# Groups whose tools are registered only when a deployment opts in
+# (``build_server(enable_agno_team_tool=True)``).
+OPT_IN_GROUPS = frozenset({"agno"})
 _ARTIFACT_READ_PERMISSION = "artifact:read"
 _ARTIFACT_WRITE_PERMISSION = "artifact:write"
 _COMPUTE_PERMISSION = "compute:execute"
@@ -102,15 +60,22 @@ def _base_specs() -> Iterable[ToolSpec]:
     yield from _with_group(design.MOLECULAR_SPECS, "molecular_design")
     yield from _with_group(design.PEPTIDE_SPECS, "peptide_design")
     yield from _with_group(synplanner.SPECS, "synplanner")
+    yield from _with_group(agno.SPECS, "agno")
 
 
 def _enrich(spec: ToolSpec) -> ToolSpec:
     """Fill capability policy defaults without duplicating tool declarations."""
 
-    profiles = spec.profiles or profiles_for_spec(spec)
-    roles = spec.roles or _GROUP_ROLES.get(spec.group or "", ("single_agent",))
+    if spec.roles or spec.profiles:
+        raise ValueError(
+            f"{spec.mcp_name}: declare role and profile grants in cs_copilot/capabilities.py, "
+            "not on the tool spec"
+        )
+    profiles = profiles_for_spec(spec)
+    roles = capabilities.mcp_roles_for_tool(spec.mcp_name, spec.group)
+    agno_bindings = _agno_bindings(spec)
     write_scope = spec.write_scope
-    if write_scope == "none" and not spec.read_only:
+    if write_scope == "none" and not spec.read_only and not spec.delegates_execution:
         write_scope = "session"
     open_world = spec.open_world or spec.requires_network
     risk = spec.risk
@@ -126,7 +91,22 @@ def _enrich(spec: ToolSpec) -> ToolSpec:
         roles=tuple(dict.fromkeys(roles)),
         profiles=tuple(dict.fromkeys(profiles)),
         write_scope=write_scope,
+        agno_bindings=agno_bindings,
     )
+
+
+def _agno_bindings(spec: ToolSpec) -> tuple[str, ...]:
+    """Name the in-process implementations of one MCP operation."""
+
+    bindings = list(spec.agno_bindings)
+    toolkit_path = getattr(spec.toolkit_factory, "toolkit_import_path", None)
+    if isinstance(toolkit_path, str) and not toolkit_path.startswith("cs_copilot.mcp."):
+        bindings.append(f"{toolkit_path}.{spec.method}")
+    group_toolkit = agno_twins.FACADE_GROUP_TOOLKITS.get(spec.group or "")
+    if group_toolkit is not None:
+        bindings.append(f"{group_toolkit}.{spec.method}")
+    bindings.extend(agno_twins.AGNO_TWINS.get(spec.mcp_name, ()))
+    return tuple(dict.fromkeys(bindings))
 
 
 def _materialized_specs() -> tuple[ToolSpec, ...]:
@@ -136,10 +116,26 @@ def _materialized_specs() -> tuple[ToolSpec, ...]:
     return specs
 
 
-def iter_specs(profile: str | MCPProfile | None = None) -> Iterable[ToolSpec]:
-    """Yield tools, optionally restricted to one strict static profile."""
+def iter_specs(
+    profile: str | MCPProfile | None = None,
+    *,
+    opt_in_groups: Iterable[str] = (),
+) -> Iterable[ToolSpec]:
+    """Yield tools, optionally restricted to one strict static profile.
 
-    specs = _materialized_specs()
+    Tools of :data:`OPT_IN_GROUPS` are included only for the groups named in
+    ``opt_in_groups``.
+    """
+
+    enabled = frozenset(opt_in_groups)
+    unknown = sorted(enabled - OPT_IN_GROUPS)
+    if unknown:
+        raise ValueError(f"Unknown opt-in tool groups: {', '.join(unknown)}")
+    specs = tuple(
+        spec
+        for spec in _materialized_specs()
+        if spec.group not in OPT_IN_GROUPS or spec.group in enabled
+    )
     if profile is None:
         yield from specs
         return
@@ -147,10 +143,14 @@ def iter_specs(profile: str | MCPProfile | None = None) -> Iterable[ToolSpec]:
     yield from (spec for spec in specs if selected.name in spec.profiles)
 
 
-def all_specs(profile: str | MCPProfile | None = None) -> List[ToolSpec]:
+def all_specs(
+    profile: str | MCPProfile | None = None,
+    *,
+    opt_in_groups: Iterable[str] = (),
+) -> List[ToolSpec]:
     """Return registered tools, optionally restricted to ``profile``."""
 
-    return list(iter_specs(profile=profile))
+    return list(iter_specs(profile=profile, opt_in_groups=opt_in_groups))
 
 
 def validate_registry(specs: Iterable[ToolSpec] | None = None) -> None:
@@ -164,6 +164,11 @@ def validate_registry(specs: Iterable[ToolSpec] | None = None) -> None:
     for spec in materialized:
         if not spec.group:
             raise ValueError(f"{spec.mcp_name}: group is required")
+        if capabilities.group_for_tool(spec.mcp_name) != spec.group:
+            raise ValueError(
+                f"{spec.mcp_name}: tool names must start with their group's prefix "
+                f"(group {spec.group!r}); see cs_copilot/capabilities.py"
+            )
         if not spec.roles:
             raise ValueError(f"{spec.mcp_name}: at least one role is required")
         if not spec.profiles:
@@ -181,7 +186,11 @@ def required_permissions_for_spec(spec: ToolSpec) -> frozenset[str]:
         permissions.add(_NETWORK_PERMISSION)
     if spec.read_artifact_fields:
         permissions.add(_ARTIFACT_READ_PERMISSION)
-    if spec.write_scope == "session" or spec.result_artifact_type is not None:
+    if (
+        spec.write_scope == "session"
+        or spec.result_artifact_type is not None
+        or spec.delegates_execution
+    ):
         permissions.add(_ARTIFACT_WRITE_PERMISSION)
     if spec.group in _COMPUTE_GROUPS:
         permissions.add(_COMPUTE_PERMISSION)

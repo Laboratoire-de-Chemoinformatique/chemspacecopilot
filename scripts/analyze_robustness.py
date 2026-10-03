@@ -200,6 +200,7 @@ Examples:
         logger.error(f"❌ Analysis failed: {e}")
         if args.debug:
             import traceback
+
             traceback.print_exc()
         return 1
 

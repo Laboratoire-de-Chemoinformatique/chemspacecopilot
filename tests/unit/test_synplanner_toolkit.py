@@ -699,3 +699,71 @@ def test_incomplete_rollout_api_fails_instead_of_silent_substitution(monkeypatch
             reaction_rules=[],
             building_blocks=set(),
         )
+
+
+class TestCandidateProvenance:
+    """A retyped SMILES can silently become a different, valid molecule.
+
+    A measured run dropped one ``C(F)(F)`` unit from a candidate, turning a
+    pentafluoroethyl group into a trifluoromethyl one. The planner then searched
+    a compound that was in no candidate set and reported an ordinary no-route
+    result, so nothing downstream could tell the target was wrong.
+    """
+
+    CANDIDATE = "CCC(C)C(=O)C1CCC(=O)CC(C(=O)Nc2ccc(F)c(C(F)(F)C(F)(F)F)c2)CN1"
+    RETYPED = "CCC(C)C(=O)C1CCC(=O)CC(C(=O)Nc2ccc(F)c(C(F)(F)F)c2)CN1"
+
+    def _state(self, tmp_path):
+        import json
+
+        artifact = tmp_path / "candidates.json"
+        artifact.write_text(
+            json.dumps({"candidates": [{"smiles": self.CANDIDATE}, {"smiles": "CCO"}]})
+        )
+        return {
+            "session_objects": {"candidate_sets": {"cset_001": {"artifact_path": str(artifact)}}}
+        }
+
+    def test_the_two_structures_really_are_different_molecules(self):
+        from rdkit import Chem, rdBase
+
+        with rdBase.BlockLogs():
+            left, right = Chem.MolFromSmiles(self.CANDIDATE), Chem.MolFromSmiles(self.RETYPED)
+        assert left is not None and right is not None
+        assert Chem.MolToSmiles(left) != Chem.MolToSmiles(right)
+
+    def test_a_retyped_target_that_matches_no_candidate_is_flagged(self, tmp_path):
+        toolkit = SynPlannerToolkit()
+        provenance = toolkit._candidate_match(self.RETYPED, self._state(tmp_path))
+        assert provenance["matched"] is False
+        assert provenance["candidates_checked"] == 2
+
+    def test_a_retyped_target_that_does_match_is_recorded_as_matching(self, tmp_path):
+        toolkit = SynPlannerToolkit()
+        provenance = toolkit._candidate_match(self.CANDIDATE, self._state(tmp_path))
+        assert provenance["matched"] is True
+        assert provenance["candidate_index"] == 0
+
+    def test_a_reference_resolves_to_the_stored_structure_without_retyping(self, tmp_path):
+        toolkit = SynPlannerToolkit()
+        state = self._state(tmp_path)
+        smiles, provenance = toolkit._resolve_candidate_reference("cset_001", state)
+        assert smiles == self.CANDIDATE
+        assert provenance["matched"] is True
+
+        second, _ = toolkit._resolve_candidate_reference("cset_001#1", state)
+        assert second == "CCO"
+
+    def test_an_unknown_reference_names_what_is_available(self, tmp_path):
+        toolkit = SynPlannerToolkit()
+        with pytest.raises(ValueError, match="cset_001"):
+            toolkit._resolve_candidate_reference("cset_999", self._state(tmp_path))
+
+    def test_an_out_of_range_index_is_rejected(self, tmp_path):
+        toolkit = SynPlannerToolkit()
+        with pytest.raises(ValueError, match="outside"):
+            toolkit._resolve_candidate_reference("cset_001#7", self._state(tmp_path))
+
+    def test_no_candidate_sets_means_no_provenance_claim(self):
+        toolkit = SynPlannerToolkit()
+        assert toolkit._candidate_match(self.RETYPED, {}) == {}

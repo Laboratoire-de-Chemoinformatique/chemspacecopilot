@@ -209,6 +209,84 @@ def _finite(value):
         return False
 
 
+_DESCRIPTOR_TOKENS = ("fingerprint", "embedding", "descriptor_vector")
+# Only these stages persist and register a descriptor table.
+_DESCRIPTOR_PERSISTING_TOOLS = ("fetch_compounds", "normalize_for_analysis")
+
+
+def _descriptor_stage_ran(output) -> bool:
+    return _has_tool(output, _DESCRIPTOR_PERSISTING_TOOLS)
+
+
+def _in_session_descriptors(output) -> bool:
+    """Whether descriptors were computed in memory.
+
+    Projecting onto a cached, pretrained map computes descriptors but never
+    writes them: the stage that persists them belongs to retrieval/
+    normalization. Requiring a file there would score a configuration choice as
+    a scientific failure, so in-session evidence counts when no persisting
+    stage ran.
+    """
+
+    # Serialising the whole state is not safe here: a live GTM session holds a
+    # node lookup keyed by coordinate tuples, which json rejects, and swallowing
+    # that silently turns this check into a constant False.
+    def search(node, depth: int = 0) -> bool:
+        if depth > 8:
+            return False
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if any(token in str(key).lower() for token in _DESCRIPTOR_TOKENS):
+                    return True
+                if search(value, depth + 1):
+                    return True
+            return False
+        if isinstance(node, (list, tuple, set)):
+            return any(search(item, depth + 1) for item in list(node)[:200])
+        try:
+            text = node if isinstance(node, str) else repr(node)
+        except Exception:
+            return False
+        return any(token in text.lower() for token in _DESCRIPTOR_TOKENS)
+
+    return search(_state(output))
+
+
+def _normalize_digit_separators(text: str) -> str:
+    """Strip thousands separators so a count anchors regardless of formatting."""
+
+    return re.sub(r"(?<=\d)[,   ](?=\d{3}(?!\d))", "", text)
+
+
+def _assay_identifiers(value):
+    """Yield each assay identifier in a cell.
+
+    A grouped dataset stores several identifiers per compound, often as a JSON
+    list. Anchoring on the whole cell would demand the narrative reproduce the
+    brackets and quoting verbatim, so a report citing one real identifier would
+    not count as grounded.
+    """
+
+    if isinstance(value, (list, tuple, set)):
+        items = list(value)
+    else:
+        text = str(value).strip()
+        items = None
+        if text.startswith("[") and text.endswith("]"):
+            try:
+                parsed = json.loads(text)
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, list):
+                items = parsed
+        if items is None:
+            items = re.split(r"[;,|]\s*", text) if text else []
+    for item in items:
+        cleaned = str(item).strip().strip("\"'")
+        if cleaned:
+            yield cleaned
+
+
 def _model_artifact(output, path):
     """Inspect only a GTM pickle's header; never execute it or read a large model fully.
 
@@ -405,15 +483,20 @@ def validate_seh_analysis(output):
     reports = _report_texts(output)
     narrative = "\n".join([_response(output), *reports])
     known_ids = {
-        str(value)
+        identifier
         for _, table in valid_datasets
         for col in table.columns
         if "assay" in str(col).lower()
         for value in table[col].dropna()
+        for identifier in _assay_identifiers(value)
     }
     count_anchors = {str(len(table)) for _, table in valid_datasets}
+    # "2,212 compounds" states the observed count just as truthfully as "2212".
+    # Anchoring on raw digits alone would score a formatting choice as an
+    # ungrounded claim.
+    grounded_text = _normalize_digit_separators(narrative)
     grounded = any(
-        re.search(r"(?<!\d)" + re.escape(anchor) + r"(?!\d)", narrative)
+        re.search(r"(?<!\d)" + re.escape(anchor) + r"(?!\d)", grounded_text)
         for anchor in known_ids | count_anchors
     )
     coverage = bool(
@@ -441,8 +524,15 @@ def validate_seh_analysis(output):
             ),
             _check(
                 "descriptor_artifact_registered",
-                descriptors,
-                "readable finite descriptor vectors required",
+                descriptors
+                or (not _descriptor_stage_ran(output) and _in_session_descriptors(output)),
+                (
+                    "readable finite descriptor vectors required"
+                    if _descriptor_stage_ran(output)
+                    else f"persisted descriptors={descriptors}; "
+                    f"in-session descriptors={_in_session_descriptors(output)} "
+                    "(no descriptor-persisting stage in this configuration)"
+                ),
                 category="missing_artifact",
             ),
             _check(

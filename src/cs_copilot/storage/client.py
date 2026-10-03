@@ -17,8 +17,10 @@ import logging
 import os
 import stat
 import tempfile
+import threading
 import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Iterator, Mapping
 from urllib.parse import unquote, urlsplit
@@ -96,6 +98,15 @@ _EXTERNAL_STAGED_PUBLICATIONS: contextvars.ContextVar[dict[str, str] | None] = (
         "cs_copilot_storage_external_staged_publications",
         default=None,
     )
+)
+_COMMITTED_ON_CLOSE: contextvars.ContextVar[list[Any] | None] = contextvars.ContextVar(
+    "cs_copilot_storage_committed_on_close",
+    default=None,
+)
+_COMPOUND_SUFFIXES = (".pkl.gz", ".csv.gz", ".tsv.gz", ".json.gz", ".sdf.gz", ".tar.gz")
+_WRITE_OBSERVATION: contextvars.ContextVar["WriteObservation | None"] = contextvars.ContextVar(
+    "cs_copilot_storage_write_observation",
+    default=None,
 )
 _OPEN_SUPPORTS_DIR_FD = os.open in os.supports_dir_fd
 _O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
@@ -391,6 +402,7 @@ class _AtomicLocalCreateFile:
                 staged[self._staged_key] = self
         else:
             self._commit()
+            _note_committed_on_close(self)
         self._closed = True
 
     def _prepare(self) -> None:
@@ -575,9 +587,12 @@ class _AtomicS3CreateFile:
                 if staged is not None and self._staged_key is not None:
                     staged[self._staged_key] = self
             else:
+                if _COMMITTED_ON_CLOSE.get() is not None:
+                    self._capture_integrity()
                 self._published = True
                 self._finalized = True
                 self._mirror.close()
+                _note_committed_on_close(self)
         except (FileExistsError, IsADirectoryError) as exc:
             self._abort()
             raise PermissionError(
@@ -676,6 +691,66 @@ class _AtomicS3CreateFile:
         self._expected_size = size
 
 
+def _versioned_name(rel: str, version: int) -> str:
+    head, separator, name = str(rel).rpartition("/")
+    lowered = name.lower()
+    suffix = next(
+        (item for item in _COMPOUND_SUFFIXES if lowered.endswith(item) and len(name) > len(item)),
+        PurePosixPath(name).suffix,
+    )
+    stem = name[: len(name) - len(suffix)] if suffix else name
+    return f"{head}{separator}{stem}-v{version}{suffix}"
+
+
+def _note_committed_on_close(writer: Any) -> None:
+    committed = _COMMITTED_ON_CLOSE.get()
+    if committed is not None:
+        committed.append(writer)
+
+
+class ScopedWriteDenied(PermissionError):
+    """A write refused by :meth:`S3.confine_writes`, with a stable ``verdict``."""
+
+    def __init__(self, message: str, *, verdict: str) -> None:
+        super().__init__(message)
+        self.verdict = verdict
+
+
+@dataclass
+class WriteObservation:
+    """Writes attempted during one observed call, classified like confined writes.
+
+    Each record is ``{"path", "mode", "verdict", "created"}``. ``verdict`` is
+    how :meth:`S3.confine_writes` would have treated the write:
+    ``create_new``, ``overwrite_existing``, ``append_existing``,
+    ``protected_artifact``, ``runtime_metadata``, ``outside_boundary``,
+    ``absolute_path``, or ``unsafe_path``. ``path`` is where the bytes actually
+    land (session-relative when inside the session) and ``created`` tells
+    whether the write created a new file inside the boundary. Observation
+    never changes what the write does.
+    """
+
+    boundary: str
+    protected: frozenset[str] = frozenset()
+    records: list[dict[str, Any]] = field(default_factory=list)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def record(self, entry: dict[str, Any]) -> None:
+        with self._lock:
+            self.records.append(entry)
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [dict(entry) for entry in self.records]
+
+    def created_paths(self) -> list[str]:
+        """Session-relative paths of new files written inside the boundary, in order."""
+
+        return list(
+            dict.fromkeys(entry["path"] for entry in self.snapshot() if entry.get("created"))
+        )
+
+
 class _S3Meta(type):
     @property
     def prefix(cls) -> str:
@@ -745,12 +820,115 @@ class S3(metaclass=_S3Meta):
 
     @classmethod
     @contextmanager
+    def scoped_session_prefix(cls, prefix: str) -> Iterator[None]:
+        """Bind a session prefix for this execution context only.
+
+        Unlike :meth:`set_session_prefix`, the process-wide fallback is left
+        untouched, so concurrent chats in one process cannot leak into each
+        other through it.
+        """
+
+        token = _SESSION_PREFIX.set(_normalize_storage_prefix(prefix))
+        try:
+            yield
+        finally:
+            _SESSION_PREFIX.reset(token)
+
+    @classmethod
+    @contextmanager
+    def observe_writes(
+        cls,
+        boundary: str,
+        *,
+        protected_paths: Iterable[str] = (),
+    ) -> Iterator[WriteObservation]:
+        """Record, without enforcing, how confined writes would treat each write.
+
+        While active and no :meth:`confine_writes` boundary is set, every write
+        through :meth:`open` is classified against ``boundary`` and the
+        protected paths, then performed exactly as it would be without the
+        observer. Classification errors are recorded, never raised.
+        """
+
+        observation = WriteObservation(
+            boundary=cls._normalize_relative_path(boundary, allow_empty=True),
+            protected=frozenset(str(path) for path in protected_paths),
+        )
+        token = _WRITE_OBSERVATION.set(observation)
+        try:
+            yield observation
+        finally:
+            _WRITE_OBSERVATION.reset(token)
+
+    @classmethod
+    def _observe_write(cls, observation: WriteObservation, rel: str, mode: str) -> None:
+        try:
+            entry = cls._classify_observed_write(observation, rel, mode)
+        except Exception:  # noqa: BLE001 - observation must never change a write
+            logger.debug("Could not classify an observed write to %r", rel, exc_info=True)
+            entry = {"path": str(rel), "verdict": "unclassified", "created": False}
+        observation.record({**entry, "mode": mode})
+
+    @classmethod
+    def _classify_observed_write(
+        cls,
+        observation: WriteObservation,
+        rel: str,
+        mode: str,
+    ) -> dict[str, Any]:
+        candidate = str(rel).strip()
+        actual = cls._verified_read_key(candidate)
+        boundary = PurePosixPath(observation.boundary) if observation.boundary else PurePosixPath()
+        inside = False
+        if actual is not None:
+            try:
+                PurePosixPath(actual).relative_to(boundary)
+                inside = True
+            except ValueError:
+                inside = False
+        existed = cls._storage_key_exists(actual) if inside and actual is not None else False
+        token = _WRITE_PROTECTED_PATHS.set(observation.protected)
+        try:
+            cls._validate_scoped_write(candidate, boundary=observation.boundary)
+        except ScopedWriteDenied as denied:
+            verdict = denied.verdict
+        except (PermissionError, ValueError):
+            verdict = "unsafe_path"
+        else:
+            if "a" in mode or "+" in mode:
+                verdict = "append_existing" if existed else "create_new"
+            else:
+                verdict = "overwrite_existing" if existed else "create_new"
+        finally:
+            _WRITE_PROTECTED_PATHS.reset(token)
+        return {
+            "path": actual or candidate,
+            "verdict": verdict,
+            # Runtime metadata and registered artifacts are never new evidence.
+            "created": bool(
+                inside and not existed and verdict not in {"runtime_metadata", "protected_artifact"}
+            ),
+        }
+
+    @classmethod
+    def _storage_key_exists(cls, key: str) -> bool:
+        if not is_s3_enabled():
+            return cls._local_session_path(key).exists()
+        filesystem, filesystem_path = fsspec.core.url_to_fs(
+            cls.path(key),
+            **get_s3_config().to_storage_options(),
+        )
+        return bool(filesystem.exists(filesystem_path))
+
+    @classmethod
+    @contextmanager
     def confine_writes(
         cls,
         boundary: str,
         *,
         protected_paths: Iterable[str] = (),
         publication_receipt: dict[str, dict[str, Any]] | None = None,
+        commit_policy: str = "on_exit",
     ) -> Iterator[None]:
         """Confine relative writes to one session subtree for this execution context.
 
@@ -759,7 +937,24 @@ class S3(metaclass=_S3Meta):
         enforced again by the worker process. Existing registered artifacts
         can be supplied as protected paths so a tool cannot mutate immutable
         scientific evidence. Reads remain unaffected.
+
+        ``commit_policy="on_exit"`` (default) keeps every write private until
+        the scope exits cleanly. ``"on_close"`` publishes each file as soon as
+        it is closed, so code that reads its own outputs through other APIs
+        keeps working; the files are still recorded in ``publication_receipt``
+        and rolled back if the scope exits with an exception.
         """
+
+        if commit_policy == "on_close":
+            with cls._confine_writes_on_close(
+                boundary,
+                protected_paths=protected_paths,
+                publication_receipt=publication_receipt,
+            ):
+                yield
+            return
+        if commit_policy != "on_exit":
+            raise ValueError(f"unknown commit policy: {commit_policy!r}")
 
         normalized = cls._normalize_relative_path(boundary, allow_empty=True)
         boundary_path = PurePosixPath(normalized) if normalized else PurePosixPath()
@@ -839,6 +1034,127 @@ class S3(metaclass=_S3Meta):
             _PENDING_ARTIFACT_WRITES.reset(pending_token)
             _WRITE_PROTECTED_PATHS.reset(protected_token)
             _WRITE_BOUNDARY.reset(boundary_token)
+
+    @classmethod
+    @contextmanager
+    def _confine_writes_on_close(
+        cls,
+        boundary: str,
+        *,
+        protected_paths: Iterable[str],
+        publication_receipt: dict[str, dict[str, Any]] | None,
+    ) -> Iterator[None]:
+        if _PENDING_ARTIFACT_WRITES.get() is not None:
+            raise RuntimeError("on-close confinement cannot nest inside a deferred transaction")
+        normalized = cls._normalize_relative_path(boundary, allow_empty=True)
+        boundary_path = PurePosixPath(normalized) if normalized else PurePosixPath()
+        protected: set[str] = set()
+        for path in protected_paths:
+            protected_path = cls._normalize_relative_path(path)
+            try:
+                PurePosixPath(protected_path).relative_to(boundary_path)
+            except ValueError as exc:
+                raise ValueError(
+                    "protected write path must remain inside the active boundary"
+                ) from exc
+            protected.add(protected_path)
+        committed: list[Any] = []
+        boundary_token = _WRITE_BOUNDARY.set(normalized)
+        protected_token = _WRITE_PROTECTED_PATHS.set(frozenset(protected))
+        committed_token = _COMMITTED_ON_CLOSE.set(committed)
+        try:
+            yield
+        except BaseException:
+            cleanup_errors: list[BaseException] = []
+            for writer in reversed(committed):
+                try:
+                    writer._rollback_published()
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
+                    logger.warning(
+                        "Refused or failed to roll back a published artifact",
+                        exc_info=True,
+                    )
+            if cleanup_errors:
+                raise RuntimeError(
+                    "artifact transaction failed and could not be fully rolled back"
+                ) from cleanup_errors[0]
+            raise
+        else:
+            if publication_receipt is not None:
+                for writer in committed:
+                    key = getattr(writer, "_staged_key", None)
+                    if key is None or writer._expected_sha256 is None:
+                        continue
+                    publication_receipt[key] = {
+                        "staged_path": key,
+                        "sha256": writer._expected_sha256,
+                        "size_bytes": writer._expected_size,
+                    }
+        finally:
+            _COMMITTED_ON_CLOSE.reset(committed_token)
+            _WRITE_PROTECTED_PATHS.reset(protected_token)
+            _WRITE_BOUNDARY.reset(boundary_token)
+
+    @classmethod
+    def exists(cls, rel: str) -> bool:
+        """Return whether a storage path (relative, local, or S3 URL) exists."""
+
+        candidate = str(rel).strip()
+        if cls._is_explicit_local_path(candidate):
+            local = (
+                unquote(urlsplit(candidate).path) if candidate.startswith("file://") else candidate
+            )
+            return Path(local).exists()
+        if not cls._is_s3_url(candidate) and not is_s3_enabled():
+            return cls._local_session_path(candidate).exists()
+        url = candidate if cls._is_s3_url(candidate) else cls.path(candidate)
+        filesystem, filesystem_path = fsspec.core.url_to_fs(
+            url, **get_s3_config().to_storage_options()
+        )
+        filesystem.invalidate_cache(filesystem_path.rsplit("/", 1)[0])
+        return bool(filesystem.exists(filesystem_path))
+
+    @classmethod
+    def first_free_path(cls, rel: str) -> str:
+        """Return ``rel``, or its first free ``<stem>-v<N><suffix>`` sibling.
+
+        Workflow outputs are immutable once registered and confined writes are
+        create-only, so re-running a step writes a new version of each output
+        instead of overwriting the previous one. The same spelling (relative,
+        local, or S3 URL) is returned.
+        """
+
+        if not cls.exists(rel):
+            return rel
+        version = 2
+        while cls.exists(_versioned_name(rel, version)):
+            version += 1
+        return _versioned_name(rel, version)
+
+    @classmethod
+    def latest_version_path(cls, rel: str) -> str:
+        """Return the newest existing version of ``rel`` written by :meth:`first_free_path`.
+
+        Readers that locate an output by its deterministic name use this to
+        find the most recent re-run. ``rel`` itself is returned when it has no
+        later version (or does not exist).
+        """
+
+        latest = rel
+        if not cls.exists(rel):
+            return rel
+        version = 2
+        while cls.exists(_versioned_name(rel, version)):
+            latest = _versioned_name(rel, version)
+            version += 1
+        return latest
+
+    @classmethod
+    def session_relative(cls, path: str) -> str | None:
+        """Return the session-relative key of a path in the active session, if any."""
+
+        return cls._verified_read_key(path)
 
     @staticmethod
     def _pending_writer_metadata(writer: Any, final_key: str) -> dict[str, Any]:
@@ -1172,6 +1488,10 @@ class S3(metaclass=_S3Meta):
                 )
 
         write_boundary = cls.current_write_boundary() if write_mode else None
+        if write_mode and write_boundary is None:
+            observation = _WRITE_OBSERVATION.get()
+            if observation is not None:
+                cls._observe_write(observation, rel, mode)
         scoped_write_key: str | None = None
         if write_boundary is not None:
             scoped_write_key = cls._validate_scoped_write(rel, boundary=write_boundary)
@@ -1454,7 +1774,10 @@ class S3(metaclass=_S3Meta):
                 or expected.scheme.lower() != "s3"
                 or not decoded_path.startswith(f"{expected_path}/")
             ):
-                raise PermissionError("S3 write destination is outside the active boundary")
+                raise ScopedWriteDenied(
+                    "S3 write destination is outside the active boundary",
+                    verdict="outside_boundary",
+                )
             relative = decoded_path[len(expected_path) + 1 :]
             cls._normalize_relative_path(relative)
             cls._reject_reserved_run_path(relative)
@@ -1465,8 +1788,9 @@ class S3(metaclass=_S3Meta):
             return session_relative
 
         if cls._is_explicit_local_path(candidate):
-            raise PermissionError(
-                "absolute and file:// write destinations are forbidden during scoped execution"
+            raise ScopedWriteDenied(
+                "absolute and file:// write destinations are forbidden during scoped execution",
+                verdict="absolute_path",
             )
 
         normalized = cls._normalize_relative_path(candidate)
@@ -1475,7 +1799,10 @@ class S3(metaclass=_S3Meta):
         try:
             relative = normalized_path.relative_to(boundary_path)
         except ValueError as exc:
-            raise PermissionError("write destination is outside the active boundary") from exc
+            raise ScopedWriteDenied(
+                "write destination is outside the active boundary",
+                verdict="outside_boundary",
+            ) from exc
         cls._reject_reserved_run_path(relative.as_posix())
         cls._reject_protected_write(normalized)
         return normalized
@@ -1508,12 +1835,18 @@ class S3(metaclass=_S3Meta):
             parts = path.parts
         normalized = path.as_posix()
         if normalized in _RESERVED_RUN_FILES or (parts and parts[0] in {".staging", "events"}):
-            raise PermissionError("write destination is reserved for workflow runtime metadata")
+            raise ScopedWriteDenied(
+                "write destination is reserved for workflow runtime metadata",
+                verdict="runtime_metadata",
+            )
 
     @staticmethod
     def _reject_protected_write(session_relative: str) -> None:
         if session_relative in _WRITE_PROTECTED_PATHS.get():
-            raise PermissionError("write destination is an immutable registered workflow artifact")
+            raise ScopedWriteDenied(
+                "write destination is an immutable registered workflow artifact",
+                verdict="protected_artifact",
+            )
 
     @classmethod
     def _open_confined_s3_path(
@@ -1593,7 +1926,10 @@ class S3(metaclass=_S3Meta):
         try:
             relative = destination.relative_to(boundary_root)
         except ValueError as exc:
-            raise PermissionError("write destination is outside the active boundary") from exc
+            raise ScopedWriteDenied(
+                "write destination is outside the active boundary",
+                verdict="outside_boundary",
+            ) from exc
         if not relative.parts:
             raise PermissionError("write destination must identify a file")
 

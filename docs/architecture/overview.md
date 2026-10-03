@@ -69,10 +69,12 @@ The default team has:
 - no cross-session user or agent memory; and
 - streaming member and tool events for the Chainlit UI.
 
-The default Chainlit and CLI constructors do not supply a v2 `RunContext`.
-Their handoffs are validated but remain process-local. A caller that explicitly
-supplies a `RunContext` also receives pinned task-contract validation and
-durable handoff events.
+Chainlit and the CLI give every chat a durable ad-hoc `agno-session` workflow
+run: tool calls, delegated tasks, handoffs, uploads, and files produced by
+tools are recorded in it through the same execution kernel the MCP server uses
+(enforced by default, see
+[Agentic Runtime v2](agentic-runtime-v2.md#capability-profiles)). A caller that
+supplies a catalog `RunContext` also receives pinned task-contract validation.
 
 ### MCP
 

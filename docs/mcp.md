@@ -163,18 +163,25 @@ superset.
 |---------|------------------|
 | `bootstrap` | Read-only `mcp_bootstrap` and catalog discovery, plus write-capable ChEMBL/GTM preflights that record plan artifacts |
 | `standard` | Every stable catalog tool |
-| `chembl-retrieval` | ChEMBL retrieval, judging, and run artifacts |
+| `chembl-retrieval` | ChEMBL retrieval, judging, tabular preparation, and run artifacts |
 | `gtm-analysis` | GTM, tabular preparation, and reports |
-| `chemoinformatics` | Similarity/chemotype analysis, tables, and reports |
-| `reporting` | Run inspection and report generation |
+| `chemoinformatics` | Similarity/chemotype analysis, GTM, tables, and reports |
+| `reporting` | Run inspection, tables, GTM figures, and report generation |
 | `molecular-design` | Small-molecule design, validation, GTM, and reports |
 | `peptide-design` | Peptide design, validation, GTM, and reports |
 | `retrosynthesis` | Candidate resolution and SynPlanner routes |
-| `robustness` | Robustness analysis and report export |
+| `robustness` | Robustness analysis, tables, and report export |
 
-The same role names and profile assignments are used by the in-process agent
-factories. Factory construction fails when a role is configured with a
-toolkit outside its allowlist.
+Profiles and role grants are declared once, in the shared capability table
+(`src/cs_copilot/capabilities.py`), and both runtimes derive their view from
+it: the in-process role policies expand each role's tool groups into toolkit
+classes, and every MCP tool's roles and profiles are computed from its name
+prefix and group. The canonical grants are the in-process agent grants; on MCP
+every role also receives the `llm` and `session` groups, and the coordinator
+(spelled `supervisor` on MCP) receives the `workflow` control plane. Every role
+fits inside its assigned profile, the table is validated at import time, and
+factory construction fails when a role is configured with a toolkit outside its
+allowlist.
 
 ## Claude Code config
 
@@ -467,13 +474,35 @@ By default the MCP server keeps external-client reasoning separate from the
 Agno team. Trusted private deployments can opt into one coarse delegation tool:
 
 ```sh
-cscopilot-mcp-serve --enable-agno-team-tool
+cscopilot-mcp-serve --enable-agno-team-tool --llm-policy agno-model
 ```
 
-This registers `agno_team_run(prompt)`, which loads the configured Agno model
-and delegates the prompt to the cs_copilot Agno team. Prefer fine-grained MCP
-skills and tools for normal external clients; use this flag only where the
-client is trusted and model/API access is intentional.
+This registers `agno_team_run(prompt)` (supervisor role, `standard` profile
+only), which delegates the prompt to the cs_copilot Agno team. The team
+reasons with the server's own configured model, so the flag requires
+`--llm-policy agno-model`, and calls are refused under the `external` and
+`disabled` policies. Prefer fine-grained MCP skills and tools for normal
+external clients; use this flag only where the client is trusted and
+model/API access is intentional.
+
+The tool is governed by the execution kernel like any other tool:
+
+- the team runs in the session's ad-hoc run (catalog workflow runs must be
+  driven task by task and are refused) with in-process execution enforced:
+  every tool the team calls is confined to the run, recorded with
+  `runtime: "agno"` and a `parent_span_id` pointing at the `agno_team_run`
+  span, and its files are registered as artifacts;
+- the team sees a JSON snapshot of the session state plus the session's
+  in-memory objects (data frames, fitted models) by reference, as an
+  in-process tool would; its JSON-serializable changes are merged back with
+  the same optimistic concurrency as worker-process tools, while in-memory
+  objects it creates or replaces stay with the team and are reported in
+  `warnings`;
+- the result carries the team's answer as `content`, plus `run_id`, the new
+  `artifact_ids`, and `warnings`;
+- one team run at a time per session; the call times out after 30 minutes,
+  and a cancelled or timed-out run is stopped and its in-flight tool calls
+  are drained before the session can be used again.
 
 ## What the server exposes
 
@@ -597,9 +626,16 @@ The MCP package is intentionally isolated from the Agno team:
 - `cs_copilot.agents` resolves its exports lazily, so importing
   `cs_copilot.agents.instructions` does not load the team, factories, or
   registry.
-- The runtime-neutral core (`cs_copilot.routing`, `cs_copilot.workflows`,
-  `cs_copilot.skills`, `cs_copilot.storage`, `cs_copilot.tracking`) imports
-  neither runtime: no `agno`, `cs_copilot.agents`, or `cs_copilot.mcp`.
+- The runtime-neutral core (`cs_copilot.routing`, `cs_copilot.capabilities`,
+  `cs_copilot.execution`, `cs_copilot.workflows`, `cs_copilot.skills`,
+  `cs_copilot.storage`, `cs_copilot.tracking`) imports neither runtime: no
+  `agno`, `cs_copilot.agents`, or `cs_copilot.mcp`.
+- The execution pipeline behind every tool call (authorization, boundaries,
+  idempotency, artifact registration, durable events, and the v2 envelope)
+  lives in the runtime-neutral `cs_copilot.execution` package. The MCP adapter
+  only adds the public tool signature, MCP context injection, and subprocess
+  worker dispatch; see
+  [Shared execution kernel](architecture/agentic-runtime-v2.md#shared-execution-kernel).
 - Importing `cs_copilot` or `cs_copilot.tools.*` does not require the `mcp`
   extra to be installed.
 - The MCP server runs as one OS process per stdio session. Concurrent

@@ -11,25 +11,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, Literal, Mapping
+from typing import Any, Dict, Iterable, Mapping
+
+from cs_copilot.execution.llm import LLM_POLICIES, LLMPolicy, normalize_llm_policy
 
 from ..errors import MCPToolError
 
-LLMPolicy = Literal["external", "agno-model", "disabled"]
-LLM_POLICIES: tuple[LLMPolicy, ...] = ("external", "agno-model", "disabled")
+__all__ = ["LLM_POLICIES", "LLMBroker", "LLMPolicy", "normalize_llm_policy"]
+
 LLM_TASKS_KEY = "_mcp_llm_tasks"
 LLM_TASK_ORDER_KEY = "_mcp_llm_task_order"
-
-
-def normalize_llm_policy(value: str | None) -> LLMPolicy:
-    """Normalize and validate an MCP LLM policy value."""
-
-    normalized = str(value or "external").strip().lower().replace("_", "-")
-    if normalized not in LLM_POLICIES:
-        raise ValueError(
-            f"Unsupported MCP LLM policy {value!r}. " f"Use one of: {', '.join(LLM_POLICIES)}."
-        )
-    return normalized  # type: ignore[return-value]
 
 
 def _now_iso() -> str:

@@ -40,6 +40,17 @@ refresh cannot change run truth. SQLite stores conversation history, while
 workflow events and artifacts provide reproducible scientific state.
 Cross-session agent memory remains disabled.
 
+Every tool call appends three to four events, so appends stay constant-cost
+as a run grows. A context that already holds the stream checks that its last
+known event is unchanged and reads newer events by their exact sequence names,
+so an append needs no directory listing and no replay of the known prefix;
+every 256 catch-ups a single listing confirms that no known event disappeared,
+and a missing or rewritten event still fails with `EventReplayError`. The
+replaceable snapshots are rewritten only for state-changing events, not for
+the observational `tool_progress`, `tool_call_recorded`, and `task_progress`
+events. `scripts/benchmark_run_ledger.py --check` measures append latency
+against the configured storage backend.
+
 Registered artifacts must remain inside their run root and record SHA-256, MIME type, producer task/tool, size, trust classification, and creation time. Local
 artifact verification and reads use no-follow, descriptor-relative traversal;
 MCP session-write arguments are normalized into the active run, and the
@@ -64,12 +75,61 @@ supervisor-confirmed `abandoned`. The later `completed` observation is
 best-effort because result acceptance has already linearized publication and
 registration. This prevents status changes from racing an in-flight mutation.
 
+## Shared execution kernel
+
+The pipeline that enforces these guarantees for every tool call lives in
+`cs_copilot.execution`, not in the MCP package, so every runtime that lets a
+reasoner call cs_copilot toolkits can use it:
+
+- `execution.kernel` defines the invocation phases: attribution capture,
+  catalog-task authorization and budgets, the durable `started` event, read
+  and write boundaries, idempotency reservation, the run write lock, execution
+  inside the write scope, result acceptance, artifact registration and
+  rollback, and the terminal events and v2 envelope.
+- `execution.runner.execute_async` drives those phases on an event loop; the
+  MCP adapter (`mcp/tool_adapter.py`) wraps it with the public tool signature,
+  the `idempotency_key` parameter, MCP context injection, and subprocess
+  worker dispatch.
+- `execution.runner.execute_sync` drives the same phases on a worker thread for
+  runtimes without a running event loop. Any interruption still records a
+  terminal `cancelled` event, so a run is never left with an open tool span.
+- The run write lock is shared by both drivers: async callers take an
+  event-loop lock and then the run's thread lock, which is the lock
+  thread-based callers take, so MCP tools and in-process Agno tools writing to
+  the same run never interleave.
+- A tool that runs other tools declares `delegates_execution=True` (the MCP
+  `agno_team_run` tool). Its own invocation only records events: it takes no
+  write lock, sets up no read or write confinement, and registers no result
+  artifacts, because each delegated call goes through the kernel itself and
+  records the delegating span (`execution.tracing.current_tool_span_id()`) as
+  its `parent_span_id`. Its `started` event carries `delegates_execution:
+  true`, so the ledger's in-flight guards on run transitions and artifact
+  registration watch only the delegated calls' spans; crash recovery can
+  still abandon an orphaned delegating span.
+- `execution.events` writes the `tool_progress` and `tool_call_recorded`
+  events. Their `runtime` field and the slug of a lazily created ad-hoc run
+  come from the execution context's runtime profile (`mcp` / `mcp-session`,
+  `agno` / `agno-session`). Both ad-hoc slugs are exempt from catalog-task
+  authorization.
+- `execution.errors` owns the seven-code error taxonomy shared with
+  `cs_copilot.workflows` (`ToolErrorCode`); `execution.llm` gives toolkits a
+  runtime-neutral way to require an in-process model.
+
+The kernel never imports `agno`, `cs_copilot.agents`, `cs_copilot.mcp`, or the
+`mcp` SDK, and it imports storage, workflows, and toolkit helpers only inside
+functions, because `cs_copilot.storage` reads `SESSION_ID` at import time. Both
+rules are enforced by `tests/unit/mcp/test_no_team_imports.py` and
+`tests/unit/test_runtime_import_isolation.py`.
+
 ## Capability profiles
 
 `cscopilot-mcp --profile <name>` registers only the selected profile's tools. The shipped profiles are `bootstrap`, `standard`, `chembl-retrieval`, `gtm-analysis`, `chemoinformatics`, `reporting`, `molecular-design`, `peptide-design`, `retrosynthesis`, and `robustness`. Unknown profiles and workflows whose required tools are unavailable fail before execution.
 
-Parallel role policies enforce per-role toolkit allowlists for the in-process
-coordinator and every specialist. For catalog workflows with a task DAG—currently the
+One capability table (`src/cs_copilot/capabilities.py`) declares the role
+grants and profiles for both runtimes: the in-process role policies that
+enforce per-role toolkit allowlists for the coordinator and every specialist,
+and the roles and profiles of every MCP tool, are derived from it. For catalog
+workflows with a task DAG—currently the
 `chembl-to-gtm-report` pilot—the MCP adapter also requires an active running
 task and enforces its role, profile, and tool allowlist before domain
 execution. Tool contracts include read/write,
@@ -84,9 +144,57 @@ broadcasting is disabled, role factories reject tools outside their allowlists,
 and the delegation guard validates handoff schema, private-context exclusion,
 receiver role, and declared budgets. When the caller supplies a v2
 `RunContext`, Agno additionally records the handoff through that runtime and
-therefore receives its durable pinned-task validation. The default Chainlit
-and CLI team constructors do not supply a `RunContext`; their structured
-handoffs are ad hoc and process-local rather than durable workflow events.
+therefore receives its durable pinned-task validation.
+
+Chainlit and the CLI give every chat one durable ad-hoc `agno-session` run,
+created before the first message is processed and reused when a chat resumes
+(`cs_copilot.agents.session_runs`). The coordinator invents task ids for
+free-form chats, so for ad-hoc runs the delegation guard stamps the real run
+identity onto each handoff, creates the task if it does not exist, records the
+handoff, and starts the task; tasks started during a turn are completed (or
+failed) when the turn ends. Tool spans and running tasks left behind by a
+previous chat process are reconciled as abandoned or interrupted on resume.
+Uploads are stored inside the run and registered as untrusted `user_upload`
+artifacts.
+
+Every toolkit call of the team goes through the shared kernel
+(`cs_copilot.agents.execution_binding`). The mode is set by
+`CS_COPILOT_AGNO_EXECUTION`:
+
+- `enforce` (default): the full kernel, as for MCP tools, adapted to
+  in-process calls: destination arguments are rewritten into the chat's run,
+  writes are confined and create-only (a registered output can never be
+  overwritten), declared file inputs must be registered artifacts, each file
+  is published when it is closed and every file a call wrote is registered,
+  and a failing call's files are rolled back. Denials reach the model as tool
+  errors. Resumed chats verify their artifacts (a chat whose artifacts no
+  longer match starts a fresh run), and uploads stored outside the run are
+  adopted into it. Only ad-hoc chat runs are supported;
+- `observe`: calls run exactly as before, while the kernel records
+  the same event protocol as MCP (labelled `runtime: "agno"`, attributed to
+  the calling role and delegated task), registers every file a call created
+  inside the run, and adds an `execution_audit` block to `tool_call_recorded`
+  describing how the write and read boundaries would have rewritten or denied
+  the call and how each write would be classified under confined writes;
+- `off`: no recording; storage behaves exactly as before.
+
+`scripts/agno_execution_audit.py --session <id>` aggregates the observe-mode
+audits of a chat per tool — which writes enforce would refuse, which inputs
+it would deny — so a new toolkit or workflow can be checked in `observe` mode
+before it runs under `enforce`.
+
+Because registered outputs are immutable, toolkits that write deterministic
+file names pass them through `S3.first_free_path(...)`, which returns the path
+itself or its first free `<stem>-vN<suffix>` version, so repeating a step (a
+rebuilt map, a rewritten report) writes a new version instead of failing.
+Code that locates an output by its deterministic name rather than by the path
+a tool returned uses `S3.latest_version_path(...)`.
+`tests/unit/test_toolkit_enforce_canaries.py` runs each built-in writer twice
+under enforce mode.
+
+In-process calls are recorded under the identity of their MCP twin tool when
+one exists (`ToolSpec.agno_bindings`, merged from
+`mcp/tool_specs/agno_twins.py`), and as `agno.<Toolkit>.<function>` otherwise.
 
 For the MCP task-DAG pilot, handoffs are validated against the pinned task role
 and exact capability, selected-input, output, and acceptance-criteria

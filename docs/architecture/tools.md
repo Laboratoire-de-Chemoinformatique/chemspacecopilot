@@ -37,8 +37,11 @@ layer under `src/cs_copilot/mcp/`:
 - the server publishes only the selected capability profile.
 
 A toolkit method is not automatically public through MCP. It must have an MCP
-specification and belong to the selected profile. Conversely, narrowing an MCP
-profile does not change the tools assigned to an Agno specialist.
+specification whose name starts with its group's prefix (`gtm_`, `chem_`, ...)
+and belong to the selected profile. Role grants and profiles live in one
+capability table, `src/cs_copilot/capabilities.py`: changing a role's groups
+changes both the Agno specialist's allowlist and the MCP roles of every tool in
+those groups, and every role must still fit inside its assigned profile.
 
 ## ChEMBL backends
 
@@ -61,10 +64,13 @@ directory is available.
 
 1. Implement or extend a toolkit in the appropriate scientific package and
    register only the methods intended for Agno.
-2. Add the toolkit to the owning agent factory and its canonical role
-   allowlist.
-3. If MCP should expose the operation, add its tool specification, facade or
-   adapter binding, annotations, and capability-profile membership.
+2. Add the toolkit to the owning agent factory. A new toolkit class also joins
+   its group in `src/cs_copilot/capabilities.py`, and a role that needs a new
+   group gets it there.
+3. If MCP should expose the operation, add its tool specification (named with
+   its group's prefix), facade or adapter binding, and annotations. Roles and
+   profiles are derived from the capability table; do not set them on the
+   spec.
 4. Update affected skills and workflow contracts when the operation changes a
    procedure, permission, or artifact contract.
 5. Test deterministic behavior, role access, direct-tool/MCP parity, profile
