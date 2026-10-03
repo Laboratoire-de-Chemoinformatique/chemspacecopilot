@@ -1851,6 +1851,33 @@ class TestBackendFallbackIsAnnounced:
         assert "mysql" in toolkit._backend_fallback
         assert any("REST API" in r.getMessage() for r in caplog.records)
 
+    def test_a_configured_database_that_refuses_the_connection_falls_back(self, monkeypatch):
+        from cs_copilot.tools.databases.base import DatabaseError
+        from cs_copilot.tools.databases.chembl import ChemblToolkit
+
+        monkeypatch.setenv("CHEMBL_MYSQL_HOST", "localhost")
+        monkeypatch.delenv("CHEMBL_SQLITE_PATH", raising=False)
+        monkeypatch.delenv("CHEMBL_PG_HOST", raising=False)
+
+        refused = MagicMock()
+        refused.connect.side_effect = DatabaseError(
+            "ChEMBL MySQL connection failed: (1045, \"Access denied for user 'chembl'\")\n"
+            "(Background on this error at: https://sqlalche.me/e/20/e3q8)"
+        )
+        rest = object()
+        monkeypatch.setattr(
+            ChemblToolkit, "_create_fetcher", lambda self, b: refused if b == "mysql" else rest
+        )
+        toolkit = self._toolkit()
+
+        resolved, fetcher = toolkit._create_auto_fetcher()
+
+        assert resolved == "rest"
+        assert fetcher is rest
+        assert "Access denied" in toolkit._backend_fallback
+        assert "sqlalche.me" not in toolkit._backend_fallback
+        refused.close.assert_called_once()
+
     def test_plain_rest_use_is_not_reported_as_a_fallback(self, monkeypatch):
         from cs_copilot.tools.databases.chembl import ChemblToolkit
 
