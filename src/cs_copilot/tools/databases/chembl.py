@@ -241,6 +241,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
             fetcher = self._create_fetcher(resolved)
 
         self._active_backend = resolved
+        self._backend_fallback = getattr(self, "_backend_fallback", None)
         is_sql = resolved in ("mysql", "postgresql", "sqlite")
 
         if config is None:
@@ -367,16 +368,33 @@ class ChemblToolkit(BaseDatabaseToolkit):
         driver packages do not abort startup; they trigger a fallback to the
         next candidate, ending with the REST API.
         """
-        for candidate in self._auto_backend_candidates():
+        candidates = self._auto_backend_candidates()
+        configured = [name for name in candidates if name != "rest"]
+        skipped: list[str] = []
+
+        for candidate in candidates:
             try:
-                return candidate, self._create_fetcher(candidate)
+                fetcher = self._create_fetcher(candidate)
             except ImportError as exc:
+                skipped.append(f"{candidate} ({exc})")
                 logger.warning(
                     "ChEMBL backend %s unavailable during auto-detection (%s). "
                     "Trying the next backend.",
                     candidate,
                     exc,
                 )
+                continue
+            if candidate == "rest" and configured:
+                # Falling back to the network after a database was configured
+                # changes where every result comes from, so say so plainly
+                # rather than leaving it to a debug log.
+                self._backend_fallback = (
+                    f"Configured ChEMBL backend(s) {', '.join(configured)} could not be used, "
+                    f"so retrieval is using the public REST API instead. Skipped: "
+                    f"{'; '.join(skipped) or 'unknown reason'}."
+                )
+                logger.warning(self._backend_fallback)
+            return candidate, fetcher
 
         # The REST fetcher is expected to be always constructible, so reaching
         # this point would indicate an internal bug rather than configuration.
@@ -423,12 +441,18 @@ class ChemblToolkit(BaseDatabaseToolkit):
         caps = super().get_capabilities()
         caps["active_backend"] = self._active_backend
         caps["active_backend_label"] = self._backend_summary()
+        fallback = getattr(self, "_backend_fallback", None)
+        if fallback:
+            caps["backend_fallback_warning"] = fallback
         return caps
 
     def _backend_summary(self) -> str:
         """Return the human-readable backend used by retrieval calls."""
         active_backend = getattr(self, "_active_backend", "unknown")
-        return self.BACKEND_DISPLAY_NAMES.get(active_backend, str(active_backend))
+        label = self.BACKEND_DISPLAY_NAMES.get(active_backend, str(active_backend))
+        if getattr(self, "_backend_fallback", None):
+            label = f"{label} (fallback: a configured database could not be used)"
+        return label
 
     def query(self, params: QueryParams) -> ResultPage:
         """
