@@ -25,7 +25,7 @@ import time
 from time import perf_counter
 from typing import Any, Awaitable, Callable, Mapping
 
-from .artifacts import _register_observed_writes
+from .artifacts import _register_observed_writes, _register_result_artifacts
 from .context import ExecutionContext, _active_output_layout
 from .envelopes import _coerce_return_value, _error_envelope, _success_envelope
 from .errors import ToolErrorCode, ToolExecutionError, normalize_error
@@ -150,6 +150,10 @@ def execute_sync(
     invoke: SyncInvoker,
     inject: Injector | None = None,
     owner_wait_timeout_s: float | None = None,
+    publication_policy: str = "result_paths",
+    verify_artifacts_on_lock: bool = True,
+    scope: _InvocationScope | None = None,
+    extra: Mapping[str, Any] | None = None,
 ) -> InvocationOutcome:
     """Run one invocation to completion on the calling thread.
 
@@ -157,9 +161,22 @@ def execute_sync(
     and retry backoff block. Any ``BaseException`` (for example a
     ``KeyboardInterrupt``) still records a terminal ``cancelled`` event so the
     run is never left with an open tool span.
+
+    ``publication_policy="all_published"`` publishes each confined write when
+    its file closes and registers every file the call wrote; see
+    :func:`cs_copilot.execution.kernel.begin_invocation` for the other options.
     """
 
-    inv = begin_invocation(spec, ctx, arguments)
+    inv = begin_invocation(
+        spec,
+        ctx,
+        arguments,
+        publication_policy=publication_policy,
+        verify_artifacts_on_lock=verify_artifacts_on_lock,
+        scope=scope,
+        extra=extra,
+    )
+    commit_policy = "on_close" if publication_policy == "all_published" else "on_exit"
     try:
         admission = prepare_invocation(inv)
         if admission.cached_envelope is not None:
@@ -179,7 +196,9 @@ def execute_sync(
                 local_publications: dict[str, dict[str, Any]] = {}
                 try:
                     attempt_context(inv)
-                    with _tool_write_scope(spec, ctx) as local_publications:
+                    with _tool_write_scope(
+                        spec, ctx, commit_policy=commit_policy
+                    ) as local_publications:
                         executed = _as_executed_call(invoke(call_kwargs))
                         deferred = executed.deferred
                         accepted = accept_result(inv, executed)
@@ -386,17 +405,32 @@ def _observe_success(
         if observation is not None:
             audit["writes"] = observation.snapshot()[:_AUDIT_ITEMS]
         producer_task_id = _running_task(ctx, inv.scope)
-        artifact_ids, problems = _register_observed_writes(
+        coerced = _coerce_return_value(value)
+        # Result paths first, so outputs get the typed contracts enforcement
+        # relies on (for example gtm_model_path for trusted model reads)...
+        artifact_ids, warnings = _register_result_artifacts(
+            spec,
+            coerced,
+            ctx,
+            active_task_id=producer_task_id,
+            invocation_span_id=inv.trace.get("span_id"),
+            publication_leases={key: {} for key in created},
+            strict_result_paths=False,
+        )
+        if warnings:
+            audit["registration_warnings"] = warnings[:_AUDIT_ITEMS]
+        # ...then every other new file the call created inside the run.
+        observed_ids, problems = _register_observed_writes(
             spec,
             ctx,
-            created,
+            _unregistered(ctx, created),
             producer_task_id=producer_task_id,
             invocation_span_id=inv.trace.get("span_id"),
         )
+        artifact_ids = list(dict.fromkeys([*artifact_ids, *observed_ids]))
         if problems:
             audit["registration_problems"] = problems[:_AUDIT_ITEMS]
         inv.trace = _refresh_tool_trace(ctx, inv.trace)
-        coerced = _coerce_return_value(value)
         try:
             output_bytes = len(json.dumps(coerced, ensure_ascii=False, default=str).encode("utf-8"))
         except (TypeError, ValueError):
@@ -433,6 +467,18 @@ def _observe_success(
         )
     except Exception as exc:  # noqa: BLE001
         _audit_kernel_problem(audit, "record", spec, exc)
+
+
+def _unregistered(ctx: ExecutionContext, keys: list[str]) -> list[str]:
+    run_context = getattr(ctx, "run_context", None)
+    run = getattr(run_context, "run", None)
+    layout = getattr(run_context, "layout", None)
+    if run is None or layout is None:
+        return list(keys)
+    registered = {
+        layout.artifact_rel_path(record.relative_path) for record in run.artifacts.values()
+    }
+    return [key for key in keys if key not in registered]
 
 
 def _running_task(ctx: ExecutionContext, scope: _InvocationScope) -> str | None:

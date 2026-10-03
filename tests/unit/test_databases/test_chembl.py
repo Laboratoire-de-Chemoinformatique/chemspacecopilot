@@ -1208,13 +1208,10 @@ class TestChemblToolkit:
         assert result.retained_df.empty
         assert saved[0]["filter_reason"].tolist() == ["judge_unavailable"]
 
-    def test_retrieval_filtering_report_section_is_appended(self, tmp_path):
+    def test_retrieval_filtering_report_section(self):
         toolkit = ChemblToolkit()
-        report_path = tmp_path / "report.md"
-        report_path.write_text("# Dataset Standardization Report\n")
 
-        toolkit._append_retrieval_filtering_report(
-            str(report_path),
+        report = toolkit._retrieval_filtering_report_appendix(
             {
                 "suspicious_row_count": 2,
                 "filtered_row_count": 1,
@@ -1227,7 +1224,6 @@ class TestChemblToolkit:
             },
         )
 
-        report = report_path.read_text()
         assert "## ChEMBL Retrieval Filtering" in report
         assert "Filtered rows artifact: `filtered.csv`" in report
 

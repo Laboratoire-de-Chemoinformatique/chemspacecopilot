@@ -148,15 +148,36 @@ Every toolkit call of the team goes through the shared kernel
 (`cs_copilot.agents.execution_binding`). The mode is set by
 `CS_COPILOT_AGNO_EXECUTION`:
 
-- `observe` (default): calls run exactly as before, while the kernel records
+- `enforce` (default): the full kernel, as for MCP tools, adapted to
+  in-process calls: destination arguments are rewritten into the chat's run,
+  writes are confined and create-only (a registered output can never be
+  overwritten), declared file inputs must be registered artifacts, each file
+  is published when it is closed and every file a call wrote is registered,
+  and a failing call's files are rolled back. Denials reach the model as tool
+  errors. Resumed chats verify their artifacts (a chat whose artifacts no
+  longer match starts a fresh run), and uploads stored outside the run are
+  adopted into it. Only ad-hoc chat runs are supported;
+- `observe`: calls run exactly as before, while the kernel records
   the same event protocol as MCP (labelled `runtime: "agno"`, attributed to
   the calling role and delegated task), registers every file a call created
   inside the run, and adds an `execution_audit` block to `tool_call_recorded`
   describing how the write and read boundaries would have rewritten or denied
   the call and how each write would be classified under confined writes;
-- `off`: no recording; storage behaves exactly as before;
-- `enforce`: reserved for full enforcement; until it is enabled for the
-  in-process runtime it behaves like `observe`.
+- `off`: no recording; storage behaves exactly as before.
+
+`scripts/agno_execution_audit.py --session <id>` aggregates the observe-mode
+audits of a chat per tool — which writes enforce would refuse, which inputs
+it would deny — so a new toolkit or workflow can be checked in `observe` mode
+before it runs under `enforce`.
+
+Because registered outputs are immutable, toolkits that write deterministic
+file names pass them through `S3.first_free_path(...)`, which returns the path
+itself or its first free `<stem>-vN<suffix>` version, so repeating a step (a
+rebuilt map, a rewritten report) writes a new version instead of failing.
+Code that locates an output by its deterministic name rather than by the path
+a tool returned uses `S3.latest_version_path(...)`.
+`tests/unit/test_toolkit_enforce_canaries.py` runs each built-in writer twice
+under enforce mode.
 
 In-process calls are recorded under the identity of their MCP twin tool when
 one exists (`ToolSpec.agno_bindings`, merged from

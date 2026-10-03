@@ -369,6 +369,8 @@ class GTMToolkit(BaseDRToolkit):
             FileNotFoundError: If df_csv_path does not point to an existing CSV file
             ValueError: If smiles_column is missing
         """
+        from cs_copilot.storage import S3
+
         result = gtm_operations.optimize_gtm_model(
             df_csv_path,
             dataset_name,
@@ -380,11 +382,14 @@ class GTMToolkit(BaseDRToolkit):
         )
         self._remember_gtm_map(
             dataset_path=df_csv_path,
-            model_path=gtm_operations.chemical_space_artifact_path(
-                f"{gtm_name}.pkl.gz",
-                "gtm",
-                "models",
-                agent=agent,
+            # The name the next save of this map will use.
+            model_path=S3.first_free_path(
+                gtm_operations.chemical_space_artifact_path(
+                    f"{gtm_name}.pkl.gz",
+                    "gtm",
+                    "models",
+                    agent=agent,
+                )
             ),
             descriptor_type=descriptor_type,
             agent=agent,

@@ -12,7 +12,7 @@ from agno.tools.function import Function, FunctionCall
 from cs_copilot.agents.delegation import DELEGATE_TOOL_NAME, StructuredDelegationGuard
 from cs_copilot.agents.execution_binding import attach_execution, get_binding
 from cs_copilot.storage import S3
-from cs_copilot.workflows import RunContext, TaskStatus
+from cs_copilot.workflows import RunContext, TaskRecord, TaskStatus
 
 
 def _payload(**updates):
@@ -111,29 +111,65 @@ def test_redelegating_a_running_task_is_recorded(chat):
     assert run.run.tasks["map-egfr"].status is TaskStatus.RUNNING
 
 
-def test_observe_mode_never_blocks_delegation_on_the_ledger(chat):
+def _claim_task_for_another_role(run) -> None:
+    run.add_task(
+        TaskRecord(
+            task_id="map-egfr", role="chemoinformatician", profile="chemoinformatics", step="x"
+        )
+    )
+
+
+def test_unknown_input_artifacts_are_dropped_not_fatal(chat):
     team, run = chat
     attach_execution(team, run_context=run, mode="observe")
 
-    execution = _delegate(team, _payload(input_artifact_ids=["artifact-missing"]))
+    execution = _delegate(team, _payload(input_artifact_ids=["ds_001", "map_006"]))
 
     assert execution.status == "success"
-    task = run.refresh().tasks["map-egfr"]
-    assert task.status is TaskStatus.SKIPPED  # created, but its handoff was never recorded
-    assert run.run.handoffs == []
-    assert any("artifact-missing" in problem for problem in get_binding(team).problems)
+    [handoff] = run.refresh().handoffs
+    assert handoff.input_artifact_ids == ()
+    assert run.run.tasks["map-egfr"].status is TaskStatus.RUNNING
+    assert any("ds_001" in problem for problem in get_binding(team).problems)
+
+
+def test_observe_mode_never_blocks_delegation_on_the_ledger(chat):
+    team, run = chat
+    attach_execution(team, run_context=run, mode="observe")
+    _claim_task_for_another_role(run)
+
+    execution = _delegate(team, _payload())
+
+    assert execution.status == "success"
+    assert run.refresh().handoffs == []
+    assert any("does not match task role" in problem for problem in get_binding(team).problems)
 
 
 def test_enforce_mode_keeps_delegation_fail_closed(chat):
     team, run = chat
     attach_execution(team, run_context=run, mode="enforce")
+    _claim_task_for_another_role(run)
 
-    with pytest.raises(RetryAgentRun, match="unknown artifacts"):
-        _delegate(team, _payload(input_artifact_ids=["artifact-missing"]))
+    with pytest.raises(RetryAgentRun, match="does not match task role"):
+        _delegate(team, _payload())
 
 
 def test_without_a_binding_ledger_failures_stay_fail_closed(chat):
-    team, _ = chat
+    team, run = chat
+    _claim_task_for_another_role(run)
 
-    with pytest.raises(RetryAgentRun, match="unknown artifacts"):
-        _delegate(team, _payload(input_artifact_ids=["artifact-missing"]))
+    with pytest.raises(RetryAgentRun, match="does not match task role"):
+        _delegate(team, _payload())
+
+
+def test_a_failed_handoff_skips_the_task_it_created(chat, monkeypatch):
+    team, run = chat
+    attach_execution(team, run_context=run, mode="observe")
+
+    def failing_record(envelope, **kwargs):
+        raise ValueError("ledger unavailable")
+
+    monkeypatch.setattr(run, "record_handoff", failing_record)
+    execution = _delegate(team, _payload())
+
+    assert execution.status == "success"
+    assert run.refresh().tasks["map-egfr"].status is TaskStatus.SKIPPED

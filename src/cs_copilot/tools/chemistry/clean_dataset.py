@@ -544,12 +544,14 @@ def _chemical_space_artifact_path(
 
 
 def _write_csv(df: pd.DataFrame, filename: str) -> str:
+    filename = S3.first_free_path(filename)
     with S3.open(filename, "w") as handle:
         df.to_csv(handle, index=False)
     return S3.path(filename)
 
 
 def _write_parquet(df: pd.DataFrame, filename: str) -> str:
+    filename = S3.first_free_path(filename)
     with S3.open(filename, "wb") as handle:
         df.to_parquet(handle, index=False)
     return S3.path(filename)
@@ -564,6 +566,7 @@ def _write_report(
     report = _format_report(summary)
     if appendix and appendix.strip():
         report = f"{report.rstrip()}\n\n{appendix.strip()}\n"
+    filename = S3.first_free_path(filename)
     with S3.open(filename, "w") as handle:
         handle.write(report)
     return S3.path(filename)
