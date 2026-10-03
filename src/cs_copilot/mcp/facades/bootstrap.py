@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from cs_copilot.capabilities import COORDINATOR_ROLE, SUPERVISOR_ROLE, allowed_tools_for
 from cs_copilot.routing import RoutingResult, match_request
 
 _MCP_PROMPT = "cs_copilot_mcp_workflow"
@@ -332,7 +333,7 @@ def _handoff_action(
 def _handoff_sender_role(receiver_role: str) -> str:
     """Keep the coordinator distinct from the role receiving the handoff."""
 
-    return "coordinator" if receiver_role == "supervisor" else "supervisor"
+    return COORDINATOR_ROLE if receiver_role == SUPERVISOR_ROLE else SUPERVISOR_ROLE
 
 
 def _expected_output_schema(workflow: Any, task: Any) -> dict[str, Any]:
@@ -368,15 +369,7 @@ def _effective_tool_allowlist(
 ) -> list[str]:
     """Combine task requirements with role/profile-compatible optional tools."""
 
-    from cs_copilot.mcp.tools_registry import all_specs
-
-    specs = {spec.mcp_name: spec for spec in all_specs()}
-    allowed = list(required_tools)
-    for tool_name in optional_tools:
-        spec = specs.get(tool_name)
-        if spec is not None and task.role in spec.roles and task.profile in spec.profiles:
-            allowed.append(tool_name)
-    return _dedupe(allowed)
+    return _dedupe([*required_tools, *allowed_tools_for(task.role, task.profile, optional_tools)])
 
 
 def _topological_tasks(tasks: Any) -> list[Any]:

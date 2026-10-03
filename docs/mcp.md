@@ -163,18 +163,25 @@ superset.
 |---------|------------------|
 | `bootstrap` | Read-only `mcp_bootstrap` and catalog discovery, plus write-capable ChEMBL/GTM preflights that record plan artifacts |
 | `standard` | Every stable catalog tool |
-| `chembl-retrieval` | ChEMBL retrieval, judging, and run artifacts |
+| `chembl-retrieval` | ChEMBL retrieval, judging, tabular preparation, and run artifacts |
 | `gtm-analysis` | GTM, tabular preparation, and reports |
-| `chemoinformatics` | Similarity/chemotype analysis, tables, and reports |
-| `reporting` | Run inspection and report generation |
+| `chemoinformatics` | Similarity/chemotype analysis, GTM, tables, and reports |
+| `reporting` | Run inspection, tables, GTM figures, and report generation |
 | `molecular-design` | Small-molecule design, validation, GTM, and reports |
 | `peptide-design` | Peptide design, validation, GTM, and reports |
 | `retrosynthesis` | Candidate resolution and SynPlanner routes |
-| `robustness` | Robustness analysis and report export |
+| `robustness` | Robustness analysis, tables, and report export |
 
-The same role names and profile assignments are used by the in-process agent
-factories. Factory construction fails when a role is configured with a
-toolkit outside its allowlist.
+Profiles and role grants are declared once, in the shared capability table
+(`src/cs_copilot/capabilities.py`), and both runtimes derive their view from
+it: the in-process role policies expand each role's tool groups into toolkit
+classes, and every MCP tool's roles and profiles are computed from its name
+prefix and group. The canonical grants are the in-process agent grants; on MCP
+every role also receives the `llm` and `session` groups, and the coordinator
+(spelled `supervisor` on MCP) receives the `workflow` control plane. Every role
+fits inside its assigned profile, the table is validated at import time, and
+factory construction fails when a role is configured with a toolkit outside its
+allowlist.
 
 ## Claude Code config
 
@@ -597,9 +604,10 @@ The MCP package is intentionally isolated from the Agno team:
 - `cs_copilot.agents` resolves its exports lazily, so importing
   `cs_copilot.agents.instructions` does not load the team, factories, or
   registry.
-- The runtime-neutral core (`cs_copilot.routing`, `cs_copilot.workflows`,
-  `cs_copilot.skills`, `cs_copilot.storage`, `cs_copilot.tracking`) imports
-  neither runtime: no `agno`, `cs_copilot.agents`, or `cs_copilot.mcp`.
+- The runtime-neutral core (`cs_copilot.routing`, `cs_copilot.capabilities`,
+  `cs_copilot.execution`, `cs_copilot.workflows`, `cs_copilot.skills`,
+  `cs_copilot.storage`, `cs_copilot.tracking`) imports neither runtime: no
+  `agno`, `cs_copilot.agents`, or `cs_copilot.mcp`.
 - The execution pipeline behind every tool call (authorization, boundaries,
   idempotency, artifact registration, durable events, and the v2 envelope)
   lives in the runtime-neutral `cs_copilot.execution` package. The MCP adapter
