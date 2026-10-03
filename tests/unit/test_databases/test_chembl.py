@@ -1818,3 +1818,48 @@ class TestPunctuationRegex:
         assert r"\)" in p
         assert re.search(p, "IL-1beta (receptor)", re.IGNORECASE)
         assert re.search(p, "IL 1beta (receptor)", re.IGNORECASE)
+
+
+class TestBackendFallbackIsAnnounced:
+    """Falling back to the network changes where every result comes from."""
+
+    def _toolkit(self):
+        from cs_copilot.tools.databases.chembl import ChemblToolkit
+
+        return ChemblToolkit.__new__(ChemblToolkit)
+
+    def test_a_configured_backend_that_cannot_load_warns_and_is_recorded(self, monkeypatch, caplog):
+        from cs_copilot.tools.databases.chembl import ChemblToolkit
+
+        monkeypatch.setenv("CHEMBL_MYSQL_HOST", "localhost")
+        monkeypatch.delenv("CHEMBL_SQLITE_PATH", raising=False)
+        monkeypatch.delenv("CHEMBL_PG_HOST", raising=False)
+
+        def create(self, backend):
+            if backend == "mysql":
+                raise ImportError("pymysql missing")
+            return object()
+
+        monkeypatch.setattr(ChemblToolkit, "_create_fetcher", create)
+        toolkit = self._toolkit()
+
+        with caplog.at_level("WARNING"):
+            resolved, _ = toolkit._create_auto_fetcher()
+
+        assert resolved == "rest"
+        assert "REST API" in toolkit._backend_fallback
+        assert "mysql" in toolkit._backend_fallback
+        assert any("REST API" in r.getMessage() for r in caplog.records)
+
+    def test_plain_rest_use_is_not_reported_as_a_fallback(self, monkeypatch):
+        from cs_copilot.tools.databases.chembl import ChemblToolkit
+
+        for name in ("CHEMBL_MYSQL_HOST", "CHEMBL_PG_HOST", "CHEMBL_SQLITE_PATH"):
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.setattr(ChemblToolkit, "_create_fetcher", lambda self, b: object())
+        toolkit = self._toolkit()
+
+        resolved, _ = toolkit._create_auto_fetcher()
+
+        assert resolved == "rest"
+        assert getattr(toolkit, "_backend_fallback", None) is None
