@@ -589,9 +589,17 @@ It does not enable `agno_team_run` and does not instantiate the Agno team.
 
 The MCP package is intentionally isolated from the Agno team:
 
-- `cs_copilot.mcp.*` never imports `cs_copilot.agents.teams`,
-  `cs_copilot.agents.factories`, `cs_copilot.agents.registry`,
-  `cs_copilot.model_config`, or `chainlit_app`.
+- `cs_copilot.mcp.*` never imports `cs_copilot.agents` (the only exception is
+  `cs_copilot.agents.instructions`, which is served verbatim as MCP prompts),
+  `cs_copilot.model_config`, or `chainlit_app`. The opt-in `agno_team_run`
+  tool and the `agno-model` LLM policy reach those modules only through
+  explicitly listed dynamic imports.
+- `cs_copilot.agents` resolves its exports lazily, so importing
+  `cs_copilot.agents.instructions` does not load the team, factories, or
+  registry.
+- The runtime-neutral core (`cs_copilot.routing`, `cs_copilot.workflows`,
+  `cs_copilot.skills`, `cs_copilot.storage`, `cs_copilot.tracking`) imports
+  neither runtime: no `agno`, `cs_copilot.agents`, or `cs_copilot.mcp`.
 - Importing `cs_copilot` or `cs_copilot.tools.*` does not require the `mcp`
   extra to be installed.
 - The MCP server runs as one OS process per stdio session. Concurrent
@@ -601,5 +609,10 @@ The MCP package is intentionally isolated from the Agno team:
   a server, while separate server constructions receive separate instances.
   Factory functions therefore do not retain process-global mutable toolkits.
 
-A guard test (`tests/unit/mcp/test_no_team_imports.py`) AST-walks the package
-and fails CI if any of the forbidden imports reappear.
+Two guard tests enforce these rules in CI.
+`tests/unit/mcp/test_no_team_imports.py` AST-walks the MCP package and the
+neutral core, resolving relative, `from`-qualified, literal dynamic, and
+`factory("module:Class")` imports. `tests/unit/test_runtime_import_isolation.py`
+imports the MCP package surfaces (every module, prompt rendering, the tool
+registry, bootstrap, and server assembly) in a fresh interpreter and checks
+that no Agno team module was loaded.
