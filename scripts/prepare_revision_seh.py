@@ -33,7 +33,7 @@ EXCLUDED_ASSAYS = {
     "CHEMBL4415272": "Phosphatase activity of bifunctional EPHX2, not epoxide hydrolase activity"
 }
 POLICY = {
-    "purpose": "prospective_reviewer_revision_not_historical_reconstruction",
+    "purpose": "prospective_measurement_not_historical_reconstruction",
     "target_chembl_id": TARGET,
     "target_organism": "Homo sapiens",
     "target_type": "SINGLE PROTEIN",

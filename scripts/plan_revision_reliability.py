@@ -45,14 +45,16 @@ def _python_path(root: Path) -> str:
     """Runtime import path, including vendored dependencies when present.
 
     Some platforms have no SynPlanner wheel, so the study ships it under
-    ``reports/reviewer_revision/python-deps``. Omitting that directory makes
-    every route search fail for a reason unrelated to what is being measured.
+    ``reports/<study>/python-deps``. Omitting that directory makes every route
+    search fail for a reason unrelated to what is being measured.
     """
 
     entries = [root / "src"]
-    vendored = root / "reports" / "reviewer_revision" / "python-deps"
-    if vendored.is_dir():
-        entries.append(vendored.resolve())
+    for parent in ("reliability_study", "reviewer_revision"):
+        vendored = root / "reports" / parent / "python-deps"
+        if vendored.is_dir():
+            entries.append(vendored.resolve())
+            break
     return ":".join(str(entry) for entry in entries)
 
 
