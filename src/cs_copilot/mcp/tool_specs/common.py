@@ -16,4 +16,6 @@ def factory(import_path: str) -> Callable[[], Any]:
         cls = getattr(module, class_name)
         return cls()
 
+    # Lets the in-process runtime map this spec to ``<toolkit>.<method>``.
+    _build.toolkit_import_path = import_path  # type: ignore[attr-defined]
     return _build

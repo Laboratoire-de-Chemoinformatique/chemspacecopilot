@@ -17,8 +17,10 @@ import logging
 import os
 import stat
 import tempfile
+import threading
 import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Iterator, Mapping
 from urllib.parse import unquote, urlsplit
@@ -96,6 +98,10 @@ _EXTERNAL_STAGED_PUBLICATIONS: contextvars.ContextVar[dict[str, str] | None] = (
         "cs_copilot_storage_external_staged_publications",
         default=None,
     )
+)
+_WRITE_OBSERVATION: contextvars.ContextVar["WriteObservation | None"] = contextvars.ContextVar(
+    "cs_copilot_storage_write_observation",
+    default=None,
 )
 _OPEN_SUPPORTS_DIR_FD = os.open in os.supports_dir_fd
 _O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
@@ -676,6 +682,49 @@ class _AtomicS3CreateFile:
         self._expected_size = size
 
 
+class ScopedWriteDenied(PermissionError):
+    """A write refused by :meth:`S3.confine_writes`, with a stable ``verdict``."""
+
+    def __init__(self, message: str, *, verdict: str) -> None:
+        super().__init__(message)
+        self.verdict = verdict
+
+
+@dataclass
+class WriteObservation:
+    """Writes attempted during one observed call, classified like confined writes.
+
+    Each record is ``{"path", "mode", "verdict", "created"}``. ``verdict`` is
+    how :meth:`S3.confine_writes` would have treated the write:
+    ``create_new``, ``overwrite_existing``, ``append_existing``,
+    ``protected_artifact``, ``runtime_metadata``, ``outside_boundary``,
+    ``absolute_path``, or ``unsafe_path``. ``path`` is where the bytes actually
+    land (session-relative when inside the session) and ``created`` tells
+    whether the write created a new file inside the boundary. Observation
+    never changes what the write does.
+    """
+
+    boundary: str
+    protected: frozenset[str] = frozenset()
+    records: list[dict[str, Any]] = field(default_factory=list)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def record(self, entry: dict[str, Any]) -> None:
+        with self._lock:
+            self.records.append(entry)
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [dict(entry) for entry in self.records]
+
+    def created_paths(self) -> list[str]:
+        """Session-relative paths of new files written inside the boundary, in order."""
+
+        return list(
+            dict.fromkeys(entry["path"] for entry in self.snapshot() if entry.get("created"))
+        )
+
+
 class _S3Meta(type):
     @property
     def prefix(cls) -> str:
@@ -742,6 +791,108 @@ class S3(metaclass=_S3Meta):
     def current_prefix(cls) -> str:
         """Return the active context-local prefix, falling back to ``S3.prefix``."""
         return _SESSION_PREFIX.get() or cls._fallback_prefix
+
+    @classmethod
+    @contextmanager
+    def scoped_session_prefix(cls, prefix: str) -> Iterator[None]:
+        """Bind a session prefix for this execution context only.
+
+        Unlike :meth:`set_session_prefix`, the process-wide fallback is left
+        untouched, so concurrent chats in one process cannot leak into each
+        other through it.
+        """
+
+        token = _SESSION_PREFIX.set(_normalize_storage_prefix(prefix))
+        try:
+            yield
+        finally:
+            _SESSION_PREFIX.reset(token)
+
+    @classmethod
+    @contextmanager
+    def observe_writes(
+        cls,
+        boundary: str,
+        *,
+        protected_paths: Iterable[str] = (),
+    ) -> Iterator[WriteObservation]:
+        """Record, without enforcing, how confined writes would treat each write.
+
+        While active and no :meth:`confine_writes` boundary is set, every write
+        through :meth:`open` is classified against ``boundary`` and the
+        protected paths, then performed exactly as it would be without the
+        observer. Classification errors are recorded, never raised.
+        """
+
+        observation = WriteObservation(
+            boundary=cls._normalize_relative_path(boundary, allow_empty=True),
+            protected=frozenset(str(path) for path in protected_paths),
+        )
+        token = _WRITE_OBSERVATION.set(observation)
+        try:
+            yield observation
+        finally:
+            _WRITE_OBSERVATION.reset(token)
+
+    @classmethod
+    def _observe_write(cls, observation: WriteObservation, rel: str, mode: str) -> None:
+        try:
+            entry = cls._classify_observed_write(observation, rel, mode)
+        except Exception:  # noqa: BLE001 - observation must never change a write
+            logger.debug("Could not classify an observed write to %r", rel, exc_info=True)
+            entry = {"path": str(rel), "verdict": "unclassified", "created": False}
+        observation.record({**entry, "mode": mode})
+
+    @classmethod
+    def _classify_observed_write(
+        cls,
+        observation: WriteObservation,
+        rel: str,
+        mode: str,
+    ) -> dict[str, Any]:
+        candidate = str(rel).strip()
+        actual = cls._verified_read_key(candidate)
+        boundary = PurePosixPath(observation.boundary) if observation.boundary else PurePosixPath()
+        inside = False
+        if actual is not None:
+            try:
+                PurePosixPath(actual).relative_to(boundary)
+                inside = True
+            except ValueError:
+                inside = False
+        existed = cls._storage_key_exists(actual) if inside and actual is not None else False
+        token = _WRITE_PROTECTED_PATHS.set(observation.protected)
+        try:
+            cls._validate_scoped_write(candidate, boundary=observation.boundary)
+        except ScopedWriteDenied as denied:
+            verdict = denied.verdict
+        except (PermissionError, ValueError):
+            verdict = "unsafe_path"
+        else:
+            if "a" in mode or "+" in mode:
+                verdict = "append_existing" if existed else "create_new"
+            else:
+                verdict = "overwrite_existing" if existed else "create_new"
+        finally:
+            _WRITE_PROTECTED_PATHS.reset(token)
+        return {
+            "path": actual or candidate,
+            "verdict": verdict,
+            # Runtime metadata and registered artifacts are never new evidence.
+            "created": bool(
+                inside and not existed and verdict not in {"runtime_metadata", "protected_artifact"}
+            ),
+        }
+
+    @classmethod
+    def _storage_key_exists(cls, key: str) -> bool:
+        if not is_s3_enabled():
+            return cls._local_session_path(key).exists()
+        filesystem, filesystem_path = fsspec.core.url_to_fs(
+            cls.path(key),
+            **get_s3_config().to_storage_options(),
+        )
+        return bool(filesystem.exists(filesystem_path))
 
     @classmethod
     @contextmanager
@@ -1172,6 +1323,10 @@ class S3(metaclass=_S3Meta):
                 )
 
         write_boundary = cls.current_write_boundary() if write_mode else None
+        if write_mode and write_boundary is None:
+            observation = _WRITE_OBSERVATION.get()
+            if observation is not None:
+                cls._observe_write(observation, rel, mode)
         scoped_write_key: str | None = None
         if write_boundary is not None:
             scoped_write_key = cls._validate_scoped_write(rel, boundary=write_boundary)
@@ -1454,7 +1609,10 @@ class S3(metaclass=_S3Meta):
                 or expected.scheme.lower() != "s3"
                 or not decoded_path.startswith(f"{expected_path}/")
             ):
-                raise PermissionError("S3 write destination is outside the active boundary")
+                raise ScopedWriteDenied(
+                    "S3 write destination is outside the active boundary",
+                    verdict="outside_boundary",
+                )
             relative = decoded_path[len(expected_path) + 1 :]
             cls._normalize_relative_path(relative)
             cls._reject_reserved_run_path(relative)
@@ -1465,8 +1623,9 @@ class S3(metaclass=_S3Meta):
             return session_relative
 
         if cls._is_explicit_local_path(candidate):
-            raise PermissionError(
-                "absolute and file:// write destinations are forbidden during scoped execution"
+            raise ScopedWriteDenied(
+                "absolute and file:// write destinations are forbidden during scoped execution",
+                verdict="absolute_path",
             )
 
         normalized = cls._normalize_relative_path(candidate)
@@ -1475,7 +1634,10 @@ class S3(metaclass=_S3Meta):
         try:
             relative = normalized_path.relative_to(boundary_path)
         except ValueError as exc:
-            raise PermissionError("write destination is outside the active boundary") from exc
+            raise ScopedWriteDenied(
+                "write destination is outside the active boundary",
+                verdict="outside_boundary",
+            ) from exc
         cls._reject_reserved_run_path(relative.as_posix())
         cls._reject_protected_write(normalized)
         return normalized
@@ -1508,12 +1670,18 @@ class S3(metaclass=_S3Meta):
             parts = path.parts
         normalized = path.as_posix()
         if normalized in _RESERVED_RUN_FILES or (parts and parts[0] in {".staging", "events"}):
-            raise PermissionError("write destination is reserved for workflow runtime metadata")
+            raise ScopedWriteDenied(
+                "write destination is reserved for workflow runtime metadata",
+                verdict="runtime_metadata",
+            )
 
     @staticmethod
     def _reject_protected_write(session_relative: str) -> None:
         if session_relative in _WRITE_PROTECTED_PATHS.get():
-            raise PermissionError("write destination is an immutable registered workflow artifact")
+            raise ScopedWriteDenied(
+                "write destination is an immutable registered workflow artifact",
+                verdict="protected_artifact",
+            )
 
     @classmethod
     def _open_confined_s3_path(
@@ -1593,7 +1761,10 @@ class S3(metaclass=_S3Meta):
         try:
             relative = destination.relative_to(boundary_root)
         except ValueError as exc:
-            raise PermissionError("write destination is outside the active boundary") from exc
+            raise ScopedWriteDenied(
+                "write destination is outside the active boundary",
+                verdict="outside_boundary",
+            ) from exc
         if not relative.parts:
             raise PermissionError("write destination must identify a file")
 

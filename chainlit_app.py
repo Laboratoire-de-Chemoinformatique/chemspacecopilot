@@ -20,6 +20,12 @@ from chainlit.input_widget import Select, Switch
 from chainlit.types import ThreadDict
 from dotenv import load_dotenv
 
+from cs_copilot.agents.session_runs import (
+    ensure_agno_session_run,
+    finalize_agno_turn,
+    restore_team_session_state,
+    store_chat_upload,
+)
 from cs_copilot.agents.teams import get_cs_copilot_agent_team
 from cs_copilot.model_config import _is_retriable, arun_with_retry, load_model_from_config
 from cs_copilot.storage import S3
@@ -176,7 +182,8 @@ async def on_chat_resume(thread: ThreadDict):
                     restored_map = saved_state.get("map_type", "new_map")
                     # Seed the in-memory session_state from the DB so the agent
                     # doesn't lose uploaded_files or other state before the first arun.
-                    session_agent.session_state = saved_state.copy()
+                    # Restore in place: members share the team's dict.
+                    restore_team_session_state(session_agent, saved_state)
                     logger.info(
                         f"Restored Agno session state for thread {thread_id}: "
                         f"map={restored_map}, "
@@ -669,18 +676,27 @@ async def _send_text_with_smiles(text: str):
         await cl.Message(content=text[pos:], author="assistant").send()
 
 
-async def _handle_file_uploads(files: list, session_id: str) -> list[str]:
+async def _handle_file_uploads(
+    files: list,
+    session_id: str,
+    run_context=None,
+) -> list[tuple[str, str, str | None]]:
     """
-    Upload files to S3 in the session-specific folder.
+    Upload files into the chat's storage.
+
+    With a workflow run attached, uploads are stored inside the run and
+    registered as untrusted ``user_upload`` artifacts; otherwise they are
+    written at the session root.
 
     Args:
         files: List of cl.File objects from the message
         session_id: Current Chainlit thread/session ID
+        run_context: The chat's workflow run, if one is attached
 
     Returns:
-        List of S3 paths where files were uploaded
+        ``(original_name, storage_path, artifact_id_or_None)`` per uploaded file
     """
-    uploaded_paths = []
+    uploaded_paths: list[tuple[str, str, str | None]] = []
     logger.debug(f"_handle_file_uploads called with {len(files)} files")
 
     for file in files:
@@ -705,20 +721,20 @@ async def _handle_file_uploads(files: list, session_id: str) -> list[str]:
                 logger.warning(f"Could not read content from file {file.name}")
                 continue
 
-            # Upload to S3 using relative path
-            # S3.prefix is already set to sessions/{session_id} by on_chat_start/resume
-            relative_path = f"{file.name}"
-            logger.debug(f"Relative S3 path: {relative_path}")
-            logger.debug(f"Current S3 prefix: {S3.current_prefix()}")
-
-            # Write file to S3 using S3.open with relative path
-            logger.debug("Opening S3 file for writing...")
-            with S3.open(relative_path, "wb") as s3_file:
-                s3_file.write(file_content)
-
-            # Get the full S3 URL for display
-            full_s3_url = S3.path(relative_path)
-            uploaded_paths.append(full_s3_url)
+            if run_context is not None:
+                full_s3_url, artifact_id = await asyncio.to_thread(
+                    store_chat_upload,
+                    run_context,
+                    filename=file.name,
+                    content=file_content,
+                )
+            else:
+                # S3.prefix is already set to sessions/{session_id} by on_chat_start/resume
+                relative_path = f"{file.name}"
+                with S3.open(relative_path, "wb") as s3_file:
+                    s3_file.write(file_content)
+                full_s3_url, artifact_id = S3.path(relative_path), None
+            uploaded_paths.append((file.name, full_s3_url, artifact_id))
             logger.info(f"Uploaded file {file.name} to {full_s3_url}")
 
         except Exception as e:
@@ -784,6 +800,7 @@ async def relay(stream):
 # ---------- Chainlit entry-point ------------------------------------------- #
 @cl.on_message
 async def main(user_msg: cl.Message):
+    session_agent = None
     try:
         # Ensure session is properly initialized
         if not cl.user_session.get("session_initialized"):
@@ -816,6 +833,16 @@ async def main(user_msg: cl.Message):
         _sync_storage_session(thread_id, "main")
         _apply_map_settings(session_agent, cl.user_session.get("map") or "new_map")
 
+        # One durable workflow run records this chat's tool calls and artifacts.
+        chat_run = None
+        if thread_id:
+            try:
+                chat_run = await asyncio.to_thread(
+                    ensure_agno_session_run, session_agent, session_id=thread_id
+                )
+            except Exception:
+                logger.warning("Could not attach the chat's workflow run", exc_info=True)
+
         # Handle file uploads if present
         # Debug: Check multiple possible locations for files
         files = None
@@ -837,7 +864,7 @@ async def main(user_msg: cl.Message):
             logger.debug(f"Thread ID: {thread_id}")
 
             if thread_id:
-                uploaded_paths = await _handle_file_uploads(files, thread_id)
+                uploaded_paths = await _handle_file_uploads(files, thread_id, chat_run)
                 logger.debug(f"Uploaded paths: {uploaded_paths}")
 
                 if uploaded_paths:
@@ -852,10 +879,13 @@ async def main(user_msg: cl.Message):
                         session_agent.session_state["uploaded_files"] = {}
                         logger.info("Initialized uploaded_files in agent session state")
 
-                    # Add new files (basename: s3_path) without overwriting existing ones
-                    for s3_path in uploaded_paths:
-                        filename = s3_path.split("/")[-1]
+                    # Add new files (original name: stored path) without overwriting others
+                    for filename, s3_path, artifact_id in uploaded_paths:
                         session_agent.session_state["uploaded_files"][filename] = s3_path
+                        if artifact_id is not None:
+                            session_agent.session_state.setdefault("uploaded_artifacts", {})[
+                                filename
+                            ] = artifact_id
                         logger.info(f"Added to session state: {filename} → {s3_path}")
 
                     logger.info(
@@ -864,7 +894,7 @@ async def main(user_msg: cl.Message):
 
                     # Display confirmation message
                     file_list = "\n".join(
-                        [f"- `{path.split('/')[-1]}` → {path}" for path in uploaded_paths]
+                        [f"- `{filename}` → {path}" for filename, path, _ in uploaded_paths]
                     )
                     await cl.Message(
                         content=f"📁 **Files uploaded to S3:**\n{file_list}",
@@ -920,10 +950,17 @@ async def main(user_msg: cl.Message):
                     continue
                 # Non-retriable or final attempt – fall through to error handler
                 raise
+        # Close the ad-hoc tasks this turn delegated.
+        await asyncio.to_thread(finalize_agno_turn, session_agent, failed=False)
 
     except Exception as e:
         # Log error and send user-friendly message
         logger.error(f"Error processing message: {e}", exc_info=True)
+        if session_agent is not None:
+            try:
+                await asyncio.to_thread(finalize_agno_turn, session_agent, failed=True)
+            except Exception:
+                logger.warning("Could not finalize the failed turn's tasks", exc_info=True)
         await cl.Message(
             content="Sorry, I encountered an error processing your message. Please try again.",
             author="assistant",
