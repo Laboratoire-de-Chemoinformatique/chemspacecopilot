@@ -1,4 +1,4 @@
-"""Combine per-batch reliability bundles into the manuscript result tables.
+"""Combine per-batch reliability bundles into the study result tables.
 
 This reads only retained run records. It performs no inference, no scientific
 computation and no network access, and it never reruns or substitutes a run.
