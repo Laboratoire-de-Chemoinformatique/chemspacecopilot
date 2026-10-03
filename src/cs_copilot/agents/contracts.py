@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
+from cs_copilot import capabilities as _capabilities
 from cs_copilot.workflows.runtime import SCHEMA_VERSION, HandoffEnvelope
 
 HANDOFF_SCHEMA_VERSION = SCHEMA_VERSION
@@ -75,90 +76,17 @@ def _policy(
     return RolePolicy(role, profile, frozenset(toolkits), frozenset(functions))
 
 
+# Derived from the shared capability table: each role's groups expand into the
+# Agno toolkit classes that implement them, plus its bare callables.
 ROLE_POLICIES: Mapping[str, RolePolicy] = MappingProxyType(
     {
-        "coordinator": _policy(
-            "coordinator",
-            "standard",
-            ("SessionMemoryToolkit", "SkillToolkit"),
-        ),
-        "chembl_downloader": _policy(
-            "chembl_downloader",
-            "chembl-retrieval",
-            ("ChemblToolkit", "PointerPandasTools", "SkillToolkit"),
-        ),
-        "gtm_agent": _policy(
-            "gtm_agent",
-            "gtm-analysis",
-            ("GTMToolkit", "PointerPandasTools", "SessionMemoryToolkit", "SkillToolkit"),
-            ("save_gtm_landscape_plot", "save_gtm_plot"),
-        ),
-        "chemoinformatician": _policy(
-            "chemoinformatician",
-            "chemoinformatics",
-            ("ChemicalSimilarityToolkit", "PointerPandasTools", "GTMToolkit", "SkillToolkit"),
-        ),
-        "report_generator": _policy(
-            "report_generator",
-            "reporting",
-            ("PointerPandasTools", "SkillToolkit"),
-            (
-                "save_gtm_landscape_plot",
-                "save_gtm_plot",
-                "save_rich_report",
-                "save_markdown_report",
-            ),
-        ),
-        "molecular_designer": _policy(
-            "molecular_designer",
-            "molecular-design",
-            (
-                "MolecularDesignerToolkit",
-                "AutoencoderToolkit",
-                "GTMToolkit",
-                "ChemicalSimilarityToolkit",
-                "PointerPandasTools",
-                "SkillToolkit",
-            ),
-        ),
-        "peptide_designer": _policy(
-            "peptide_designer",
-            "peptide-design",
-            ("PeptideDesignerToolkit", "GTMToolkit", "PointerPandasTools", "SkillToolkit"),
-            ("save_gtm_landscape_plot", "save_gtm_plot"),
-        ),
-        "synplanner": _policy(
-            "synplanner",
-            "retrosynthesis",
-            ("SynPlannerToolkit", "SkillToolkit"),
-        ),
-        "robustness_evaluation": _policy(
-            "robustness_evaluation",
-            "robustness",
-            ("PointerPandasTools", "RobustnessAnalysisToolkit", "SkillToolkit"),
-        ),
-        "single_agent": _policy(
-            "single_agent",
-            "standard",
-            (
-                "ChemblToolkit",
-                "GTMToolkit",
-                "ChemicalSimilarityToolkit",
-                "MolecularDesignerToolkit",
-                "AutoencoderToolkit",
-                "PeptideDesignerToolkit",
-                "SynPlannerToolkit",
-                "SessionMemoryToolkit",
-                "PointerPandasTools",
-                "SkillToolkit",
-            ),
-            (
-                "save_gtm_landscape_plot",
-                "save_gtm_plot",
-                "save_rich_report",
-                "save_markdown_report",
-            ),
-        ),
+        role: _policy(
+            role,
+            capabilities.profile,
+            _capabilities.agno_toolkits_for_role(role),
+            _capabilities.agno_functions_for_role(role),
+        )
+        for role, capabilities in _capabilities.ROLES.items()
     }
 )
 

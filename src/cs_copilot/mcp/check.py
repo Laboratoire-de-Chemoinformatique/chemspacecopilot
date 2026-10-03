@@ -371,22 +371,23 @@ def _validate_tool_annotations(tools: Sequence[object]) -> tuple[int, int, int]:
             + ", ".join(sorted(bad_open_world))
         )
 
-    from .tools_registry import all_specs
+    from .tools_registry import OPT_IN_GROUPS, all_specs
 
+    specs = all_specs(opt_in_groups=OPT_IN_GROUPS)
     expected_read_only = {
         "search": True,
         "fetch": True,
-        **{spec.mcp_name: spec.read_only for spec in all_specs()},
+        **{spec.mcp_name: spec.read_only for spec in specs},
     }
     expected_open_world = {
         "search": False,
         "fetch": False,
-        **{spec.mcp_name: spec.open_world for spec in all_specs()},
+        **{spec.mcp_name: spec.open_world for spec in specs},
     }
     expected_destructive = {
         "search": False,
         "fetch": False,
-        **{spec.mcp_name: spec.destructive for spec in all_specs()},
+        **{spec.mcp_name: spec.destructive for spec in specs},
     }
     mismatched_read_only = []
     mismatched_destructive = []

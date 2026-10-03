@@ -1017,7 +1017,7 @@ Be thorough and specific in your analysis."""
             logger.info(f"Running robustness analysis for {test_name}/{timestamp}...")
 
         response = agent.run(analysis_prompt, stream=False)
-        response_text = response.content if response.content else ""
+        response_text = "" if response.content is None else response.content
 
         if verbose:
             logger.info("✅ Robustness analysis completed")

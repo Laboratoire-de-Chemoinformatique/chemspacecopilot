@@ -3,7 +3,9 @@
 Events are authoritative. Every event is stored in its own immutable JSONL
 object so local filesystems and object stores have the same append semantics.
 ``manifest.json`` and ``artifacts/index.json`` are replaceable snapshots that
-can always be rebuilt by replaying the event objects.
+can always be rebuilt by replaying the event objects; they are refreshed after
+state-changing events only. Appends synchronize incrementally from the known
+tail of the stream, so their cost does not grow with the length of a run.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 import fsspec
 
+from cs_copilot.execution.errors import ToolErrorCode
 from cs_copilot.storage import (
     LAYOUT_VERSION,
     OUTPUT_CONTEXT_KEY,
@@ -39,6 +42,11 @@ from cs_copilot.storage import (
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 2
+# Events that are durable observations only: replay ignores them for run state.
+_OBSERVATION_EVENT_TYPES = frozenset({"tool_progress", "tool_call_recorded", "task_progress"})
+# After this many incremental syncs, a context re-checks that every event it
+# knows is still listed in the stream (one directory listing, no reads).
+_STREAM_CHECK_INTERVAL = 256
 _FORBIDDEN_HANDOFF_FIELDS = frozenset(
     {
         "messages",
@@ -106,18 +114,6 @@ class TaskStatus(str, Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
     SKIPPED = "skipped"
-
-
-class ToolErrorCode(str, Enum):
-    """Stable error taxonomy shared by workflow and tool envelopes."""
-
-    INVALID_INPUT = "invalid_input"
-    PERMISSION_DENIED = "permission_denied"
-    TRANSIENT_EXTERNAL = "transient_external"
-    TIMEOUT = "timeout"
-    RESOURCE_LIMIT = "resource_limit"
-    SCIENTIFIC_VALIDATION = "scientific_validation"
-    INTERNAL = "internal"
 
 
 class ArtifactTrust(str, Enum):
@@ -717,6 +713,7 @@ class RunContext:
         self.run = run
         self.events = list(events)
         self._event_lock = threading.RLock()
+        self._syncs_since_full = 0
 
     @classmethod
     def create(
@@ -885,6 +882,12 @@ class RunContext:
                     continue
                 self.events.append(event)
                 self.run = candidate
+                if event_type in _OBSERVATION_EVENT_TYPES:
+                    # Observational events never change run state; rewriting
+                    # both replaceable snapshots for each of them would double
+                    # the storage writes of every tool call. The next
+                    # state-changing event (or rebuild_snapshots) refreshes them.
+                    return event
                 try:
                     self._write_snapshots()
                 except Exception:
@@ -899,8 +902,68 @@ class RunContext:
         raise AssertionError("unreachable event append state")  # pragma: no cover
 
     def _synchronize_events(self, *, pending_event_type: str) -> None:
-        """Refresh a stale writer and reject replaced or duplicate run streams."""
+        """Refresh a stale writer and reject replaced or duplicate run streams.
 
+        A context that already holds the stream catches up incrementally: it
+        checks that its last known event is unchanged and reads newer events by
+        their exact sequence names, so an append costs neither a directory
+        listing nor a replay of the known prefix. Every
+        ``_STREAM_CHECK_INTERVAL`` catch-ups, one listing confirms that no known
+        event disappeared. A full re-read and replay runs for a context without
+        events and whenever a known event is missing.
+        """
+
+        if self.events and self.run is not None:
+            known_prefix_listed = True
+            if self._syncs_since_full >= _STREAM_CHECK_INTERVAL:
+                known_prefix_listed = self._known_events_listed()
+                self._syncs_since_full = 0
+            if known_prefix_listed and self._synchronize_tail():
+                self._syncs_since_full += 1
+                return
+        self._synchronize_full(pending_event_type=pending_event_type)
+        self._syncs_since_full = 0
+
+    def _known_events_listed(self) -> bool:
+        """Return whether every event this context knows is still in the stream."""
+
+        listed = {PurePosixPath(path).name for path in _list_event_paths(self.layout)}
+        return all(f"{event.event_id}.jsonl" in listed for event in self.events)
+
+    def _synchronize_tail(self) -> bool:
+        """Catch up from the known tail; return ``False`` when a full re-read is needed."""
+
+        _forget_cached_event_listing(self.layout)
+        last = self.events[-1]
+        try:
+            stored = _read_event_segment(self.layout, last.event_id)
+        except FileNotFoundError:
+            return False
+        if _canonical_event(stored) != _canonical_event(last):
+            raise EventReplayError(f"event stream for run {self.layout.run_id!r} was replaced")
+
+        newer: list[WorkflowEvent] = []
+        sequence = last.sequence + 1
+        while True:
+            try:
+                event = _read_event_segment(self.layout, f"{sequence:08d}")
+            except FileNotFoundError:
+                break
+            if event.sequence != sequence:
+                raise EventReplayError(f"event sequence is not contiguous at {sequence}")
+            newer.append(event)
+            sequence += 1
+        if newer:
+            # Apply to a detached copy so a malformed event cannot leave the
+            # caller-visible run half updated.
+            run = WorkflowRun.from_dict(self._require_run().to_dict())
+            for event in newer:
+                run = _apply_replayed_event(run, event)
+            self.events.extend(newer)
+            self.run = run
+        return True
+
+    def _synchronize_full(self, *, pending_event_type: str) -> None:
         paths = _list_event_paths(self.layout)
         if not paths:
             if self.events or self.run is not None:
@@ -1463,6 +1526,7 @@ class RunContext:
         run = _replay(events)
         self.events = events
         self.run = run
+        self._syncs_since_full = 0
         self.layout = OutputLayout(run.session_id, run.run_id, run.workflow_slug)
         self._write_snapshots()
         return run
@@ -1816,26 +1880,7 @@ def _read_events(layout: OutputLayout) -> list[WorkflowEvent]:
     event_paths = _list_event_paths(layout)
     if not event_paths:
         raise EventReplayError(f"workflow run {layout.run_id!r} has no events")
-    events: list[WorkflowEvent] = []
-    for path in event_paths:
-        with S3.open(path, "r") as handle:
-            lines = [line for line in handle.read().splitlines() if line.strip()]
-        if len(lines) != 1:
-            raise EventReplayError(f"event segment must contain exactly one JSON line: {path}")
-        try:
-            raw = json.loads(lines[0])
-        except json.JSONDecodeError as exc:
-            raise EventReplayError(f"invalid JSON event segment: {path}") from exc
-        if not isinstance(raw, Mapping):
-            raise EventReplayError(f"event segment must contain a JSON object: {path}")
-        try:
-            event = WorkflowEvent.from_dict(raw)
-        except (KeyError, TypeError, ValueError) as exc:
-            raise EventReplayError(f"invalid workflow event record: {path}") from exc
-        expected_name = f"{event.event_id}.jsonl"
-        if PurePosixPath(path).name != expected_name:
-            raise EventReplayError(f"event id does not match segment name: {path}")
-        events.append(event)
+    events: list[WorkflowEvent] = [_read_event_path(path) for path in event_paths]
 
     events.sort(key=lambda item: item.sequence)
     sequences = [event.sequence for event in events]
@@ -1846,28 +1891,82 @@ def _read_events(layout: OutputLayout) -> list[WorkflowEvent]:
     return events
 
 
+def _read_event_segment(layout: OutputLayout, event_id: str) -> WorkflowEvent:
+    """Read one event by its exact segment name (raises ``FileNotFoundError``)."""
+
+    return _read_event_path(layout.event_rel_path(event_id))
+
+
+def _read_event_path(path: str) -> WorkflowEvent:
+    with S3.open(path, "r") as handle:
+        lines = [line for line in handle.read().splitlines() if line.strip()]
+    if len(lines) != 1:
+        raise EventReplayError(f"event segment must contain exactly one JSON line: {path}")
+    try:
+        raw = json.loads(lines[0])
+    except json.JSONDecodeError as exc:
+        raise EventReplayError(f"invalid JSON event segment: {path}") from exc
+    if not isinstance(raw, Mapping):
+        raise EventReplayError(f"event segment must contain a JSON object: {path}")
+    try:
+        event = WorkflowEvent.from_dict(raw)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise EventReplayError(f"invalid workflow event record: {path}") from exc
+    expected_name = f"{event.event_id}.jsonl"
+    if PurePosixPath(path).name != expected_name:
+        raise EventReplayError(f"event id does not match segment name: {path}")
+    return event
+
+
+def _canonical_event(event: WorkflowEvent) -> str:
+    return json.dumps(event.to_dict(), sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _apply_replayed_event(run: WorkflowRun | None, event: WorkflowEvent) -> WorkflowRun:
+    try:
+        return _apply_event(run, event)
+    except EventReplayError:
+        raise
+    except (KeyError, TypeError, ValueError, WorkflowRuntimeError) as exc:
+        raise EventReplayError(
+            f"could not apply event {event.event_id!r} ({event.event_type})"
+        ) from exc
+
+
 def _replay(events: Sequence[WorkflowEvent]) -> WorkflowRun:
     run: WorkflowRun | None = None
     for event in events:
-        try:
-            run = _apply_event(run, event)
-        except EventReplayError:
-            raise
-        except (KeyError, TypeError, ValueError, WorkflowRuntimeError) as exc:
-            raise EventReplayError(
-                f"could not apply event {event.event_id!r} ({event.event_type})"
-            ) from exc
+        run = _apply_replayed_event(run, event)
     if run is None:
         raise EventReplayError("workflow event stream is empty")
     return run
 
 
-def _list_event_paths(layout: OutputLayout) -> list[str]:
-    glob_url = S3.path(f"{layout.events_rel_path}/*.jsonl")
+def _events_filesystem(layout: OutputLayout, pattern: str = "") -> tuple[Any, str]:
+    url = S3.path(f"{layout.events_rel_path}/{pattern}" if pattern else layout.events_rel_path)
     options: dict[str, Any] = {}
     if is_s3_enabled():
         options = get_s3_config().to_storage_options()
-    fs, fs_path = fsspec.core.url_to_fs(glob_url, **options)
+    return fsspec.core.url_to_fs(url, **options)
+
+
+def _forget_cached_event_listing(layout: OutputLayout) -> None:
+    """Drop a cached S3 listing so exact-name reads see events from other writers.
+
+    s3fs answers existence checks from a cached parent listing when it has
+    one, which would hide events appended by another process after the last
+    listing.
+    """
+
+    if not is_s3_enabled():
+        return
+    fs, fs_path = _events_filesystem(layout)
+    fs.invalidate_cache(fs_path)
+
+
+def _list_event_paths(layout: OutputLayout) -> list[str]:
+    _forget_cached_event_listing(layout)
+    fs, fs_path = _events_filesystem(layout, "*.jsonl")
     matches = fs.glob(fs_path)
     paths: list[str] = []
     for match in matches:
@@ -2520,7 +2619,11 @@ def _pending_tool_invocations(
             continue
         span_id = str(payload.get("span_id") or "")
         tool_name = str(payload.get("tool_name") or "unknown_tool")
-        if domain_only and tool_name.startswith("workflow_"):
+        # Control-plane calls and calls that only delegate to other tools (whose
+        # own spans are tracked) do no domain work themselves.
+        if domain_only and (
+            tool_name.startswith("workflow_") or payload.get("delegates_execution") is True
+        ):
             continue
         key = span_id or f"{event_task_id}:{tool_name}"
         stage = str(payload.get("stage") or "")

@@ -29,6 +29,10 @@ load_dotenv()
 # Suppress verbose startup logs emitted at import time by the agent registry
 # and gtm_operations.setup_logging().
 logging.disable(logging.CRITICAL)
+from cs_copilot.agents.session_runs import (  # noqa: E402
+    ensure_agno_session_run,
+    finalize_agno_turn,
+)
 from cs_copilot.agents.teams import get_cs_copilot_agent_team  # noqa: E402
 from cs_copilot.model_config import (  # noqa: E402
     _is_retriable,
@@ -237,6 +241,12 @@ async def run_repl():
     except Exception as e:
         renderer.print_error(f"Failed to initialize agent team: {e}")
         return
+    # One durable workflow run records this session's tool calls and artifacts.
+    try:
+        session_run = ensure_agno_session_run(team, session_id=session_id)
+    except Exception as e:  # noqa: BLE001 - recording must not block the REPL
+        logger.warning("Could not start the session's workflow run: %s", e)
+        session_run = None
 
     renderer.print_banner(session_id, provider, model_id)
 
@@ -294,6 +304,7 @@ async def run_repl():
         generating = True
         max_retries = 3
         base_delay = 2.0
+        turn_failed = True
         try:
             for attempt in range(max_retries + 1):
                 try:
@@ -306,6 +317,7 @@ async def run_repl():
                     )
                     await stream_response(stream, renderer)
                     console.print()  # blank line after response
+                    turn_failed = False
                     break
                 except (KeyboardInterrupt, asyncio.CancelledError):
                     console.print()
@@ -329,10 +341,17 @@ async def run_repl():
                     break
         finally:
             generating = False
+            finalize_agno_turn(team, failed=turn_failed)
 
     # Cleanup
     if has_signal_handler:
         loop.remove_signal_handler(signal.SIGINT)
+    if session_run is not None:
+        # CLI sessions cannot be resumed; close the run (partial if unfinished).
+        try:
+            session_run.complete()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Could not complete the session's workflow run: %s", e)
 
 
 def main():

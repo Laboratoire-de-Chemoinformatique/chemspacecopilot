@@ -226,11 +226,18 @@ def _parse_args(
         "--enable-agno-team-tool",
         action="store_true",
         help=(
-            "Register private agno_team_run delegation tool. Use only for "
-            "trusted clients; default MCP mode keeps Agno reasoning disabled."
+            "Register the private agno_team_run delegation tool (standard "
+            "profile, --llm-policy agno-model). Use only for trusted clients; "
+            "default MCP mode keeps Agno reasoning disabled."
         ),
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.enable_agno_team_tool:
+        if args.llm_policy != "agno-model":
+            parser.error("--enable-agno-team-tool requires --llm-policy agno-model")
+        if args.profile != "standard":
+            parser.error("--enable-agno-team-tool is only available with --profile standard")
+    return args
 
 
 def main(

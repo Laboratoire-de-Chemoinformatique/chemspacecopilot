@@ -320,6 +320,7 @@ def save_candidate_set_dataset(
     table = pd.DataFrame(row_list)
     if table.empty:
         table = pd.DataFrame(columns=["smi", "rank", "candidate_set_id", "source"])
+    rel_path = S3.first_free_path(rel_path)
     with S3.open(rel_path, "w") as handle:
         table.to_csv(handle, index=False)
     return S3.path(rel_path)
@@ -344,6 +345,7 @@ def save_candidate_set_artifact(
         "candidates": _json_safe(candidate_list, max_items=max(max_items, 1000)),
     }
     rel_path = _candidate_artifact_rel_path(candidate_set_id, session_state=session_state)
+    rel_path = S3.first_free_path(rel_path)
     with S3.open(rel_path, "w") as handle:
         json.dump(payload, handle, sort_keys=True)
     return S3.path(rel_path)
@@ -622,8 +624,45 @@ def _resolve_dotted_session_key(
             if 0 <= index < len(current):
                 current = current[index]
                 continue
-        return False, None
+        return _resolve_unique_leaf(session_state, session_key)
     return True, current
+
+
+def _resolve_unique_leaf(session_state: Dict[str, Any], session_key: str) -> Tuple[bool, Any]:
+    """Resolve a bare leaf name when exactly one nested key matches.
+
+    The agent instructions and skills name leaf keys such as
+    ``clean_dataset_path``, while the value lives at
+    ``data_file_paths.clean_dataset_path``. Rejecting the documented spelling
+    costs a round trip and teaches nothing; an ambiguous name still fails, so
+    this never guesses between two candidates.
+    """
+
+    leaf = str(session_key).rsplit(".", 1)[-1]
+
+    # ``data_file_paths`` is the documented home for the dataset pointers the
+    # instructions name, so it wins over copies held by individual objects.
+    canonical = session_state.get("data_file_paths")
+    if isinstance(canonical, dict) and canonical.get(leaf) is not None:
+        return True, canonical[leaf]
+
+    matches: list[Any] = []
+
+    def walk(node: Any, depth: int = 0) -> None:
+        if depth > 6:
+            return
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == leaf and value is not None:
+                    matches.append(value)
+                walk(value, depth + 1)
+
+    walk(session_state)
+    # Several objects may record the same path; that is not an ambiguity.
+    distinct = {repr(value) for value in matches}
+    if len(distinct) == 1:
+        return True, matches[0]
+    return False, None
 
 
 def _loadable_sort_key(entry: Dict[str, Any]) -> tuple[int, str]:
@@ -871,7 +910,7 @@ def register_generated_candidate_set(
             metadata=artifact_metadata,
             session_state=session_state,
         )
-        artifact_rel_path = _candidate_artifact_rel_path(
+        artifact_rel_path = S3.session_relative(artifact_path) or _candidate_artifact_rel_path(
             candidate_set_id,
             session_state=session_state,
         )
@@ -915,7 +954,9 @@ def register_generated_candidate_set(
             session_state=session_state,
         )
         csv_count = len(csv_rows)
-        csv_rel_path = _candidate_dataset_rel_path(candidate_set_id, session_state=session_state)
+        csv_rel_path = S3.session_relative(csv_path) or _candidate_dataset_rel_path(
+            candidate_set_id, session_state=session_state
+        )
         pointer = session_state.get(session_key)
         if not isinstance(pointer, dict):
             pointer = {
@@ -1177,7 +1218,9 @@ def materialize_candidate_set_dataset(
     }
 
     if top_n is None:
-        csv_rel_path = _candidate_dataset_rel_path(candidate_set_id, session_state=session_state)
+        csv_rel_path = S3.session_relative(csv_path) or _candidate_dataset_rel_path(
+            candidate_set_id, session_state=session_state
+        )
         update_session_object(
             session_state,
             candidate_set_id,

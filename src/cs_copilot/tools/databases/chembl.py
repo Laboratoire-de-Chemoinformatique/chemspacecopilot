@@ -9,13 +9,13 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
 import pandas as pd
 from agno.agent import Agent
 from pydantic import BaseModel, Field
 
+from cs_copilot.execution.llm import require_model
 from cs_copilot.storage import S3, OutputOperation, scoped_artifact_path
 from cs_copilot.tools.chemistry.activity_schema import build_compound_memory_preview
 from cs_copilot.tools.chemistry.clean_dataset import prepare_clean_dataset
@@ -1268,9 +1268,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         keywords: Sequence[str],
         agent: Optional[Agent],
     ) -> Dict[str, _ChemblJudgeDecision]:
-        model = getattr(agent, "model", None)
-        if model is None:
-            raise RuntimeError("No agent model is available for ChEMBL short-keyword judging.")
+        model = require_model(agent, "ChEMBL short-keyword judging")
 
         prompt = self._build_retrieval_judge_prompt(
             judge_items,
@@ -1312,9 +1310,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         keywords: Sequence[str],
         agent: Optional[Agent],
     ) -> Dict[str, _ChemblJudgeDecision]:
-        model = getattr(agent, "model", None)
-        if model is None:
-            raise RuntimeError("No agent model is available for ChEMBL metadata judging.")
+        model = require_model(agent, "ChEMBL metadata judging")
 
         prompt = self._build_metadata_judge_prompt(
             judge_items,
@@ -1419,35 +1415,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
             session_state=session_state,
             workflow_slug="chemical_space",
         )
+        rel_path = S3.first_free_path(rel_path)
         with S3.open(rel_path, "w") as handle:
             filtered_df.to_csv(handle, index=False)
         return S3.path(rel_path)
-
-    def _append_retrieval_filtering_report(
-        self,
-        report_path: str,
-        filtering_summary: Dict[str, Any],
-    ) -> None:
-        section = self._retrieval_filtering_report_appendix(filtering_summary)
-        if section is None:
-            return
-        try:
-            if self._is_remote_or_explicit_path(report_path):
-                try:
-                    with S3.open(report_path, "r") as handle:
-                        existing = handle.read()
-                except Exception:
-                    existing = ""
-                if not isinstance(existing, str):
-                    existing = ""
-                with S3.open(report_path, "w") as handle:
-                    handle.write(existing.rstrip() + "\n\n" + section)
-            else:
-                path = Path(report_path)
-                existing = path.read_text() if path.exists() else ""
-                path.write_text(existing.rstrip() + "\n\n" + section)
-        except Exception as exc:
-            logger.warning("Could not append ChEMBL retrieval filtering report: %s", exc)
 
     def _retrieval_filtering_report_appendix(
         self,
@@ -1485,6 +1456,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
             "were removed during retrieval validation.\n\n"
             f"{self._format_retrieval_filtering_report_section(filtering_summary)}"
         )
+        rel_path = S3.first_free_path(rel_path)
         with S3.open(rel_path, "w") as handle:
             handle.write(report)
         return S3.path(rel_path)
@@ -1619,20 +1591,6 @@ class ChemblToolkit(BaseDatabaseToolkit):
             how="left",
             suffixes=("", "_assay"),
         )
-
-    def _save_chembl_data(self, df: pd.DataFrame, query: str) -> str:
-        """Save ChEMBL data and return the resolved storage path."""
-        filename = f"chembl_{query.replace(' ', '_')}.csv"
-        saved_path = S3.path(filename)
-
-        try:
-            with S3.open(filename, "w") as f:
-                df.to_csv(f, index=False)
-            logger.info(f"Saved ChEMBL data to {saved_path}")
-            return saved_path
-        except Exception as e:
-            logger.error(f"Error saving ChEMBL data: {e}")
-            raise
 
     def _format_success_message(
         self,

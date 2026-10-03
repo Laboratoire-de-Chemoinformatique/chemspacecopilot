@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 from collections import Counter, OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from threading import Lock
 from typing import Any, Mapping, MutableMapping, Sequence
 
@@ -14,16 +15,28 @@ from agno.exceptions import RetryAgentRun
 from agno.team import Team
 from agno.utils.team import get_member_id
 
+from cs_copilot import capabilities as _capabilities
+from cs_copilot.execution.context import is_ad_hoc_run
+from cs_copilot.workflows import RunStatus, TaskRecord, TaskStatus
+
+from .agno_compat import patch_async_function_call_retry
 from .contracts import (
     ROLE_POLICIES,
     ExecutionBudget,
     HandoffEnvelope,
     record_handoff,
 )
+from .execution_binding import BINDING_ATTRIBUTE, ExecutionMode
+
+logger = logging.getLogger(__name__)
+
+# The guard rejects delegations with RetryAgentRun from a pre-hook; the pinned
+# Agno release mishandles that on the async path without this fix.
+patch_async_function_call_retry()
 
 DELEGATE_TOOL_NAME = "delegate_task_to_member"
 DELEGATE_ALL_TOOL_NAME = "delegate_task_to_members"
-COORDINATOR_ROLE = "coordinator"
+COORDINATOR_ROLE = _capabilities.COORDINATOR_ROLE
 _RESERVED_DELEGATE_TOOL_NAMES = frozenset({DELEGATE_TOOL_NAME, DELEGATE_ALL_TOOL_NAME})
 
 _REQUIRED_HANDOFF_FIELDS = frozenset(
@@ -225,7 +238,7 @@ class StructuredDelegationGuard:
             self._reserve(run_key, arguments["member_id"], envelope.task_id, fingerprint)
             try:
                 runtime = _resolve_run_context(team, dependencies)
-                record_handoff(runtime, envelope)
+                envelope = _record_delegation(team, runtime, envelope)
             except Exception:
                 self._release(
                     run_key,
@@ -605,6 +618,107 @@ def _resolve_run_context(
     if dependencies:
         return dependencies.get("run_context")
     return None
+
+
+def _record_delegation(team: Any, runtime: Any, envelope: HandoffEnvelope) -> HandoffEnvelope:
+    """Record one handoff; ad-hoc chat runs get their task created on demand.
+
+    The coordinator invents task ids for free-form chats, so for ad-hoc runs
+    the guard stamps the real run identity onto the envelope, creates the task
+    if it does not exist, records the handoff, and starts the task. In observe
+    mode a ledger failure is logged instead of blocking the delegation.
+    """
+
+    run = getattr(runtime, "run", None)
+    if run is None or not is_ad_hoc_run(run):
+        record_handoff(runtime, envelope)
+        return envelope
+    binding = getattr(team, BINDING_ATTRIBUTE, None)
+    known_artifacts = set(runtime.refresh().artifacts)
+    unknown_inputs = [item for item in envelope.input_artifact_ids if item not in known_artifacts]
+    if unknown_inputs:
+        # The coordinator of a free-form chat often names session objects
+        # (dataset or map ids) here; only registered run artifacts can be
+        # verified inputs of a durable handoff.
+        logger.info(
+            "Dropping unknown input artifacts from ad-hoc handoff %s: %s",
+            envelope.task_id,
+            ", ".join(unknown_inputs),
+        )
+        if binding is not None:
+            binding.note_problem(
+                f"handoff {envelope.task_id}: dropped unknown input artifacts "
+                + ", ".join(unknown_inputs)
+            )
+    envelope = replace(
+        envelope,
+        run_id=run.run_id,
+        workflow_slug=run.workflow_slug,
+        trace_id=run.trace_id,
+        input_artifact_ids=tuple(
+            item for item in envelope.input_artifact_ids if item in known_artifacts
+        ),
+    )
+    try:
+        created = _ensure_ad_hoc_task(runtime, envelope)
+        try:
+            record_handoff(runtime, envelope)
+        except Exception:
+            if created:
+                _skip_task(runtime, envelope.task_id)
+            raise
+        _start_ad_hoc_task(runtime, envelope.task_id)
+        if binding is not None:
+            binding.note_task_started(envelope.receiver_role, envelope.task_id)
+    except Exception as exc:
+        if binding is None or binding.mode is ExecutionMode.ENFORCE:
+            raise
+        logger.warning("Could not record ad-hoc handoff %s: %s", envelope.task_id, exc)
+        binding.note_problem(f"handoff {envelope.task_id}: {exc}")
+    return envelope
+
+
+def _ensure_ad_hoc_task(runtime: Any, envelope: HandoffEnvelope) -> bool:
+    run = runtime.refresh()
+    task = run.tasks.get(envelope.task_id)
+    if task is not None:
+        return False
+    policy = ROLE_POLICIES.get(envelope.receiver_role)
+    runtime.add_task(
+        TaskRecord(
+            task_id=envelope.task_id,
+            role=envelope.receiver_role,
+            profile=policy.profile if policy is not None else "standard",
+            step=(envelope.objective.strip() or envelope.task_id)[:200],
+        )
+    )
+    return True
+
+
+_STARTABLE_AD_HOC_RUN_STATUSES = frozenset(
+    {RunStatus.SUBMITTED, RunStatus.PLANNING, RunStatus.INPUT_REQUIRED}
+)
+
+
+def _start_ad_hoc_task(runtime: Any, task_id: str) -> None:
+    run = runtime.refresh()
+    task = run.tasks[task_id]
+    if task.status not in {TaskStatus.PENDING, TaskStatus.FAILED, TaskStatus.INPUT_REQUIRED}:
+        return
+    if run.status in _STARTABLE_AD_HOC_RUN_STATUSES:
+        # Tasks only run in a running workflow. An ad-hoc run that has not
+        # started yet (an MCP session delegating to the team) starts with its
+        # first delegated task.
+        run = runtime.transition_run(RunStatus.RUNNING, reason=f"task {task_id} delegated")
+    if run.status is RunStatus.RUNNING:
+        runtime.transition_task(task_id, TaskStatus.RUNNING)
+
+
+def _skip_task(runtime: Any, task_id: str) -> None:
+    try:
+        runtime.transition_task(task_id, TaskStatus.SKIPPED)
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not skip unrecorded ad-hoc task %s", task_id, exc_info=True)
 
 
 def _coordinator_run_key(

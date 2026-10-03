@@ -607,10 +607,97 @@ class SynPlannerToolkit(BaseChemistryToolkit):
     # ------------------------------------------------------------------
     # Planning and formatting
     # ------------------------------------------------------------------
+    @staticmethod
+    def _registered_candidates(session_state) -> List[Dict[str, Any]]:
+        """Candidate sets registered in this session, with their stored SMILES."""
+
+        import json as _json
+
+        from cs_copilot.storage import S3
+
+        sets: List[Dict[str, Any]] = []
+        state = session_state if isinstance(session_state, dict) else {}
+        registry = (state.get("session_objects") or {}).get("candidate_sets") or {}
+        for set_id, entry in registry.items():
+            if not isinstance(entry, dict):
+                continue
+            path = entry.get("artifact_path")
+            smiles: List[str] = []
+            if path:
+                try:
+                    with S3.open(path, "r") as handle:
+                        payload = _json.load(handle)
+                except Exception:  # unreadable artifact is not a planning error
+                    payload = None
+                items = payload.get("candidates") if isinstance(payload, dict) else payload
+                for item in items or []:
+                    value = item.get("smiles") if isinstance(item, dict) else item
+                    if isinstance(value, str) and value:
+                        smiles.append(value)
+            sets.append({"id": set_id, "smiles": smiles})
+        return sets
+
+    def _resolve_candidate_reference(self, reference: str, session_state):
+        """Resolve "cset_001" or "cset_001#3" to its stored SMILES."""
+
+        set_id, _, index_text = str(reference).partition("#")
+        set_id = set_id.strip()
+        try:
+            index = int(index_text) if index_text.strip() else 0
+        except ValueError as exc:
+            raise ValueError(
+                f"candidate_reference index must be an integer, got {index_text!r}"
+            ) from exc
+
+        sets = self._registered_candidates(session_state)
+        available = ", ".join(f"{s['id']} ({len(s['smiles'])} candidates)" for s in sets)
+        match = next((s for s in sets if s["id"] == set_id), None)
+        if match is None:
+            raise ValueError(
+                f"No candidate set {set_id!r} in this session. Available: {available or 'none'}"
+            )
+        if not match["smiles"]:
+            raise ValueError(f"Candidate set {set_id!r} has no readable stored candidates.")
+        if not 0 <= index < len(match["smiles"]):
+            raise ValueError(
+                f"Candidate index {index} is outside {set_id!r} "
+                f"(0..{len(match['smiles']) - 1})."
+            )
+        return match["smiles"][index], {
+            "candidate_set_id": set_id,
+            "candidate_index": index,
+            "matched": True,
+            "source": "registered candidate set",
+        }
+
+    def _candidate_match(self, smiles: str, session_state) -> Dict[str, Any]:
+        """Whether a retyped target matches a registered candidate."""
+
+        sets = self._registered_candidates(session_state)
+        checked = 0
+        for entry in sets:
+            for index, stored in enumerate(entry["smiles"]):
+                checked += 1
+                if self._canonicalize_smiles(stored) == self._canonicalize_smiles(smiles):
+                    return {
+                        "candidate_set_id": entry["id"],
+                        "candidate_index": index,
+                        "matched": True,
+                        "source": "retyped SMILES matched a registered candidate",
+                    }
+        if not checked:
+            return {}
+        return {
+            "matched": False,
+            "candidates_checked": checked,
+            "source": "retyped SMILES; not among registered candidates",
+        }
+
     def plan_synthesis(
         self,
-        query: str,
+        query: str = "",
         *,
+        candidate_reference: Optional[str] = None,
         top_k: Optional[int] = None,
         llm_smiles_guess: Optional[str] = None,
         agent: Optional[Agent] = None,
@@ -619,15 +706,41 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         """Run the SynPlanner retrosynthesis engine for the given query.
 
         Args:
-            query: SMILES string or molecule name
+            query: SMILES string or molecule name. Prefer candidate_reference
+                when the target is a generated candidate: retyping a long
+                SMILES can silently alter the structure.
+            candidate_reference: Registered candidate to plan for, instead of a
+                retyped SMILES. Either a candidate-set id ("cset_001", meaning
+                its first candidate) or an id with a zero-based index
+                ("cset_001#3"). The SMILES is read from the stored candidate
+                set, so it always matches the registered structure.
             top_k: Number of top routes to return
             llm_smiles_guess: Optional SMILES guess from LLM
             agent: Optional agent instance for storing PNG paths in session state
             session_state: Optional injected session state shared by the team
         """
 
-        info = self.identify_input(query, llm_smiles_guess=llm_smiles_guess)
-        smiles = info["smiles"]
+        candidate_provenance: Dict[str, Any] = {}
+        if candidate_reference:
+            resolved, candidate_provenance = self._resolve_candidate_reference(
+                candidate_reference, session_state
+            )
+            info = {"smiles": resolved, "source": "candidate_reference"}
+            smiles = resolved
+        else:
+            info = self.identify_input(query, llm_smiles_guess=llm_smiles_guess)
+            smiles = info["smiles"]
+            candidate_provenance = self._candidate_match(smiles, session_state)
+            if candidate_provenance.get("matched") is False:
+                # A target that is not the registered candidate is still planned,
+                # because planning an arbitrary molecule is legitimate. It must
+                # not be reported as if it were that candidate, though: a dropped
+                # fragment yields a valid but different compound.
+                logger.warning(
+                    "plan_synthesis target is not among the %d registered candidates; "
+                    "pass candidate_reference to plan a stored candidate exactly.",
+                    candidate_provenance.get("candidates_checked", 0),
+                )
 
         # Load SynPlanner components if not already loaded
         self._load_synplanner_components()
@@ -679,9 +792,10 @@ class SynPlannerToolkit(BaseChemistryToolkit):
 
         # Store full plan with visualizations for later retrieval
         full_plan = {
-            "query": info["query"],
+            "query": info.get("query", query),
             "source": info["source"],
             "smiles": smiles,
+            "candidate_provenance": candidate_provenance,
             "top_k": request_top_k,
             "routes": routes,
             "raw": raw_routes,
@@ -696,9 +810,10 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         # Return lightweight plan without large visualization data to prevent context overflow
         # Visualizations are still available via get_route_visualizations()
         plan = {
-            "query": info["query"],
+            "query": info.get("query", query),
             "source": info["source"],
             "smiles": smiles,
+            "candidate_provenance": candidate_provenance,
             "top_k": request_top_k,
             "routes": routes,
             "descriptors": descriptors,
@@ -984,6 +1099,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
         )
         try:
             payload = {key: value for key, value in report_plan.items() if key != "plan_path"}
+            rel_path = S3.first_free_path(rel_path)
             with S3.open(rel_path, "w") as handle:
                 json.dump(payload, handle, indent=2, sort_keys=True, default=str)
             return S3.path(rel_path)
@@ -1013,6 +1129,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                 session_state=session_state,
             )
             try:
+                rel_path = S3.first_free_path(rel_path)
                 with S3.open(rel_path, "w") as handle:
                     json.dump(route, handle, indent=2, sort_keys=True, default=str)
                 route["route_json_path"] = S3.path(rel_path)
@@ -1465,6 +1582,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                     )
                     try:
                         svg_bytes = svg_string.encode("utf-8")
+                        svg_path = S3.first_free_path(svg_path)
                         with S3.open(svg_path, "wb") as f:
                             f.write(svg_bytes)
                         svg_s3_path = S3.path(svg_path)
@@ -1486,6 +1604,7 @@ class SynPlannerToolkit(BaseChemistryToolkit):
                         session_state=session_state,
                     )
 
+                    png_path = S3.first_free_path(png_path)
                     if self._convert_svg_to_png(svg_string, png_path):
                         # Get the full S3 path for storage in session state
                         png_s3_path = S3.path(png_path)

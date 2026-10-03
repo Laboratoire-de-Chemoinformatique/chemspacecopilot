@@ -35,14 +35,6 @@ SPECS: List[ToolSpec] = [
         ),
         write_scope="session",
         result_artifact_type="gtm_plan",
-        roles=(
-            "supervisor",
-            "gtm_agent",
-            "chemoinformatician",
-            "molecular_designer",
-            "peptide_designer",
-            "single_agent",
-        ),
     ),
     ToolSpec(
         mcp_name="workflow_list",
@@ -92,7 +84,6 @@ SPECS: List[ToolSpec] = [
         ),
         destructive=True,
         risk="high",
-        roles=("supervisor",),
     ),
     ToolSpec(
         mcp_name="workflow_add_task",

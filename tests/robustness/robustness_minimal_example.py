@@ -119,6 +119,17 @@ def run_timeout(seconds: int):
         signal.signal(signal.SIGALRM, previous_handler)
 
 
+def response_text_of(content: Any) -> str:
+    """Render model content as text without truth-testing it.
+
+    A team coordinator can return a pointer-backed DataFrame as its ``content``,
+    and truth-testing one raises ``ValueError``. Losing the run to that would
+    discard an execution the agent actually completed, so only ``None`` counts
+    as absent; an empty string or frame still renders through ``str``.
+    """
+    return "" if content is None else str(content)
+
+
 @dataclass
 class TestConfig:
     """Configuration for a single test."""
@@ -1031,7 +1042,7 @@ class RobustnessRunner:
             # inspection. Memory-disabled Agno systems have no persisted session,
             # but their in-memory ``session_state`` remains authoritative.
             telemetry = normalize_agno_output(result, pricing=self.config.pricing)
-            response_text = str(result.content) if result.content else ""
+            response_text = response_text_of(result.content)
             session_state_snapshot = self._snapshot_session_state(agent)
             session_state = session_state_snapshot
 

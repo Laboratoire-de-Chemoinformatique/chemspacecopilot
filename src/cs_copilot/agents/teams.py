@@ -31,6 +31,7 @@ from .delegation import (
     StructuredDelegationGuard,
     StructuredHandoffTeam,
 )
+from .execution_binding import ExecutionMode, attach_execution, execution_mode_from_env
 from .factories import AgentCreationError
 from .instructions import AGENT_TEAM_INSTRUCTIONS
 from .registry import create_agent
@@ -46,6 +47,7 @@ def get_cs_copilot_agent_team(
     db_file: str = None,
     enable_mlflow_tracking: bool = True,
     run_context: Any = None,
+    execution_mode: ExecutionMode | str | None = None,
 ) -> Team:
     """
     Create a coordinated team of cs_copilot agents using Agno.
@@ -62,7 +64,12 @@ def get_cs_copilot_agent_team(
         enable_mlflow_tracking: Enable MLflow tracking for agents (default: True).
                                Set to False to disable tracking.
         run_context: Optional v2 workflow ``RunContext`` used to record validated
-                     specialist handoffs.
+                     specialist handoffs. When it is a real ``RunContext``, the
+                     team's tool calls are routed through the execution kernel
+                     immediately; otherwise ``ensure_agno_session_run`` attaches
+                     the chat's run before the first message.
+        execution_mode: ``off``, ``observe``, or ``enforce``. Defaults to
+                     ``CS_COPILOT_AGNO_EXECUTION`` (``enforce`` when unset).
 
     Returns:
         Team: Configured Cs_copilot team
@@ -256,5 +263,13 @@ def get_cs_copilot_agent_team(
         stream_member_events=True,  # stream events from members (Team API)
         show_members_responses=show_members_responses,
     )
+    team.execution_mode = execution_mode_from_env(execution_mode)
+    if (
+        team.execution_mode is not ExecutionMode.OFF
+        and hasattr(run_context, "bind_session_state")
+        and hasattr(run_context, "layout")
+    ):
+        run_context.bind_session_state(shared_session_state)
+        attach_execution(team, run_context=run_context, mode=team.execution_mode)
     logger.info("Successfully created Cs_copilot Agent Team")
     return team
