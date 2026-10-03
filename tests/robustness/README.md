@@ -112,7 +112,7 @@ For `--system both`, a cross-arm comparison is also written to
 
 ## Manuscript reliability benchmark
 
-For the small reviewer-response study, follow the
+For the small controlled reliability study, follow the
 [manuscript revision protocol](../../docs/testing/manuscript-revision.md).
 It defines the 48-execution controlled comparison plus 12 live case/stage
 executions, required scientific artifacts, and interpretation limits.
@@ -183,7 +183,7 @@ independent adjudicator and retain both original scores.
 
 ## Multi-agent vs single-agent comparison (paper ablation)
 
-The `--system` flag turns the runner into an A/B harness for the reviewer-requested
+The `--system` flag turns the runner into an A/B harness for the
 multi-agent-vs-single-agent comparison. It is a **controlled ablation**: both arms
 hold the **model, tools, task set, and harness constant** and vary **only the
 agentic structure**.
