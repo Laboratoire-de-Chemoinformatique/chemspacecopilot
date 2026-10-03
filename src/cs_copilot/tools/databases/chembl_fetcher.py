@@ -15,6 +15,10 @@ from .base import DatabaseError
 
 logger = logging.getLogger(__name__)
 
+# Bound how long a dead database host can stall toolkit start-up, where
+# auto-detection checks the server before choosing it.
+CONNECT_TIMEOUT_S = 5
+
 
 class ChemblDataFetcher(ABC):
     """Abstract strategy interface for ChEMBL data backends."""
@@ -223,7 +227,12 @@ class SqlChemblFetcher(ChemblDataFetcher):
             password=password,
             database=database,
         )
-        engine = create_engine(url, pool_pre_ping=True, pool_size=5)
+        engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            pool_size=5,
+            connect_args={"connect_timeout": CONNECT_TIMEOUT_S},
+        )
         logger.info(f"Created MySQL engine for ChEMBL: {host}:{port}/{database}")
         return cls(engine, backend_label="MySQL")
 
@@ -259,7 +268,12 @@ class SqlChemblFetcher(ChemblDataFetcher):
             password=password,
             database=database,
         )
-        engine = create_engine(url, pool_pre_ping=True, pool_size=5)
+        engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            pool_size=5,
+            connect_args={"connect_timeout": CONNECT_TIMEOUT_S},
+        )
         logger.info(f"Created PostgreSQL engine for ChEMBL: {host}:{port}/{database}")
         return cls(engine, backend_label="PostgreSQL")
 
@@ -330,7 +344,7 @@ class SqlChemblFetcher(ChemblDataFetcher):
             sql += " AND td.organism LIKE :organism_pattern"
             params["organism_pattern"] = f"%{organism}%"
 
-        with self._engine.connect() as conn:
+        with self._connect() as conn:
             if self._backend_label == "SQLite" and regex_pattern is not None:
                 self._ensure_sqlite_regexp(conn)
             result = conn.execute(text(sql), params)
@@ -371,9 +385,26 @@ class SqlChemblFetcher(ChemblDataFetcher):
             sql += f" AND ass.assay_type IN ({type_placeholders})"
             params.update({f"at_{i}": code for i, code in enumerate(assay_type_codes)})
 
-        with self._engine.connect() as conn:
+        with self._connect() as conn:
             result = conn.execute(text(sql), params)
             return [dict(row._mapping) for row in result]
+
+    def _connect(self):
+        """Open a connection, explaining a server that cannot be reached."""
+        from sqlalchemy.exc import DBAPIError
+
+        try:
+            return self._engine.connect()
+        except DBAPIError as e:
+            reason = str(e).splitlines()[0]
+            # The backend is chosen once per session, so retrieval does not
+            # switch to the REST API here: one dataset would then mix two
+            # ChEMBL releases.
+            raise DatabaseError(
+                f"The ChEMBL {self._backend_label} database could not be reached: {reason}. "
+                "Fix its connection settings, or remove them to use the ChEMBL REST API, "
+                "then start a new session."
+            ) from e
 
     def connect(self):
         try:

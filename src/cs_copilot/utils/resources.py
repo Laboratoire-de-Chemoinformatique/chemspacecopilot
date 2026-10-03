@@ -4,8 +4,10 @@
 Runtime resource detection for cs_copilot.
 
 Probes the local environment (GPU, CPU, RAM, databases, cached models) and
-returns a structured profile dict.  All checks are local -- no network I/O,
-no model loading -- so the function is safe to call at startup (<100 ms).
+returns a structured profile dict.  No model loading and no network I/O,
+except that a configured ChEMBL MySQL/PostgreSQL server is asked for a
+connection (bounded by ``CONNECT_TIMEOUT_S``), so the profile never reports a
+database that would refuse every query.
 """
 
 import logging
@@ -91,21 +93,38 @@ def _detect_ram() -> Dict[str, Optional[float]]:
         return {"total_gb": None, "available_gb": None}
 
 
-def _optional_driver_available(module_name: str) -> bool:
-    """Return True when an optional database driver can be imported."""
-    import importlib.util
+def _sql_backend_problem(backend: str) -> Optional[str]:
+    """Return why a configured ChEMBL SQL server cannot be used, or None if it answers."""
+    from cs_copilot.tools.databases.base import DatabaseError
+    from cs_copilot.tools.databases.chembl_fetcher import SqlChemblFetcher
 
-    return importlib.util.find_spec(module_name) is not None
+    create = (
+        SqlChemblFetcher.from_postgres_env
+        if backend == "postgresql"
+        else SqlChemblFetcher.from_mysql_env
+    )
+    try:
+        fetcher = create()
+    except ImportError as exc:
+        return str(exc)
+    try:
+        fetcher.connect()
+    except DatabaseError as exc:
+        return str(exc).splitlines()[0]
+    finally:
+        fetcher.close()
+    return None
 
 
 def _detect_chembl_backend() -> Dict[str, str]:
-    """Detect configured ChEMBL backend from environment variables.
+    """Detect the ChEMBL backend retrieval will actually use.
 
-    Mirrors the priority cascade in chembl.py _resolve_backend:
-    SQLite > PostgreSQL > MySQL > REST API. When an optional SQL driver is
-    missing, the next fallback backend is reported instead.
+    Mirrors the auto-detection cascade in ``ChemblToolkit._create_auto_fetcher``:
+    SQLite > PostgreSQL > MySQL > REST API. A configured server whose driver is
+    missing, or that is down or rejects the login, is skipped, and the next
+    backend is reported instead.
     """
-    missing_driver_notes: List[str] = []
+    problems: List[str] = []
 
     if os.getenv("CHEMBL_SQLITE_PATH"):
         return {
@@ -113,24 +132,26 @@ def _detect_chembl_backend() -> Dict[str, str]:
             "description": "Local SQLite ChEMBL database",
         }
     if os.getenv("CHEMBL_PG_HOST"):
-        if _optional_driver_available("psycopg2"):
+        problem = _sql_backend_problem("postgresql")
+        if problem is None:
             return {
                 "backend": "postgresql",
                 "description": "Local PostgreSQL ChEMBL database",
             }
-        missing_driver_notes.append("PostgreSQL configured but psycopg2 is not installed")
+        problems.append(f"PostgreSQL configured but unusable: {problem}")
     if os.getenv("CHEMBL_MYSQL_HOST"):
-        if _optional_driver_available("pymysql"):
+        problem = _sql_backend_problem("mysql")
+        if problem is None:
             return {
                 "backend": "mysql",
                 "description": "Local MySQL ChEMBL database",
             }
-        missing_driver_notes.append("MySQL configured but pymysql is not installed")
+        problems.append(f"MySQL configured but unusable: {problem}")
 
-    if missing_driver_notes:
+    if problems:
         return {
             "backend": "rest",
-            "description": "ChEMBL REST API (" + "; ".join(missing_driver_notes) + ")",
+            "description": "ChEMBL REST API (" + "; ".join(problems) + ")",
         }
 
     return {
@@ -217,8 +238,8 @@ def _build_recommendations(profile: Dict[str, Any]) -> List[str]:
     chembl = profile["chembl_backend"]
     if chembl["backend"] == "rest":
         recs.append(
-            "No local ChEMBL database configured -- data download will use the "
-            "REST API (functional but slower for large queries)."
+            f"{chembl['description']} will be used for data download "
+            "(functional but slower for large queries)."
         )
     else:
         recs.append(

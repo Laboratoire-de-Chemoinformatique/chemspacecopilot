@@ -155,7 +155,7 @@ class TestDetectChemblBackend:
     def test_postgresql(self):
         env = {"CHEMBL_PG_HOST": "localhost"}
         with patch.dict("os.environ", env, clear=False):
-            with patch("cs_copilot.utils.resources._optional_driver_available", return_value=True):
+            with patch("cs_copilot.utils.resources._sql_backend_problem", return_value=None):
                 with patch.dict("os.environ", {"CHEMBL_SQLITE_PATH": ""}, clear=False):
                     result = _detect_chembl_backend()
         assert result["backend"] == "postgresql"
@@ -163,13 +163,13 @@ class TestDetectChemblBackend:
     def test_postgresql_falls_back_to_mysql_when_pg_driver_missing(self):
         env = {"CHEMBL_PG_HOST": "localhost", "CHEMBL_MYSQL_HOST": "localhost"}
 
-        def has_driver(module_name: str) -> bool:
-            return module_name == "pymysql"
+        def problem(backend: str):
+            return "psycopg2 is required" if backend == "postgresql" else None
 
         with patch.dict("os.environ", env, clear=False):
             with patch(
-                "cs_copilot.utils.resources._optional_driver_available",
-                side_effect=has_driver,
+                "cs_copilot.utils.resources._sql_backend_problem",
+                side_effect=problem,
             ):
                 with patch.dict("os.environ", {"CHEMBL_SQLITE_PATH": ""}, clear=False):
                     result = _detect_chembl_backend()
@@ -182,7 +182,7 @@ class TestDetectChemblBackend:
             {**env, "CHEMBL_SQLITE_PATH": "", "CHEMBL_PG_HOST": ""},
             clear=False,
         ):
-            with patch("cs_copilot.utils.resources._optional_driver_available", return_value=True):
+            with patch("cs_copilot.utils.resources._sql_backend_problem", return_value=None):
                 result = _detect_chembl_backend()
         assert result["backend"] == "mysql"
 
@@ -193,10 +193,35 @@ class TestDetectChemblBackend:
             {**env, "CHEMBL_SQLITE_PATH": "", "CHEMBL_PG_HOST": ""},
             clear=False,
         ):
-            with patch("cs_copilot.utils.resources._optional_driver_available", return_value=False):
+            with patch(
+                "cs_copilot.utils.resources._sql_backend_problem",
+                return_value="pymysql is required for MySQL backend",
+            ):
                 result = _detect_chembl_backend()
         assert result["backend"] == "rest"
         assert "pymysql" in result["description"]
+
+    def test_mysql_that_rejects_the_login_is_not_reported_as_usable(self):
+        from cs_copilot.tools.databases.base import DatabaseError
+        from cs_copilot.tools.databases.chembl_fetcher import SqlChemblFetcher
+
+        fetcher = MagicMock(spec=SqlChemblFetcher)
+        fetcher.connect.side_effect = DatabaseError(
+            "ChEMBL MySQL connection failed: (1045, \"Access denied for user 'chembl'\")\n"
+            "(Background on this error at: https://sqlalche.me/e/20/e3q8)"
+        )
+        with patch.dict(
+            "os.environ",
+            {"CHEMBL_MYSQL_HOST": "localhost", "CHEMBL_SQLITE_PATH": "", "CHEMBL_PG_HOST": ""},
+            clear=False,
+        ):
+            with patch.object(SqlChemblFetcher, "from_mysql_env", return_value=fetcher):
+                result = _detect_chembl_backend()
+
+        assert result["backend"] == "rest"
+        assert "Access denied" in result["description"]
+        assert "sqlalche.me" not in result["description"]
+        fetcher.close.assert_called_once()
 
     def test_rest_fallback(self):
         with patch.dict(
