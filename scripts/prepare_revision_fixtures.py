@@ -67,7 +67,7 @@ def build(args) -> dict:
             "curation_provenance_path": str(args.provenance.resolve()),
         },
         "revision_context": {
-            "study_type": "prospective reviewer revision; not historical manuscript replay",
+            "study_type": "prospective measurement; not a replay of historical runs",
             "dataset": "ChEMBL37 human EPHX2/CHEMBL2409; curated epoxide-hydrolase IC50",
             "active_rule": "median IC50 < 1000 nM",
             "inactive_rule": "median IC50 >= 10000 nM",
