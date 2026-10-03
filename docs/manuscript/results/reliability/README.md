@@ -205,3 +205,81 @@ first v3 attempt whose generated plan omitted the vendored dependency path, so
 SynPlanner could not be imported and every route search failed for a reason
 unrelated to the measurement. It is kept rather than deleted and forms no part
 of any denominator.
+
+---
+
+# Confirming the corrected check (v4)
+
+The v3 analysis identified one check as the dominant remaining cause of failure
+and predicted that correcting it would recover nine runs. That prediction was
+testable, so the frozen tier was executed a third time on 2026-10-02 against
+commit `f540b9f`, under an independently verified plan (`v4/study_plan.json`).
+Protocol, model, inputs, seeds and counterbalanced order are unchanged, and the
+v2 and v3 plans remain byte-identical and still verify.
+
+Only the frozen tier was re-run. The corrected check cannot affect the live
+tier, whose sEH analysis already passed 3/3, so re-measuring it would have cost
+an hour for no new information. Results are reported per tier rather than mixed
+into a single denominator across runtimes.
+
+| Frozen tier, 48 runs each | v2 | v3 | v4 |
+|---|---:|---:|---:|
+| Task fulfilment | 31/48 = 64.6% | 34/48 = 70.8% | **43/48 = 89.6%** |
+| 95% Wilson CI | 49.5–77.0% | 56.1–82.2% | 77.8–95.5% |
+| Completed without an agent exception | 81.2% | 100% | 100% |
+| Failed tool calls | 16.6% | 10.1% | 10.1% |
+| Telemetry coverage | 39/48 | 48/48 | 48/48 |
+
+Per case, both arms pooled:
+
+| Case | v2 | v3 | v4 |
+|---|---:|---:|---:|
+| 1 sEH analysis | 0/12 | 3/12 | **11/12** |
+| 2 generation | 9/12 | 7/12 | 8/12 |
+| 3 retrosynthesis | 11/12 | 12/12 | 12/12 |
+| 4 peptide design | 11/12 | 12/12 | 12/12 |
+
+Case 1 moved as predicted. The v4 interval no longer overlaps the v2 interval.
+
+## Architecture
+
+| Frozen, n = 24 per arm | team | single agent |
+|---|---:|---:|
+| v2 | 15/24 | 16/24 |
+| v3 | 18/24 | 16/24 |
+| v4 | **24/24** | 19/24 |
+
+In v4 the team arm strictly dominates: of 24 paired cells, 19 both succeeded,
+5 team-only, and **no cell where the flat agent succeeded and the team did
+not**. An exact two-sided sign test on five concordant discordant pairs gives
+**p = 0.0625** -- not significant, and the first run in which the direction is
+consistent.
+
+The gap is almost entirely one case. On generation the team scores 6/6 against
+the flat agent's 2/6, and that is the task whose tool has poor yield: a call
+returns one or two valid structures against a required ten. The specialist
+agent persists and accumulates across calls; the flat agent does not. Where a
+multi-agent advantage appears here, it is on recovery from a weak tool rather
+than on the tasks that succeed first time.
+
+This should still be read as exploratory. The direction reversed across v2, v3
+and v4, no provider seed exists, and 24 paired cells cannot separate a real
+effect of this size from run-to-run variation. The durable finding is the cost:
+a median **+71 s** and **+134,000 tokens** per matched cell.
+
+## What still fails
+
+All five remaining failures are in the flat arm. Four are the generation
+yield mismatch, which was deliberately left unfixed and is the only remaining
+failure mode attributable to the chemistry rather than to instrumentation. The
+fifth is one sEH analysis run that failed broadly rather than on a single
+check.
+
+## Reading these three versions together
+
+v2 measures the software as the manuscript describes it. v3 and v4 measure
+corrected software, and the correction between them was to the measuring
+instrument, not to the agents. The honest summary is that the v2 figure
+understated the software twice over: once through a dependency defect that
+aborted completed runs, and once through a check that could not pass in the
+configuration being tested.
