@@ -31,20 +31,6 @@ model:
   #   input_per_million: 0.0
   #   output_per_million: 0.0
 
-metrics:
-  # Legacy prompt-robustness score is retained as a descriptive secondary metric.
-  # Publication-facing pass/fail uses each case's objective validator.
-  weights:
-    data_similarity: 0.4
-    semantic_similarity: 0.3
-    process_consistency: 0.2
-    visual_similarity: 0.1
-  thresholds:
-    excellent: 0.90
-    good: 0.80
-    acceptable: 0.70
-  pass_threshold: 0.75
-
 tests:
   live_seh_workflow:
     enabled: true
