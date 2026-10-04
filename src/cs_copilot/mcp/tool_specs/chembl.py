@@ -35,6 +35,9 @@ SPECS: List[ToolSpec] = [
             "Low-level execution tool that fetches ChEMBL bioactivity data for "
             "one or more keyword targets. For vague user requests, call "
             "chembl_prepare_retrieval first and fetch only after can_proceed=true. "
+            "Before each fetch, show the user the exact keywords and filters. "
+            "If their relevance is uncertain, ask the user for clarification and "
+            "wait for an answer before fetching. "
             "MCP LLM policy controls LLM-as-judge behavior: external creates "
             "client-side judge tasks, agno-model uses the configured model "
             "in-process, and disabled skips LLM judging."
@@ -75,7 +78,9 @@ SPECS: List[ToolSpec] = [
         method="convert_to_chembl_query",
         summary=(
             "Rewrite a free-form natural language query into the canonical "
-            "ChEMBL keyword form accepted by chembl_fetch_compounds."
+            "ChEMBL keyword form accepted by chembl_fetch_compounds. Show the "
+            "generated keywords to the user before searching; ask for help and "
+            "wait if any keyword's relevance is uncertain."
         ),
         read_only=True,
     ),
