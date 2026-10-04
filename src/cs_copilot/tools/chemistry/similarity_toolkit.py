@@ -88,7 +88,7 @@ class ChemicalSimilarityToolkit(BaseChemistryToolkit):
                 have similarity 1; zero embeddings are invalid for cosine.
 
         Returns:
-            matrix[i][j], metric, descriptor_kind, and is_distance. Euclidean
+            ``matrix[i][j]``, metric, descriptor_kind, and is_distance. Euclidean
             is a distance (lower is closer); Tanimoto and cosine are similarities
             (higher is closer). Cosine ranges from -1 to 1. Use bounded blocks
             and save large matrices as artifacts rather than inlining them.
