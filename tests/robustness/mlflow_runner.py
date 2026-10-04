@@ -93,7 +93,6 @@ class MLflowRobustnessRunner(RobustnessRunner):
                     "model_id": self.config.model_id,
                     "debug_mode": self.config.debug_mode,
                     "s3_session_isolation": self.config.s3_session_isolation,
-                    "pass_threshold": self.config.pass_threshold,
                     "system_under_test": self.system,
                 }
             )
@@ -240,33 +239,17 @@ class MLflowRobustnessRunner(RobustnessRunner):
         """
         import mlflow
 
-        total_tests = len(results)
-
-        # Handle both successful results and error results
-        passed_tests = sum(
-            1 for r in results.values() if isinstance(r, dict) and r.get("passed", False)
-        )
-        failed_tests = total_tests - passed_tests
-
-        # Calculate average robustness score only for successful tests
-        robustness_scores = [
-            r.get("robustness_score", 0)
-            for r in results.values()
-            if isinstance(r, dict) and "robustness_score" in r
-        ]
-        avg_robustness_score = (
-            sum(robustness_scores) / len(robustness_scores) if robustness_scores else 0.0
-        )
-
-        mlflow.log_metrics(
-            {
-                "total_tests": float(total_tests),
-                "passed_tests": float(passed_tests),
-                "failed_tests": float(failed_tests),
-                "pass_rate": float(passed_tests / total_tests if total_tests > 0 else 0),
-                "avg_robustness_score": avg_robustness_score,
-            }
-        )
+        metrics = {
+            "total_tests": float(results["total_tests"]),
+            "passed_tests": float(results["passed"]),
+            "failed_tests": float(results["failed"]),
+            "pass_rate": float(results["pass_rate"]),
+        }
+        if "average_robustness_score" in results:
+            metrics["avg_robustness_score"] = float(results["average_robustness_score"])
+        if "reliability" in results:
+            metrics["task_success_rate"] = float(results["reliability"]["success_rate"])
+        mlflow.log_metrics(metrics)
 
     def _log_test_metrics(self, test_name: str, result: Dict[str, Any]):
         """Log test-level metrics.
@@ -295,6 +278,8 @@ class MLflowRobustnessRunner(RobustnessRunner):
 
         if "passed" in result:
             metrics["passed"] = 1.0 if result["passed"] else 0.0
+        if "task_success_rate" in result:
+            metrics["task_success_rate"] = float(result["task_success_rate"])
 
         if "execution_time" in result:
             metrics["execution_time_seconds"] = float(result["execution_time"])

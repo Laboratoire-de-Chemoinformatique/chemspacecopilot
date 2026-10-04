@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from .models import RELIABILITY_SCHEMA_VERSION
 
-SYSTEM_COMPARISON_SCHEMA_VERSION = "1.0"
+SYSTEM_COMPARISON_SCHEMA_VERSION = "1.1"
 NON_EVALUABLE_EXECUTION_STATUSES = frozenset({"fixture_error", "prerequisite_error"})
 
 
@@ -326,8 +326,6 @@ def _comparison_deltas(
 
 def build_system_comparison(
     records_by_arm: Mapping[str, Sequence[Mapping[str, Any]]],
-    *,
-    robustness_summaries: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     """Build a paired, publication-facing comparison of agentic architectures."""
     arms = list(records_by_arm)
@@ -422,35 +420,6 @@ def build_system_comparison(
         else:
             paired_outcomes["both_failed"] += 1
 
-    secondary: Dict[str, Any] = {"per_arm": {}, "per_test": {}}
-    if robustness_summaries:
-        secondary["per_arm"] = {
-            arm: {
-                "tests": summary.get("total_tests", 0),
-                "passed": summary.get("passed", 0),
-                "pass_rate": summary.get("pass_rate", 0),
-                "average_robustness_score": summary.get("average_robustness_score", 0),
-                "overall_rating": summary.get("overall_rating", "N/A"),
-            }
-            for arm, summary in robustness_summaries.items()
-        }
-        test_names = sorted(
-            {
-                test_name
-                for summary in robustness_summaries.values()
-                for test_name in (summary.get("results") or {})
-            }
-        )
-        secondary["per_test"] = {
-            test_name: {
-                arm: (
-                    (robustness_summaries[arm].get("results") or {}).get(test_name, {}) or {}
-                ).get("robustness_score")
-                for arm in arms
-            }
-            for test_name in test_names
-        }
-
     return {
         "schema_version": SYSTEM_COMPARISON_SCHEMA_VERSION,
         "arms": arms,
@@ -472,7 +441,6 @@ def build_system_comparison(
             ),
         },
         "per_case": per_case,
-        "secondary_robustness": secondary,
         "warnings": warnings,
     }
 
@@ -715,8 +683,8 @@ def _markdown_system_comparison(comparison: Mapping[str, Any]) -> str:
         "is the agentic structure: coordinator plus specialists versus one flat "
         "tool-calling agent.",
         "",
-        "Objective task success is the primary outcome. Prompt-robustness similarity "
-        "is reported separately as a secondary descriptive metric.",
+        "Objective task success is the primary outcome, accompanied by tool failures "
+        "and runtime, token, and cost measurements.",
         "",
         "Runs blocked before either architecture executes because a common fixture or "
         "prerequisite is unavailable are listed as not evaluated and excluded from "
@@ -833,26 +801,6 @@ def _markdown_system_comparison(comparison: Mapping[str, Any]) -> str:
                 f"{_format_distribution(summary, 'wall_time_seconds')} | "
                 f"{_format_distribution(summary, 'total_tokens', digits=0)} | "
                 f"{_format_distribution(summary, 'tool_calls_per_run')} |"
-            )
-
-    secondary = comparison.get("secondary_robustness") or {}
-    if secondary.get("per_arm"):
-        lines.extend(
-            [
-                "",
-                "## Secondary prompt-robustness results",
-                "",
-                "| Arm | Tests | Passed | Pass rate | Average robustness score | Rating |",
-                "|---|---:|---:|---:|---:|---|",
-            ]
-        )
-        for arm in arms:
-            summary = secondary["per_arm"][arm]
-            lines.append(
-                f"| {arm} | {summary.get('tests', 0)} | {summary.get('passed', 0)} | "
-                f"{summary.get('pass_rate', 0):.1%} | "
-                f"{summary.get('average_robustness_score', 0):.3f} | "
-                f"{summary.get('overall_rating', 'N/A')} |"
             )
 
     for arm in arms:
@@ -1008,15 +956,10 @@ def save_reliability_bundle(
 def save_system_comparison(
     output_dir: Path,
     records_by_arm: Mapping[str, Sequence[Mapping[str, Any]]],
-    *,
-    robustness_summaries: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> Path:
     """Write paired JSON and manuscript-ready Markdown comparison artifacts."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    comparison = build_system_comparison(
-        records_by_arm,
-        robustness_summaries=robustness_summaries,
-    )
+    comparison = build_system_comparison(records_by_arm)
     (output_dir / "comparison.json").write_text(
         json.dumps(comparison, indent=2, sort_keys=True, default=str),
         encoding="utf-8",

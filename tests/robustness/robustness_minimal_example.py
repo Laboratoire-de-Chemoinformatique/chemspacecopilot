@@ -179,7 +179,7 @@ class RobustnessConfig:
     model_id: str = "deepseek-chat"
     api_key_env: str = "DEEPSEEK_API_KEY"
 
-    # Metrics settings
+    # Legacy prompt-robustness settings (unused by reliability tests)
     weights: Dict[str, float] = field(default_factory=dict)
     thresholds: Dict[str, float] = field(default_factory=dict)
     pass_threshold: float = 0.75
@@ -1244,7 +1244,13 @@ class RobustnessRunner:
 
         return comparison_results
 
-    def _save_artifacts(self, test_name: str, outputs: List[Dict], comparison: Dict, score: float):
+    def _save_artifacts(
+        self,
+        test_name: str,
+        outputs: List[Dict],
+        comparison: Optional[Dict] = None,
+        score: Optional[float] = None,
+    ):
         """Save test artifacts for later analysis."""
         if not self.config.save_artifacts:
             return
@@ -1292,13 +1298,12 @@ class RobustnessRunner:
             }
             (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2, default=str))
 
-        # Save comparison results
-        (artifacts_dir / "comparison.json").write_text(
-            json.dumps(comparison, indent=2, default=str)
-        )
-
-        # Save score
-        (artifacts_dir / "score.txt").write_text(f"{score:.4f}")
+        if comparison is not None:
+            (artifacts_dir / "comparison.json").write_text(
+                json.dumps(comparison, indent=2, default=str)
+            )
+        if score is not None:
+            (artifacts_dir / "score.txt").write_text(f"{score:.4f}")
 
         logger.info(f"Artifacts saved to {artifacts_dir}")
 
@@ -1512,18 +1517,24 @@ class RobustnessRunner:
         reliability_records = [self._to_reliability_record(output) for output in outputs]
         self.reliability_records.extend(reliability_records)
 
-        try:
-            comparison = self._compare_outputs(outputs, test_config.name)
-        except Exception as exc:
-            logger.warning(
-                "Optional output comparison failed for %s; retaining run records: %s",
-                test_config.name,
-                exc,
-            )
-            comparison = {"error": f"Output comparison unavailable: {exc}"}
-
-        # Calculate robustness score
-        score = self.metrics_calculator.calculate_robustness_score(comparison)
+        reliability_mode = (
+            self.config.reliability_enabled
+            or test_config.validator != "execution_only"
+            or bool(test_config.steps)
+        )
+        comparison = None
+        score = None
+        if not reliability_mode:
+            try:
+                comparison = self._compare_outputs(outputs, test_config.name)
+            except Exception as exc:
+                logger.warning(
+                    "Optional output comparison failed for %s; retaining run records: %s",
+                    test_config.name,
+                    exc,
+                )
+                comparison = {"error": f"Output comparison unavailable: {exc}"}
+            score = self.metrics_calculator.calculate_robustness_score(comparison)
 
         # Save artifacts
         self._save_artifacts(test_config.name, outputs, comparison, score)
@@ -1536,12 +1547,6 @@ class RobustnessRunner:
         task_success_rate = (
             successful_tasks / len(reliability_records) if reliability_records else 0
         )
-        reliability_mode = (
-            self.config.reliability_enabled
-            or test_config.validator != "execution_only"
-            or bool(test_config.steps)
-        )
-
         # Prepare result
         result = {
             "test_name": test_config.name,
@@ -1552,21 +1557,25 @@ class RobustnessRunner:
             "successful_runs": sum(1 for o in outputs if o.get("status") == "success"),
             "successful_tasks": successful_tasks,
             "task_success_rate": task_success_rate,
-            "robustness_score": score,
-            "rating": self.metrics_calculator.get_rating(score),
             "passed": (
                 task_success_rate >= self.config.reliability_min_success_rate
                 if reliability_mode
                 else score >= self.config.pass_threshold
             ),
-            "comparison": comparison,
             "outputs": outputs if self.config.include_run_details else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+        if score is not None:
+            result.update(
+                robustness_score=score,
+                rating=self.metrics_calculator.get_rating(score),
+                comparison=comparison,
+            )
 
         logger.info(f"\nTest '{test_config.name}' completed:")
-        logger.info(f"  Score: {score:.3f}")
-        logger.info(f"  Rating: {result['rating']}")
+        if score is not None:
+            logger.info(f"  Score: {score:.3f}")
+            logger.info(f"  Rating: {result['rating']}")
         logger.info(f"  Objective success rate: {task_success_rate:.1%}")
         logger.info(f"  Passed: {'✅' if result['passed'] else '❌'}")
 
@@ -1600,8 +1609,6 @@ class RobustnessRunner:
                 "passed": 0,
                 "failed": 1,
                 "pass_rate": 0,
-                "average_robustness_score": 0,
-                "overall_rating": "N/A",
                 "results": {},
             }
 
@@ -1668,9 +1675,6 @@ class RobustnessRunner:
         passed_tests = sum(1 for r in results.values() if r.get("passed", False))
         failed_tests = total_tests - passed_tests
 
-        scores = [r.get("robustness_score", 0) for r in results.values() if "robustness_score" in r]
-        avg_score = sum(scores) / len(scores) if scores else 0
-
         summary = {
             "test_run_id": self.test_run_id,
             "system_under_test": self.system,
@@ -1679,11 +1683,21 @@ class RobustnessRunner:
             "passed": passed_tests,
             "failed": failed_tests,
             "pass_rate": passed_tests / total_tests if total_tests > 0 else 0,
-            "average_robustness_score": avg_score,
-            "overall_rating": self.metrics_calculator.get_rating(avg_score),
-            "pass_threshold": self.config.pass_threshold,
             "results": results,
         }
+        scores = [r["robustness_score"] for r in results.values() if "robustness_score" in r]
+        if scores:
+            avg_score = sum(scores) / len(scores)
+            summary.update(
+                average_robustness_score=avg_score,
+                overall_rating=self.metrics_calculator.get_rating(avg_score),
+                pass_threshold=self.config.pass_threshold,
+            )
+        if self.config.reliability_enabled or any(
+            "task_success_rate" in result and "robustness_score" not in result
+            for result in results.values()
+        ):
+            summary["reliability_min_success_rate"] = self.config.reliability_min_success_rate
 
         return summary
 
@@ -1708,7 +1722,8 @@ class RobustnessRunner:
 
     def _generate_markdown_report(self, summary: Dict) -> str:
         """Generate comprehensive markdown report."""
-        report = f"""# Robustness Test Report
+        title = "Robustness" if "average_robustness_score" in summary else "Reliability"
+        report = f"""# {title} Test Report
 
 **Test Run ID:** {summary['test_run_id']}
 **Date:** {summary['timestamp']}
@@ -1721,23 +1736,28 @@ class RobustnessRunner:
 | Passed | {summary['passed']} |
 | Failed | {summary['failed']} |
 | Pass Rate | {summary['pass_rate']:.1%} |
-| Average Score | {summary['average_robustness_score']:.3f} |
+"""
+        if "average_robustness_score" in summary:
+            report += f"""| Average Score | {summary['average_robustness_score']:.3f} |
 | Overall Rating | {summary['overall_rating']} |
 | Pass Threshold | {summary['pass_threshold']:.2f} |
+"""
+        if "reliability_min_success_rate" in summary:
+            report += (
+                "| Required Task Success Rate | "
+                f"{summary['reliability_min_success_rate']:.0%} |\n"
+            )
+        report += """
 
 ## Test Results
 
 """
         for test_name, result in summary.get("results", {}).items():
             status = "✅ PASSED" if result.get("passed", False) else "❌ FAILED"
-            score = result.get("robustness_score", 0)
-            rating = result.get("rating", "N/A")
 
             report += f"""### {test_name}
 
 - **Status:** {status}
-- **Score:** {score:.3f}
-- **Rating:** {rating}
 - **Description:** {result.get('description', 'N/A')}
 - **Variations:** {result.get('n_variations', 'N/A')}
 - **Executions:** {result.get('n_runs', 'N/A')}
@@ -1745,6 +1765,11 @@ class RobustnessRunner:
 - **Objective Task Success:** {result.get('task_success_rate', 0):.1%}
 
 """
+            if "robustness_score" in result:
+                report += (
+                    f"- **Score:** {result['robustness_score']:.3f}\n"
+                    f"- **Rating:** {result['rating']}\n\n"
+                )
             # Include comparison details
             comparison = result.get("comparison", {})
             if comparison and "text" in comparison:
@@ -1757,7 +1782,7 @@ class RobustnessRunner:
 """
 
         # Recommendations
-        if self.config.include_recommendations:
+        if self.config.include_recommendations and "average_robustness_score" in summary:
             report += """## Recommendations
 
 """
@@ -1915,16 +1940,11 @@ def _make_runner(config: RobustnessConfig, args) -> "RobustnessRunner":
 
 
 def compare_systems(
-    summaries: Dict[str, Dict],
     records_by_arm: Dict[str, List[Dict[str, Any]]],
     output_dir: Path,
 ) -> Path:
-    """Write paired reliability and secondary robustness comparison artifacts."""
-    comparison_md = save_system_comparison(
-        output_dir,
-        records_by_arm,
-        robustness_summaries=summaries,
-    )
+    """Write paired reliability comparison artifacts."""
+    comparison_md = save_system_comparison(output_dir, records_by_arm)
     logger.info(f"Comparison written to {comparison_md}")
     return comparison_md
 
@@ -2019,8 +2039,11 @@ def main():
             print(f"Total Tests: {summary.get('total_tests', 0)}")
             print(f"Passed: {summary.get('passed', 0)}")
             print(f"Failed: {summary.get('failed', 0)}")
-            print(f"Average Score: {summary.get('average_robustness_score', 0):.3f}")
-            print(f"Overall Rating: {summary.get('overall_rating', 'N/A')}")
+            if "average_robustness_score" in summary:
+                print(f"Average Score: {summary['average_robustness_score']:.3f}")
+                print(f"Overall Rating: {summary['overall_rating']}")
+            if "reliability" in summary:
+                print(f"Objective Task Success: {summary['reliability']['success_rate']:.1%}")
             print(f"Reports saved to: {runner.output_dir}")
             print(f"{'=' * 60}")
             if config.stop_on_timeout and any(
@@ -2036,7 +2059,7 @@ def main():
             comparison_dir = (
                 Path(__file__).parent / config.output_dir / f"{first_run_id}_comparison"
             )
-            comparison_md = compare_systems(summaries, records_by_arm, comparison_dir)
+            comparison_md = compare_systems(records_by_arm, comparison_dir)
             print(f"\nMulti-agent vs single-agent comparison written to: {comparison_md}")
 
         # Exit non-zero if any arm reported failing tests.
