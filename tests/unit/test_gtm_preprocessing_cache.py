@@ -60,6 +60,7 @@ def _patch_fast_gtm_optimization(monkeypatch, tmp_path: Path):
         agent=None,
         X=None,
         descriptor_column=None,
+        **_kwargs,
     ):
         calls["optimize"].append(
             {
@@ -279,3 +280,81 @@ def test_data_load_and_prep_reuses_prepared_dataset_cache(monkeypatch, tmp_path)
 
     assert calls["standardize"] == 1
     assert calls["descriptors"] == 1
+
+
+def test_neighborhood_preservation_is_one_for_identical_layout_and_lower_when_shuffled():
+    points = np.random.default_rng(0).normal(size=(40, 2))
+    data_neighbors = gtm_operations._knn_indices(points, 5)
+
+    assert gtm_operations.neighborhood_preservation(data_neighbors, points * 3) == 1.0
+    shuffled = np.random.default_rng(1).permutation(points)
+    assert gtm_operations.neighborhood_preservation(data_neighbors, shuffled) < 0.5
+
+
+def test_optimize_gtm_neighborhood_preservation_objective(monkeypatch):
+    class FakeGTM:
+        """Puts every molecule on its own node at its own descriptor coordinates."""
+
+        def __init__(self, num_nodes, **_kwargs):
+            self.num_nodes = num_nodes
+
+        def fit(self, tensor):
+            self.nodes = tensor
+
+        def project(self, tensor):
+            n = tensor.shape[0]
+            return gtm_operations.torch.eye(n, dtype=gtm_operations.torch.float64), None
+
+    monkeypatch.setattr(gtm_operations, "GTM", FakeGTM)
+    X = np.random.default_rng(0).normal(size=(12, 2))
+    df = pd.DataFrame({"smi": ["C"] * 12, "morgan_fingerprint": [row.tolist() for row in X]})
+
+    for metric in ("auto", "cosine"):
+        _, _, best_score = gtm_operations.optimize_gtm(
+            df,
+            X=X,
+            descriptor_type="autoencoder",
+            descriptor_column="morgan_fingerprint",
+            objective="neighborhood_preservation",
+            neighborhood_k=3,
+            neighborhood_metric=metric,
+        )
+        assert 0.0 <= best_score <= 1.0
+    assert best_score < 1.0  # cosine ignores the radial distances the map keeps
+    _, _, best_score = gtm_operations.optimize_gtm(
+        df,
+        X=X,
+        descriptor_type="autoencoder",
+        descriptor_column="morgan_fingerprint",
+        objective="neighborhood_preservation",
+        neighborhood_k=3,
+    )
+    assert best_score == pytest.approx(1.0)
+    with pytest.raises(ValueError, match="Unknown objective"):
+        gtm_operations.optimize_gtm(
+            df, X=X, descriptor_column="morgan_fingerprint", objective="trustworthiness"
+        )
+    with pytest.raises(ValueError, match="not 'cosine'"):
+        gtm_operations.optimize_gtm(
+            df,
+            X=X,
+            descriptor_type="morgan",
+            descriptor_column="morgan_fingerprint",
+            objective="neighborhood_preservation",
+            neighborhood_metric="cosine",
+        )
+
+
+def test_neighborhood_metric_follows_descriptor_kind():
+    resolve = gtm_operations.resolve_neighborhood_metric
+    assert resolve("morgan") == "tanimoto"
+    assert resolve("ae") == "euclidean"
+    assert resolve("autoencoder", "Cosine") == "cosine"
+    with pytest.raises(ValueError):
+        resolve("autoencoder", "tanimoto")
+
+    # Counts [10,0], [1,0], [0,1]: row 1 is Euclidean-closest to row 2,
+    # but shares all its features only with row 0, so Tanimoto picks row 0.
+    counts = np.array([[10.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    assert gtm_operations._knn_indices(counts, 1, "tanimoto")[1].tolist() == [0]
+    assert gtm_operations._knn_indices(counts, 1, "euclidean")[1].tolist() == [2]

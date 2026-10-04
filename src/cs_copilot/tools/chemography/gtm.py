@@ -344,11 +344,14 @@ class GTMToolkit(BaseDRToolkit):
         agent: Agent,
         strategy: str = "low",
         descriptor_type: Optional[str] = None,
+        objective: str = "entropy",
+        neighborhood_k: int = 10,
+        neighborhood_metric: str = "auto",
         session_state: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Load a dataset of SMILES strings, optimize a Generative Topographic Mapping (GTM)
-        model for entropy, store results in the agent's session state,
+        model for the chosen objective, store results in the agent's session state,
         and report the entropy score.
 
         Args:
@@ -361,9 +364,20 @@ class GTMToolkit(BaseDRToolkit):
                 - "low": Heuristic grid search (9 combinations, fastest)
                 - "medium": Extended grid search (up to 144 combinations, balanced)
                 - "high": Optuna TPE with 50 trials (thorough, slowest)
+            objective: Score the search maximizes. One of:
+                - "entropy" (default): how evenly molecules spread over the map nodes
+                - "neighborhood_preservation": fraction of each molecule's
+                  neighborhood_k nearest descriptor-space neighbours that stay its
+                  nearest neighbours on the map. Use only when the user asks for it.
+            neighborhood_k: Neighbours per molecule for neighborhood_preservation
+                (default 10).
+            neighborhood_metric: Descriptor-space metric for neighborhood_preservation.
+                "auto" (default) picks Tanimoto for Morgan count fingerprints and
+                Euclidean for autoencoder embeddings; "cosine" is also allowed for
+                embeddings. Ignored for the entropy objective.
 
         Returns:
-            Human-readable message reporting the best entropy score achieved
+            Human-readable message reporting the best score achieved
 
         Raises:
             FileNotFoundError: If df_csv_path does not point to an existing CSV file
@@ -379,6 +393,9 @@ class GTMToolkit(BaseDRToolkit):
             agent,
             strategy=strategy,
             descriptor_type=descriptor_type,
+            objective=objective,
+            neighborhood_k=neighborhood_k,
+            neighborhood_metric=neighborhood_metric,
         )
         self._remember_gtm_map(
             dataset_path=df_csv_path,
