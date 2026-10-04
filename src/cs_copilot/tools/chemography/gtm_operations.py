@@ -68,6 +68,7 @@ from ..chemistry.descriptors import (
     DEFAULT_DESCRIPTOR_TYPE,
     MolecularDescriptorEncoder,
 )
+from ..chemistry.similarity_toolkit import _tanimoto_matrix
 from ..chemistry.smiles_columns import (
     find_smiles_column_name,
     format_smiles_column_expectation,
@@ -2973,6 +2974,61 @@ def gtm_param_grid(n_samples: int, mode: str = "extended") -> dict:
     raise ValueError(f"Unknown mode: {mode!r}. Use 'heuristic' or 'extended'.")
 
 
+def _knn_indices(points: np.ndarray, k: int, metric: str = "euclidean") -> np.ndarray:
+    """Indices of each point's ``k`` nearest neighbours under ``metric``, excluding itself.
+
+    ``"tanimoto"`` uses the similarity toolkit's dot-product kernel in row blocks;
+    other metrics go to scikit-learn.
+    """
+    if metric != "tanimoto":
+        return (
+            NearestNeighbors(n_neighbors=k, metric=metric)
+            .fit(points)
+            .kneighbors(return_distance=False)
+        )
+    # ponytail: exact O(n^2 * d) search, ~6 s for 5k x 1024; subsample anchors if too slow.
+    neighbors = np.empty((len(points), k), dtype=np.intp)
+    for start in range(0, len(points), 1024):
+        similarity = _tanimoto_matrix(points[start : start + 1024], points)
+        rows = np.arange(len(similarity))
+        similarity[rows, rows + start] = -np.inf
+        neighbors[start : start + len(similarity)] = np.argpartition(-similarity, k - 1, axis=1)[
+            :, :k
+        ]
+    return neighbors
+
+
+def resolve_neighborhood_metric(descriptor_type: str, metric: str = "auto") -> str:
+    """
+    Descriptor-space metric for neighbourhood preservation.
+
+    Morgan descriptors here are count fingerprints and use Tanimoto; autoencoder
+    embeddings use Euclidean (``"auto"``) or cosine.
+    """
+    allowed = {"morgan": ("tanimoto",), "autoencoder": ("euclidean", "cosine")}[
+        MolecularDescriptorEncoder(descriptor_type).default_descriptor
+    ]
+    metric = allowed[0] if metric.lower() == "auto" else metric.lower()
+    if metric not in allowed:
+        raise ValueError(f"Use {allowed} for {descriptor_type} descriptors, not {metric!r}.")
+    return metric
+
+
+def neighborhood_preservation(data_neighbors: np.ndarray, latent: np.ndarray) -> float:
+    """
+    Mean fraction of each molecule's ``k`` nearest descriptor-space neighbours that
+    remain among its ``k`` nearest neighbours on the map, in [0, 1].
+
+    Args:
+        data_neighbors: (n_samples, k) neighbour indices in descriptor space,
+            from :func:`_knn_indices`.
+        latent: (n_samples, 2) map coordinates (responsibility-weighted node positions).
+    """
+    latent_neighbors = _knn_indices(latent, data_neighbors.shape[1])
+    shared = (data_neighbors[:, :, None] == latent_neighbors[:, None, :]).any(axis=2)
+    return float(shared.mean())
+
+
 def optimize_gtm(
     df: pd.DataFrame,
     smiles_column: str = "smi",
@@ -2982,6 +3038,9 @@ def optimize_gtm(
     agent: Optional[Agent] = None,
     X: Optional[np.ndarray] = None,
     descriptor_column: Optional[str] = None,
+    objective: str = "entropy",
+    neighborhood_k: int = 10,
+    neighborhood_metric: str = "auto",
 ) -> tuple[pd.DataFrame, GTM, float]:
     """
     Optimize GTM hyperparameters and fit the final model.
@@ -2991,10 +3050,27 @@ def optimize_gtm(
         smiles_column: Name of the column containing SMILES (default: 'smi')
         strategy: Optimization effort level — ``"low"`` (heuristic grid, 9 combos),
             ``"medium"`` (extended grid, up to 144 combos), or ``"high"`` (Optuna TPE, 50 trials).
+        objective: Score to maximize — ``"entropy"`` (normalized node-occupancy
+            Shannon entropy) or ``"neighborhood_preservation"`` (see
+            :func:`neighborhood_preservation`).
+        neighborhood_k: Neighbours per molecule for neighbourhood preservation
+            (capped at n_samples - 1).
+        neighborhood_metric: Descriptor-space metric for neighbourhood preservation;
+            see :func:`resolve_neighborhood_metric`.
 
     Returns:
         tuple: (df with descriptors, fitted GTM model, best score)
     """
+    if objective not in ("entropy", "neighborhood_preservation"):
+        raise ValueError(
+            f"Unknown objective: {objective!r}. Use 'entropy' or 'neighborhood_preservation'."
+        )
+    if objective == "neighborhood_preservation":
+        if neighborhood_k < 1:
+            raise ValueError("neighborhood_k must be at least 1.")
+        neighborhood_metric = resolve_neighborhood_metric(
+            get_session_descriptor_type(agent, descriptor_type), neighborhood_metric
+        )
 
     if X is None:
         # Compute descriptors using the resolved descriptor type (session-aware).
@@ -3028,6 +3104,11 @@ def optimize_gtm(
         f"Sample descriptors from column '{descriptor_column}': {df[descriptor_column].head()}"
     )
     X = X.astype(np.float64)
+
+    data_neighbors = None
+    if objective == "neighborhood_preservation":
+        # Descriptor-space neighbours do not depend on the map: compute them once.
+        data_neighbors = _knn_indices(X, min(neighborhood_k, n_samples - 1), neighborhood_metric)
 
     # --- Strategy dispatch ---------------------------------------------------
     if strategy == "low":
@@ -3121,9 +3202,12 @@ def optimize_gtm(
             gtm.fit(torch.from_numpy(X))
             resps, _ = gtm.project(torch.from_numpy(X))
             resps = resps.cpu().numpy()
-            entropy = shannon_entropy(resps)
-            logger.debug(f"Trial {trial.number}: entropy={entropy:.2f}")
-            return entropy
+            if data_neighbors is None:
+                score = shannon_entropy(resps)
+            else:
+                score = neighborhood_preservation(data_neighbors, resps @ gtm.nodes.cpu().numpy())
+            logger.debug(f"Trial {trial.number}: {objective}={score:.2f}")
+            return score
         except Exception as e:
             logger.debug(f"Trial {trial.number} failed: {e}")
             # If the model fails to fit, return a low score
@@ -3190,6 +3274,9 @@ def optimize_gtm_model(
     strategy: str = "low",
     *,
     descriptor_type: Optional[str] = None,
+    objective: str = "entropy",
+    neighborhood_k: int = 10,
+    neighborhood_metric: str = "auto",
 ) -> str:
     """
     Load a dataset of SMILES strings, optimize a Generative Topographic Mapping (GTM)
@@ -3203,9 +3290,13 @@ def optimize_gtm_model(
         smiles_column: Name of the column in the CSV that holds SMILES strings
         agent: The agent whose session_state dict will be updated
         strategy: Optimization effort level — ``"low"``, ``"medium"``, or ``"high"``
+        objective: ``"entropy"`` (default) or ``"neighborhood_preservation"``
+        neighborhood_k: Neighbours per molecule for neighbourhood preservation
+        neighborhood_metric: ``"auto"``, ``"tanimoto"``, ``"euclidean"`` or ``"cosine"``;
+            see :func:`resolve_neighborhood_metric`
 
     Returns:
-        Human-readable message reporting the best entropy score achieved
+        Human-readable message reporting the best score achieved
 
     Raises:
         FileNotFoundError: If df_csv_path does not point to an existing CSV file
@@ -3220,6 +3311,11 @@ def optimize_gtm_model(
         raise ValueError("gtm_name cannot be empty")
     if not smiles_column:
         raise ValueError("smiles_column cannot be empty")
+    if objective == "neighborhood_preservation":
+        # Resolve "auto" before loading data so a bad metric fails fast.
+        neighborhood_metric = resolve_neighborhood_metric(
+            get_session_descriptor_type(agent, descriptor_type), neighborhood_metric
+        )
 
     logger.info(f"Starting GTM optimization for {df_csv_path}")
 
@@ -3245,7 +3341,7 @@ def optimize_gtm_model(
         )
 
         # Optimize GTM model
-        logger.info(f"Optimizing GTM with entropy (strategy={strategy})")
+        logger.info(f"Optimizing GTM with {objective} (strategy={strategy})")
         df, gtm, best_score = optimize_gtm(
             prepared.df,
             smiles_column,
@@ -3254,6 +3350,9 @@ def optimize_gtm_model(
             agent=agent,
             X=prepared.X,
             descriptor_column=prepared.descriptor_column,
+            objective=objective,
+            neighborhood_k=neighborhood_k,
+            neighborhood_metric=neighborhood_metric,
         )
 
         # Store results in agent session
@@ -3274,8 +3373,15 @@ def optimize_gtm_model(
         optimized_model_path = S3.first_free_path(optimized_model_path)
         set_session_gtm_model(agent, gtm, optimized_model_path)
 
-        logger.info(f"GTM optimization completed with entropy: {best_score:.1f}")
-        return f"Entropy of the current study: {best_score:.1f} (strategy: {strategy})"
+        if objective == "entropy":
+            logger.info(f"GTM optimization completed with entropy: {best_score:.1f}")
+            return f"Entropy of the current study: {best_score:.1f} (strategy: {strategy})"
+        logger.info(f"GTM optimization completed with {objective}: {best_score:.2f}")
+        return (
+            f"Neighborhood preservation (k={neighborhood_k}, {neighborhood_metric}) "
+            f"of the current study: {best_score:.2f} "
+            f"(strategy: {strategy})"
+        )
 
     except Exception as e:
         logger.error(f"Error in GTM optimization: {e}")
