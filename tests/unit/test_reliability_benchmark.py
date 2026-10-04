@@ -405,29 +405,7 @@ def test_system_comparison_pairs_runs_and_reports_objective_deltas(tmp_path):
             ),
         ],
     }
-    robustness_summaries = {
-        "team": {
-            "total_tests": 2,
-            "passed": 2,
-            "pass_rate": 1.0,
-            "average_robustness_score": 0.9,
-            "overall_rating": "Excellent",
-            "results": {},
-        },
-        "single_agent": {
-            "total_tests": 2,
-            "passed": 1,
-            "pass_rate": 0.5,
-            "average_robustness_score": 0.7,
-            "overall_rating": "Acceptable",
-            "results": {},
-        },
-    }
-
-    comparison = build_system_comparison(
-        records_by_arm,
-        robustness_summaries=robustness_summaries,
-    )
+    comparison = build_system_comparison(records_by_arm)
 
     assert comparison["pairing"]["paired_runs"] == 2
     assert comparison["pairing"]["outcomes"] == {
@@ -443,18 +421,15 @@ def test_system_comparison_pairs_runs_and_reports_objective_deltas(tmp_path):
     assert comparison["warnings"]
     assert len(comparison["pairing"]["unmatched_runs"]["team"]) == 1
 
-    comparison_md = save_system_comparison(
-        tmp_path,
-        records_by_arm,
-        robustness_summaries=robustness_summaries,
-    )
+    comparison_md = save_system_comparison(tmp_path, records_by_arm)
     persisted = json.loads((tmp_path / "comparison.json").read_text())
     report = comparison_md.read_text()
 
     assert persisted["pairing"]["paired_runs"] == 2
     assert "Objective task success is the primary outcome" in report
     assert "Results by representative case" in report
-    assert "Secondary prompt-robustness results" in report
+    assert "secondary_robustness" not in persisted
+    assert "Secondary prompt-robustness results" not in report
     assert "n/a" in report
 
 
@@ -626,6 +601,40 @@ def test_config_schema_accepts_explicit_prompts_and_chains(tmp_path):
     assert loaded["tests"]["explicit_prompts"]["required_files"][0]["env"] == ("EXAMPLE_INPUT_PATH")
 
 
+@pytest.mark.parametrize("mode", ["suite", "validator", "chain", "custom", "legacy"])
+def test_similarity_metrics_required_only_for_legacy_tests(tmp_path, mode):
+    config = _valid_config()
+    if mode == "suite":
+        config["general"]["reliability_enabled"] = True
+    elif mode == "validator":
+        config["tests"] = {
+            "objective_test": {
+                "enabled": True,
+                "prompt_variants": ["run"],
+                "validator": "clarification",
+            }
+        }
+    elif mode == "chain":
+        config["tests"] = {"chain": config["tests"]["chain"]}
+    elif mode == "custom":
+        config["tests"] = {}
+        config["custom_tests"] = {
+            "objective_test": {"enabled": True, "prompt": "run", "validator": "clarification"}
+        }
+    del config["metrics"]
+    config_path = tmp_path / "benchmark.yaml"
+    config_path.write_text(yaml.safe_dump(config))
+
+    if mode == "legacy":
+        with pytest.raises(ValueError, match="Missing required weight"):
+            ConfigValidator.load_and_validate(config_path)
+        return
+
+    loaded = ConfigValidator.load_and_validate(config_path)
+
+    assert loaded["general"]["reliability_min_success_rate"] == 0.8
+
+
 def test_config_schema_reads_nested_legacy_prompt_catalog(tmp_path):
     fixtures_dir = tmp_path / "fixtures"
     fixtures_dir.mkdir()
@@ -756,7 +765,7 @@ def test_runner_retains_records_when_optional_comparison_fails(monkeypatch, tmp_
             repetitions=1,
             output_dir=str(tmp_path / "reports"),
             s3_session_isolation=False,
-            reliability_enabled=True,
+            reliability_enabled=False,
         )
     )
     monkeypatch.setattr(runner, "_build_system", FakeAgent)
@@ -778,6 +787,98 @@ def test_runner_retains_records_when_optional_comparison_fails(monkeypatch, tmp_
     assert result["comparison"]["error"].endswith("optional comparator")
     assert len(runner.reliability_records) == 1
     assert runner.reliability_records[0]["execution_status"] == "success"
+    summary = runner._generate_summary({test_config.name: result})
+    runner._save_reports(summary)
+    assert result["passed"] is False
+    assert summary["average_robustness_score"] == 0
+    assert "Average Score" in (runner.output_dir / "report.md").read_text()
+    assert (runner.output_dir / test_config.name / "score.txt").is_file()
+
+
+@pytest.mark.parametrize("mode", ["suite", "validator", "chain"])
+def test_reliability_reports_without_similarity_dependencies(monkeypatch, tmp_path, mode):
+    class FakeAgent:
+        session_state = {}
+
+        def run(self, prompt, stream=False):
+            return FakeOutput(content="Which molecule would you like to analyze?")
+
+    test_config = RunnerTestConfig(
+        name="objective_test",
+        enabled=True,
+        prompt_key="",
+        prompt_variants=["run"],
+        validator="clarification" if mode == "validator" else "execution_only",
+        steps=[{"name": "first", "prompt": "run"}] if mode == "chain" else [],
+    )
+    runner = RobustnessRunner(
+        RobustnessConfig(
+            output_dir=str(tmp_path),
+            repetitions=1,
+            s3_session_isolation=False,
+            reliability_enabled=mode == "suite",
+            tests={test_config.name: test_config},
+        )
+    )
+    monkeypatch.setattr(runner, "_build_system", FakeAgent)
+    monkeypatch.setattr(
+        runner, "_compare_outputs", lambda *_: pytest.fail("Reliability must skip similarity")
+    )
+    monkeypatch.setattr(
+        RobustnessRunner,
+        "metrics_calculator",
+        property(lambda _: pytest.fail("Reliability must not load the legacy scorer")),
+    )
+
+    summary = runner.run_all_tests()
+
+    result = summary["results"][test_config.name]
+    assert result["task_success_rate"] == 1.0
+    assert result["passed"] is True
+    assert not {"robustness_score", "rating", "comparison"}.intersection(result)
+    assert "average_robustness_score" not in summary
+    assert summary["reliability_min_success_rate"] == 0.8
+    report = (runner.output_dir / "report.md").read_text()
+    assert "Objective Task Success" in report
+    assert "Score" not in report
+    assert "Rating" not in report
+    artifacts = runner.output_dir / test_config.name
+    assert (artifacts / "run_0" / "response.txt").is_file()
+    assert (artifacts / "run_0" / "session_state.json").is_file()
+    assert not (artifacts / "comparison.json").exists()
+    assert not (artifacts / "score.txt").exists()
+    if mode == "suite":
+        assert summary["reliability"]["successful"] == 1
+        assert (runner.output_dir / "reliability" / "runs.jsonl").is_file()
+
+
+def test_mlflow_reliability_summary_uses_objective_metrics(monkeypatch, tmp_path):
+    from mlflow_runner import MLflowRobustnessRunner
+
+    logged = {}
+    monkeypatch.setitem(sys.modules, "mlflow", SimpleNamespace(log_metrics=logged.update))
+    runner = MLflowRobustnessRunner(
+        RobustnessConfig(output_dir=str(tmp_path), reliability_enabled=True), enable_mlflow=False
+    )
+
+    runner._log_suite_metrics(
+        {
+            "total_tests": 2,
+            "passed": 1,
+            "failed": 1,
+            "pass_rate": 0.5,
+            "reliability": {"success_rate": 0.75},
+            "results": {},
+        }
+    )
+
+    assert logged == {
+        "total_tests": 2.0,
+        "passed_tests": 1.0,
+        "failed_tests": 1.0,
+        "pass_rate": 0.5,
+        "task_success_rate": 0.75,
+    }
 
 
 def test_runner_repeats_explicit_prompts(monkeypatch, tmp_path):

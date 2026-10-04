@@ -379,10 +379,20 @@ class ConfigValidator:
         except Exception as e:
             errors.append(f"[model] {e}")
 
-        # 3. Metrics configuration
+        # 3. Require similarity metrics only for enabled legacy tests.
         try:
-            metrics = MetricsConfigSchema.from_dict(data.get("metrics", {}))
-            metrics.validate()
+            if not data.get("general", {}).get("reliability_enabled", False):
+                legacy_tests_enabled = any(
+                    test
+                    and test.get("enabled", False)
+                    and test.get("validator", "execution_only") == "execution_only"
+                    and not test.get("steps")
+                    for section in ("tests", "custom_tests")
+                    for test in (data.get(section) or {}).values()
+                )
+                if legacy_tests_enabled:
+                    metrics = MetricsConfigSchema.from_dict(data.get("metrics", {}))
+                    metrics.validate()
         except Exception as e:
             errors.append(f"[metrics] {e}")
 

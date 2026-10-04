@@ -73,8 +73,8 @@ Repeat independent batches with `--arm-order single-agent-first` to reduce
 temporal service bias. The cross-arm `comparison.md` and `comparison.json` pair
 runs by case, prompt variant, and repetition. They report objective success with
 Wilson 95% intervals, latency, tokens, tool use and errors, incorrect selection,
-optional estimated cost, and the older prompt-robustness score as a secondary
-metric.
+and optional estimated cost. Reliability runs do not compute or report the legacy
+weighted similarity score.
 
 The comparison isolates agentic structure, not scientific algorithms: both arms
 use the same model configuration, prompts, frozen inputs, tool implementations,
@@ -95,7 +95,10 @@ Each prompt variation runs in complete isolation:
 
 This ensures tests measure robustness to prompt variation, not side effects from memory or shared state.
 
-## Robustness Score
+## Legacy Prompt-Robustness Score
+
+This score applies only to the separate prompt-robustness tests. Reliability
+tests use objective task acceptance checks and the task-success rate.
 
 ```
 Score = 0.4 × Data + 0.3 × Semantic + 0.2 × Process + 0.1 × Visual
