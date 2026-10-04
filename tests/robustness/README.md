@@ -129,8 +129,8 @@ for the ChemSpace Copilot manuscript. It separates two sources of variability:
 
 Each execution records objective task success, structured failed tool calls,
 wall time, Agno token metrics, optional estimated cost, artifact pointers, and
-case-specific acceptance evidence. The legacy semantic robustness score remains
-a secondary descriptive metric; it does not determine reliability pass/fail.
+case-specific acceptance evidence. Reliability runs use objective validators for
+pass/fail and do not compute or report the legacy weighted similarity score.
 Wall time covers the synchronous `agent.run(...)` call from submitted prompt to
 returned result; one-time team/model initialization is excluded.
 
@@ -203,9 +203,6 @@ Controls and caveats to state in the methods section:
   objective validators, and telemetry collection. The comparison reports task
   success with Wilson 95% intervals, wall time, tokens, tool calls and failures,
   incorrect tool selection, and optional estimated cost.
-- **Secondary robustness metric.** Semantic/data/process/visual similarity remains
-  available for prompt-variation analysis, but it does not determine the
-  publication-facing task-success result.
 - **Complete flat tool namespace.** Agno keeps the first tool when names collide.
   The flat baseline registers peptide operations under their MCP-style
   `peptide_*` names, retaining both peptide and small-molecule capabilities. The
@@ -232,8 +229,8 @@ uv run python tests/robustness/robustness_minimal_example.py \
 ```
 
 The comparison directory contains paired `comparison.md` and `comparison.json`
-artifacts with overall and per-case outcomes. Unmatched runs are retained in arm
-summaries but listed as pairing warnings. With `--mlflow`, each suite run is
+artifacts with objective overall and per-case outcomes. Unmatched runs are
+retained in arm summaries but listed as pairing warnings. With `--mlflow`, each suite run is
 tagged `system_under_test` so `mlflow_reporter.compare_runs` provides the A/B
 dashboard.
 
