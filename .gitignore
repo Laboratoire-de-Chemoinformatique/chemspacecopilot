@@ -11,6 +11,7 @@ tmp/
 tests/robustness/reports/
 tests/robustness/artifacts/
 *.pyc
+*.nb[ci]
 *.log.*
 *.log
 cs_copilot_memory.db

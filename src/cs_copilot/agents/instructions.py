@@ -43,6 +43,16 @@ DATASET_ARTIFACT_CONTRACT = [
     "DataFrame hygiene: modify DataFrames with in-place operations and never print "
     "whole DataFrames to the console; reference large tables by path or session key "
     "to protect the context window.",
+    "Choose similarity metrics from descriptor provenance: use Tanimoto for Morgan "
+    "and other binary/count fingerprints, preserving count multiplicities; use "
+    "Euclidean distance or cosine similarity for learned embeddings. Floating-point "
+    "storage does not make Morgan counts embeddings. Inspect metadata when the "
+    "representation is unknown. Follow the chemoinformatics-analysis skill for "
+    "tool selection, count-Tanimoto convention, and matrix handling.",
+    "Report the representation, metric definition, and score direction: higher "
+    "Tanimoto/cosine similarity is closer, lower Euclidean distance is closer. "
+    "Do not apply fingerprint similarity thresholds to embedding distances or "
+    "interpret GTM plot proximity as fingerprint similarity.",
 ]
 
 SESSION_MEMORY_INSTRUCTIONS = [
