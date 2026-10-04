@@ -64,6 +64,8 @@ Use this workflow when the user needs ChEMBL bioactivity data for a specific tar
 2. Ask for any returned clarifications before calling mutating retrieval tools.
 3. Enforce target specificity, abbreviation confirmation, organism, assay type, and mechanism preference through preflight/user answers. Do not infer missing values.
 4. Convert clarified natural language to ChEMBL keyword form with `chembl_convert_to_chembl_query`.
-5. Fetch only after `can_proceed=true` using `chembl_fetch_compounds`.
-6. If ambiguous rows need judge-style filtering, use the `chembl_retrieval_judge` and `chembl_metadata_judge` prompts with the external MCP client's reasoning.
-7. Summarize the clean dataset with `chembl_describe_dataset` and return raw, clean, descriptor, filtered-row, and standardization artifact paths.
+5. Before every retrieval, show the exact comma-separated keywords, including expanded synonyms, and organism, assay-type, and mechanism filters in user-facing chat. State when a filter is unrestricted and briefly explain how the terms match the requested target. Tool logs or internal specialist messages are insufficient; coordinators must relay these details to the user. Show revised queries before retries; do not silently broaden the target or remove user-selected filters.
+6. If a keyword, synonym, target mapping, or filter has uncertain relevance, show the questionable terms, explain the uncertainty, and ask the user to choose or correct them. Combine related questions and wait for the user's answer before retrieval. A complete preflight is not proof of relevance. When relevance is clear, proceed after displaying the query without routine approval.
+7. Fetch only after `can_proceed=true` and relevance questions have been resolved, using the displayed query and filters in `chembl_fetch_compounds`.
+8. If ambiguous rows need judge-style filtering, use the `chembl_retrieval_judge` and `chembl_metadata_judge` prompts with the external MCP client's reasoning. If target metadata leaves query relevance uncertain, ask the user before retrying or using the dataset downstream.
+9. Summarize the clean dataset with `chembl_describe_dataset` and return raw, clean, descriptor, filtered-row, and standardization artifact paths. Include the queries and filters actually used in the final user-facing response, including when no data was found.

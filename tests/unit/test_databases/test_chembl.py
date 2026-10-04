@@ -381,6 +381,39 @@ class TestChemblToolkit:
         assert "No data found for any of the keywords" in result
         assert "nonexistent_target" in result
 
+    @pytest.mark.parametrize(
+        "assay_types, organism, mechanism, expected_filters",
+        [
+            (None, None, None, ("Binding, Functional", "none", "none")),
+            ([], None, None, ("all", "none", "none")),
+            (
+                ["binding"],
+                "Homo sapiens",
+                " antagonist ",
+                ("Binding", "Homo sapiens", "antagonist"),
+            ),
+        ],
+    )
+    @patch.object(ChemblToolkit, "_ensure_client")
+    def test_empty_search_reports_effective_query_filters(
+        self, mock_ensure_client, assay_types, organism, mechanism, expected_filters
+    ):
+        mock_ensure_client.return_value.assay.filter.return_value = []
+
+        result = ChemblToolkit(backend="rest").fetch_compounds(
+            "EGFR, epidermal growth factor receptor",
+            assay_types=assay_types,
+            organism=organism,
+            mechanism=mechanism,
+        )
+
+        assert "EGFR" in result
+        assert "epidermal growth factor receptor" in result
+        expected_types, expected_organism, expected_mechanism = expected_filters
+        assert f"Assay types filtered: {expected_types}" in result
+        assert f"Target organism filter: {expected_organism}" in result
+        assert f"Mechanism of action filter: {expected_mechanism}" in result
+
     @patch.object(ChemblToolkit, "_ensure_client")
     @patch("cs_copilot.tools.databases.chembl.S3")
     def test_fetch_compounds_with_filters(self, mock_s3, mock_ensure_client):
