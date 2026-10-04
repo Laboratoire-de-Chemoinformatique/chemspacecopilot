@@ -609,6 +609,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
         """
         Fetch compound bioactivity data from ChEMBL database using multiple keywords.
 
+        Before calling, show the exact keywords and filters to the user. If any
+        term or filter has uncertain relevance, ask for clarification and wait
+        for the user's answer before fetching.
+
         Args:
             query: Search term(s) for assay descriptions. Can be:
                 - A single string (e.g., "kinase")
@@ -739,7 +743,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
             if not all_dataframes:
                 return (
                     f"No data found for any of the keywords: {keywords}\n"
-                    f"Data backend: {self._backend_summary()}"
+                    f"Data backend: {self._backend_summary()}\n"
+                    + self._format_query_filters(organism, assay_type_codes, mechanism)
                 )
 
             logger.info(f"Merging {len(all_dataframes)} datasets and removing duplicates")
@@ -810,6 +815,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
                     filtering.summary,
                     filtering.filtered_rows_path,
                     filtering_report_path,
+                    organism_filter=organism,
+                    assay_type_codes=assay_type_codes,
+                    mechanism_filter=mechanism,
                 )
 
             # Step 5: Prepare raw, clean, descriptor, and report artifacts.
@@ -1548,6 +1556,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
         filtering_summary: Dict[str, Any],
         filtered_rows_path: Optional[str],
         filtering_report_path: Optional[str],
+        organism_filter: Optional[str] = None,
+        assay_type_codes: Optional[Sequence[str]] = None,
+        mechanism_filter: Optional[str] = None,
     ) -> str:
         keywords_str = ", ".join([f"'{kw}'" for kw in keywords])
         return (
@@ -1560,7 +1571,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
             f"Rows filtered out: {filtering_summary.get('filtered_row_count', 0)}\n"
             f"Data backend: {self._backend_summary()}\n"
             f"Filtered rows artifact: `{filtered_rows_path}`\n"
-            f"Retrieval filtering report: `{filtering_report_path}`"
+            f"Retrieval filtering report: `{filtering_report_path}`\n"
+            + self._format_query_filters(organism_filter, assay_type_codes, mechanism_filter)
         )
 
     @staticmethod
@@ -1628,6 +1640,20 @@ class ChemblToolkit(BaseDatabaseToolkit):
             suffixes=("", "_assay"),
         )
 
+    @staticmethod
+    def _format_query_filters(
+        organism_filter: Optional[str],
+        assay_type_codes: Optional[Sequence[str]],
+        mechanism_filter: Optional[str],
+    ) -> str:
+        assay_type_labels = {"B": "Binding", "F": "Functional", "A": "ADMET"}
+        readable_types = [assay_type_labels.get(code, code) for code in assay_type_codes or []]
+        return (
+            f"🧪 Assay types filtered: {', '.join(readable_types) or 'all (no filter)'}\n"
+            f"⚙️ Mechanism of action filter: {mechanism_filter or 'none'}\n"
+            f"🧬 Target organism filter: {organism_filter or 'none (all organisms)'}\n"
+        )
+
     def _format_success_message(
         self,
         df: pd.DataFrame,
@@ -1668,16 +1694,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
         if total_assays > 0:
             message += f"🔬 Found {total_assays} unique assays across all keywords\n"
 
-        assay_type_labels = {"B": "Binding", "F": "Functional", "A": "ADMET"}
-        if assay_type_codes:
-            readable_types = [assay_type_labels.get(code, code) for code in assay_type_codes]
-            message += f"🧪 Assay types filtered: {', '.join(readable_types)}\n"
-
-        if mechanism_filter:
-            message += f"⚙️ Mechanism of action filter: {mechanism_filter}\n"
-
-        if organism_filter:
-            message += f"🧬 Target organism filter: {organism_filter}\n"
+        message += self._format_query_filters(organism_filter, assay_type_codes, mechanism_filter)
 
         if duplicates_removed > 0:
             message += f"🔄 Removed {duplicates_removed} duplicate raw activity records\n"
@@ -1810,6 +1827,15 @@ class ChemblToolkit(BaseDatabaseToolkit):
             f"'epidermal-growth factor receptor', 'epidermal growth-factor-receptor', etc.).\n"
             f"Output a comma-separated list of keyword phrases suitable for assay description "
             f"searches.\n"
+            "Before calling fetch_compounds, show that exact list to the user in chat, "
+            "along with the organism, assay-type, and mechanism filters (including no "
+            "filter), and briefly explain why the terms match the requested target. "
+            "If any keyword, synonym, target mapping, or filter has uncertain relevance, "
+            "identify it and ask the user to choose or correct it; wait for their answer "
+            "before retrieval. A complete preflight does not resolve uncertain relevance. "
+            "When relevance is clear, proceed after showing the query. Show revised "
+            "queries before retries, and include the queries actually used in the final "
+            "response.\n"
             f"Example: For 'phosphodiesterase 4A', generate: 'pde4a, phosphodiesterase 4A'.\n"
             f"Example: For 'epidermal growth factor receptor', generate: "
             f"'egfr, epidermal growth factor receptor, erbb1'."

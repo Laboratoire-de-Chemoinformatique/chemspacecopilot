@@ -71,6 +71,18 @@ CHEMBL_CLARIFICATION_POLICY = [
     "For abbreviations such as CDK2, EGFR, PDE4, BRAF, or JAK2, ask the user to "
     "confirm the intended full target before retrieval unless preflight already "
     "confirmed it.",
+    "Before every ChEMBL search, show the user the exact query keywords, including "
+    "expanded synonyms, and the organism, assay-type, and mechanism filters "
+    "(including any unrestricted filters). Explain briefly how the terms match "
+    "the requested target. Repeat this disclosure for revised searches and include "
+    "the queries actually used in the final response. Tool logs alone do not count "
+    "as user-visible disclosure; coordinators must relay these details to the user.",
+    "If any proposed ChEMBL keyword, synonym, target mapping, or filter has uncertain "
+    "relevance to the user's request, show the questionable terms, explain the "
+    "uncertainty, and ask the user for help choosing or correcting them. Wait for "
+    "their answer before retrieval; a complete preflight is not proof of relevance. "
+    "When relevance is clear and requirements are satisfied, proceed after showing "
+    "the query without asking for routine approval.",
     "When clarification is needed, combine all missing requirements into one "
     "question and wait for explicit answers before re-routing to retrieval.",
 ]
