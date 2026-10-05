@@ -37,6 +37,7 @@ _EXPECTED_CALLABLES = {
     "save_gtm_plot",
     "save_rich_report",
     "save_markdown_report",
+    "get_report_evidence",
 }
 # Member factories whose session_state the single agent must cover (the 7 team
 # members that actually declare session_state; SynPlanner/Peptide declare none).
@@ -181,3 +182,32 @@ def test_single_agent_instructions_dedup_and_neutralize_handoffs():
         assert (
             skill_slug in text
         ), f"single-agent instructions missing {skill_slug!r} role knowledge"
+
+
+def test_both_reporting_modes_and_mcp_expose_same_evidence_reader(monkeypatch, tmp_path):
+    import json
+
+    import pandas as pd
+
+    from cs_copilot.agents import factories
+    from cs_copilot.mcp.facades.reporting import report_facade
+    from cs_copilot.tools.io import reporting_evidence as evidence
+
+    _patch_named_dummy_toolkits(monkeypatch)
+    source = tmp_path / "clean.csv"
+    frame = pd.DataFrame({"smiles": ["CC"], "assay_chembl_ids": ["A|B"]})
+    frame.to_csv(source, index=False)
+    ref = evidence.write_dataset_evidence(
+        str(source), {"clean": (frame, str(source), "All standardized molecules")}
+    )
+    results = []
+    for factory in (factories.ReportGeneratorFactory(), factories.SingleAgentFactory()):
+        readers = [
+            tool
+            for tool in factory.get_agent_config().tools
+            if getattr(tool, "__name__", None) == "get_report_evidence"
+        ]
+        assert len(readers) == 1
+        results.append(readers[0](ref["evidence_path"]))
+    assert results[0] == results[1] == report_facade().get_evidence(ref["evidence_path"])
+    assert json.loads(results[0])["coverage"]["distinct_assays"]["value"] == 2
