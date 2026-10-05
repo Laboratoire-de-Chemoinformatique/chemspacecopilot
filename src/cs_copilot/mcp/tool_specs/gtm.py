@@ -77,8 +77,8 @@ _METHODS = [
     (
         "gtm_analyze_scaffolds_in_nodes",
         "analyze_scaffolds_in_nodes",
-        "Summarise scaffolds residing in the given GTM node ids.",
-        True,
+        "Save scoped scaffold evidence and return a bounded page for selected GTM nodes.",
+        False,
         False,
     ),
     (

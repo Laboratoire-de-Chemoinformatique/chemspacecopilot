@@ -4386,59 +4386,71 @@ def load_and_prepare_gtm_data(
 # =============================================================================
 
 
-def analyze_scaffolds_in_nodes(source_mols: pd.DataFrame, list_of_nodes: List[int]) -> str:
-    """
-    Analyze molecular scaffolds in selected GTM nodes.
+def analyze_scaffolds_in_nodes(
+    source_mols: pd.DataFrame,
+    list_of_nodes: List[int],
+    *,
+    offset: int = 0,
+    limit: int = 10,
+    session_state: Optional[dict] = None,
+) -> str:
+    """Persist exact scaffold frequencies and return a bounded, explicitly scoped page."""
+    from cs_copilot.tools.io.reporting_evidence import get_report_evidence, write_dataset_evidence
 
-    Args:
-        source_mols: DataFrame containing molecular data with node_index column
-        list_of_nodes: List of node indices to analyze
-
-    Returns:
-        String representation of scaffold frequency table
-
-    Raises:
-        ValueError: If list_of_nodes is empty or invalid
-        AttributeError: If source_mols is None
-    """
-    if not list_of_nodes:
-        raise ValueError("list_of_nodes cannot be empty")
-
-    if not isinstance(list_of_nodes, list) or not all(
-        isinstance(node, int) for node in list_of_nodes
+    if (
+        not list_of_nodes
+        or not isinstance(list_of_nodes, list)
+        or not all(isinstance(node, int) for node in list_of_nodes)
     ):
-        raise ValueError("list_of_nodes must be a list of integers")
-
+        raise ValueError("list_of_nodes must be a nonempty list of integers")
     if source_mols is None:
         raise AttributeError("source_mols cannot be None")
+    if not 1 <= limit <= 50 or offset < 0:
+        raise ValueError("limit must be 1..50 and offset must be nonnegative")
+    # Snapshot the complete projected population so selection and version are reproducible.
+    frame = (
+        source_mols[[SMILES_COLUMN, "node_index"]].rename(columns={SMILES_COLUMN: "smiles"}).copy()
+    )
+    path = scoped_artifact_path(
+        "scaffold_population.csv",
+        OutputOperation.CHEMICAL_SPACE,
+        "datasets",
+        "evidence",
+        session_state=session_state,
+        workflow_slug="chemical_space",
+    )
+    path = S3.first_free_path(path)
+    with S3.open(path, "w") as handle:
+        frame.to_csv(handle, index=False)
+    path = S3.path(path)
+    reference = write_dataset_evidence(
+        path,
+        {
+            "selected": (
+                frame,
+                path,
+                f"Molecules assigned to GTM nodes {sorted(set(list_of_nodes))}",
+            )
+        },
+        scaffold_nodes=list_of_nodes,
+    )
+    if session_state is not None:
+        from cs_copilot.tools.io.session_memory import register_session_object
 
-    logger.info(f"Analyzing scaffolds in {len(list_of_nodes)} nodes: {list_of_nodes}")
-
-    try:
-        # Get molecules from specified nodes
-        df_specific = view_molecules_by_nodes(source_mols, list_of_nodes)
-
-        if df_specific.empty:
-            logger.warning(f"No molecules found in nodes {list_of_nodes}")
-            return "No molecules found in the specified nodes"
-
-        # Calculate Murcko scaffolds
-        df_specific["scaffold_smi"] = df_specific[SMILES_COLUMN].apply(
-            MurckoScaffold.MurckoScaffoldSmiles
+        register_session_object(
+            session_state,
+            "analysis",
+            {"reporting_evidence": reference},
+            label="Scoped scaffold frequencies",
+            source_tool="analyze_scaffolds_in_nodes",
         )
-
-        # Create frequency table
-        scaffold_df = value_counts_df(df_specific, "scaffold_smi")
-
-        # Add scaffold ID for reference
-        scaffold_df["Scaffold ID"] = scaffold_df.index.astype(str)
-
-        logger.info(f"Found {len(scaffold_df)} unique scaffolds in specified nodes")
-        return df_as_str(scaffold_df)
-
-    except Exception as e:
-        logger.error(f"Error analyzing scaffolds: {e}")
-        raise
+    return get_report_evidence(
+        reference["evidence_path"],
+        section="scaffolds",
+        population="selected",
+        offset=offset,
+        limit=limit,
+    )
 
 
 def check_source_datasets_in_nodes(source_mols: pd.DataFrame, list_of_nodes: List[int]) -> str:

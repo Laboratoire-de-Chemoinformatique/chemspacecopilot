@@ -100,6 +100,7 @@ def prepare_clean_dataset(
     save_raw: bool = True,
     report_appendix: Optional[str] = None,
     session_state: Optional[dict[str, Any]] = None,
+    coverage_populations: Optional[dict[str, tuple[pd.DataFrame, str]]] = None,
 ) -> CleanDatasetResult:
     """Prepare raw, clean, descriptor, and report artifacts for a molecular dataset.
 
@@ -190,6 +191,52 @@ def prepare_clean_dataset(
             "descriptor_parquet_path": descriptor_parquet_path,
         }
     )
+
+    from cs_copilot.tools.io.reporting_evidence import write_dataset_evidence
+
+    contributing_path = _write_csv(
+        standardized_df,
+        _chemical_space_artifact_path(
+            f"{source_stem}_contributing.csv", "datasets", "evidence", session_state=session_state
+        ),
+    )
+    populations = {
+        "retained": (
+            raw_df,
+            raw_dataset_path,
+            "Retained input records before structure standardization",
+        ),
+        "contributing": (
+            standardized_df,
+            contributing_path,
+            "Retained records with valid standardized structures contributing to clean molecules",
+        ),
+        "clean": (
+            clean_df,
+            clean_dataset_path,
+            "All standardized molecules (one row per standardized SMILES)",
+        ),
+    }
+    if not raw_dataset_path:
+        # Respect save_raw=False: an unsaved population has no verifiable source.
+        populations.pop("retained")
+    for name, (frame, label) in (coverage_populations or {}).items():
+        path = _write_csv(
+            frame,
+            _chemical_space_artifact_path(
+                f"{source_stem}_{_safe_stem(name)}.csv",
+                "datasets",
+                "evidence",
+                session_state=session_state,
+            ),
+        )
+        populations[name] = (frame, path, label)
+    evidence_reference = write_dataset_evidence(clean_dataset_path, populations)
+    standardization_summary["reporting_evidence"] = evidence_reference
+    if session_state is not None:
+        session_state.setdefault("data_file_paths", {})["evidence_path"] = evidence_reference[
+            "evidence_path"
+        ]
 
     report_filename = report_filename or f"{source_stem}_standardization_report.md"
     report_path = _write_report(
@@ -328,6 +375,9 @@ def _merge_standardized_compounds(
 
         for column in metadata_columns:
             output_column = _merged_column_name(column)
+            if output_column != column and output_column in metadata_columns:
+                # Preserve both aliases so a conflict cannot be hidden by overwriting.
+                output_column = column
             record[output_column] = _joined_unique(group[column])
 
         _add_activity_record(record, group, activity_mapping, activity_kind)
@@ -453,7 +503,10 @@ def _build_descriptor_dataframe(
 
 
 def _metadata_columns(df: pd.DataFrame, activity_mapping: ActivityMapping) -> list[str]:
+    from cs_copilot.tools.io.reporting_evidence import ID_COLUMNS
+
     candidates = set(_MERGE_METADATA_COLUMNS)
+    candidates.update(column for aliases in ID_COLUMNS.values() for column in aliases)
     for column in (
         activity_mapping.molecule_id_column,
         activity_mapping.assay_column,
@@ -576,6 +629,7 @@ def _format_report(summary: dict[str, Any]) -> str:
     artifacts = [
         ("Raw dataset", summary.get("raw_dataset_path")),
         ("Clean dataset", summary.get("clean_dataset_path")),
+        ("Scoped reporting evidence", summary.get("reporting_evidence", {}).get("evidence_path")),
         ("Descriptor Parquet", summary.get("descriptor_parquet_path")),
     ]
     artifact_lines = "\n".join(f"- {label}: `{path}`" for label, path in artifacts if path)
@@ -687,6 +741,8 @@ def _collapse_examples(
 
 
 def _merged_column_name(column: str) -> str:
+    if column.endswith("_ids"):
+        return column
     if column == "cluster_id":
         return "cluster_id"
     if column == "query_keywords":

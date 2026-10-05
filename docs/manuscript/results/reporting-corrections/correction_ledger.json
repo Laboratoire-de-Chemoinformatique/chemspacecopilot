@@ -1,0 +1,3748 @@
+[
+  {
+    "run": "team_rep1",
+    "claim_type": "assay_document_coverage",
+    "original_claim": [
+      "I'll start by consulting the reusable skill catalog and checking the current session state before routing any specialized agents.Let me fetch the governing workflow skill and its key sub-skills before routing.The governing workflow is `chembl-to-gtm-report` (chaining `chembl-target-retrieval` \u2192 `gtm-density-landscape` + `gtm-activity-landscape` \u2192 `chemoinformatics-analysis` \u2192 `report-generation`). The request is fully specified: target **EPHX2 (sEH)** \u2014 a recognized gene symbol, organism **Homo sapiens**, assay types **binding + functional**, mechanism **no filter**. That satisfies ChEMBL retrieval specificity, so I'll begin with the retrieval preflight + fetch.",
+      "Delegating step 1 to the ChEMBL downloader:The guard requires `expected_output_schema` as a mapping. Resubmitting:Retrieval is complete (3028 clean compounds, 100% Homo sapiens, B/F assays, no mechanism filter). Now I'll run the GTM landscape step and the chemoinformatics step **in parallel** \u2014 both operate on `clean_dataset_path`, so they can proceed concurrently.",
+      "- **Query:** keywords `ephx2, soluble epoxide hydrolase, sEH, epoxide hydrolase 2`; organism Homo sapiens (explicit, not defaulted); assay types **B + F**; **no mechanism filter**.",
+      "## 6. Assay coverage"
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r0/20261004_161325_139120_team/live_seh_workflow/run_0/response.txt",
+        "sha256": "f963aa014bcee18d7f9463f9d8c7c89e16f0f7deeafebddd1ffca93bcb13449a",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r0/20261004_161325_139120_team/live_seh_workflow/run_0/session_state.json",
+        "sha256": "e1a21feb4597f26c9159a597ce42f5bff4803f3db81537d87532984f23046e3c",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r0/20261004_161325_139120_team/reliability/runs.jsonl",
+        "sha256": "e332d7d3ab8ffde4b9d19b622d4c8f891349331e21a6067c342faef813f20c98",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_161325_139120_team_20261004_161325_p0_v0_8d42c596/workflows/chemical_space-7a556d3b51a8/01_chemical_space/datasets/raw/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_raw.csv",
+        "sha256": "282c2897dcfaa5563394c4ea44ab65ae96ff2f1152d636498303d3187f1deb48",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_161325_139120_team_20261004_161325_p0_v0_8d42c596/workflows/chemical_space-7a556d3b51a8/01_chemical_space/datasets/clean/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_clean.csv",
+        "sha256": "832c351efcc9c1a9e6253403b5f4ac00de1f0c7faf07e88d206292e1d7853620",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_161325_139120_team_20261004_161325_p0_v0_8d42c596/workflows/chemical_space-7a556d3b51a8/01_chemical_space/datasets/filtered/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_suspicious_filtered.csv",
+        "sha256": "26dcc181747340c391c7ceb25354ec971d49c1745bdfb9502c2392eeb102daa2",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_161325_139120_team_20261004_161325_p0_v0_8d42c596/workflows/chemical_space-7a556d3b51a8/01_chemical_space/standardization/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_standardization_report.md",
+        "sha256": "891310b176a206108c7b187b968c62b083f3a019f7bd85301ecb62c0997be102",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_161325_139120_team_20261004_161325_p0_v0_8d42c596/workflows/chemical_space-7a556d3b51a8/reports/ephx2_chemical_space/ephx2_chemical_space_report.md",
+        "sha256": "7fb8a6d54a568d544f339a4ce3806617300a5dd11616e85f6f7162edfc10eb8d",
+        "kind": "original"
+      }
+    ],
+    "population": "retained raw; reconstructed full retrieval; clean compounds",
+    "counting_method": "Split pipe-delimited IDs, trim blanks, count distinct nonempty atomic IDs; never count serialized combinations as IDs.",
+    "corrected_value": {
+      "retained": {
+        "rows": 5171,
+        "distinct_assays": 334,
+        "distinct_documents": 153
+      },
+      "full_retrieved": {
+        "rows": 8322,
+        "distinct_assays": 508,
+        "distinct_documents": 169
+      },
+      "clean": {
+        "rows": 3028,
+        "distinct_assays": 334,
+        "distinct_documents": 153,
+        "serialized_assay_combinations": 311,
+        "serialized_document_combinations": 237
+      }
+    },
+    "original_count_operation_evidence": [],
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep1",
+    "claim_type": "search_matched_assays",
+    "original_claim": "Original ds_001.assay_count = 525",
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r0/20261004_161325_139120_team/live_seh_workflow/run_0/session_state.json",
+        "sha256": "e1a21feb4597f26c9159a597ce42f5bff4803f3db81537d87532984f23046e3c",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    ],
+    "population": "search-matched assay IDs before activity retrieval",
+    "counting_method": "Original fetch_compounds builds all_assay_ids from search results, then total_assays=len(all_assay_ids).",
+    "corrected_value": {
+      "recorded_count": 525,
+      "scope": "search-matched assay IDs before activity retrieval",
+      "scope_status": "verified_from_original_code_and_state",
+      "independent_id_count_status": "unresolved",
+      "reason": "The matched assay ID list was not retained; 525 is metadata, not verified retained coverage.",
+      "code_source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    },
+    "status": "unresolved",
+    "evidence_kind": "original metadata scope verified; numeric ID set not independently retained",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep1",
+    "claim_type": "whole_dataset_exact_murcko",
+    "original_claim": [
+      "Delegating GTM density/activity landscapes (autoencoder descriptors + cached default map) and chemoinformatics scaffold/active-vs-inactive analysis:Both parallel steps are complete. Now the final step: a grounded report via the Report Generator, referencing all retrieval, GTM, and chemoinformatics artifacts.All steps of the `chembl-to-gtm-report` workflow completed successfully. Here is the consolidated analysis.",
+      "## 4. Chemotypes / scaffolds",
+      "| 1,3-disubstituted urea | 29.1 | 8.14 |",
+      "| Adamantane-urea | 14.8 | 7.80 |",
+      "Urea + CF3/OCF3 motifs dominate; Tanimoto median 0.188 \u2192 **sparse, distinct chemotypes** (limited close analogs).",
+      "Would you like me to (a) run molecular design against the sparse-but-active chemotypes (nodes 522/40/691), or (b) set up retrosynthesis for a specific active scaffold?"
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r0/20261004_161325_139120_team/live_seh_workflow/run_0/response.txt",
+        "sha256": "f963aa014bcee18d7f9463f9d8c7c89e16f0f7deeafebddd1ffca93bcb13449a",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r0/20261004_161325_139120_team/live_seh_workflow/run_0/session_state.json",
+        "sha256": "e1a21feb4597f26c9159a597ce42f5bff4803f3db81537d87532984f23046e3c",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r0/20261004_161325_139120_team/reliability/runs.jsonl",
+        "sha256": "e332d7d3ab8ffde4b9d19b622d4c8f891349331e21a6067c342faef813f20c98",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_161325_139120_team_20261004_161325_p0_v0_8d42c596/workflows/chemical_space-7a556d3b51a8/01_chemical_space/datasets/raw/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_raw.csv",
+        "sha256": "282c2897dcfaa5563394c4ea44ab65ae96ff2f1152d636498303d3187f1deb48",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_161325_139120_team_20261004_161325_p0_v0_8d42c596/workflows/chemical_space-7a556d3b51a8/01_chemical_space/datasets/clean/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_clean.csv",
+        "sha256": "832c351efcc9c1a9e6253403b5f4ac00de1f0c7faf07e88d206292e1d7853620",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_161325_139120_team_20261004_161325_p0_v0_8d42c596/workflows/chemical_space-7a556d3b51a8/01_chemical_space/datasets/filtered/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_suspicious_filtered.csv",
+        "sha256": "26dcc181747340c391c7ceb25354ec971d49c1745bdfb9502c2392eeb102daa2",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_161325_139120_team_20261004_161325_p0_v0_8d42c596/workflows/chemical_space-7a556d3b51a8/01_chemical_space/standardization/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_standardization_report.md",
+        "sha256": "891310b176a206108c7b187b968c62b083f3a019f7bd85301ecb62c0997be102",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_161325_139120_team_20261004_161325_p0_v0_8d42c596/workflows/chemical_space-7a556d3b51a8/reports/ephx2_chemical_space/ephx2_chemical_space_report.md",
+        "sha256": "7fb8a6d54a568d544f339a4ce3806617300a5dd11616e85f6f7162edfc10eb8d",
+        "kind": "original"
+      }
+    ],
+    "population": "all 3028 clean compound rows",
+    "counting_method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+    "corrected_value": {
+      "method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+      "population": "all clean standardized compound rows",
+      "denominator": 3028,
+      "valid_molecules": 3028,
+      "invalid_molecules": 0,
+      "unique_scaffolds_including_acyclic": 1253,
+      "acyclic_molecules": 57,
+      "top_scaffolds": [
+        [
+          "O=C(NCc1ccccc1)c1ccccc1",
+          127
+        ],
+        [
+          "C1C2CC3CC1CC(C2)C3",
+          99
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1",
+          76
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCNCC1",
+          67
+        ],
+        [
+          "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2",
+          61
+        ],
+        [
+          "",
+          57
+        ],
+        [
+          "c1ccccc1",
+          50
+        ],
+        [
+          "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1",
+          39
+        ],
+        [
+          "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2",
+          30
+        ],
+        [
+          "O=C(Nc1ccccc1)C1CCN(S(=O)(=O)c2ccccc2)CC1",
+          27
+        ]
+      ],
+      "adamantane": 99,
+      "phenyl_urea_adamantyl": 61
+    },
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep2",
+    "claim_type": "assay_document_coverage",
+    "original_claim": [
+      "- **Assay type**: binding (B) + functional (F)",
+      "I'll begin by delegating the retrieval preflight + fetch to the ChEMBL downloader agent.Retrieval succeeded (1,580 clean compounds, target CHEMBL2409 = EPHX2, B+F assays, no mechanism filter). Now I'll run the GTM stage: load the cached **default** map with `descriptor_type=autoencoder`, project the clean dataset, and build density + activity landscapes.The GTM agent's response appears truncated. Let me inspect the session to verify what artifacts were actually created.The GTM stage largely completed (default map reused with autoencoder descriptors; density plot `fig_001`; activity landscape CSV + `fig_002`/`fig_003`; projected maps `map_007`/`map_008`; dense zone nodes [181, 5, 251, 4, 211]; sparse zone nodes [196, 635, 868, 494, 531]), but the agent's numeric density/activity summaries were truncated. I'll re-request the compact summaries and, in parallel, start the chemoinformatics scaffold/SAR stage.Both stages delivered. The chemoinformatician returned a complete grounded analysis (635 scaffolds, Shannon 8.13 bits, active/inactive split, SAR, similarity, assay coverage). The GTM agent again produced its numbers only as intermediate narration, but the density values are captured in session nodes and the 900-node landscape CSV carries both `density` and `filtered_reg_density`, so the report layer can compute globals directly.",
+      "| Assay types | Binding (B) + Functional (F) |",
+      "## 7. Assay coverage",
+      "- **525 unique assays**; assay_type: **B = 2183, F = 2** raw records. Standard types: IC50 (1882), Inhibition (136), Ki (48), T1/2 (24), Selectivity ratio (24), EC50 (21), plus IC90/TDI/Tm/Kd etc.",
+      "- \u26a0\ufe0f Caveat: functional (F) coverage is very sparse \u2014 binding dominates, so functional-assay signal is weakly represented."
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r1/20261004_164118_371994_team/live_seh_workflow/run_0/response.txt",
+        "sha256": "07e29461034051d190fc843193071b42d9393e3a89bcfdf096913238214d40dc",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r1/20261004_164118_371994_team/live_seh_workflow/run_0/session_state.json",
+        "sha256": "851617bf350c2fcc6f8c8914c0230247000006dd429fd8905d04452c7a358786",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r1/20261004_164118_371994_team/reliability/runs.jsonl",
+        "sha256": "b5fbc9332228673b3a11fa8179016921bbca5fe8008ba856f1d3be85662ff8a3",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/01_chemical_space/datasets/raw/chembl_soluble_epoxide_hydrolase_seh_ephx2_and_more_raw.csv",
+        "sha256": "76ad273f7c10520cd830990bbe147a689a029e59ac5f8f5dc84a74e4fd069600",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_seh_ephx2_and_more_clean.csv",
+        "sha256": "f38c0c77021b936267103e4508d23702aa5cb187bc55063cc544f95f82c67b34",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/01_chemical_space/datasets/filtered/chembl_soluble_epoxide_hydrolase_seh_ephx2_and_more_suspicious_filtered.csv",
+        "sha256": "3dad4d20a33321726fd57374dd36e3f7a849ba584686bb5a468d6b957d945d29",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/01_chemical_space/standardization/chembl_soluble_epoxide_hydrolase_seh_ephx2_and_more_standardization_report.md",
+        "sha256": "136168dfdeeb27e8721f8db74bda572fee20b19426c7b140c6efaf3505bde880",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/reports/combined/seh_ephx2_combined_report-v2.md",
+        "sha256": "7659eeb53d623e4eaf5652ca348ed1582fd473bb27f2cfc8e7109aa8736be449",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/reports/combined/seh_ephx2_combined_report.md",
+        "sha256": "3838c5f63c75464fb6e91894eac14fd8f9f213e7ce33a4fff79d455fcdce9f3f",
+        "kind": "original"
+      }
+    ],
+    "population": "retained raw; reconstructed full retrieval; clean compounds",
+    "counting_method": "Split pipe-delimited IDs, trim blanks, count distinct nonempty atomic IDs; never count serialized combinations as IDs.",
+    "corrected_value": {
+      "retained": {
+        "rows": 2185,
+        "distinct_assays": 156,
+        "distinct_documents": 76
+      },
+      "full_retrieved": {
+        "rows": 8322,
+        "distinct_assays": 508,
+        "distinct_documents": 169
+      },
+      "clean": {
+        "rows": 1580,
+        "distinct_assays": 156,
+        "distinct_documents": 76,
+        "serialized_assay_combinations": 167,
+        "serialized_document_combinations": 129
+      }
+    },
+    "original_count_operation_evidence": [],
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep2",
+    "claim_type": "search_matched_assays",
+    "original_claim": "Original ds_001.assay_count = 525",
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r1/20261004_164118_371994_team/live_seh_workflow/run_0/session_state.json",
+        "sha256": "851617bf350c2fcc6f8c8914c0230247000006dd429fd8905d04452c7a358786",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    ],
+    "population": "search-matched assay IDs before activity retrieval",
+    "counting_method": "Original fetch_compounds builds all_assay_ids from search results, then total_assays=len(all_assay_ids).",
+    "corrected_value": {
+      "recorded_count": 525,
+      "scope": "search-matched assay IDs before activity retrieval",
+      "scope_status": "verified_from_original_code_and_state",
+      "independent_id_count_status": "unresolved",
+      "reason": "The matched assay ID list was not retained; 525 is metadata, not verified retained coverage.",
+      "code_source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    },
+    "status": "unresolved",
+    "evidence_kind": "original metadata scope verified; numeric ID set not independently retained",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep2",
+    "claim_type": "whole_dataset_exact_murcko",
+    "original_claim": [
+      "I'll begin by delegating the retrieval preflight + fetch to the ChEMBL downloader agent.Retrieval succeeded (1,580 clean compounds, target CHEMBL2409 = EPHX2, B+F assays, no mechanism filter). Now I'll run the GTM stage: load the cached **default** map with `descriptor_type=autoencoder`, project the clean dataset, and build density + activity landscapes.The GTM agent's response appears truncated. Let me inspect the session to verify what artifacts were actually created.The GTM stage largely completed (default map reused with autoencoder descriptors; density plot `fig_001`; activity landscape CSV + `fig_002`/`fig_003`; projected maps `map_007`/`map_008`; dense zone nodes [181, 5, 251, 4, 211]; sparse zone nodes [196, 635, 868, 494, 531]), but the agent's numeric density/activity summaries were truncated. I'll re-request the compact summaries and, in parallel, start the chemoinformatics scaffold/SAR stage.Both stages delivered. The chemoinformatician returned a complete grounded analysis (635 scaffolds, Shannon 8.13 bits, active/inactive split, SAR, similarity, assay coverage). The GTM agent again produced its numbers only as intermediate narration, but the density values are captured in session nodes and the 900-node landscape CSV carries both `density` and `filtered_reg_density`, so the report layer can compute globals directly.",
+      "- Executive summary: (i) a few urea-chemotype hotspots hold most compounds; (ii) large empty/sparse regions indicate underexplored chemistry; (iii) density is structural only \u2014 it is **not** potency evidence.",
+      "- Cross-layer: the dense hotspot (nodes 4, 5, 251) **coincides with high-activity cells**, i.e. the well-sampled urea region is also the potent region. Some sparse cells retain moderate predicted activity (sparse-but-active), while a few dense cells are comparatively low-activity.",
+      "## 5. Scaffolds / chemotypes",
+      "- **635 unique Murcko scaffolds** (unique-scaffold ratio 0.402; Shannon entropy **8.13 bits** of 9.31 max) \u2192 chemically diverse.",
+      "- Dominant chemotype = **1,3-disubstituted urea (N\u2013C(=O)\u2013N)** with phenyl / cyclohexyl / adamantyl / azabicyclic caps. Top scaffolds by frequency: adamantane (<smiles>C1C2CC3CC1CC(C2)C3</smiles>, 90), acyclic (57), phenyl-urea piperidine (<smiles>O=C(Nc1ccccc1)NC1CCNCC1</smiles>, 55), phenyl-urea adamantyl (<smiles>O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2</smiles>, 49), sulfonamide-piperidine urea (39), and a diaryl-oxazole series (<smiles>c1ccc(-c2ncoc2-c2ccccc2)cc1</smiles>, 25).",
+      "- Enriched in **actives**: adamantyl-urea, phenyl-urea piperidine, and 4-aryloxy/amide piperidine ureas (nodes 3\u20136 / 35 / 251).",
+      "- Chemotype: `.../analysis/chemotype_top_scaffolds.csv` \u00b7 SAR: `.../analysis/sar_activity_cliffs_mmps.csv` \u00b7 Similarity: `.../analysis/similarity_nearest_neighbors.csv`",
+      "**Transparency notes:** (1) the global `density` statistic (max 133.4) is read from the landscape CSV column, which differs slightly from the zone object's `filtered_density` for node 181 (138.3); node 181 is densest by both. (2) Scaffold-table `Node` values are representative GTM cells for the dominant urea chemotype; flat aromatic/acyclic scaffolds are unmapped (`n/a`)."
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r1/20261004_164118_371994_team/live_seh_workflow/run_0/response.txt",
+        "sha256": "07e29461034051d190fc843193071b42d9393e3a89bcfdf096913238214d40dc",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r1/20261004_164118_371994_team/live_seh_workflow/run_0/session_state.json",
+        "sha256": "851617bf350c2fcc6f8c8914c0230247000006dd429fd8905d04452c7a358786",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r1/20261004_164118_371994_team/reliability/runs.jsonl",
+        "sha256": "b5fbc9332228673b3a11fa8179016921bbca5fe8008ba856f1d3be85662ff8a3",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/01_chemical_space/datasets/raw/chembl_soluble_epoxide_hydrolase_seh_ephx2_and_more_raw.csv",
+        "sha256": "76ad273f7c10520cd830990bbe147a689a029e59ac5f8f5dc84a74e4fd069600",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_seh_ephx2_and_more_clean.csv",
+        "sha256": "f38c0c77021b936267103e4508d23702aa5cb187bc55063cc544f95f82c67b34",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/01_chemical_space/datasets/filtered/chembl_soluble_epoxide_hydrolase_seh_ephx2_and_more_suspicious_filtered.csv",
+        "sha256": "3dad4d20a33321726fd57374dd36e3f7a849ba584686bb5a468d6b957d945d29",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/01_chemical_space/standardization/chembl_soluble_epoxide_hydrolase_seh_ephx2_and_more_standardization_report.md",
+        "sha256": "136168dfdeeb27e8721f8db74bda572fee20b19426c7b140c6efaf3505bde880",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/reports/combined/seh_ephx2_combined_report-v2.md",
+        "sha256": "7659eeb53d623e4eaf5652ca348ed1582fd473bb27f2cfc8e7109aa8736be449",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/reports/combined/seh_ephx2_combined_report.md",
+        "sha256": "3838c5f63c75464fb6e91894eac14fd8f9f213e7ce33a4fff79d455fcdce9f3f",
+        "kind": "original"
+      }
+    ],
+    "population": "all 1580 clean compound rows",
+    "counting_method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+    "corrected_value": {
+      "method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+      "population": "all clean standardized compound rows",
+      "denominator": 1580,
+      "valid_molecules": 1580,
+      "invalid_molecules": 0,
+      "unique_scaffolds_including_acyclic": 635,
+      "acyclic_molecules": 57,
+      "top_scaffolds": [
+        [
+          "C1C2CC3CC1CC(C2)C3",
+          90
+        ],
+        [
+          "",
+          57
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCNCC1",
+          55
+        ],
+        [
+          "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2",
+          49
+        ],
+        [
+          "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1",
+          39
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1",
+          38
+        ],
+        [
+          "c1ccccc1",
+          30
+        ],
+        [
+          "C1CCCCC1",
+          26
+        ],
+        [
+          "c1ccc(-c2ncoc2-c2ccccc2)cc1",
+          25
+        ],
+        [
+          "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2)CC1",
+          22
+        ]
+      ],
+      "adamantane": 90,
+      "phenyl_urea_adamantyl": 49
+    },
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep2",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 100,
+      "counts": {
+        "C1C2CC3CC1CC(C2)C3": 90,
+        "": 57,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 55,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 49,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 39,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 38,
+        "c1ccccc1": 30,
+        "C1CCCCC1": 26,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 25,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2)CC1": 22,
+        "O=C(NCc1ccccc1)C1CCN(c2ncncn2)CC1": 17,
+        "O=C(Nc1ccccc1)NC1CCCCC1": 16,
+        "O=C(Nc1ccccc1)Nc1cccc(OCCCN2CCOCC2)c1": 16,
+        "O=C(Nc1ccccc1)N1CCCC(c2ccccc2)C1": 16,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(NC1CCCCCC1)C1CCN(C(=O)c2ccccc2)CC1": 13,
+        "O=C(NCc1ccccc1)N1CCC(Oc2ccccc2)CC1": 13,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NCCc1ccccc1": 12,
+        "O=C(NCc1ccccc1)N1CCCCC1": 11,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 11,
+        "c1ccc(-n2nccc2C2CCNCC2)cc1": 10,
+        "O=C(c1ccccc1)N1CCC(c2ccnn2-c2ccccc2)CC1": 10,
+        "O=C(Nc1ccccc1)N1CCCCC1": 9,
+        "O=C(NCCCOc1ccc(-c2nc3ccccn3c2NC2CCCCC2)cc1)Nc1ccccc1": 9
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r1/20261004_164118_371994_team/reliability/runs.jsonl",
+        "sha256": "b5fbc9332228673b3a11fa8179016921bbca5fe8008ba856f1d3be85662ff8a3",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        {
+          "_truncated": 850
+        }
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 100,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_seh_ephx2_and_more_clean.csv",
+      "recorded_node_selection": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        {
+          "_truncated": 850
+        }
+      ],
+      "node_selection_complete": false,
+      "recorded_counts": {
+        "C1C2CC3CC1CC(C2)C3": 90,
+        "": 57,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 55,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 49,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 39,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 38,
+        "c1ccccc1": 30,
+        "C1CCCCC1": 26,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 25,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2)CC1": 22,
+        "O=C(NCc1ccccc1)C1CCN(c2ncncn2)CC1": 17,
+        "O=C(Nc1ccccc1)NC1CCCCC1": 16,
+        "O=C(Nc1ccccc1)Nc1cccc(OCCCN2CCOCC2)c1": 16,
+        "O=C(Nc1ccccc1)N1CCCC(c2ccccc2)C1": 16,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(NC1CCCCCC1)C1CCN(C(=O)c2ccccc2)CC1": 13,
+        "O=C(NCc1ccccc1)N1CCC(Oc2ccccc2)CC1": 13,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NCCc1ccccc1": 12,
+        "O=C(NCc1ccccc1)N1CCCCC1": 11,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 11,
+        "c1ccc(-n2nccc2C2CCNCC2)cc1": 10,
+        "O=C(c1ccccc1)N1CCC(c2ccnn2-c2ccccc2)CC1": 10,
+        "O=C(Nc1ccccc1)N1CCCCC1": 9,
+        "O=C(NCCCOc1ccc(-c2nc3ccccn3c2NC2CCCCC2)cc1)Nc1ccccc1": 9
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep3",
+    "claim_type": "assay_document_coverage",
+    "original_claim": [
+      "- Assay types: binding (B) + functional (F) \u2705",
+      "I'll chain: **ChEMBL retrieval \u2192 GTM (cached default map) \u2192 chemoinformatics \u2192 report**. Starting with the retrieval preflight + fetch, since everything downstream depends on `clean_dataset_path`.The guard requires `constraints` as a list of strings. Let me resubmit.`expected_output_schema` must be an object. Fixing both fields.`schema_version` must be an integer. Fixing.Retrieval succeeded: **1,580 clean unique human EPHX2 compounds**, Homo sapiens only, assay types constrained to B (2,183) + F (2), no MoA filter, `activity_final` present for 1,428 compounds. I'll record the artifact paths in session state, then fan out to GTM and chemoinformatics.The retrieval is registered as session dataset **ds_001**. Now I'll fan out in parallel: (1) GTM agent loads the cached default map (`descriptor_type=autoencoder`) and builds density + activity landscapes; (2) chemoinformatician profiles scaffolds/chemotypes, compares active vs inactive, and summarizes assay coverage \u2014 both consuming `clean_dataset_path`.Chemoinformatics is complete and clean. The GTM agent, however, returned mid-work \u2014 it loaded the default map and projected the dataset but did **not** return the final density/activity summaries or artifact paths. I'll re-task it to finish and report.GTM density + activity landscapes are complete. Now I'll have the Report Generator assemble the grounded, figure-rich report from all artifacts (retrieval, descriptors, GTM density/activity, chemotypes, active-vs-inactive, assay coverage).All stages are complete. The full **ChEMBL \u2192 GTM \u2192 chemoinformatics \u2192 report** chain for human sEH (EPHX2) ran successfully.",
+      "- **Preflight** initially flagged mechanism as unresolved \u2192 resolved as **\"unspecified/any\"** per the no-MoA-filter instruction; re-run returned `can_proceed=true` (protein target, *Homo sapiens*, assay types B+F, no mechanism filter). Target `EPHX2` accepted as a recognized gene symbol.",
+      "- **Coverage:** *Homo sapiens only*; target *Bifunctional epoxide hydrolase 2* (EPHX2, CHEMBL2409); **assay types B = 2,183 / F = 2**; 156 distinct assays; 2 targets; 76 documents. `activity_final` (pChEMBL, higher-is-better) present for **1,428** compounds (min 2.66, median 7.60, mean 7.41, max 10.70).",
+      "## 6. Assay coverage",
+      "Binding-dominant: **B = 2,183, F = 2**; **156 distinct assays**, 2 targets, 76 documents. Endpoint mix: IC50 1,882, Inhibition 136, Ki 48, T1/2 24, selectivity ratio 24, EC50 21, \u2026",
+      "Grounded, figure-rich report (density figure anchored in the density section with nodes labeled; Altair activity landscape anchored in the activity section; scaffold figures/tables; active-vs-inactive and assay-coverage sections \u2014 all potency claims cited from `activity_final`):",
+      "- Chemoinformatics CSVs: `.../analysis/chemotype/scaffold_summary.csv`, `.../analysis/activity_class_stats.csv`, `.../analysis/assay_coverage.csv`, `.../analysis/descriptor_comparison.csv`",
+      "**Bottom line:** human sEH (EPHX2) chemical space is **binding-assay-dominated** and **scaffold-diverse**, with the **adamantane-urea** and **phenyl-urea-piperidine** chemotypes being both the most populated and the most activity-enriched; potent compounds (pChEMBL up to 10.7) are **not localized in high-density regions**, so density should not be used as a potency proxy for this target."
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/live_seh_workflow/run_0/response.txt",
+        "sha256": "e40f23a69635e94f0c304f1c8529bdbcd2472b6ad3a7de0107ab80c22da6c1b6",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/live_seh_workflow/run_0/session_state.json",
+        "sha256": "2e87a25de07ec9319c0b233c841c3863babc4cc48e4140fdeafba34f3c26f82f",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/reliability/runs.jsonl",
+        "sha256": "92e4cac05542436d76eabc1b583efbba384ca61cf80c53550fd60105c131c11a",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/datasets/raw/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_raw.csv",
+        "sha256": "925a0abd527c6e595d9be6d549d001169e32c0150e046f63647e0cc1b4918245",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/datasets/clean/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_clean.csv",
+        "sha256": "4831a29e9449386649589066002b04d8501235a4b8432d1ac08f64a99ad7fec0",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/datasets/filtered/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_suspicious_filtered.csv",
+        "sha256": "c462c77ad4491a858012e917bd0e5756e49d237a3e4afb5f4dd635b6405130a0",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/standardization/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_standardization_report.md",
+        "sha256": "d6a9a7a70aa7bdf755c1c4d25f3266588edd636b202627e6f718aab8bcf1a9f6",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/reports/combined/seh_ephx2_chemical_space_report-v2.md",
+        "sha256": "6b77bde7e0367acf31627b12b7938e9a8eb00cbc9b603456ad8dde9cbae745eb",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/reports/combined/seh_ephx2_chemical_space_report.md",
+        "sha256": "3aaee90731251a277daf4983ac350ff6e2f3b466ffa916ab758c2ee105ab035b",
+        "kind": "original"
+      }
+    ],
+    "population": "retained raw; reconstructed full retrieval; clean compounds",
+    "counting_method": "Split pipe-delimited IDs, trim blanks, count distinct nonempty atomic IDs; never count serialized combinations as IDs.",
+    "corrected_value": {
+      "retained": {
+        "rows": 2185,
+        "distinct_assays": 156,
+        "distinct_documents": 76
+      },
+      "full_retrieved": {
+        "rows": 8322,
+        "distinct_assays": 508,
+        "distinct_documents": 169
+      },
+      "clean": {
+        "rows": 1580,
+        "distinct_assays": 156,
+        "distinct_documents": 76,
+        "serialized_assay_combinations": 167,
+        "serialized_document_combinations": 129
+      }
+    },
+    "original_count_operation_evidence": [
+      {
+        "tool_call_index": 81,
+        "column": "assay_chembl_ids",
+        "original_result": "167",
+        "serialized_combinations": 167,
+        "distinct_atomic_ids": 156,
+        "source": {
+          "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/reliability/runs.jsonl",
+          "sha256": "92e4cac05542436d76eabc1b583efbba384ca61cf80c53550fd60105c131c11a",
+          "kind": "original"
+        }
+      }
+    ],
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep3",
+    "claim_type": "saved_activity_subset_scaffolds",
+    "original_claim": {
+      "n_compounds": 1203,
+      "n_unique_scaffolds": 518,
+      "rule": "activity_final >= 6.0",
+      "top_scaffolds": [
+        {
+          "count": 73,
+          "scaffold_smiles": "C1C2CC3CC1CC(C2)C3"
+        },
+        {
+          "count": 50,
+          "scaffold_smiles": "O=C(Nc1ccccc1)NC1CCNCC1"
+        },
+        {
+          "count": 47,
+          "scaffold_smiles": "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2"
+        },
+        {
+          "count": 35,
+          "scaffold_smiles": "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1"
+        },
+        {
+          "count": 29,
+          "scaffold_smiles": "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1"
+        }
+      ],
+      "unique_scaffold_ratio": 0.4306
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/live_seh_workflow/run_0/session_state.json",
+        "sha256": "2e87a25de07ec9319c0b233c841c3863babc4cc48e4140fdeafba34f3c26f82f",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/datasets/clean/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_clean.csv",
+        "sha256": "4831a29e9449386649589066002b04d8501235a4b8432d1ac08f64a99ad7fec0",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/analysis/active_subset.csv",
+        "sha256": "d958d1eb0b020cc6124010a4b23f449af3106b21418e36cb2b3805eaac7a6ba6",
+        "kind": "original"
+      }
+    ],
+    "population": "active: activity_final >= 6; 1203 molecules",
+    "counting_method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds. Verify exact SMILES/activity row multiset against clean threshold subset.",
+    "corrected_value": {
+      "status": "verified",
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/analysis/active_subset.csv",
+        "sha256": "d958d1eb0b020cc6124010a4b23f449af3106b21418e36cb2b3805eaac7a6ba6",
+        "kind": "original"
+      },
+      "rule": "activity_final >= 6",
+      "method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+      "population": "all clean standardized compound rows",
+      "denominator": 1203,
+      "valid_molecules": 1203,
+      "invalid_molecules": 0,
+      "unique_scaffolds_including_acyclic": 518,
+      "acyclic_molecules": 15,
+      "counts": {
+        "C1C2CC3CC1CC(C2)C3": 73,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 50,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 47,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 35,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 29,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2)CC1": 19,
+        "O=C(NCc1ccccc1)C1CCN(c2ncncn2)CC1": 16,
+        "": 15,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(Nc1ccccc1)N1CCCC(c2ccccc2)C1": 14,
+        "O=C(Nc1ccccc1)Nc1cccc(OCCCN2CCOCC2)c1": 14,
+        "O=C(NCc1ccccc1)N1CCC(Oc2ccccc2)CC1": 13,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 11,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 10,
+        "O=C(NCCCOc1ccc(-c2nc3ccccn3c2NC2CCCCC2)cc1)Nc1ccccc1": 9,
+        "O=C(Nc1ccccc1)NC1CCCCC1": 9,
+        "O=C(NC1CCC(OCc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(NCCCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 8,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccccc1)Nc1ccccc1": 8,
+        "c1ccccc1": 8,
+        "O=C(Cc1ccccc1)Nc1cccc(OCCCN2CCOCC2)c1": 7,
+        "O=C(NC1CCCCC1)NC1CCNCC1": 7,
+        "O=C(NC1CCCCCC1)C1CCN(C(=O)c2ccccc2)CC1": 7,
+        "O=C(NC1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 7,
+        "O=C(Nc1cccc(OCCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 7,
+        "O=C(Nc1ccccc1)N1CCCCC1": 7,
+        "O=C(Nc1ccccc1)NC1C2CC3CC(C2)CC1C3": 7,
+        "O=C(Nc1ccccc1)Nc1ccc(C(=O)N2CCOCC2)cc1": 7,
+        "O=C1N=C(c2ccccc2)CC(c2ccc(NC(=O)c3ccccc3)cc2)N1": 7,
+        "O=C(NCCC(c1ccccc1)c1ccccc1)c1ccccc1": 6,
+        "O=C(NCc1ccccc1)N1CCCCC1": 6,
+        "O=C(Nc1ccc(C(=O)NC2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 6,
+        "O=C(Nc1ccccc1)Nc1ccc(C(=O)N2CCNCC2)cc1": 6,
+        "O=C(Nc1ccccc1)Nc1ccc(C(=O)NCCN2CCOCC2)cc1": 6,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NCCc1ccccc1": 5,
+        "O=C(NCCC(c1ccccc1)c1ccccc1)c1cccnc1": 5,
+        "O=C(NCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 5,
+        "O=C(Nc1ccc(C(=O)N2CCNCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(Nc1cccc(C(=O)N2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(Nc1ccno1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(Cc1ccc(Oc2nc3ccccc3s2)cc1)NCCc1ccccc1": 4,
+        "O=C(Cc1ccccc1)Nc1ccc(OCCCN2CCOCC2)cc1": 4,
+        "O=C(NC1CCNCC1)NC12CC3CC(CC(C3)O1)C2": 4,
+        "O=C(NCC12CC3CC(CC(C3)C1)C2)Nc1ccccc1": 4,
+        "O=C(NCCCOc1ccc(-c2nc3ccccn3c2NC2CCCC2)cc1)Nc1ccccc1": 4,
+        "O=C(NCc1ccno1)NCC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(CN2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(OCCCCN2CCNCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(OCCCN2CCNCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(OCCCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(OCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(OCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)O1)C2": 4,
+        "O=C(Nc1ccccc1)NC1CC2CCC1C2": 4,
+        "O=C(Nc1ccccc1)NC1CCC(OCc2ccccc2)CC1": 4,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccncc2)CC1": 4,
+        "O=C(Nc1ccccc1)Nc1ccc(OCCCN2CCOCC2)cc1": 4,
+        "O=C(Nc1ccccc1)Nc1cccc(C(=O)NCCN2CCOCC2)c1": 4,
+        "O=C(Nc1ccon1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(CC12CC3CC(CC(C3)C1)C2)Nc1cccc(OCCCCN2CCNCC2)c1": 3,
+        "O=C(Cc1ccc(Oc2ccccc2)cc1)NCCc1ccccc1": 3,
+        "O=C(NC12CC3CC(CC(C3)C1)C2)N1CCNCC1": 3,
+        "O=C(NC1CC1c1ccccc1)N1CCC2(CCc3ccccc3O2)CC1": 3,
+        "O=C(NC1CCCCCC1)C1CCNCC1": 3,
+        "O=C(NC1CCCCCC1)NC1CCNCC1": 3,
+        "O=C(NC1CCN(C(=O)CCC(=O)N2CCNCC2)CC1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(NCCCOc1ccc(-c2cn3ccccc3n2)cc1)Nc1ccccc1": 3,
+        "O=C(NCCCc1ccccc1)NCc1ccccc1": 3,
+        "O=C(NCc1ccccc1)N1CC2(CCN2S(=O)(=O)c2ccccc2)C1": 3,
+        "O=C(Nc1ccc(C(=O)N2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1cccc(OCCCC(=O)N2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1ccccc1)NC1CCCCCCC1": 3,
+        "O=C(Nc1ccccc1)Nc1ccc(Oc2ccncc2)cc1": 3,
+        "O=C(Nc1ccccc1)Nc1cccc(C(=O)N2CCNCC2)c1": 3,
+        "O=C(Nc1ccccc1)Nc1cccc(C(=O)N2CCOCC2)c1": 3,
+        "O=C(Nc1nccs1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "c1nc[nH]n1": 3,
+        "c1nn[nH]n1": 3,
+        "C1CCCCC1": 2,
+        "O=C(CC12CC3CC(CC(C3)C1)C2)Nc1cccc(OCCCN2CCOCC2)c1": 2,
+        "O=C(CCCCCCCCCCCNC(=O)NC12CC3CC(CC(C3)C1)C2)NCC(=O)NC1CCCCO1": 2,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NC(Cc1ccccc1)C(=O)NCCc1ccccc1": 2,
+        "O=C(NC1C(c2ccccc2)C1c1ccccc1)N1CCC(Oc2ccccc2)CC1": 2,
+        "O=C(NC1C(c2ccccc2)C1c1ccccc1)N1CCCCC1": 2,
+        "O=C(NC1CC1c1ccccc1)N1CCC2(CCc3ncccc3O2)CC1": 2,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2cccs2)CC1": 2,
+        "O=C(NC1CCCCCC1)NC1CCC(Oc2ccccc2)CC1": 2,
+        "O=C(NCC12CC3CC(CC(C3)C1)C2)N1CCCC1c1ccon1": 2,
+        "O=C(NCC12CC3CC(CC(C3)C1)C2)Nc1ccc(NC(=O)NCC23CC4CC(CC(C4)C2)C3)cc1": 2,
+        "O=C(NCC1CCCCC1)Nc1ccccc1": 2,
+        "O=C(NCCC(c1ccccc1)c1ccccc1)c1ccc(=O)[nH]c1": 2,
+        "O=C(NCCC(c1ccccc1)c1ccccc1)c1ccncc1": 2,
+        "O=C(NCCCC(=O)OCc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCCCC(=O)Oc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCCCCCCCCCCCC(=O)OCc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCCCCCCCCNC(=O)NC1CC2CCC1C2)NC1CC2CCC1C2": 2,
+        "O=C(NCCCCCCCCNC(=O)NCC12CC3CC(CC(C3)C1)C2)NCC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCCCCNC(=O)NC1CC2CCC1C2)NC1CC2CCC1C2": 2,
+        "O=C(NCCCCNC(=O)NCC12CC3CC(CC(C3)C1)C2)NCC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCCCCNC(=O)NCCC12CC3CC(CC(C3)C1)C2)NCCC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCCCOc1cccc(-c2nc3ccccn3c2NC2CCCCC2)c1)Nc1ccccc1": 2,
+        "O=C(NCCCc1ccccc1)Nc1ccccc1": 2,
+        "O=C(NCc1cc(-c2ccccc2)no1)NCC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCc1cc(-c2ccccc2)on1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCc1cc(-c2ccccc2)on1)NCC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCc1ccc(-c2ccccc2)cc1)N1CCCC(c2ccccc2)C1": 2,
+        "O=C(NCc1ccc(Cn2cccc2)cc1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCc1ccc(Cn2cccc2)cc1)NC1CCCCC1": 2,
+        "O=C(NCc1ccc(Cn2cccc2)cc1)Nc1ccccc1": 2,
+        "O=C(NCc1cccc(Cn2cccc2)c1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCc1ccccc1)C1CCN(c2ccncn2)CC1": 2,
+        "O=C(NCc1ccccc1)N1CCC(Oc2ccncc2)CC1": 2,
+        "O=C(NCc1ccccc1)N1CCC(Oc2ncccn2)CC1": 2,
+        "O=C(NCc1ccccc1)N1CCC(c2ccccc2)CC1": 2,
+        "O=C(NCc1ccccc1)Nc1ccccc1": 2,
+        "O=C(NCc1ccccc1Cn1cccc1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NCc1ccccc1Cn1cccc1)NC1CCCCC1": 2,
+        "O=C(Nc1cc[nH]n1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1ccc(-n2ccc(-c3cccnc3)n2)cc1)c1cccnc1": 2,
+        "O=C(Nc1ccc(OCCCN2CCNCC2)c2ncccc12)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1ccc(OCCN2CCOCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1ccc(Oc2ccccc2)cc1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1ccc(S(=O)(=O)Nc2cccnn2)cc1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1cccc(OCCCCN2CCN(C(=O)c3ccccc3)CC2)c1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1cccc(OCCCN2CCOCC2)c1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1cccc(OCCCN2CCOCC2)c1)NC1CCCCC1": 2,
+        "O=C(Nc1ccccc1)N1CCC(c2ccnn2-c2ccccc2)CC1": 2,
+        "O=C(Nc1ccccc1)NC12CC3CC1CC3C2": 2,
+        "O=C(Nc1ccccc1)NC1CCN(C(=O)C2CC2)CC1": 2,
+        "O=C(Nc1ccccc1)NC1CCN(C(=O)c2ccccc2)CC1": 2,
+        "O=C(Nc1ccccc1)NC1CCN(C(=O)c2cccnc2)CC1": 2,
+        "O=C(Nc1ccccc1)NC1CCN(S(=O)(=O)c2ccccc2)CC1": 2,
+        "O=C(Nc1ccccc1)Nc1ccc(C(=O)NCCN2CCCC2)cc1": 2,
+        "O=C(Nc1ccccc1)Nc1ccc(S(=O)(=O)CCCN2CCOCC2)cc1": 2,
+        "O=C(Nc1ccccc1)Nc1cccc(C(=O)NCCN2CCCC2)c1": 2,
+        "O=C(Nc1ccccc1)Nc1cccc(S(=O)(=O)CCCN2CCOCC2)c1": 2,
+        "O=C(Nc1ccccc1OCCCN1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1ccon1)NC1C2CC3CC(C2)CC1C3": 2,
+        "O=C(Nc1nnco1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(c1ccccc1)N1CCC2(CCc3ccccc3O2)CC1": 2,
+        "O=C1C(=O)N(CCC23CC4CC(CC(C4)C2)C3)C(=O)N1CCCCCCCCN1C(=O)C(=O)N(CCC23CC4CC(CC(C4)C2)C3)C1=O": 2,
+        "O=C1C(=O)N(CCC23CC4CC(CC(C4)C2)C3)C(=O)N1CCCCN1C(=O)C(=O)N(CCC23CC4CC(CC(C4)C2)C3)C1=O": 2,
+        "O=C1C(=O)N(c2ccccc2)C(=O)N1CC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C1CC2(CCN(C(=O)NC3CC3c3ccccc3)CC2)Oc2ccccc21": 2,
+        "c1ccc2scnc2c1": 2,
+        "C1=C2C3CC45OCC(CCC4C3CCC23CC32CCC(OC3CCCCO3)CC2C1)O5": 1,
+        "C1=NCCO1": 1,
+        "C1CC2CCC1C2": 1,
+        "C1CCC(OC2CCC34CC35CCC3C6CCCOC6CC3C5CCC4C2)OC1": 1,
+        "C1CCNCC1": 1,
+        "O=C(CC12CC3CC(CC(C3)C1)C2)C(=O)Nc1cccc(OCCCN2CCOCC2)c1": 1,
+        "O=C(CC12CC3CC(CC(C3)C1)C2)NC1CCC(OCc2ccccc2)CC1": 1,
+        "O=C(CC12CC3CC(CC(C3)C1)C2)NC1CCC(Oc2ccccc2)CC1": 1,
+        "O=C(CC12CC3CC(CC(C3)C1)C2)NC1CCCC(OCCCN2CCOCC2)C1": 1,
+        "O=C(CC12CC3CC(CC(C3)C1)C2)Nc1ccc(OCCCN2CCOCC2)cc1": 1,
+        "O=C(CC12CC3CC(CC(C3)C1)C2)Nc1ccc(OCc2ccccc2)cc1": 1,
+        "O=C(CC1CCCCC1)Nc1cccc(OCCCN2CCOCC2)c1": 1,
+        "O=C(CC1CCNCC1)Nc1ccccc1": 1,
+        "O=C(CCC(c1ccccc1)c1ccccc1)Nc1cccnc1": 1,
+        "O=C(CCC1(c2ccccc2)CCCN(C(=O)Nc2ccccc2)C1)N1CCOCC1": 1,
+        "O=C(CCC1(c2ccccc2)CCCN(C(=O)Nc2ccccc2)C1)NC1=NNNN1": 1,
+        "O=C(CCC12CC3CC(CC(C3)C1)C2)C(=O)NCCc1ccc(OCc2ccccc2)cc1": 1,
+        "O=C(CCC12CC3CC(CC(C3)C1)C2)C(=O)Nc1cccc(OCCCN2CCOCC2)c1": 1,
+        "O=C(CCC12CC3CC(CC(C3)C1)C2)NCCc1ccc(OCc2ccccc2)cc1": 1,
+        "O=C(CCC12CC3CC(CC(C3)C1)C2)Nc1ccc(OCc2ccccc2)cc1": 1,
+        "O=C(CCC12CC3CC(CC(C3)C1)C2)Nc1cccc(OCCCN2CCOCC2)c1": 1,
+        "O=C(CCCC12CC3CC(CC(C3)C1)C2)NCCc1ccc(OCc2ccccc2)cc1": 1,
+        "O=C(CCCC12CC3CC(CC(C3)C1)C2)Nc1cccc(OCCCN2CCOCC2)c1": 1,
+        "O=C(CCCCCCCCCCCNC(=O)NC12CC3CC(CC(C3)C1)C2)NC1CCCCO1": 1,
+        "O=C(CCCCCCCCCCCNC(=O)NC12CC3CC(CC(C3)C1)C2)NS(=O)(=O)c1ccccc1": 1,
+        "O=C(CCCCCCOCc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(CCCCCNC(=O)NC12CC3CC(CC(C3)C1)C2)NC(Cc1ccccc1)C(=O)NCCc1c[nH]c2ccccc12": 1,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NC(Cc1ccccc1)C(=O)N1CCCC1": 1,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NC(Cc1ccccc1)C(=O)NCCc1c[nH]c2ccccc12": 1,
+        "O=C(CCc1ccc(OCc2ccncc2)cc1)NCCc1ccccc1": 1,
+        "O=C(CCc1ccccc1)N1CCC2(CCc3ccccc3O2)CC1": 1,
+        "O=C(CNC12CC3CC(CC(C3)C1)C2)Nc1cccc(OCCCN2CCOCC2)c1": 1,
+        "O=C(Cc1ccc(Oc2nc3ccccc3s2)cc1)NCc1ccccc1": 1,
+        "O=C(Cc1ccc2c(c1)OCO2)Nc1cccc(OCCCN2CCOCC2)c1": 1,
+        "O=C(Cc1ccccc1)N1CCC2(CCc3ccccc3O2)CC1": 1,
+        "O=C(Cc1ccccc1)NC1CCNCC1": 1,
+        "O=C(Cc1cccnc1)NCCC(c1ccccc1)c1ccccc1": 1,
+        "O=C(N=CCc1ccccc1)N1CCCCC1": 1,
+        "O=C(NC12CC3CC(C1)C(=O)C(C3)C2)NC12CC3CC(C1)C(=O)C(C3)C2": 1,
+        "O=C(NC12CC3CC(CC(C3)C1)C2)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1C(c2ccccc2)C1c1ccccc1)N1CCCC(NS(=O)(=O)c2ccccc2)C1": 1,
+        "O=C(NC1C(c2ccccc2)C1c1ccccc1)N1CCNCC1": 1,
+        "O=C(NC1C2CC3CC(C2)CC1C3)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CC1c1ccccc1)C1CCc2ccccc2C1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCC(OC(c2ccccc2)c2ccccc2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccc(-c3ccccc3)cc2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccc(-c3nn[nH]n3)cc2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2cccc(-c3ccccc3)c2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2-c2ccccc2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccn2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2cccnc2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccncc2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2cnccn2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ncccn2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCC(c2ncno2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCCC(c2ccccc2)C1": 1,
+        "O=C(NC1CC1c1ccccc1)N1CCCC2(CCc3ccccc3O2)CC1": 1,
+        "O=C(NC1CC1c1ccccc1)c1ccc2nonc2c1": 1,
+        "O=C(NC1CC1c1ccccc1)c1ccccc1": 1,
+        "O=C(NC1CC2C=CC1C2)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(NC1CCC(Cc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCC(OC(=O)c2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCC(OC2CCCCC2)CC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCC(OCC2CCCCC2)CC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCC(OCCCN2CCOCC2)CC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)O1)C2": 1,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC1C3)C2": 1,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CCC(C1)C(=O)O2": 1,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC1C2CC3C4CC5CC3C1C(C5)C4C2": 1,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC1CC2C=CC1C2": 1,
+        "O=C(NC1CCC(Oc2ccccn2)CC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCC2CCCC2C1)C1CCCN(S(=O)(=O)c2cccs2)C1": 1,
+        "O=C(NC1CCCC(C(=O)N2CCC(N3CCOCC3)CC2)C1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCCC(C(=O)N2CCOCC2)C1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCCC(C(=O)NN2CCOCC2)C1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCCC(C(=O)OCc2ccccc2)C1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCCC(OCCCN2CCOCC2)C1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCCCC1)N1CCC(c2ccnn2-c2ccccc2)CC1": 1,
+        "O=C(NC1CCCCC1)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(NC1CCCCC1)NC1CCC(Oc2ccccc2)CC1": 1,
+        "O=C(NC1CCCCC1)NC1CCCCC1": 1,
+        "O=C(NC1CCCCC1)NC1CCN(C(=O)c2ccccn2)CC1": 1,
+        "O=C(NC1CCCCCC1)C1CCN(Cc2ccccc2)CC1": 1,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)C2CC2)CC1": 1,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)C2CCCCC2)CC1": 1,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccc3c(c2)OCCO3)CC1": 1,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2cccc3ccccc23)CC1": 1,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccsc2)CC1": 1,
+        "O=C(NC1CCCCCCC1)NC1CCC(Oc2ccccc2)CC1": 1,
+        "O=C(NC1CCN(C(=O)C2CC2)CC1)NC12CC3CC(CC(C3)O1)C2": 1,
+        "O=C(NC1CCN(C(=O)C2CCOCC2)CC1)NC12CC3CC(CC(C3)O1)C2": 1,
+        "O=C(NC1CCN(C(=O)c2ccccc2)CC1)NC12CC3CC(CC(C3)O1)C2": 1,
+        "O=C(NC1CCN(C(=O)c2cccnc2)CC1)NC12CC3CC(CC(C3)O1)C2": 1,
+        "O=C(NC1CCN(S(=O)(=O)c2ccccc2)CC1)C1CCCCCC1": 1,
+        "O=C(NC1CCN(c2ccccc2)CC1)NC12CC3CC(CC(C3)O1)C2": 1,
+        "O=C(NC1CCN(c2ccccc2)CC1)NC1CC1c1ccccc1": 1,
+        "O=C(NC1CCN(c2ncncn2)CC1)NC12CC3CC(CC(C3)O1)C2": 1,
+        "O=C(NC1CCNCC1)NC12CC3C4CC5CC3C(C1)C(C5)C4C2": 1,
+        "O=C(NC1CCNCC1)NC12CC3CC(CC1C3)C2": 1,
+        "O=C(NC1CCNCC1)NC12CC3CC1CC3C2": 1,
+        "O=C(NC1CCNCC1)NC1C2CC3C4CC5CC3C1C(C5)C4C2": 1,
+        "O=C(NC1CCNCC1)NC1C2CCC1CC2": 1,
+        "O=C(NC1CCNCC1)NC1CC1c1ccccc1": 1,
+        "O=C(NC1CCNCC1)NC1CC2CCC1CC2": 1,
+        "O=C(NC1CCOCC1)C1CCN(C(=O)NCc2ccccc2)CC1": 1,
+        "O=C(NCC#CCOc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCC12CC3CC(CC(C3)C1)C2)N1CCCC1c1ccno1": 1,
+        "O=C(NCC12CC3CC(CC(C3)C1)C2)NC1CC2C=CC1C2": 1,
+        "O=C(NCC12CC3CC1CC3C2)Nc1ccccc1": 1,
+        "O=C(NCC1CCC2CC1C2)Nc1ccccc1": 1,
+        "O=C(NCC1CCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 1,
+        "O=C(NCC1CCN(C(=O)NCC23CC4CC(CC(C4)C2)C3)CC1)NCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCC(c1ccccc1)c1ccccc1)N1CCC(Oc2cnccn2)CC1": 1,
+        "O=C(NCCC(c1ccccc1)c1ccccc1)N1CCC(c2cnccn2)C1": 1,
+        "O=C(NCCC(c1ccccc1)c1ccccc1)N1CCCC1": 1,
+        "O=C(NCCC(c1ccccc1)c1ccccc1)c1ccccn1": 1,
+        "O=C(NCCC12CC3CC(CC(C3)C1)C2)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCC1=CCCCC1)Nc1ccc2[nH]nnc2c1": 1,
+        "O=C(NCCC1CCOCC1)C1CCN(C(=O)NCc2ccccc2)CC1": 1,
+        "O=C(NCCCC(=O)OC(c1ccccc1)c1ccccc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCC(c1ccccc1)c1ccccc1)c1cccnc1": 1,
+        "O=C(NCCCCCCCCCCCC(=O)OC12CC3CC(CC(C3)C1)C2)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCCCCCCCCC(=O)OCc1cccc2ccccc12)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCCCCCCCNC(=O)NC1CC2C=CC1C2)NC1CC2C=CC1C2": 1,
+        "O=C(NCCCCCCCCNC(=O)NC12CC3CC(CC(C3)C1)C2)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCCCCCNC(=O)NC1C2CC3CC(C2)CC1C3)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(NCCCCCCCCNC(=O)NCCC12CC3CC(CC(C3)C1)C2)NCCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCCCCCNC(=O)NCc1ccco1)NCc1ccco1": 1,
+        "O=C(NCCCCCCNC(=O)NCC12CC3CC(CC(C3)C1)C2)NCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCCCNC(=O)NCCC12CC3CC(CC(C3)C1)C2)NCCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCCCNC(=O)NCc1ccco1)NCc1ccco1": 1,
+        "O=C(NCCCCCOCCCN1CCOCC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCCOCCN1CCOCC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCCOCCOCCOCc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCCOCCOCCOc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCNC(=O)NC12CC3CC(CC(C3)C1)C2)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCNC(=O)NC1C2CC3CC(C2)CC1C3)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(NCCCCNC(=O)NC1CC2C=CC1C2)NC1CC2C=CC1C2": 1,
+        "O=C(NCCCCOc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCOc1ccccc1)Nc1ccccc1": 1,
+        "O=C(NCCCN1CCOCC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCOc1ccc(-c2nc3ccccn3c2NC2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCOc1ccc(-c2nc3ccccn3c2NC2CCCCC2)cc1)NC1CCCCC1": 1,
+        "O=C(NCCCc1cc(-c2ccccc2)n(-c2ccccc2)n1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCc1cc(-c2ccccc2)n(-c2ccccc2)n1)NC1CCCCCC1": 1,
+        "O=C(NCCCc1ccccc1)C1CCC12CN(S(=O)(=O)c1ccccc1)C2": 1,
+        "O=C(NCCCc1ccccc1)N1CC2(CCN2S(=O)(=O)c2ccccc2)C1": 1,
+        "O=C(NCCCc1ccccc1)N1CCCC1c1ccccc1": 1,
+        "O=C(NCCCc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCc1ccccc1)NC1CCC(OCc2ccccc2)CC1": 1,
+        "O=C(NCCCc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 1,
+        "O=C(NCCCc1ccccc1)NC1CCCc2ccccc21": 1,
+        "O=C(NCCCc1ccccc1)NC1CCc2ccccc21": 1,
+        "O=C(NCCCc1ccccc1)NCC1CCCCC1": 1,
+        "O=C(NCCCc1ccccc1)NCc1cccc2ccccc12": 1,
+        "O=C(NCCCc1ccccc1)c1cccnc1": 1,
+        "O=C(NCCCc1cccnc1)N1CCCC(c2ccccc2)C1": 1,
+        "O=C(NCCN(CCNC(=O)NCC12CC3CC(CC(C3)C1)C2)CCNC(=O)NCC12CC3CC(CC(C3)C1)C2)NCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCN1CCCC1)C1CCN(C(=O)NCc2ccccc2)CC1": 1,
+        "O=C(NCCNC(=O)NCC12CC3CC(CC(C3)C1)C2)NCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCNS(=O)(=O)c1cccc2ccccc12)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 1,
+        "O=C(NCCc1ccc(OCc2ccccc2)cc1)NCCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCc1ccc2[nH]cnc2c1)N1CCCC(c2ccccc2)C1": 1,
+        "O=C(NCCc1ccc2nccnc2c1)N1CCCC(c2ccccc2)C1": 1,
+        "O=C(NCCc1ccccc1)N1CCCC(c2ccccc2)C1": 1,
+        "O=C(NCCc1ccccc1)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(NCCc1ccccc1)NC1CCCCC1": 1,
+        "O=C(NCc1cc(-c2ccccc2)n(-c2ccccc2)n1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCc1cc(-c2ccccc2)n(-c2ccccc2)n1)NC1CCCCCC1": 1,
+        "O=C(NCc1cc(-c2ccccc2)no1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCc1cc(-c2ccco2)on1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCc1cc(-c2ccco2)on1)NCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCc1ccc(-c2ccc3[nH]ccc3c2)cc1)N1CCCC(c2ccccc2)C1": 1,
+        "O=C(NCc1ccc(-c2ccccn2)cc1)N1CCCC(c2ccccc2)C1": 1,
+        "O=C(NCc1ccc(-n2ccc(-c3cccnc3)n2)cc1)c1ccncc1": 1,
+        "O=C(NCc1cccc(Cn2cccc2)c1)NC1CCCCC1": 1,
+        "O=C(NCc1cccc(Cn2cccc2)c1)Nc1ccccc1": 1,
+        "O=C(NCc1ccccc1)C1CCC(Nc2ncnc(NCCc3ccccc3)n2)CC1": 1,
+        "O=C(NCc1ccccc1)C1CCCC(Nc2ncnc(N3CCNCC3)n2)C1": 1,
+        "O=C(NCc1ccccc1)C1CCCC(Nc2ncncn2)C1": 1,
+        "O=C(NCc1ccccc1)C1CCN(c2ccccc2)CC1": 1,
+        "O=C(NCc1ccccc1)C1CCN(c2ccccn2)CC1": 1,
+        "O=C(NCc1ccccc1)C1CCN(c2ccncc2)CC1": 1,
+        "O=C(NCc1ccccc1)C1CCN(c2ncccn2)CC1": 1,
+        "O=C(NCc1ccccc1)C1CCN(c2ncnc(-c3ccccc3)n2)CC1": 1,
+        "O=C(NCc1ccccc1)C1CCN(c2ncnc(C3CCCCC3)n2)CC1": 1,
+        "O=C(NCc1ccccc1)C1CCN(c2ncnc(N3CCNCC3)n2)CC1": 1,
+        "O=C(NCc1ccccc1)C1CCN(c2ncnc(N3CCOCC3)n2)CC1": 1,
+        "O=C(NCc1ccccc1)N1CC2(C1)CN(C(=O)c1ccccc1)C2": 1,
+        "O=C(NCc1ccccc1)N1CC2(C1)CN(S(=O)(=O)c1ccccc1)C2": 1,
+        "O=C(NCc1ccccc1)N1CC2(CCN2c2ncccn2)C1": 1,
+        "O=C(NCc1ccccc1)N1CC2CN(C(=O)c3ccccc3)C2C1": 1,
+        "O=C(NCc1ccccc1)N1CC2CN(S(=O)(=O)c3ccccc3)C2C1": 1,
+        "O=C(NCc1ccccc1)N1CC2CN(c3ccccc3)C2C1": 1,
+        "O=C(NCc1ccccc1)N1CC2CN(c3ncccn3)C2C1": 1,
+        "O=C(NCc1ccccc1)N1CCC(Cc2ccccc2)CC1": 1,
+        "O=C(NCc1ccccc1)N1CCC(Cc2ccccn2)CC1": 1,
+        "O=C(NCc1ccccc1)N1CCC(NS(=O)(=O)c2ccccc2)CC1": 1,
+        "O=C(NCc1ccccc1)N1CCC(Nc2ncccn2)CC1": 1,
+        "O=C(NCc1ccccc1)N1CCC(S(=O)(=O)c2ccccc2)CC1": 1,
+        "O=C(NCc1ccccc1)N1CCC(c2ccncc2)C1": 1,
+        "O=C(NCc1ccccc1)N1CCC12CN(S(=O)(=O)c1ccccc1)C2": 1,
+        "O=C(NCc1ccccc1)N1CCN(c2ccccn2)CC1": 1,
+        "O=C(NCc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCc1ccccc1)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(NCc1ccccc1)NC1CC1c1ccccc1": 1,
+        "O=C(NCc1ccco1)NCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCc1ccco1)Nc1ccccc1": 1,
+        "O=C(NCc1ccn(-c2ccccc2)n1)Nc1ccccc1": 1,
+        "O=C(NCc1ccno1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCc1ccon1)NCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cc[nH]n1)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(Nc1ccc(-c2ccccc2)cc1)N1CCCC(c2ccccc2)C1": 1,
+        "O=C(Nc1ccc(-c2csc(Nc3ccccc3)n2)cc1)C12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(-n2ccc(-c3cccnc3)n2)cc1)c1ccccc1": 1,
+        "O=C(Nc1ccc(-n2ccc(-c3cccnc3)n2)cc1)c1ccncc1": 1,
+        "O=C(Nc1ccc(-n2ccc(-c3cccnc3)n2)cn1)c1ccc(=O)[nH]c1": 1,
+        "O=C(Nc1ccc(-n2ccc(-c3cccnc3)n2)cn1)c1ccccc1": 1,
+        "O=C(Nc1ccc(-n2ccc(-c3cccnc3)n2)nc1)c1ccccc1": 1,
+        "O=C(Nc1ccc(-n2ccc(-c3cccnc3)n2)nn1)c1ccccc1": 1,
+        "O=C(Nc1ccc(C(=O)N2CCCC(C(=O)N3CCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(C(=O)NC2CCC(C(=O)N3CCCCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(C(=O)NC2CCC(C(=O)NCCN3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(C(=O)NCCN2CCOCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(C(=O)NCCN2CCOCC2)cc1)Nc1ccc(C2CCCCC2)cc1": 1,
+        "O=C(Nc1ccc(C(=O)c2ccccc2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(C2CCCCC2)cc1)Nc1cccc(C(=O)NCCN2CCOCC2)c1": 1,
+        "O=C(Nc1ccc(CC(=O)c2ccccc2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(CN2CCCC(C(=O)N3CCCN(C(=O)C4CC4)CC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(CN2CCCC(C(=O)N3CCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(N2CCOCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(NC(=O)NC23CC4CC(CC(C4)C2)C3)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(OC(=O)c2ccccc2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(OCC2CNCCO2)cc1)NC1CCCCC1": 1,
+        "O=C(Nc1ccc(OCCCN2CCOCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(OCCCN2CCOCC2)cc1)NC1CCCCC1": 1,
+        "O=C(Nc1ccc(OCc2ccccc2)cc1)C(=O)C12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(Oc2ccccc2)cc1)NC1CCNCC1": 1,
+        "O=C(Nc1ccc(Oc2ccncc2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(S(=O)(=O)Nc2ccccc2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(S(=O)(=O)Nc2ccno2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(S(=O)(=O)Nc2ccon2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(S(=O)(=O)Nc2ncccn2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(S(=O)(=O)Nc2ncco2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(Sc2ccccc2)cc1)C1CCN(C(=O)c2ccccc2)CC1": 1,
+        "O=C(Nc1ccc2c(c1)-c1ccccc1S2(=O)=O)N1CCCCC1": 1,
+        "O=C(Nc1ccc2c(c1)OCO2)NC1CCNCC1": 1,
+        "O=C(Nc1ccc2ccccc2c1)NC1CCNCC1": 1,
+        "O=C(Nc1ccc2ocnc2c1)NC1CC1c1ccccc1": 1,
+        "O=C(Nc1cccc(C(=O)N2CCC(N3CCOCC3)CC2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccc(C(=O)N2CCOCC2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccc(C(=O)NCC2CN(Cc3ccccc3)CCO2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccc(C(=O)NCCCN2CCOCC2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccc(C(=O)NCCN2CCOCC2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccc(C(=O)Nc2ccc(N3CCOCC3)cc2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccc(C(=O)c2ccccc2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccc(OC(=O)c2ccccc2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccc(OCCCCN2CCN(S(=O)(=O)c3ccccc3)CC2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccc(OCCCN2CCOCC2)c1)C12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccc(OCCCN2CCOCC2)c1)C1CCCCC1": 1,
+        "O=C(Nc1cccc(OCCCN2CCOCC2)c1)Nc1ccc2c(c1)OCO2": 1,
+        "O=C(Nc1cccc(OCCCN2CCOCC2)c1)c1ccccc1": 1,
+        "O=C(Nc1cccc(Oc2ccccc2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccccc1)N1CCC(COc2ccc(-c3cn4ccccc4n3)cc2)CC1": 1,
+        "O=C(Nc1ccccc1)N1CCC(COc2ccc(-c3nc4ccccn4c3NC3CCCCC3)cc2)CC1": 1,
+        "O=C(Nc1ccccc1)N1CCC(n2cccc2)CC1": 1,
+        "O=C(Nc1ccccc1)N1CCCC(CCC2=NNNN2)(c2ccccc2)C1": 1,
+        "O=C(Nc1ccccc1)N1CCCC(c2ccc(-c3ccccc3)cc2)C1": 1,
+        "O=C(Nc1ccccc1)N1CCCC(c2ccccn2)C1": 1,
+        "O=C(Nc1ccccc1)N1CCCC(c2cccnc2)C1": 1,
+        "O=C(Nc1ccccc1)N1CCCC(c2ccncc2)C1": 1,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC1C3)C2": 1,
+        "O=C(Nc1ccccc1)NC1C2CC3C4CC5CC3C1C(C5)C4C2": 1,
+        "O=C(Nc1ccccc1)NC1CC2CC(C2)C1": 1,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccc(-c3nnco3)cc2)CC1": 1,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccc(C(=O)NCc3ccccc3)cc2)CC1": 1,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccc(C(=O)OCc3ccccc3)cc2)CC1": 1,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2cccnc2)CC1": 1,
+        "O=C(Nc1ccccc1)NC1CCCC1": 1,
+        "O=C(Nc1ccccc1)NC1CCCCCC1": 1,
+        "O=C(Nc1ccccc1)NC1CCN(C(=O)CN2CCN(Cc3ccccc3)CC2)CC1": 1,
+        "O=C(Nc1ccccc1)NC1CCN(C(=O)CN2CCNCC2)CC1": 1,
+        "O=C(Nc1ccccc1)NC1CCN(C(=O)Cc2ccccn2)CC1": 1,
+        "O=C(Nc1ccccc1)NC1CCN(C(=O)c2ccncc2)CC1": 1,
+        "O=C(Nc1ccccc1)NC1CCN(S(=O)(=O)C2CC2)CC1": 1,
+        "O=C(Nc1ccccc1)NC1CCN(S(=O)(=O)c2cccc3ccccc23)CC1": 1,
+        "O=C(Nc1ccccc1)NN1CCC(Oc2ccccc2)CC1": 1,
+        "O=C(Nc1ccccc1)Nc1cc(-c2ccccc2)n(-c2ccccc2)n1": 1,
+        "O=C(Nc1ccccc1)Nc1ccc(C(=O)N2CCC(N3CCOCC3)CC2)cc1": 1,
+        "O=C(Nc1ccccc1)Nc1ccc(C(=O)NCC(=O)N2CCOCC2)cc1": 1,
+        "O=C(Nc1ccccc1)Nc1ccc(C(=O)Nc2cccnc2)cc1": 1,
+        "O=C(Nc1ccccc1)Nc1ccc(C(=O)c2ccccc2)cc1": 1,
+        "O=C(Nc1ccccc1)Nc1ccc(C23CC4CC(CC(C4)C2)C3)cc1": 1,
+        "O=C(Nc1ccccc1)Nc1ccc(Oc2ccccc2)cc1": 1,
+        "O=C(Nc1ccccc1)Nc1ccc(S(=O)(=O)N2CCNCC2)cc1": 1,
+        "O=C(Nc1ccccc1)Nc1ccc(S(=O)(=O)N2CCOCC2)cc1": 1,
+        "O=C(Nc1ccccc1)Nc1ccc(S(=O)(=O)NCCN2CCOCC2)cc1": 1,
+        "O=C(Nc1ccccc1)Nc1cccc(C(=O)N2CCC(N3CCOCC3)CC2)c1": 1,
+        "O=C(Nc1ccccc1)Nc1cccc(C(=O)Nc2cccnc2)c1": 1,
+        "O=C(Nc1ccccc1)Nc1cccc(C(=O)c2ccccc2)c1": 1,
+        "O=C(Nc1ccccc1)Nc1cccc(S(=O)(=O)N2CCNCC2)c1": 1,
+        "O=C(Nc1ccccc1)Nc1cccc(S(=O)(=O)N2CCOCC2)c1": 1,
+        "O=C(Nc1ccccc1)Nc1cccc(S(=O)(=O)NCCN2CCOCC2)c1": 1,
+        "O=C(Nc1ccccc1)OC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(Nc1ccccc1OCCCCN1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccnc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccncc1)N1CCCC(c2ccccc2)C1": 1,
+        "O=C(Nc1ccncc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccncc1)c1ccc(-n2ccc(-c3cccnc3)n2)cc1": 1,
+        "O=C(Nc1ccncn1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccon1)NC12CC3CC(CC(C3)O1)C2": 1,
+        "O=C(Nc1cn[nH]c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cnc(-n2ccc(-c3cccnc3)n2)cn1)c1ccccc1": 1,
+        "O=C(Nc1nc2ccccc2s1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1nc2ccccc2s1)NC12CC3CC(CC(C3)O1)C2": 1,
+        "O=C(Nc1ncc(-n2ccc(-c3cccnc3)n2)cn1)c1ccccc1": 1,
+        "O=C(Nc1nccnn1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ncco1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ncco1)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(Nc1nccs1)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(Nc1ncncn1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1nnc(C2CC2)o1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1nnc(C2CCC2)o1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1nnc(C2CCC2)o1)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(Nc1nnco1)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(Nc1noc2ccccc12)N1CCCC(c2ccccc2)C1": 1,
+        "O=C1C(=O)N(C23CC4CC(CC(C4)C2)C3)C(=O)N1C1C2CC3CC(C2)CC1C3": 1,
+        "O=C1C(=O)N(C23CC4CC(CC(C4)C2)C3)C(=O)N1C1CCC(Oc2ccccc2)CC1": 1,
+        "O=C1C(=O)N(C23CC4CC(CC(C4)C2)C3)C(=O)N1CCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C1C(=O)N(C23CC4CC(CC(C4)C2)C3)C(=O)N1CCCCCCCCN1C(=O)C(=O)N(C23CC4CC(CC(C4)C2)C3)C1=O": 1,
+        "O=C1C(=O)N(C23CC4CC(CC(C4)C2)C3)C(=O)N1CCCCCCN1C(=O)C(=O)N(C23CC4CC(CC(C4)C2)C3)C1=O": 1,
+        "O=C1C(=O)N(C23CC4CC(CC(C4)C2)C3)C(=O)N1c1ccccc1": 1,
+        "O=C1C(=O)N(C2CCC(Oc3ccccc3)CC2)C(=O)N1C1CCCCCC1": 1,
+        "O=C1C(=O)N(C2CCC(Oc3ccccc3)CC2)C(=O)N1c1ccccc1": 1,
+        "O=C1C(=O)N(CC23CC4CC(CC(C4)C2)C3)C(=O)N1CCN(CCN1C(=O)C(=O)N(CC23CC4CC(CC(C4)C2)C3)C1=O)CCN1C(=O)C(=O)N(CC23CC4CC(CC(C4)C2)C3)C1=O": 1,
+        "O=C1C(=O)N(CCC23CC4CC(CC(C4)C2)C3)C(=O)N1CCCCCCN1C(=O)C(=O)N(CCC23CC4CC(CC(C4)C2)C3)C1=O": 1,
+        "O=C1C(=O)N(c2ccc(C34CC5CC(CC(C5)C3)C4)cc2)C(=O)N1c1ccccc1": 1,
+        "O=C1CC2(CCN(C(=O)NC3CC3c3ccccc3)CC2)Oc2ccc(-c3ccn[nH]3)cc21": 1,
+        "O=C1CC2(CCN(C(=O)NC3CC3c3ccccc3)CC2)Oc2ccc(-c3ccncc3)cc21": 1,
+        "O=C1CC2(CCN(C(=O)NC3CC3c3ccccc3)CC2)Oc2ccc(Nc3ccn[nH]3)cc21": 1,
+        "O=C1CC2(CCN(C(=O)NC3CC3c3ccccc3)CC2)Oc2cccnc21": 1,
+        "O=C1CC2(CCN(C(=O)NC3CCC(c4ccccc4)C3)CC2)Oc2ccccc21": 1,
+        "O=C1CC2(CCN(C(=O)NC3CCc4ccccc43)CC2)Oc2ccccc21": 1,
+        "O=C1CC2(CCN(C(=O)NC3CCc4ccccc4C3)CC2)Oc2ccccc21": 1,
+        "O=C1CC2(CCN(C(=O)NC3CCc4ccccc4CC3)CC2)Oc2ccccc21": 1,
+        "O=C1Cc2cc(-c3cc[nH]n3)ccc2N1": 1,
+        "O=C1N=C(c2ccccc2)CC(c2ccccc2)N1": 1,
+        "O=C1Nc2ccc(-c3cn[nH]c3)cc2C1Cc1ccccc1": 1,
+        "O=C1Nc2ccc(C3CCCCC3)cc2C12CCOCC2": 1,
+        "O=S(=O)(NC1CCCC1)c1ccnc2[nH]c(-c3ccccc3)nc12": 1,
+        "O=S1NC=NO1": 1,
+        "O=c1[nH]ccs1": 1,
+        "O=c1c2ccccc2[se]n1-c1ccccc1": 1,
+        "O=c1nc[nH]o1": 1,
+        "O=c1nc[nH]s1": 1,
+        "S=C(Nc1cccc(OCCCN2CCOCC2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "S=C(Nc1ccccc1)NC1C2CC3CC(C2)CC1C3": 1,
+        "S=c1nc[nH]o1": 1,
+        "c1ccc(-c2[nH]ncc2-c2ccncc2)cc1": 1,
+        "c1ccc(-c2nc(-c3ccccc3)c(-c3ccccc3)o2)cc1": 1,
+        "c1ccc(-n2nccc2C2CCNCC2)cc1": 1,
+        "c1ccc(CNCCC23CC4CC(CC(C4)C2)C3)cc1": 1,
+        "c1ccc(OC2CCN(CC3CC3)C2)cc1": 1,
+        "c1ccc2c(OC3CCCCO3)c3ccccc3c(OC3CCCCO3)c2c1": 1,
+        "c1ccc2c(c1)CCC1C2CCC2CCCC21": 1,
+        "c1ccc2sccc2c1": 1,
+        "c1ccn2c(NC3CCCCC3)c(-c3ccc(N4CCOCC4)cc3)nc2c1": 1,
+        "c1nc2[nH]ncc2c2c1CSCC2": 1
+      }
+    },
+    "status": "verified",
+    "evidence_kind": "reconstructed from original saved activity subset; not a node-membership replay",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep3",
+    "claim_type": "saved_activity_subset_scaffolds",
+    "original_claim": {
+      "n_compounds": 225,
+      "n_unique_scaffolds": 122,
+      "rule": "activity_final < 6.0",
+      "top_scaffolds": [
+        {
+          "chemotype": "acyclic",
+          "count": 17,
+          "scaffold_smiles": ""
+        },
+        {
+          "count": 14,
+          "scaffold_smiles": "c1ccc(-c2ncoc2-c2ccccc2)cc1"
+        },
+        {
+          "count": 12,
+          "scaffold_smiles": "C1CCCCC1"
+        },
+        {
+          "count": 11,
+          "scaffold_smiles": "c1ccccc1"
+        },
+        {
+          "count": 10,
+          "scaffold_smiles": "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1"
+        }
+      ],
+      "unique_scaffold_ratio": 0.5422
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/live_seh_workflow/run_0/session_state.json",
+        "sha256": "2e87a25de07ec9319c0b233c841c3863babc4cc48e4140fdeafba34f3c26f82f",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/datasets/clean/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_clean.csv",
+        "sha256": "4831a29e9449386649589066002b04d8501235a4b8432d1ac08f64a99ad7fec0",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/analysis/inactive_subset.csv",
+        "sha256": "92fbbbb0cc2cf3c3570eb6cf5abe66f39d0a10cfdde139351d3cd3a1807b35a1",
+        "kind": "original"
+      }
+    ],
+    "population": "inactive: activity_final < 6; 225 molecules",
+    "counting_method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds. Verify exact SMILES/activity row multiset against clean threshold subset.",
+    "corrected_value": {
+      "status": "verified",
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/analysis/inactive_subset.csv",
+        "sha256": "92fbbbb0cc2cf3c3570eb6cf5abe66f39d0a10cfdde139351d3cd3a1807b35a1",
+        "kind": "original"
+      },
+      "rule": "activity_final < 6",
+      "method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+      "population": "all clean standardized compound rows",
+      "denominator": 225,
+      "valid_molecules": 225,
+      "invalid_molecules": 0,
+      "unique_scaffolds_including_acyclic": 122,
+      "acyclic_molecules": 17,
+      "counts": {
+        "": 17,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 14,
+        "C1CCCCC1": 12,
+        "c1ccccc1": 11,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 10,
+        "C1C2CC3CC1CC(C2)C3": 6,
+        "O=C(NC1CCCCCC1)C1CCN(C(=O)c2ccccc2)CC1": 6,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NCCc1ccccc1": 5,
+        "O=C(Cc1ccc(Oc2nc3ccccc3s2)cc1)NCCc1ccccc1": 4,
+        "C1=C2C3CC45OCC(CCC4C3CCC23CC32CCC(OC3CCCCO3)CC2C1)O5": 3,
+        "O=C(CC1CCCCC1)Nc1ccccc1": 3,
+        "O=C(Cc1ccccc1)NC1CCCCC1": 3,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 3,
+        "O=C(Nc1ccccc1OCCCCN1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "c1ccc(-n2nccc2C2CCNCC2)cc1": 3,
+        "C1CC2CCC1C2": 2,
+        "O=C(C=Cc1ccccc1)OC1CCOC1OC1CCCC(COC(=O)c2ccccc2)O1": 2,
+        "O=C(CCCCCNC(=O)NC12CC3CC(CC(C3)C1)C2)NCCc1ccccc1": 2,
+        "O=C(Cc1ccc(Oc2ccccc2)cc1)NCCc1ccccc1": 2,
+        "O=C(Cc1ccccc1)Nc1ccccc1": 2,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2cccs2)CC1": 2,
+        "O=C(NCCCc1ccccc1)NCc1ccccc1": 2,
+        "O=C(NCc1ccccc1)N1CCCCC1": 2,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1ccccc1)NC1CCCCC1": 2,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 2,
+        "O=C(Nc1ccccc1)Nc1cccc(OCCCN2CCOCC2)c1": 2,
+        "O=C(Nc1ccccc1OCCCN1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "c1ccc(-c2nc(-c3ccccc3)c(-c3ccccc3)o2)cc1": 2,
+        "c1ccc(OCCCN2CCOCC2)cc1": 2,
+        "C1=C2C3CC45OC6CCOC6(CCC4C3CCC23CC32CCC(OC3CCCCO3)CC2C1)O5": 1,
+        "C1=C2C3CC4OCCCC4C3CCC23CC32CCC(OC3CCCCO3)CC2C1": 1,
+        "C1CCC(OC2CCC34CC35CCC3C6CC7OCCC7OC6CC3C5CCC4C2)OC1": 1,
+        "N=C1C(=Cc2ccccc2)N2CCC1CC2": 1,
+        "O=C(C=Cc1ccccc1)OC1CCOC1OC1CCC(OC(=O)c2ccccc2)CO1": 1,
+        "O=C(C=Cc1ccccc1)OCC1CCCC(OC2OCCC2OC(=O)C=Cc2ccccc2)O1": 1,
+        "O=C(CC12CC3CC(CC(C3)C1)C2)C(=O)NCCc1ccc(OCc2ccccc2)cc1": 1,
+        "O=C(CC12CC3CC(CC(C3)C1)C2)C(=O)Nc1ccc(OCc2ccccc2)cc1": 1,
+        "O=C(CC1CCCCC1)NCCc1ccccc1": 1,
+        "O=C(CCCCCNC(=O)NC12CC3CC(CC(C3)C1)C2)NCCc1c[nH]c2ccccc12": 1,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NC(Cc1ccccc1)C(=O)NCCc1c[nH]cn1": 1,
+        "O=C(CCCNC(=O)NC1CCCCC1)NCCc1c[nH]cn1": 1,
+        "O=C(CCCNC(=O)NC1CCCCC1)NCCc1ccccc1": 1,
+        "O=C(CCCc1ccccc1)NC1CCCCC1": 1,
+        "O=C(CSc1ccccc1)c1ccc2[nH]ccc2c1": 1,
+        "O=C(Cc1ccc(Oc2nc3ccccc3s2)cc1)NCc1c[nH]c2ccccc12": 1,
+        "O=C(Cc1cccnc1)Nc1cccc(OCCCN2CCOCC2)c1": 1,
+        "O=C(NC12CC3CC(CC(C3)C1)C2)N1CC2(CCN2S(=O)(=O)c2ccccc2)C1": 1,
+        "O=C(NC12CC3CC(CC(C3)C1)C2)N1CCNCC1": 1,
+        "O=C(NC1CCCCC1)N1CCC(c2ccnn2-c2ccccc2)CC1": 1,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCCCC1)NC1CCCCC1": 1,
+        "O=C(NC1CCCCC1)Oc1cccc(-c2ccccc2)c1": 1,
+        "O=C(NC1CCN(Cc2ccccc2)CC1)NC12CC3CC(CC(C3)O1)C2": 1,
+        "O=C(NCCC1CNC(Cc2ccccc2)CN1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCCCCCNC(=O)NCCC12CC3CC(CC(C3)C1)C2)NCCC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCCCCNC(=O)NCc1ccco1)NCc1ccco1": 1,
+        "O=C(NCCCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 1,
+        "O=C(NCCCc1ccccc1)N1CC2(CCN2Cc2ccccc2)C1": 1,
+        "O=C(NCCCc1ccccc1)N1CC2(CCN2S(=O)(=O)c2ccccc2)C1": 1,
+        "O=C(NCCOc1ccccc1)C1CCCCC1": 1,
+        "O=C(NCc1cccc(Cn2cccc2)c1)NC1CCCCC1": 1,
+        "O=C(NCc1ccccc1)C1CCN(c2ccccn2)CC1": 1,
+        "O=C(NCc1ccccc1)C1CCN(c2ncncn2)CC1": 1,
+        "O=C(NCc1ccccc1)N1CC2(C1)CN(c1ccccc1)C2": 1,
+        "O=C(NCc1ccccc1)N1CC2(C1)CN(c1ncccn1)C2": 1,
+        "O=C(NCc1ccccc1)NC1CCC12CN(S(=O)(=O)c1ccccc1)C2": 1,
+        "O=C(NCc1ccccc1Cn1cccc1)Nc1ccccc1": 1,
+        "O=C(NCc1ccon1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NN1CCOCC1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cc[nH]n1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cc[nH]n1)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(Nc1ccc(N2CCOCC2)cc1)NC1CCNCC1": 1,
+        "O=C(Nc1ccccc1)N1CCC(c2ccnn2-c2ccccc2)CC1": 1,
+        "O=C(Nc1ccccc1)N1CCCC(c2ccccc2)C1": 1,
+        "O=C(Nc1ccccc1)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C(Nc1ccccc1)Nc1cccc(C(=O)NCCN2CCOCC2)c1": 1,
+        "O=C(Nc1ccccc1)c1cccc(-n2cnnn2)c1": 1,
+        "O=C(Nc1ccccn1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1cccnc1)NC1CCNCC1": 1,
+        "O=C(Nc1cccnc1)Nc1cccc(OCCCN2CCOCC2)c1": 1,
+        "O=C(Nc1ncccn1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ncncn1)NC12CC3CC(CC(C3)O1)C2": 1,
+        "O=C(Nc1nnc(-c2cccs2)o1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1nnc(C2CC2)o1)NC1C2CC3CC(C2)CC1C3": 1,
+        "O=C1C(=O)N(C2C3CC4CC(C3)CC2C4)C(=O)N1c1ccccc1": 1,
+        "O=C1C2CC3CC1CC(N1C(=O)C(=O)N(C45CC6CC(C4)C(=O)C(C6)C5)C1=O)(C3)C2": 1,
+        "O=C1C=CCC2Cc3ccccc3C(=O)C12": 1,
+        "O=C1CC2CCC34CC35CCC(OC3CCCCO3)CC5CC=C4C2C1": 1,
+        "O=C1CCC2C(C1)CC1C3=CCC4CC(OC5CCCCO5)CCC45CC35CCC12": 1,
+        "O=C1CSc2ccccc2N1": 1,
+        "O=C1Cc2cc(-c3ccc[nH]3)ccc2N1": 1,
+        "O=S(=O)(Nc1cccc(OCCCN2CCOCC2)c1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=S(=O)(Nc1cccc(OCCCN2CCOCC2)c1)c1ccccc1": 1,
+        "O=c1ccc(C2CCCCC2)c[nH]1": 1,
+        "O=c1ccoc2ccccc12": 1,
+        "c1c[nH]nn1": 1,
+        "c1cc(-c2cncc(-c3nn[nH]n3)c2)cs1": 1,
+        "c1cc(C2CC2)n[nH]1": 1,
+        "c1cc2cc(C3CCCCC3)ccc2[nH]1": 1,
+        "c1ccc(-c2cccnc2)cc1": 1,
+        "c1ccc(-c2cccs2)cc1": 1,
+        "c1ccc(-c2ccno2)cc1": 1,
+        "c1ccc(-c2cn3ccccc3n2)cc1": 1,
+        "c1ccc(-c2cocn2)cc1": 1,
+        "c1ccc(-c2nc3ccccc3[nH]2)cc1": 1,
+        "c1ccc(-c2ncoc2-c2cccnc2)cc1": 1,
+        "c1ccc(-c2ncoc2-c2ccncc2)cc1": 1,
+        "c1ccc(-n2cccn2)cc1": 1,
+        "c1ccc(CCNCc2cc[nH]n2)cc1": 1,
+        "c1ccc(CCNCc2ccc(Oc3ccccc3)cc2)cc1": 1,
+        "c1ccc(CCNCc2cccs2)cc1": 1,
+        "c1ccc(COc2ccccc2)cc1": 1,
+        "c1ccc(C[SH+]Cc2ccccc2)cc1": 1,
+        "c1ccc(N2CCNCC2)nc1": 1,
+        "c1ccc2[nH]cnc2c1": 1,
+        "c1ccc2c(c1)CCCN2": 1,
+        "c1ccncc1": 1,
+        "c1ccoc1": 1,
+        "c1cncc(-c2nc3ccccc3[nH]2)c1": 1,
+        "c1coc(-c2nc3ccccc3[nH]2)c1": 1,
+        "c1csc(-c2nncs2)c1": 1
+      }
+    },
+    "status": "verified",
+    "evidence_kind": "reconstructed from original saved activity subset; not a node-membership replay",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep3",
+    "claim_type": "search_matched_assays",
+    "original_claim": "Original ds_001.assay_count = 525",
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/live_seh_workflow/run_0/session_state.json",
+        "sha256": "2e87a25de07ec9319c0b233c841c3863babc4cc48e4140fdeafba34f3c26f82f",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    ],
+    "population": "search-matched assay IDs before activity retrieval",
+    "counting_method": "Original fetch_compounds builds all_assay_ids from search results, then total_assays=len(all_assay_ids).",
+    "corrected_value": {
+      "recorded_count": 525,
+      "scope": "search-matched assay IDs before activity retrieval",
+      "scope_status": "verified_from_original_code_and_state",
+      "independent_id_count_status": "unresolved",
+      "reason": "The matched assay ID list was not retained; 525 is metadata, not verified retained coverage.",
+      "code_source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    },
+    "status": "unresolved",
+    "evidence_kind": "original metadata scope verified; numeric ID set not independently retained",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep3",
+    "claim_type": "whole_dataset_exact_murcko",
+    "original_claim": [
+      "I'll start by consulting the reusable ChemSpace workflow skills and the session context before routing any specialized agents.The session is empty, so this is a fresh workflow. The user's request is concrete and maps cleanly to the **ChEMBL \u2192 GTM \u2192 chemoinformatics \u2192 report** chain. Let me fetch the governing skill procedures before routing.The session is empty and this is a fresh run. The request matches the **`chembl-to-gtm-report`** workflow (plus `chemoinformatics-analysis` for scaffolds/active-vs-inactive and `report-generation` at the end).",
+      "I'll chain: **ChEMBL retrieval \u2192 GTM (cached default map) \u2192 chemoinformatics \u2192 report**. Starting with the retrieval preflight + fetch, since everything downstream depends on `clean_dataset_path`.The guard requires `constraints` as a list of strings. Let me resubmit.`expected_output_schema` must be an object. Fixing both fields.`schema_version` must be an integer. Fixing.Retrieval succeeded: **1,580 clean unique human EPHX2 compounds**, Homo sapiens only, assay types constrained to B (2,183) + F (2), no MoA filter, `activity_final` present for 1,428 compounds. I'll record the artifact paths in session state, then fan out to GTM and chemoinformatics.The retrieval is registered as session dataset **ds_001**. Now I'll fan out in parallel: (1) GTM agent loads the cached default map (`descriptor_type=autoencoder`) and builds density + activity landscapes; (2) chemoinformatician profiles scaffolds/chemotypes, compares active vs inactive, and summarizes assay coverage \u2014 both consuming `clean_dataset_path`.Chemoinformatics is complete and clean. The GTM agent, however, returned mid-work \u2014 it loaded the default map and projected the dataset but did **not** return the final density/activity summaries or artifact paths. I'll re-task it to finish and report.GTM density + activity landscapes are complete. Now I'll have the Report Generator assemble the grounded, figure-rich report from all artifacts (retrieval, descriptors, GTM density/activity, chemotypes, active-vs-inactive, assay coverage).All stages are complete. The full **ChEMBL \u2192 GTM \u2192 chemoinformatics \u2192 report** chain for human sEH (EPHX2) ran successfully.",
+      "## 4. Scaffolds / chemotypes",
+      "**635 unique Murcko scaffolds** over 1,580 compounds (unique-scaffold ratio 0.40; Shannon entropy \u2248 5.58 nats).",
+      "Top chemotypes: **adamantane** <smiles>C1C2CC3CC1CC(C2)C3</smiles> (90), **phenyl-urea-piperidine** <smiles>O=C(Nc1ccccc1)NC1CCNCC1</smiles> (55), adamantane-aryl-urea (49), cyclohexyl-sulfonamide-piperidine (39). Chemotypes are mutually orthogonal (top-scaffold Tanimoto 0.40\u20130.48) \u2014 the set spans several distinct scaffolds.",
+      "- **Active-enriched scaffolds:** adamantane (73 active / 6 inactive), phenyl-urea-piperidine (50 / 2).",
+      "- **Inactive-enriched:** acyclic (empty) scaffolds (15 / 17), biaryl-oxazole (11 / 14).",
+      "Grounded, figure-rich report (density figure anchored in the density section with nodes labeled; Altair activity landscape anchored in the activity section; scaffold figures/tables; active-vs-inactive and assay-coverage sections \u2014 all potency claims cited from `activity_final`):",
+      "- Chemoinformatics CSVs: `.../analysis/chemotype/scaffold_summary.csv`, `.../analysis/activity_class_stats.csv`, `.../analysis/assay_coverage.csv`, `.../analysis/descriptor_comparison.csv`",
+      "**Bottom line:** human sEH (EPHX2) chemical space is **binding-assay-dominated** and **scaffold-diverse**, with the **adamantane-urea** and **phenyl-urea-piperidine** chemotypes being both the most populated and the most activity-enriched; potent compounds (pChEMBL up to 10.7) are **not localized in high-density regions**, so density should not be used as a potency proxy for this target."
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/live_seh_workflow/run_0/response.txt",
+        "sha256": "e40f23a69635e94f0c304f1c8529bdbcd2472b6ad3a7de0107ab80c22da6c1b6",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/live_seh_workflow/run_0/session_state.json",
+        "sha256": "2e87a25de07ec9319c0b233c841c3863babc4cc48e4140fdeafba34f3c26f82f",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/reliability/runs.jsonl",
+        "sha256": "92e4cac05542436d76eabc1b583efbba384ca61cf80c53550fd60105c131c11a",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/datasets/raw/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_raw.csv",
+        "sha256": "925a0abd527c6e595d9be6d549d001169e32c0150e046f63647e0cc1b4918245",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/datasets/clean/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_clean.csv",
+        "sha256": "4831a29e9449386649589066002b04d8501235a4b8432d1ac08f64a99ad7fec0",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/datasets/filtered/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_suspicious_filtered.csv",
+        "sha256": "c462c77ad4491a858012e917bd0e5756e49d237a3e4afb5f4dd635b6405130a0",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/standardization/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_standardization_report.md",
+        "sha256": "d6a9a7a70aa7bdf755c1c4d25f3266588edd636b202627e6f718aab8bcf1a9f6",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/reports/combined/seh_ephx2_chemical_space_report-v2.md",
+        "sha256": "6b77bde7e0367acf31627b12b7938e9a8eb00cbc9b603456ad8dde9cbae745eb",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/reports/combined/seh_ephx2_chemical_space_report.md",
+        "sha256": "3aaee90731251a277daf4983ac350ff6e2f3b466ffa916ab758c2ee105ab035b",
+        "kind": "original"
+      }
+    ],
+    "population": "all 1580 clean compound rows",
+    "counting_method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+    "corrected_value": {
+      "method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+      "population": "all clean standardized compound rows",
+      "denominator": 1580,
+      "valid_molecules": 1580,
+      "invalid_molecules": 0,
+      "unique_scaffolds_including_acyclic": 635,
+      "acyclic_molecules": 57,
+      "top_scaffolds": [
+        [
+          "C1C2CC3CC1CC(C2)C3",
+          90
+        ],
+        [
+          "",
+          57
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCNCC1",
+          55
+        ],
+        [
+          "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2",
+          49
+        ],
+        [
+          "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1",
+          39
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1",
+          38
+        ],
+        [
+          "c1ccccc1",
+          30
+        ],
+        [
+          "C1CCCCC1",
+          26
+        ],
+        [
+          "c1ccc(-c2ncoc2-c2ccccc2)cc1",
+          25
+        ],
+        [
+          "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2)CC1",
+          22
+        ]
+      ],
+      "adamantane": 90,
+      "phenyl_urea_adamantyl": 49
+    },
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep3",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 105,
+      "counts": {
+        "": 35,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 15,
+        "C1CCCCC1": 14,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 10,
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 6,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 5,
+        "O=C(Nc1ccccc1)NC1CCCCC1": 5,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(NC1CCCCC1)NC1CCNCC1": 5,
+        "O=C(Nc1ccc(C(=O)N2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 4,
+        "c1nn[nH]n1": 4,
+        "O=C(Nc1ccno1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(NCc1ccno1)NCC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(CN2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(OCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1ccon1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(NC1CCCCCC1)NC1CCNCC1": 3,
+        "O=C(Nc1ccc(C(=O)N2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1ccc(OCCCCN2CCNCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 3
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/reliability/runs.jsonl",
+        "sha256": "92e4cac05542436d76eabc1b583efbba384ca61cf80c53550fd60105c131c11a",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 105,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/datasets/clean/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_clean.csv",
+      "recorded_node_selection": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50
+      ],
+      "node_selection_complete": true,
+      "recorded_counts": {
+        "": 35,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 15,
+        "C1CCCCC1": 14,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 10,
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 6,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 5,
+        "O=C(Nc1ccccc1)NC1CCCCC1": 5,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(NC1CCCCC1)NC1CCNCC1": 5,
+        "O=C(Nc1ccc(C(=O)N2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 4,
+        "c1nn[nH]n1": 4,
+        "O=C(Nc1ccno1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(NCc1ccno1)NCC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(CN2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(OCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1ccon1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(NC1CCCCCC1)NC1CCNCC1": 3,
+        "O=C(Nc1ccc(C(=O)N2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1ccc(OCCCCN2CCNCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 3
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep3",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 106,
+      "counts": {
+        "C1C2CC3CC1CC(C2)C3": 90,
+        "": 57,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 55,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 49,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 39,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 38,
+        "c1ccccc1": 30,
+        "C1CCCCC1": 26,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 25,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2)CC1": 22,
+        "O=C(NCc1ccccc1)C1CCN(c2ncncn2)CC1": 17,
+        "O=C(Nc1ccccc1)Nc1cccc(OCCCN2CCOCC2)c1": 16,
+        "O=C(Nc1ccccc1)N1CCCC(c2ccccc2)C1": 16,
+        "O=C(Nc1ccccc1)NC1CCCCC1": 16,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(NC1CCCCCC1)C1CCN(C(=O)c2ccccc2)CC1": 13,
+        "O=C(NCc1ccccc1)N1CCC(Oc2ccccc2)CC1": 13,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NCCc1ccccc1": 12,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 11,
+        "O=C(NCc1ccccc1)N1CCCCC1": 11,
+        "O=C(c1ccccc1)N1CCC(c2ccnn2-c2ccccc2)CC1": 10,
+        "c1ccc(-n2nccc2C2CCNCC2)cc1": 10,
+        "O=C(Nc1ccccc1)N1CCCCC1": 9,
+        "O=C(NCCCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 9
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/reliability/runs.jsonl",
+        "sha256": "92e4cac05542436d76eabc1b583efbba384ca61cf80c53550fd60105c131c11a",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        {
+          "_truncated": 850
+        }
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 106,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/datasets/clean/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_clean.csv",
+      "recorded_node_selection": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        {
+          "_truncated": 850
+        }
+      ],
+      "node_selection_complete": false,
+      "recorded_counts": {
+        "C1C2CC3CC1CC(C2)C3": 90,
+        "": 57,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 55,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 49,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 39,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 38,
+        "c1ccccc1": 30,
+        "C1CCCCC1": 26,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 25,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2)CC1": 22,
+        "O=C(NCc1ccccc1)C1CCN(c2ncncn2)CC1": 17,
+        "O=C(Nc1ccccc1)Nc1cccc(OCCCN2CCOCC2)c1": 16,
+        "O=C(Nc1ccccc1)N1CCCC(c2ccccc2)C1": 16,
+        "O=C(Nc1ccccc1)NC1CCCCC1": 16,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(NC1CCCCCC1)C1CCN(C(=O)c2ccccc2)CC1": 13,
+        "O=C(NCc1ccccc1)N1CCC(Oc2ccccc2)CC1": 13,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NCCc1ccccc1": 12,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 11,
+        "O=C(NCc1ccccc1)N1CCCCC1": 11,
+        "O=C(c1ccccc1)N1CCC(c2ccnn2-c2ccccc2)CC1": 10,
+        "c1ccc(-n2nccc2C2CCNCC2)cc1": 10,
+        "O=C(Nc1ccccc1)N1CCCCC1": 9,
+        "O=C(NCCCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 9
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep3",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 111,
+      "counts": {
+        "C1C2CC3CC1CC(C2)C3": 73,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 50,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 47,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 35,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 29,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2)CC1": 19,
+        "O=C(NCc1ccccc1)C1CCN(c2ncncn2)CC1": 16,
+        "": 15,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(Nc1ccccc1)N1CCCC(c2ccccc2)C1": 14,
+        "O=C(Nc1ccccc1)Nc1cccc(OCCCN2CCOCC2)c1": 14,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(NCc1ccccc1)N1CCC(Oc2ccccc2)CC1": 13,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 11,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 10,
+        "O=C(NCCCOc1ccc(-c2nc3ccccn3c2NC2CCCCC2)cc1)Nc1ccccc1": 9,
+        "O=C(Nc1ccccc1)NC1CCCCC1": 9,
+        "O=C(NCCCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 8,
+        "O=C(NC1CCC(OCc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "c1ccccc1": 8,
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccccc1)Nc1ccccc1": 8
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/reliability/runs.jsonl",
+        "sha256": "92e4cac05542436d76eabc1b583efbba384ca61cf80c53550fd60105c131c11a",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        {
+          "_truncated": 850
+        }
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 111,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/analysis/active_subset.csv",
+      "recorded_node_selection": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        {
+          "_truncated": 850
+        }
+      ],
+      "node_selection_complete": false,
+      "recorded_counts": {
+        "C1C2CC3CC1CC(C2)C3": 73,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 50,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 47,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 35,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 29,
+        "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2)CC1": 19,
+        "O=C(NCc1ccccc1)C1CCN(c2ncncn2)CC1": 16,
+        "": 15,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(Nc1ccccc1)N1CCCC(c2ccccc2)C1": 14,
+        "O=C(Nc1ccccc1)Nc1cccc(OCCCN2CCOCC2)c1": 14,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 14,
+        "O=C(NCc1ccccc1)N1CCC(Oc2ccccc2)CC1": 13,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 11,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 10,
+        "O=C(NCCCOc1ccc(-c2nc3ccccn3c2NC2CCCCC2)cc1)Nc1ccccc1": 9,
+        "O=C(Nc1ccccc1)NC1CCCCC1": 9,
+        "O=C(NCCCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 8,
+        "O=C(NC1CCC(OCc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "c1ccccc1": 8,
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccccc1)Nc1ccccc1": 8
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  },
+  {
+    "run": "team_rep3",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 113,
+      "counts": {
+        "": 17,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 14,
+        "C1CCCCC1": 12,
+        "c1ccccc1": 11,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 10,
+        "C1C2CC3CC1CC(C2)C3": 6,
+        "O=C(NC1CCCCCC1)C1CCN(C(=O)c2ccccc2)CC1": 6,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NCCc1ccccc1": 5,
+        "O=C(Cc1ccc(Oc2nc3ccccc3s2)cc1)NCCc1ccccc1": 4,
+        "O=C(CC1CCCCC1)Nc1ccccc1": 3,
+        "O=C(Cc1ccccc1)NC1CCCCC1": 3,
+        "c1ccc(-n2nccc2C2CCNCC2)cc1": 3,
+        "C1=C2C3CC45OCC(CCC4C3CCC23CC32CCC(OC3CCCCO3)CC2C1)O5": 3,
+        "O=C(Nc1ccccc1OCCCCN1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 3,
+        "c1ccc(-c2nc(-c3ccccc3)c(-c3ccccc3)o2)cc1": 2,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 2,
+        "O=C(Cc1ccccc1)Nc1ccccc1": 2,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2cccs2)CC1": 2,
+        "O=C(C=Cc1ccccc1)OC1CCOC1OC1CCCC(COC(=O)c2ccccc2)O1": 2,
+        "O=C(Nc1ccccc1)Nc1cccc(OCCCN2CCOCC2)c1": 2,
+        "O=C(Cc1ccc(Oc2ccccc2)cc1)NCCc1ccccc1": 2,
+        "O=C(NCCCc1ccccc1)NCc1ccccc1": 2,
+        "O=C(NCc1ccccc1)N1CCCCC1": 2,
+        "O=C(Nc1ccccc1OCCCN1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "c1ccc(OCCCN2CCOCC2)cc1": 2
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/reports/reviewer_revision/reliability_study_v4/runs/live_r2/20261004_165746_311162_team/reliability/runs.jsonl",
+        "sha256": "92e4cac05542436d76eabc1b583efbba384ca61cf80c53550fd60105c131c11a",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        {
+          "_truncated": 850
+        }
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 113,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/analysis/inactive_subset.csv",
+      "recorded_node_selection": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        {
+          "_truncated": 850
+        }
+      ],
+      "node_selection_complete": false,
+      "recorded_counts": {
+        "": 17,
+        "c1ccc(-c2ncoc2-c2ccccc2)cc1": 14,
+        "C1CCCCC1": 12,
+        "c1ccccc1": 11,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 10,
+        "C1C2CC3CC1CC(C2)C3": 6,
+        "O=C(NC1CCCCCC1)C1CCN(C(=O)c2ccccc2)CC1": 6,
+        "O=C(CCCCCNC(=O)NC1CCCCC1)NCCc1ccccc1": 5,
+        "O=C(Cc1ccc(Oc2nc3ccccc3s2)cc1)NCCc1ccccc1": 4,
+        "O=C(CC1CCCCC1)Nc1ccccc1": 3,
+        "O=C(Cc1ccccc1)NC1CCCCC1": 3,
+        "c1ccc(-n2nccc2C2CCNCC2)cc1": 3,
+        "C1=C2C3CC45OCC(CCC4C3CCC23CC32CCC(OC3CCCCO3)CC2C1)O5": 3,
+        "O=C(Nc1ccccc1OCCCCN1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 3,
+        "c1ccc(-c2nc(-c3ccccc3)c(-c3ccccc3)o2)cc1": 2,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 2,
+        "O=C(Cc1ccccc1)Nc1ccccc1": 2,
+        "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2cccs2)CC1": 2,
+        "O=C(C=Cc1ccccc1)OC1CCOC1OC1CCCC(COC(=O)c2ccccc2)O1": 2,
+        "O=C(Nc1ccccc1)Nc1cccc(OCCCN2CCOCC2)c1": 2,
+        "O=C(Cc1ccc(Oc2ccccc2)cc1)NCCc1ccccc1": 2,
+        "O=C(NCCCc1ccccc1)NCc1ccccc1": 2,
+        "O=C(NCc1ccccc1)N1CCCCC1": 2,
+        "O=C(Nc1ccccc1OCCCN1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "c1ccc(OCCCN2CCOCC2)cc1": 2
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep1",
+    "claim_type": "assay_document_coverage",
+    "original_claim": [
+      "**Preflight (completed before retrieval):** target = human soluble epoxide hydrolase (sEH/EPHX2) \u2192 ChEMBL target **CHEMBL2409 \"Bifunctional epoxide hydrolase 2\"**, organism = **Homo sapiens**, assay types = **binding + functional**, mechanism = **none** (explicitly unspecified). `can_proceed = true`, no clarification needed.",
+      "- 8,322 raw rows \u2192 judges filtered 3,151 \u2192 standardization: 5,171 raw \u2192 5,165 valid (6 invalid) \u2192 **3,028 clean compounds** (2,137 duplicates removed). **525 assays / 237 documents.**"
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r0/20261004_173245_139895_single_agent/live_seh_workflow/run_0/response.txt",
+        "sha256": "cfc49cd3e705361afb08fb9ab8a1bb2d2af7628a51237188f4f1ddeb33d4eccb",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r0/20261004_173245_139895_single_agent/live_seh_workflow/run_0/session_state.json",
+        "sha256": "daba9e6a1e5f9ed2365cfb531692928a1015734870dc4cbd9e7cc36dc8a9a7b7",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r0/20261004_173245_139895_single_agent/reliability/runs.jsonl",
+        "sha256": "9821b739687bbb9dfc91b2049710502f5202403c76e3c9103d894ed098c27098",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/datasets/raw/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_raw.csv",
+        "sha256": "04c7fa04ab4c5b60d3e2d47bcb1409fd4f1e397addd4a0b9d9d5884f00e25b5c",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+        "sha256": "c785ddc73ceb5d70a17b7adc237b1ae63febbd268809f58b3d2ca91e0e50d487",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/datasets/filtered/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_suspicious_filtered.csv",
+        "sha256": "e3bbb7104a39cfd86aae9523cc5d8fba6eed9d72c1c2416bfa4340f397809853",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/standardization/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_standardization_report.md",
+        "sha256": "b22e29a2042878b2bedf68901b37c519c2fc616b2732f9a20119801578631f39",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/reports/chembl_gtm_chemical_space/seh_EPHX2_chemical_space_report.md",
+        "sha256": "3daa31d77d468f08d25352a1541a46667c13d99a22a45857d45dd8fc329fd984",
+        "kind": "original"
+      }
+    ],
+    "population": "retained raw; reconstructed full retrieval; clean compounds",
+    "counting_method": "Split pipe-delimited IDs, trim blanks, count distinct nonempty atomic IDs; never count serialized combinations as IDs.",
+    "corrected_value": {
+      "retained": {
+        "rows": 5171,
+        "distinct_assays": 334,
+        "distinct_documents": 153
+      },
+      "full_retrieved": {
+        "rows": 8322,
+        "distinct_assays": 508,
+        "distinct_documents": 169
+      },
+      "clean": {
+        "rows": 3028,
+        "distinct_assays": 334,
+        "distinct_documents": 153,
+        "serialized_assay_combinations": 311,
+        "serialized_document_combinations": 237
+      }
+    },
+    "original_count_operation_evidence": [
+      {
+        "tool_call_index": 19,
+        "column": "document_chembl_ids",
+        "original_result": "237",
+        "serialized_combinations": 237,
+        "distinct_atomic_ids": 153,
+        "source": {
+          "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r0/20261004_173245_139895_single_agent/reliability/runs.jsonl",
+          "sha256": "9821b739687bbb9dfc91b2049710502f5202403c76e3c9103d894ed098c27098",
+          "kind": "original"
+        }
+      }
+    ],
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep1",
+    "claim_type": "search_matched_assays",
+    "original_claim": "Original ds_001.assay_count = 525",
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r0/20261004_173245_139895_single_agent/live_seh_workflow/run_0/session_state.json",
+        "sha256": "daba9e6a1e5f9ed2365cfb531692928a1015734870dc4cbd9e7cc36dc8a9a7b7",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    ],
+    "population": "search-matched assay IDs before activity retrieval",
+    "counting_method": "Original fetch_compounds builds all_assay_ids from search results, then total_assays=len(all_assay_ids).",
+    "corrected_value": {
+      "recorded_count": 525,
+      "scope": "search-matched assay IDs before activity retrieval",
+      "scope_status": "verified_from_original_code_and_state",
+      "independent_id_count_status": "unresolved",
+      "reason": "The matched assay ID list was not retained; 525 is metadata, not verified retained coverage.",
+      "code_source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    },
+    "status": "unresolved",
+    "evidence_kind": "original metadata scope verified; numeric ID set not independently retained",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep1",
+    "claim_type": "whole_dataset_exact_murcko",
+    "original_claim": [
+      "I'll start by reviewing the relevant skill catalog and completing the retrieval preflight.Preflight passes (can proceed, no clarification needed). Let me fetch the relevant skills.Now let me convert the target to ChEMBL query keywords.Retrieval succeeded \u2014 3028 clean compounds. Now let me describe the clean dataset.Now let me plan the GTM analyses and load the default map.Density artifacts are ready. Now let me create the activity landscapes.Active (pChEMBL \u2265 6) = 2171, inactive (< 6) = 460. Now let me sample active regions and scaffolds.I have all the evidence I need. Let me record results in session state and generate the report.All analyses are complete. Now let me generate the grounded report.## Human sEH / EPHX2 chemical-space analysis \u2014 complete",
+      "### Scaffolds / chemotypes",
+      "Adamantane cage (39), 1-adamantyl-3-aryl ureas (36), 4-(aryloxy)cyclohexyl ureas (30); 448/3,028 contain the adamantyl motif; 57 are acyl-piperidin-4-yl ureas.",
+      "pChEMBL \u2265 6 \u2192 **2,171 active (82.5%)** vs **460 inactive (17.5%)**. Acyl-piperidinyl ureas: 55 measured, mean 8.88 / median 9.11 vs adamantyl series 430 measured, mean 7.59 / median 7.80. Top active: CHEMBL3327073 (10.70), CHEMBL5190894 & CHEMBL6177252 (10.52), CHEMBL5746598 (10.30)."
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r0/20261004_173245_139895_single_agent/live_seh_workflow/run_0/response.txt",
+        "sha256": "cfc49cd3e705361afb08fb9ab8a1bb2d2af7628a51237188f4f1ddeb33d4eccb",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r0/20261004_173245_139895_single_agent/live_seh_workflow/run_0/session_state.json",
+        "sha256": "daba9e6a1e5f9ed2365cfb531692928a1015734870dc4cbd9e7cc36dc8a9a7b7",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r0/20261004_173245_139895_single_agent/reliability/runs.jsonl",
+        "sha256": "9821b739687bbb9dfc91b2049710502f5202403c76e3c9103d894ed098c27098",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/datasets/raw/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_raw.csv",
+        "sha256": "04c7fa04ab4c5b60d3e2d47bcb1409fd4f1e397addd4a0b9d9d5884f00e25b5c",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+        "sha256": "c785ddc73ceb5d70a17b7adc237b1ae63febbd268809f58b3d2ca91e0e50d487",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/datasets/filtered/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_suspicious_filtered.csv",
+        "sha256": "e3bbb7104a39cfd86aae9523cc5d8fba6eed9d72c1c2416bfa4340f397809853",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/standardization/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_standardization_report.md",
+        "sha256": "b22e29a2042878b2bedf68901b37c519c2fc616b2732f9a20119801578631f39",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/reports/chembl_gtm_chemical_space/seh_EPHX2_chemical_space_report.md",
+        "sha256": "3daa31d77d468f08d25352a1541a46667c13d99a22a45857d45dd8fc329fd984",
+        "kind": "original"
+      }
+    ],
+    "population": "all 3028 clean compound rows",
+    "counting_method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+    "corrected_value": {
+      "method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+      "population": "all clean standardized compound rows",
+      "denominator": 3028,
+      "valid_molecules": 3028,
+      "invalid_molecules": 0,
+      "unique_scaffolds_including_acyclic": 1253,
+      "acyclic_molecules": 57,
+      "top_scaffolds": [
+        [
+          "O=C(NCc1ccccc1)c1ccccc1",
+          127
+        ],
+        [
+          "C1C2CC3CC1CC(C2)C3",
+          99
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1",
+          76
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCNCC1",
+          67
+        ],
+        [
+          "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2",
+          61
+        ],
+        [
+          "",
+          57
+        ],
+        [
+          "c1ccccc1",
+          50
+        ],
+        [
+          "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1",
+          39
+        ],
+        [
+          "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2",
+          30
+        ],
+        [
+          "O=C(Nc1ccccc1)C1CCN(S(=O)(=O)c2ccccc2)CC1",
+          27
+        ]
+      ],
+      "adamantane": 99,
+      "phenyl_urea_adamantyl": 61
+    },
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep1",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 38,
+      "counts": {
+        "C1C2CC3CC1CC(C2)C3": 39,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 36,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 30,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 25,
+        "O=C(NCc1ccccc1)c1cnc(CN2CCNCC2)s1": 17,
+        "O=C(Nc1ccccc1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 11,
+        "O=C(Cc1ccccc1)Nc1nc2ccc(N(CCN3CCOCC3)C(=O)Nc3ccccc3)cc2s1": 10,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 10,
+        "O=C(NCc1ccccc1)c1ccc(CN2CCNCC2)s1": 10,
+        "O=C(NCc1ccc(CS(=O)(=O)C2CC2)cc1)c1ccc2[nH]ccc2c1": 8,
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccc(-c2nc(-c3ccccc3)cs2)cc1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 8,
+        "O=C(NCc1ccccc1)C1CCC(Nc2ncnc(NCCc3ccccc3)n2)CC1": 8,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1cccc(-c2nc(-c3ccccc3)cs2)c1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 8,
+        "O=C(NCc1ccccc1)c1ccc(CN2CCN(C(=O)c3ccc(=O)oc3)CC2)s1": 8,
+        "O=C(NC1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 7,
+        "O=C(NCCC(c1ccccc1)c1ccccc1)c1ccccc1": 7,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 7
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r0/20261004_173245_139895_single_agent/reliability/runs.jsonl",
+        "sha256": "9821b739687bbb9dfc91b2049710502f5202403c76e3c9103d894ed098c27098",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        251,
+        181,
+        250,
+        4,
+        5
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 38,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+      "recorded_node_selection": [
+        251,
+        181,
+        250,
+        4,
+        5
+      ],
+      "node_selection_complete": true,
+      "recorded_counts": {
+        "C1C2CC3CC1CC(C2)C3": 39,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 36,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 30,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 25,
+        "O=C(NCc1ccccc1)c1cnc(CN2CCNCC2)s1": 17,
+        "O=C(Nc1ccccc1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 11,
+        "O=C(Cc1ccccc1)Nc1nc2ccc(N(CCN3CCOCC3)C(=O)Nc3ccccc3)cc2s1": 10,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 10,
+        "O=C(NCc1ccccc1)c1ccc(CN2CCNCC2)s1": 10,
+        "O=C(NCc1ccc(CS(=O)(=O)C2CC2)cc1)c1ccc2[nH]ccc2c1": 8,
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccc(-c2nc(-c3ccccc3)cs2)cc1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 8,
+        "O=C(NCc1ccccc1)C1CCC(Nc2ncnc(NCCc3ccccc3)n2)CC1": 8,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1cccc(-c2nc(-c3ccccc3)cs2)c1)C1CCN(S(=O)(=O)c2ccccc2)CC1": 8,
+        "O=C(NCc1ccccc1)c1ccc(CN2CCN(C(=O)c3ccc(=O)oc3)CC2)s1": 8,
+        "O=C(NC1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 7,
+        "O=C(NCCC(c1ccccc1)c1ccccc1)c1ccccc1": 7,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 7
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep1",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 46,
+      "counts": {
+        "O=C(Nc1ccccc1)NC1CCCCCCC1": 2,
+        "c1ccccc1": 2,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 1
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r0/20261004_173245_139895_single_agent/reliability/runs.jsonl",
+        "sha256": "9821b739687bbb9dfc91b2049710502f5202403c76e3c9103d894ed098c27098",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        522,
+        40,
+        691,
+        57,
+        861
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 46,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+      "recorded_node_selection": [
+        522,
+        40,
+        691,
+        57,
+        861
+      ],
+      "node_selection_complete": true,
+      "recorded_counts": {
+        "O=C(Nc1ccccc1)NC1CCCCCCC1": 2,
+        "c1ccccc1": 2,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 1
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep1",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 47,
+      "counts": {
+        "c1ccc2c(c1)CCCN2": 1,
+        "c1ccc(N2CCNCC2)nc1": 1,
+        "c1ccc2ccccc2c1": 1,
+        "c1nc(-c2ccn(CC3CCCO3)c2)cs1": 1
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r0/20261004_173245_139895_single_agent/reliability/runs.jsonl",
+        "sha256": "9821b739687bbb9dfc91b2049710502f5202403c76e3c9103d894ed098c27098",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        659,
+        615,
+        651,
+        660,
+        30
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 47,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+      "recorded_node_selection": [
+        659,
+        615,
+        651,
+        660,
+        30
+      ],
+      "node_selection_complete": true,
+      "recorded_counts": {
+        "c1ccc2c(c1)CCCN2": 1,
+        "c1ccc(N2CCNCC2)nc1": 1,
+        "c1ccc2ccccc2c1": 1,
+        "c1nc(-c2ccn(CC3CCCO3)c2)cs1": 1
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep2",
+    "claim_type": "assay_document_coverage",
+    "original_claim": [
+      "I'll start by consulting the skill catalog and running the retrieval preflight for sEH/EPHX2.The preflight needs the assay types as a list. Let me retry and fetch the relevant skills.Preflight passed: target resolves to a protein (Homo sapiens), assay types B+F, mechanism = any. Now converting the target to a ChEMBL query form.Connectivity is fine. Now fetching ChEMBL bioactivity data for sEH/EPHX2 with the semantic keyword set.Retrieved 1,580 clean sEH/EPHX2 (CHEMBL2409, \"Bifunctional epoxide hydrolase 2\") compounds. Now describing the dataset and validating the GTM analysis plan.Let me inspect the dataset structure and key columns for the activity and assay coverage summaries.Activity distribution captured (median pChEMBL 7.60; 1,203 compounds \u22656, 926 \u22657). Let me fetch the GTM skills and load the cached default map with autoencoder descriptors.Data projected onto the cached default GTM with autoencoder descriptors. Now generating the density landscape artifacts.Density plot saved. Now creating the activity landscape and checking for the persisted density table.Activity landscape created. Let me summarize it and load the landscape table for stats.Let me compute density and activity-landscape statistics from the landscape table.Now the chemotype/scaffold analysis on dense and active nodes, plus the analysis skill.Now the active vs inactive comparison and inactive-region sampling.Let me tabulate assay coverage and pull descriptors for representative active vs inactive compounds.Let me fetch the report skill and generate an additional smooth Plotly landscape view.Let me pull the top measured compounds with their exact pChEMBL values to ground the activity claims.Let me regenerate the density and activity figures with the discussed GTM nodes labeled.All artifacts are ready. Now I'll compose the grounded report.The chemical-space analysis of human sEH/EPHX2 is complete end to end. Report saved as HTML, PDF, and Markdown.",
+      "Target = **protein**, organism = **Homo sapiens**, assay types = **Binding + Functional (B, F)**, mechanism = **any (no filter)** \u2014 all user-specified, no clarification needed. Target resolved to **CHEMBL2409 \"Bifunctional epoxide hydrolase 2\" (gene EPHX2)**.",
+      "- 525 unique assays \u2192 **2,185 raw \u2192 2,179 valid \u2192 1,580 clean compounds** (6 invalid, 599 duplicate rows collapsed; 229 duplicate raw records removed; 5,590 suspicious rows judged; 547 rows filtered on target metadata)",
+      "## Assay coverage",
+      "EPHX2 = 1,496 compounds; 167 unique assays from 129 documents; endpoints dominated by IC50 (1,387 rows) plus Inhibition/Ki and mixed sets; all harmonized to pChEMBL."
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r1/20261004_173903_469546_single_agent/live_seh_workflow/run_0/response.txt",
+        "sha256": "7c8a4e84fd595d483920f254eedc470172cf110ba764aee903b30243d5b6d174",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r1/20261004_173903_469546_single_agent/live_seh_workflow/run_0/session_state.json",
+        "sha256": "1ae83069659ff66849c6eabf1647c0b3835503ed1935824186778d02c4d9e5a2",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r1/20261004_173903_469546_single_agent/reliability/runs.jsonl",
+        "sha256": "eb58d17f8080006ba9fdf928a9bb977d99ea4e4c1a17d81431bb670155840fe4",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/01_chemical_space/datasets/raw/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_raw.csv",
+        "sha256": "1140c5f8e4702a095aa696b9874b9df9c5cf8bd42ed6c173f2506d295fc592e2",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+        "sha256": "ea4be6c250190ebb13d80e6106bd717837ee232b7249d0a08a6addb4f6a0a317",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/01_chemical_space/datasets/filtered/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_suspicious_filtered.csv",
+        "sha256": "b72b885f7f2b3e82daec632f569e5a83fe3eeb50baaaa6cf242eb1b4d054c479",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/01_chemical_space/standardization/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_standardization_report.md",
+        "sha256": "8de812870a12c83e6d789e2bcf77c2e6c8d85974e310b9fdde8b3f8b537e1ab4",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/reports/gtm_chembl_combined/sEH_EPHX2_chemical_space_report.md",
+        "sha256": "eba60e7f58b80ac41c90bd05bcde1159d57ad5a0369fef88969159a936b59eab",
+        "kind": "original"
+      }
+    ],
+    "population": "retained raw; reconstructed full retrieval; clean compounds",
+    "counting_method": "Split pipe-delimited IDs, trim blanks, count distinct nonempty atomic IDs; never count serialized combinations as IDs.",
+    "corrected_value": {
+      "retained": {
+        "rows": 2185,
+        "distinct_assays": 156,
+        "distinct_documents": 76
+      },
+      "full_retrieved": {
+        "rows": 8322,
+        "distinct_assays": 508,
+        "distinct_documents": 169
+      },
+      "clean": {
+        "rows": 1580,
+        "distinct_assays": 156,
+        "distinct_documents": 76,
+        "serialized_assay_combinations": 167,
+        "serialized_document_combinations": 129
+      }
+    },
+    "original_count_operation_evidence": [
+      {
+        "tool_call_index": 44,
+        "column": "assay_chembl_ids",
+        "original_result": "167",
+        "serialized_combinations": 167,
+        "distinct_atomic_ids": 156,
+        "source": {
+          "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r1/20261004_173903_469546_single_agent/reliability/runs.jsonl",
+          "sha256": "eb58d17f8080006ba9fdf928a9bb977d99ea4e4c1a17d81431bb670155840fe4",
+          "kind": "original"
+        }
+      },
+      {
+        "tool_call_index": 45,
+        "column": "document_chembl_ids",
+        "original_result": "129",
+        "serialized_combinations": 129,
+        "distinct_atomic_ids": 76,
+        "source": {
+          "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r1/20261004_173903_469546_single_agent/reliability/runs.jsonl",
+          "sha256": "eb58d17f8080006ba9fdf928a9bb977d99ea4e4c1a17d81431bb670155840fe4",
+          "kind": "original"
+        }
+      }
+    ],
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep2",
+    "claim_type": "search_matched_assays",
+    "original_claim": "Original ds_001.assay_count = 525",
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r1/20261004_173903_469546_single_agent/live_seh_workflow/run_0/session_state.json",
+        "sha256": "1ae83069659ff66849c6eabf1647c0b3835503ed1935824186778d02c4d9e5a2",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    ],
+    "population": "search-matched assay IDs before activity retrieval",
+    "counting_method": "Original fetch_compounds builds all_assay_ids from search results, then total_assays=len(all_assay_ids).",
+    "corrected_value": {
+      "recorded_count": 525,
+      "scope": "search-matched assay IDs before activity retrieval",
+      "scope_status": "verified_from_original_code_and_state",
+      "independent_id_count_status": "unresolved",
+      "reason": "The matched assay ID list was not retained; 525 is metadata, not verified retained coverage.",
+      "code_source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    },
+    "status": "unresolved",
+    "evidence_kind": "original metadata scope verified; numeric ID set not independently retained",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep2",
+    "claim_type": "whole_dataset_exact_murcko",
+    "original_claim": [
+      "I'll start by consulting the skill catalog and running the retrieval preflight for sEH/EPHX2.The preflight needs the assay types as a list. Let me retry and fetch the relevant skills.Preflight passed: target resolves to a protein (Homo sapiens), assay types B+F, mechanism = any. Now converting the target to a ChEMBL query form.Connectivity is fine. Now fetching ChEMBL bioactivity data for sEH/EPHX2 with the semantic keyword set.Retrieved 1,580 clean sEH/EPHX2 (CHEMBL2409, \"Bifunctional epoxide hydrolase 2\") compounds. Now describing the dataset and validating the GTM analysis plan.Let me inspect the dataset structure and key columns for the activity and assay coverage summaries.Activity distribution captured (median pChEMBL 7.60; 1,203 compounds \u22656, 926 \u22657). Let me fetch the GTM skills and load the cached default map with autoencoder descriptors.Data projected onto the cached default GTM with autoencoder descriptors. Now generating the density landscape artifacts.Density plot saved. Now creating the activity landscape and checking for the persisted density table.Activity landscape created. Let me summarize it and load the landscape table for stats.Let me compute density and activity-landscape statistics from the landscape table.Now the chemotype/scaffold analysis on dense and active nodes, plus the analysis skill.Now the active vs inactive comparison and inactive-region sampling.Let me tabulate assay coverage and pull descriptors for representative active vs inactive compounds.Let me fetch the report skill and generate an additional smooth Plotly landscape view.Let me pull the top measured compounds with their exact pChEMBL values to ground the activity claims.Let me regenerate the density and activity figures with the discussed GTM nodes labeled.All artifacts are ready. Now I'll compose the grounded report.The chemical-space analysis of human sEH/EPHX2 is complete end to end. Report saved as HTML, PDF, and Markdown.",
+      "- Dominant scaffold: **1,3-disubstituted (adamantyl-aryl/alkyl) urea** \u2014 bare adamantane (32) and adamantyl-phenyl urea (31) lead the frequencies.",
+      "**Executive takeaway:** the human sEH chemical space is narrow and chemotype-dominated \u2014 a single adamantyl-urea series occupies nearly all high-density nodes and most high-activity nodes, while a sparse-but-potent node (node 3) and several dense-but-weakly-active nodes signal regions where targeted analog design could add SAR value."
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r1/20261004_173903_469546_single_agent/live_seh_workflow/run_0/response.txt",
+        "sha256": "7c8a4e84fd595d483920f254eedc470172cf110ba764aee903b30243d5b6d174",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r1/20261004_173903_469546_single_agent/live_seh_workflow/run_0/session_state.json",
+        "sha256": "1ae83069659ff66849c6eabf1647c0b3835503ed1935824186778d02c4d9e5a2",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r1/20261004_173903_469546_single_agent/reliability/runs.jsonl",
+        "sha256": "eb58d17f8080006ba9fdf928a9bb977d99ea4e4c1a17d81431bb670155840fe4",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/01_chemical_space/datasets/raw/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_raw.csv",
+        "sha256": "1140c5f8e4702a095aa696b9874b9df9c5cf8bd42ed6c173f2506d295fc592e2",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+        "sha256": "ea4be6c250190ebb13d80e6106bd717837ee232b7249d0a08a6addb4f6a0a317",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/01_chemical_space/datasets/filtered/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_suspicious_filtered.csv",
+        "sha256": "b72b885f7f2b3e82daec632f569e5a83fe3eeb50baaaa6cf242eb1b4d054c479",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/01_chemical_space/standardization/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_standardization_report.md",
+        "sha256": "8de812870a12c83e6d789e2bcf77c2e6c8d85974e310b9fdde8b3f8b537e1ab4",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/reports/gtm_chembl_combined/sEH_EPHX2_chemical_space_report.md",
+        "sha256": "eba60e7f58b80ac41c90bd05bcde1159d57ad5a0369fef88969159a936b59eab",
+        "kind": "original"
+      }
+    ],
+    "population": "all 1580 clean compound rows",
+    "counting_method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+    "corrected_value": {
+      "method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+      "population": "all clean standardized compound rows",
+      "denominator": 1580,
+      "valid_molecules": 1580,
+      "invalid_molecules": 0,
+      "unique_scaffolds_including_acyclic": 635,
+      "acyclic_molecules": 57,
+      "top_scaffolds": [
+        [
+          "C1C2CC3CC1CC(C2)C3",
+          90
+        ],
+        [
+          "",
+          57
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCNCC1",
+          55
+        ],
+        [
+          "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2",
+          49
+        ],
+        [
+          "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1",
+          39
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1",
+          38
+        ],
+        [
+          "c1ccccc1",
+          30
+        ],
+        [
+          "C1CCCCC1",
+          26
+        ],
+        [
+          "c1ccc(-c2ncoc2-c2ccccc2)cc1",
+          25
+        ],
+        [
+          "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2)CC1",
+          22
+        ]
+      ],
+      "adamantane": 90,
+      "phenyl_urea_adamantyl": 49
+    },
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep2",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 39,
+      "counts": {
+        "C1C2CC3CC1CC(C2)C3": 32,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 31,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 10,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 7,
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 6,
+        "O=C(Nc1ccno1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(NCc1ccno1)NCC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(OCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(NC1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(OCCCCN2CCNCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(C(=O)N2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(CN2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(OCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1ccccc1OCCCN1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1ccc(C(=O)N2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 3
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r1/20261004_173903_469546_single_agent/reliability/runs.jsonl",
+        "sha256": "eb58d17f8080006ba9fdf928a9bb977d99ea4e4c1a17d81431bb670155840fe4",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        181,
+        5,
+        4
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 39,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+      "recorded_node_selection": [
+        181,
+        5,
+        4
+      ],
+      "node_selection_complete": true,
+      "recorded_counts": {
+        "C1C2CC3CC1CC(C2)C3": 32,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 31,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 10,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 7,
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 6,
+        "O=C(Nc1ccno1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(NCc1ccno1)NCC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(OCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(NC1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(OCCCCN2CCNCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(C(=O)N2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(CN2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(OCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1ccccc1OCCCN1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1ccc(C(=O)N2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 3
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep2",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 40,
+      "counts": {
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 6,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(CN2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1cccc(C(=O)N2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1cccc(OCCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1cccc(OCCCC(=O)N2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NC1CCN(C(=O)CCC(=O)N2CCNCC2)CC1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1ccc(C(=O)NC2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(S(=O)(=O)Nc2ncco2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCc1ccno1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCCCC1)NC1CCNCC1": 1,
+        "O=C(Nc1ccc(C(=O)N2CCNCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 1
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r1/20261004_173903_469546_single_agent/reliability/runs.jsonl",
+        "sha256": "eb58d17f8080006ba9fdf928a9bb977d99ea4e4c1a17d81431bb670155840fe4",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        3,
+        213,
+        691,
+        4
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 40,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+      "recorded_node_selection": [
+        3,
+        213,
+        691,
+        4
+      ],
+      "node_selection_complete": true,
+      "recorded_counts": {
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 6,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(CN2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1ccc(C(=O)N2CCCC(C(=O)N3CCCNCC3)C2)cc1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1cccc(C(=O)N2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 3,
+        "O=C(Nc1cccc(OCCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1cccc(OCCCC(=O)N2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(NC1CCN(C(=O)CCC(=O)N2CCNCC2)CC1)NC12CC3CC(CC(C3)C1)C2": 2,
+        "O=C(Nc1ccc(C(=O)NC2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(Nc1ccc(S(=O)(=O)Nc2ncco2)cc1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NCc1ccno1)NC12CC3CC(CC(C3)C1)C2": 1,
+        "O=C(NC1CCCCC1)NC1CCNCC1": 1,
+        "O=C(Nc1ccc(C(=O)N2CCNCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 1
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep3",
+    "claim_type": "assay_document_coverage",
+    "original_claim": [
+      "I'll start by validating the retrieval parameters with the preflight, since the user has specified target, organism, assay types, and mechanism.Preflight passed with no clarifications needed. Now let me convert the target description into ChEMBL search keywords.The converter returned its instruction template, so I'll supply the semantic keyword variations myself: `soluble epoxide hydrolase`, `sEH`, `EPHX2`, `epoxide hydrolase 2`.Retrieval succeeded \u2014 1580 clean compounds. Now let me describe the clean dataset and run the GTM analysis preflight.Dataset described and analysis preflight passed. Let me inspect available session data and load the default GTM map with the sEH dataset.Data projected onto the default GTM. Now let me generate the density summary, node lookup, density plot, and activity landscape.Now let me get the activity landscape summary.Now let me compute activity and assay-coverage statistics from the clean dataset.Notable: the retrieval is dominated by binding (B=2183) vs functional (F=2). Let me locate the density/landscape tables and analyze them.The preview truncates rows, so let me use the sampling tools which return node-level detail, plus density stats.Let me extract the full top-node rankings via markdown output.Now let me analyze scaffolds/chemotypes in the densest and most-active nodes.The dense-node chemotype is clearly the adamantyl-urea sEH series. Let me ground potency claims by sampling top-active molecules and segmenting active vs inactive.Active set = 926 (pChEMBL \u2265 7), inactive = 225 (pChEMBL < 6). Let me gather remaining stats and the report skill.Now let me render marked density and activity-landscape plots for the report.All artifacts are ready. Now I'll compose and save the grounded report.I've completed the full workflow end to end. Here's the summary.",
+      "Preflight passed with no clarifications needed (target = soluble epoxide hydrolase / **EPHX2**, organism = **Homo sapiens**, assay types = **binding + functional**, mechanism = **none**). ChEMBL REST retrieval across 4 keywords yielded **1,580 unique clean standardized compounds** (2,185 raw activity rows \u2192 2,179 valid \u2192 1,580 unique; 6 invalid rows, 599 duplicates collapsed, 229 raw duplicate records merged). All final activities are on a **p-scale (pChEMBL, higher-is-better)**.",
+      "## Chemotypes, active vs inactive, assay coverage",
+      "- **Assay coverage is binding-dominated: B = 2,183 vs F = 2 records** \u2014 a clear functional-assay gap. Standard types led by IC50 (1,882 raw); 156 assays, 129 documents."
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r2/20261004_174429_336882_single_agent/live_seh_workflow/run_0/response.txt",
+        "sha256": "3918786c491762b59b1153964f552061c7b72b0816897b839a340c0ab0c2b12e",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r2/20261004_174429_336882_single_agent/live_seh_workflow/run_0/session_state.json",
+        "sha256": "be6a00d6dc69e123db229bc7b44e52ef0e54903ef2d9f9cb695107aa5c194baa",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r2/20261004_174429_336882_single_agent/reliability/runs.jsonl",
+        "sha256": "3674ea2275fd9ecef944f3a18a07eafb331cad058a12e5fbbc04956a5e87629b",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/01_chemical_space/datasets/raw/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_raw.csv",
+        "sha256": "1140c5f8e4702a095aa696b9874b9df9c5cf8bd42ed6c173f2506d295fc592e2",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+        "sha256": "ea4be6c250190ebb13d80e6106bd717837ee232b7249d0a08a6addb4f6a0a317",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/01_chemical_space/datasets/filtered/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_suspicious_filtered.csv",
+        "sha256": "5b5d101e33f37c2988a68c3934dc5498ac5a09cee20b68480e2330f3156d6290",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/01_chemical_space/standardization/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_standardization_report.md",
+        "sha256": "dd7e3b06a89e1aae09102aa4324254d75e48e239ee2c3ebc2811f62f269ae866",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/reports/gtm_activity/seh_ephx2_chemical_space_report.md",
+        "sha256": "397c0838d69456d82b0deb097f365dd003713f8384ea87da2101c1c6c8ceee46",
+        "kind": "original"
+      }
+    ],
+    "population": "retained raw; reconstructed full retrieval; clean compounds",
+    "counting_method": "Split pipe-delimited IDs, trim blanks, count distinct nonempty atomic IDs; never count serialized combinations as IDs.",
+    "corrected_value": {
+      "retained": {
+        "rows": 2185,
+        "distinct_assays": 156,
+        "distinct_documents": 76
+      },
+      "full_retrieved": {
+        "rows": 8322,
+        "distinct_assays": 508,
+        "distinct_documents": 169
+      },
+      "clean": {
+        "rows": 1580,
+        "distinct_assays": 156,
+        "distinct_documents": 76,
+        "serialized_assay_combinations": 167,
+        "serialized_document_combinations": 129
+      }
+    },
+    "original_count_operation_evidence": [
+      {
+        "tool_call_index": 28,
+        "column": "document_chembl_ids",
+        "original_result": "129",
+        "serialized_combinations": 129,
+        "distinct_atomic_ids": 76,
+        "source": {
+          "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r2/20261004_174429_336882_single_agent/reliability/runs.jsonl",
+          "sha256": "3674ea2275fd9ecef944f3a18a07eafb331cad058a12e5fbbc04956a5e87629b",
+          "kind": "original"
+        }
+      }
+    ],
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep3",
+    "claim_type": "search_matched_assays",
+    "original_claim": "Original ds_001.assay_count = 525",
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r2/20261004_174429_336882_single_agent/live_seh_workflow/run_0/session_state.json",
+        "sha256": "be6a00d6dc69e123db229bc7b44e52ef0e54903ef2d9f9cb695107aa5c194baa",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    ],
+    "population": "search-matched assay IDs before activity retrieval",
+    "counting_method": "Original fetch_compounds builds all_assay_ids from search results, then total_assays=len(all_assay_ids).",
+    "corrected_value": {
+      "recorded_count": 525,
+      "scope": "search-matched assay IDs before activity retrieval",
+      "scope_status": "verified_from_original_code_and_state",
+      "independent_id_count_status": "unresolved",
+      "reason": "The matched assay ID list was not retained; 525 is metadata, not verified retained coverage.",
+      "code_source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/databases/chembl.py",
+        "sha256": "5b2cbfcb7f0ff985066125dd50576e49c17fea643ad3452e02f03ddd9b3a2edb",
+        "kind": "original"
+      }
+    },
+    "status": "unresolved",
+    "evidence_kind": "original metadata scope verified; numeric ID set not independently retained",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep3",
+    "claim_type": "whole_dataset_exact_murcko",
+    "original_claim": [
+      "I'll start by validating the retrieval parameters with the preflight, since the user has specified target, organism, assay types, and mechanism.Preflight passed with no clarifications needed. Now let me convert the target description into ChEMBL search keywords.The converter returned its instruction template, so I'll supply the semantic keyword variations myself: `soluble epoxide hydrolase`, `sEH`, `EPHX2`, `epoxide hydrolase 2`.Retrieval succeeded \u2014 1580 clean compounds. Now let me describe the clean dataset and run the GTM analysis preflight.Dataset described and analysis preflight passed. Let me inspect available session data and load the default GTM map with the sEH dataset.Data projected onto the default GTM. Now let me generate the density summary, node lookup, density plot, and activity landscape.Now let me get the activity landscape summary.Now let me compute activity and assay-coverage statistics from the clean dataset.Notable: the retrieval is dominated by binding (B=2183) vs functional (F=2). Let me locate the density/landscape tables and analyze them.The preview truncates rows, so let me use the sampling tools which return node-level detail, plus density stats.Let me extract the full top-node rankings via markdown output.Now let me analyze scaffolds/chemotypes in the densest and most-active nodes.The dense-node chemotype is clearly the adamantyl-urea sEH series. Let me ground potency claims by sampling top-active molecules and segmenting active vs inactive.Active set = 926 (pChEMBL \u2265 7), inactive = 225 (pChEMBL < 6). Let me gather remaining stats and the report skill.Now let me render marked density and activity-landscape plots for the report.All artifacts are ready. Now I'll compose and save the grounded report.I've completed the full workflow end to end. Here's the summary.",
+      "- Dominant chemotype = **1,3-disubstituted ureas** with a bulky cage (adamantyl) or ring (cyclohexyl/cyclooctyl) and an (hetero)aryl cap \u2014 e.g. the most frequent scaffold, 1-(adamantan-1-yl)-3-phenylurea (count 42), adamantane core (55).",
+      "- **Active (\u22657): 926**; **inactive (<6): 225**; intermediate 277. Potency tracks terminal-group elaboration (fluorinated/basic-amine caps), not the urea core alone \u2014 the adamantylurea scaffold appears in both sets."
+    ],
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r2/20261004_174429_336882_single_agent/live_seh_workflow/run_0/response.txt",
+        "sha256": "3918786c491762b59b1153964f552061c7b72b0816897b839a340c0ab0c2b12e",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r2/20261004_174429_336882_single_agent/live_seh_workflow/run_0/session_state.json",
+        "sha256": "be6a00d6dc69e123db229bc7b44e52ef0e54903ef2d9f9cb695107aa5c194baa",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r2/20261004_174429_336882_single_agent/reliability/runs.jsonl",
+        "sha256": "3674ea2275fd9ecef944f3a18a07eafb331cad058a12e5fbbc04956a5e87629b",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/01_chemical_space/datasets/raw/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_raw.csv",
+        "sha256": "1140c5f8e4702a095aa696b9874b9df9c5cf8bd42ed6c173f2506d295fc592e2",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+        "sha256": "ea4be6c250190ebb13d80e6106bd717837ee232b7249d0a08a6addb4f6a0a317",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/01_chemical_space/datasets/filtered/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_suspicious_filtered.csv",
+        "sha256": "5b5d101e33f37c2988a68c3934dc5498ac5a09cee20b68480e2330f3156d6290",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/01_chemical_space/standardization/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_standardization_report.md",
+        "sha256": "dd7e3b06a89e1aae09102aa4324254d75e48e239ee2c3ebc2811f62f269ae866",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/reports/gtm_activity/seh_ephx2_chemical_space_report.md",
+        "sha256": "397c0838d69456d82b0deb097f365dd003713f8384ea87da2101c1c6c8ceee46",
+        "kind": "original"
+      }
+    ],
+    "population": "all 1580 clean compound rows",
+    "counting_method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+    "corrected_value": {
+      "method": "RDKit GetScaffoldForMol on each original clean SMILES; canonical isomeric SMILES (atom and bond types retained, no generic scaffold conversion); count every valid clean row once, including empty acyclic scaffolds.",
+      "population": "all clean standardized compound rows",
+      "denominator": 1580,
+      "valid_molecules": 1580,
+      "invalid_molecules": 0,
+      "unique_scaffolds_including_acyclic": 635,
+      "acyclic_molecules": 57,
+      "top_scaffolds": [
+        [
+          "C1C2CC3CC1CC(C2)C3",
+          90
+        ],
+        [
+          "",
+          57
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCNCC1",
+          55
+        ],
+        [
+          "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2",
+          49
+        ],
+        [
+          "O=C(NC1CCCCCC1)C1CCN(S(=O)(=O)c2ccccc2)CC1",
+          39
+        ],
+        [
+          "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1",
+          38
+        ],
+        [
+          "c1ccccc1",
+          30
+        ],
+        [
+          "C1CCCCC1",
+          26
+        ],
+        [
+          "c1ccc(-c2ncoc2-c2ccccc2)cc1",
+          25
+        ],
+        [
+          "O=C(NC1CC1c1ccccc1)N1CCC(Oc2ccccc2)CC1",
+          22
+        ]
+      ],
+      "adamantane": 90,
+      "phenyl_urea_adamantyl": 49
+    },
+    "status": "verified",
+    "evidence_kind": "reconstructed",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep3",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 40,
+      "counts": {
+        "C1C2CC3CC1CC(C2)C3": 55,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 42,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 12,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 11,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(NC1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 7,
+        "O=C(Nc1cccc(OCCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 7,
+        "O=C(Nc1ccc(C(=O)NC2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 6,
+        "O=C(NCCCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 6,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 6,
+        "O=C(Nc1ccno1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(NC1CCC(OCc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(NCc1ccccc1)N1CCC(Oc2ccccc2)CC1": 5,
+        "O=C(Nc1cccc(OCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(NCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 4,
+        "O=C(Nc1ccc(OCCCCN2CCNCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(C(=O)N2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 4
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r2/20261004_174429_336882_single_agent/reliability/runs.jsonl",
+        "sha256": "3674ea2275fd9ecef944f3a18a07eafb331cad058a12e5fbbc04956a5e87629b",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        181,
+        5,
+        4,
+        251,
+        211,
+        151,
+        115,
+        322
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 40,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+      "recorded_node_selection": [
+        181,
+        5,
+        4,
+        251,
+        211,
+        151,
+        115,
+        322
+      ],
+      "node_selection_complete": true,
+      "recorded_counts": {
+        "C1C2CC3CC1CC(C2)C3": 55,
+        "O=C(Nc1ccccc1)NC12CC3CC(CC(C3)C1)C2": 42,
+        "O=C(NC1CCC(Oc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 12,
+        "O=C(NC1CCCCC1)NC12CC3CC(CC(C3)C1)C2": 11,
+        "O=C(Nc1ccc(CN2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccc(CN2CCCN(C(=O)CC3CCNCC3)CC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(Nc1ccc(C(=O)N2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 8,
+        "O=C(NC1CCNCC1)NC12CC3CC(CC(C3)C1)C2": 7,
+        "O=C(Nc1cccc(OCCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 7,
+        "O=C(Nc1ccc(C(=O)NC2CCCCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 6,
+        "O=C(NCCCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 6,
+        "O=C(Nc1ccccc1)NC1CCC(Oc2ccccc2)CC1": 6,
+        "O=C(Nc1ccno1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(NC1CCC(OCc2ccccc2)CC1)NC12CC3CC(CC(C3)C1)C2": 5,
+        "O=C(NCc1ccccc1)N1CCC(Oc2ccccc2)CC1": 5,
+        "O=C(Nc1cccc(OCCCN2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(NCc1cc(-c2ccccc2)n(-c2ccccc2)n1)Nc1ccccc1": 4,
+        "O=C(Nc1ccc(OCCCCN2CCNCC2)cc1)NC12CC3CC(CC(C3)C1)C2": 4,
+        "O=C(Nc1cccc(C(=O)N2CCNCC2)c1)NC12CC3CC(CC(C3)C1)C2": 4
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  },
+  {
+    "run": "single_agent_rep3",
+    "claim_type": "selected_node_scaffolds",
+    "original_claim": {
+      "tool_call_index": 41,
+      "counts": {
+        "O=C(Nc1ccccc1)NC1CCCCCCC1": 2,
+        "c1ccccc1": 2,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 1,
+        "O=C(NCC1CCC2CC1C2)Nc1ccccc1": 1,
+        "O=C(NC1CCCCC1)NC1CCNCC1": 1
+      }
+    },
+    "source_artifacts": [
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot/reports/reviewer_revision/reliability_study_v4_live_single_agent_20261004/runs/live_single_r2/20261004_174429_336882_single_agent/reliability/runs.jsonl",
+        "sha256": "3674ea2275fd9ecef944f3a18a07eafb331cad058a12e5fbbc04956a5e87629b",
+        "kind": "original"
+      },
+      {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/src/cs_copilot/tools/chemography/gtm_operations.py",
+        "sha256": "622ace7d96c019caaf11c7ff57f7fd83c136e60c5ee1fdae3a59025141206c27",
+        "kind": "original"
+      }
+    ],
+    "population": {
+      "selected_nodes": [
+        3,
+        213,
+        691,
+        522,
+        243,
+        57,
+        861,
+        89
+      ],
+      "denominator": null
+    },
+    "counting_method": "Original tool selects source_mols.node_index membership then computes Murcko scaffold frequencies.",
+    "corrected_value": {
+      "tool_call_index": 41,
+      "tool_name": "analyze_scaffolds_in_nodes",
+      "original_loaded_dataset": "data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+      "recorded_node_selection": [
+        3,
+        213,
+        691,
+        522,
+        243,
+        57,
+        861,
+        89
+      ],
+      "node_selection_complete": true,
+      "recorded_counts": {
+        "O=C(Nc1ccccc1)NC1CCCCCCC1": 2,
+        "c1ccccc1": 2,
+        "O=C(Nc1ccccc1)NC1CCNCC1": 1,
+        "O=C(NCC1CCC2CC1C2)Nc1ccccc1": 1,
+        "O=C(NC1CCCCC1)NC1CCNCC1": 1
+      },
+      "origin": "original stored tool-call preview; may be truncated",
+      "subset_recomputation_status": "unresolved",
+      "subset_denominator": null,
+      "reason": "Original per-molecule node membership is not available in these previews; no projection inference rerun."
+    },
+    "status": "unresolved",
+    "evidence_kind": "original subset result; scope recovered; whole-dataset extrapolation invalid",
+    "originals_preserved": true
+  }
+]

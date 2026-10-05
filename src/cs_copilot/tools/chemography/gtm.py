@@ -642,15 +642,24 @@ class GTMToolkit(BaseDRToolkit):
             f"dataset {dataset} projected onto gtm model {resolved_model} and successfully loaded"
         )
 
-    def analyze_scaffolds_in_nodes(self, list_of_nodes: List[int]) -> str:
+    def analyze_scaffolds_in_nodes(
+        self,
+        list_of_nodes: List[int],
+        offset: int = 0,
+        limit: int = 10,
+        agent: Optional[Agent] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """
         Analyze molecular scaffolds in selected GTM nodes.
 
         Args:
             list_of_nodes: List of node indices to analyze
+            offset: Zero-based scaffold page offset.
+            limit: Maximum returned scaffolds (1..50); totals cover all selected molecules.
 
         Returns:
-            String representation of scaffold frequency table
+            JSON with population, denominator, exact scaffold definition, page and evidence path.
 
         Raises:
             ValueError: If list_of_nodes is empty or invalid
@@ -659,7 +668,16 @@ class GTMToolkit(BaseDRToolkit):
         if self._gtm_data is None or self._gtm_data.source_mols is None:
             raise AttributeError("Data not loaded. Call load_and_prep_data() first.")
 
-        return gtm_operations.analyze_scaffolds_in_nodes(self._gtm_data.source_mols, list_of_nodes)
+        state = (
+            session_state if session_state is not None else getattr(agent, "session_state", None)
+        )
+        return gtm_operations.analyze_scaffolds_in_nodes(
+            self._gtm_data.source_mols,
+            list_of_nodes,
+            offset=offset,
+            limit=limit,
+            session_state=state,
+        )
 
     def check_source_datasets_in_nodes(self, list_of_nodes: List[int]) -> str:
         """
