@@ -2249,6 +2249,7 @@ def save_markdown_report(
     filename: Optional[str] = None,
     report_type: Optional[str] = None,
     session_state: Optional[Dict[str, Any]] = None,
+    evidence_requests: Optional[list[dict[str, Any]]] = None,
 ) -> str:
     """
     Save a markdown report to the session-scoped storage (S3 or local).
@@ -2266,6 +2267,8 @@ def save_markdown_report(
             to ``.md``.
         report_type: Short slug (e.g. ``"chemotype"``, ``"gtm_density"``).
             Used for auto-generated filenames only.
+        evidence_requests: Scoped coverage/scaffold evidence queries. Verified tables
+            are appended; unavailable, stale or conflicting facts remain unresolved.
 
     Returns:
         ``"Markdown report saved to S3: `<path>`"`` — same backticked format as
@@ -2277,6 +2280,15 @@ def save_markdown_report(
     """
     if not isinstance(content, str) or not content.strip():
         raise ValueError("content cannot be empty")
+
+    if evidence_requests:
+        from .reporting_evidence import evidence_report_section
+
+        for request in evidence_requests:
+            section = _normalize_sections([evidence_report_section(request)])[0]
+            content += f"\n\n## {section['heading']}\n\n"
+            content += "\n\n".join(section["paragraphs"]) + "\n\n"
+            content += "\n\n".join(_markdown_table(table) for table in section["tables"])
 
     name = _report_filename(filename, _MD_EXTENSION, report_type)
     rel_path = _report_rel_path(name, report_type, session_state)
@@ -2313,6 +2325,7 @@ def save_rich_report(
     formats: Optional[list[str]] = None,
     embed_images: bool = True,
     session_state: Optional[Dict[str, Any]] = None,
+    evidence_requests: Optional[list[dict[str, Any]]] = None,
 ) -> str:
     """
     Save an image-rich report to session-scoped storage.
@@ -2351,6 +2364,9 @@ def save_rich_report(
         formats: Optional output formats. Supported values are ``"html"``,
             ``"pdf"``, ``"md"``, and ``"markdown"``. Defaults to HTML + PDF.
         embed_images: Whether HTML should embed readable images as data URLs.
+        evidence_requests: Scoped queries with evidence_path, population, section,
+            offset and limit. Render coverage/scaffold tables directly from verified
+            facts; unavailable, changed or conflicting evidence remains unresolved.
 
     Returns:
         A labeled list of backticked saved paths, for example:
@@ -2363,6 +2379,12 @@ def save_rich_report(
     if not isinstance(title, str) or not title.strip():
         raise ValueError("title cannot be empty")
 
+    if evidence_requests:
+        from .reporting_evidence import evidence_report_section
+
+        sections = list(sections or []) + [
+            evidence_report_section(request) for request in evidence_requests
+        ]
     normalized_summary = _as_strings(summary)
     normalized_sections = _normalize_sections(sections, session_state=session_state)
     normalized_figures = _normalize_figures(figures, session_state=session_state)

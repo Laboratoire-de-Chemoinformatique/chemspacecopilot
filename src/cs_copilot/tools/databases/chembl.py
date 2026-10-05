@@ -787,6 +787,7 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 agent.session_state = {}
             session_for_artifacts = session_state or getattr(agent, "session_state", None)
 
+            retrieved_df = merged_df.copy()
             filtering = self._filter_suspicious_short_keyword_rows(
                 merged_df,
                 keywords=keywords,
@@ -830,6 +831,16 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 descriptor_filename=f"chembl_{query_slug}_descriptors.parquet",
                 report_filename=f"chembl_{query_slug}_standardization_report.md",
                 report_appendix=self._retrieval_filtering_report_appendix(filtering.summary),
+                coverage_populations={
+                    "retrieved": (
+                        retrieved_df,
+                        "Retrieved activity records before retrieval filtering",
+                    ),
+                    "search": (
+                        pd.DataFrame({"assay_chembl_id": sorted(all_assay_ids)}),
+                        "Search-matched assay IDs; some have no retrieved or retained activities",
+                    ),
+                },
                 session_state=session_for_artifacts,
             )
             prepared.standardization_summary["chembl_retrieval_filtering"] = filtering.summary
@@ -852,6 +863,9 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 ] = prepared.standardization_report_path
                 if filtering.filtered_rows_path:
                     state["data_file_paths"]["filtered_dataset_path"] = filtering.filtered_rows_path
+                state["data_file_paths"]["evidence_path"] = prepared.standardization_summary[
+                    "reporting_evidence"
+                ]["evidence_path"]
                 state["data_file_paths"]["dataset_path"] = prepared.clean_dataset_path
                 dataset_id = register_session_object(
                     state,
@@ -873,7 +887,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
                             filtering.summary["filtered_row_count"]
                         ),
                         "unique_compounds": int(clean_df["smiles"].nunique()),
-                        "assay_count": total_assays,
+                        "search_matched_assay_count": total_assays,
+                        "reporting_evidence": prepared.standardization_summary[
+                            "reporting_evidence"
+                        ],
                         "organism_filter": organism,
                         "assay_type_codes": assay_type_codes,
                         "mechanism_filter": mechanism,
@@ -1692,7 +1709,10 @@ class ChemblToolkit(BaseDatabaseToolkit):
             message += f"🧾 Standardization report: `{standardization_report_path}`\n"
 
         if total_assays > 0:
-            message += f"🔬 Found {total_assays} unique assays across all keywords\n"
+            message += f"🔬 Search-matched assays: {total_assays} (before activity retrieval/filtering; not retained-data coverage)\n"
+        if standardization_summary and standardization_summary.get("reporting_evidence"):
+            reference = standardization_summary["reporting_evidence"]
+            message += f"📄 Scoped coverage/scaffold evidence: `{reference['evidence_path']}` (retrieve the required population with get_report_evidence)\n"
 
         message += self._format_query_filters(organism_filter, assay_type_codes, mechanism_filter)
 
@@ -1758,7 +1778,8 @@ class ChemblToolkit(BaseDatabaseToolkit):
             path_to_dataset: S3 or local path to the CSV file containing the dataset
 
         Returns:
-            String representation of the pandas DataFrame's descriptive statistics
+            JSON containing atomic identifier coverage and numeric statistics for all
+            supplied rows. Categorical serialized-cell uniqueness is not entity coverage.
 
         Raises:
             FileNotFoundError: If the file doesn't exist
@@ -1778,8 +1799,20 @@ class ChemblToolkit(BaseDatabaseToolkit):
                 raise ValueError(f"Dataset at '{path_to_dataset}' is empty")
 
             logger.info(f"Loaded dataset with shape {df.shape} for description")
-            description = df.describe(include="all")
-            return str(description)
+            from cs_copilot.tools.io.reporting_evidence import coverage_counts
+
+            # Categorical describe().unique counts serialized cells, not entities.
+            numeric = df.select_dtypes(include="number")
+            statistics = json.loads(numeric.describe().to_json()) if not numeric.empty else {}
+            return json.dumps(
+                {
+                    "source": path_to_dataset,
+                    "population_label": "All rows in the supplied dataset",
+                    "coverage": coverage_counts(df),
+                    "numeric_statistics": statistics,
+                    "note": "Population stage is not inferred from filename. Distinct serialized cells are not distinct entities.",
+                }
+            )
 
         except Exception as e:
             logger.error(f"Error describing dataset {path_to_dataset}: {e}")
