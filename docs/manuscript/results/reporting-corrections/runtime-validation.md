@@ -4,7 +4,8 @@ Validated on 2026-10-05 in the current worktree. No live agent benchmark was rer
 
 ## Automated checks
 
-- Complete offline unit suite: **1,565 passed, 2 skipped**, 3 existing warnings. Command: `PYTHONPATH=src python -m pytest tests/unit`.
+- PR preparation after rebasing onto the latest `main`: **1,568 passed, 2 skipped**; CSV output uses LF line endings and all 82 original hashes were reverified.
+- Complete offline unit suite before that rebase: **1,565 passed, 2 skipped**, 3 existing warnings. Command: `PYTHONPATH=src python -m pytest tests/unit`.
 - Ruff checks on all changed Python files and `git diff --check`: passed.
 - All **82 original source hashes** in `reconciliation.json` were independently rechecked after implementation; none changed.
 - Independent reconciliation covers all six historical sEH runs, with **32 correction ledger entries**. See [historical corrections](README.md).

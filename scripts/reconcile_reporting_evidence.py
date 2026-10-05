@@ -461,7 +461,9 @@ def reconcile(audit_dir, source_root, output_dir):
     )
     with (output_dir / "murcko_scaffold_frequencies.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(
-            handle, fieldnames=["run", "population", "denominator", "scaffold_smiles", "count"]
+            handle,
+            fieldnames=["run", "population", "denominator", "scaffold_smiles", "count"],
+            lineterminator="\n",
         )
         writer.writeheader()
         writer.writerows(scaffold_rows)
