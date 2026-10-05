@@ -1631,3 +1631,47 @@ def test_save_rich_report_rejects_invalid_inputs(local_session_root, kwargs, mes
         save_rich_report(**kwargs)
 
     assert not _report_files(local_session_root, "report", "*")
+
+
+def test_rich_report_renders_verified_coverage_and_unresolved_source(local_session_root, tmp_path):
+    import pandas as pd
+
+    from cs_copilot.tools.io.reporting_evidence import write_dataset_evidence
+
+    source = tmp_path / "coverage.csv"
+    frame = pd.DataFrame({"smiles": ["CC", "CCC"], "assay_chembl_ids": ["A|B", "B|A"]})
+    frame.to_csv(source, index=False)
+    ref = write_dataset_evidence(
+        str(source), {"clean": (frame, str(source), "All standardized molecules")}
+    )
+    request = {"evidence_path": ref["evidence_path"]}
+    save_rich_report(
+        title="Coverage", evidence_requests=[request], filename="coverage", formats=["md"]
+    )
+    content = _report_files(local_session_root, "report", "coverage.md")[0].read_text()
+    assert "All standardized molecules" in content
+    assert "distinct assays | 2" in content
+    assert "distinct documents | Unresolved" in content
+    source.write_text("smiles\nCCCC\n")
+    save_rich_report(
+        title="Coverage", evidence_requests=[request], filename="stale", formats=["md"]
+    )
+    content = _report_files(local_session_root, "report", "stale.md")[0].read_text()
+    assert "Unresolved: stale source" in content
+    assert "distinct assays | 2" not in content
+
+
+def test_markdown_report_appends_unresolved_evidence(local_session_root, tmp_path):
+    save_markdown_report(
+        content="# Report",
+        filename="unresolved",
+        evidence_requests=[
+            {
+                "evidence_path": str(tmp_path / "absent.json"),
+                "population": "retained",
+            }
+        ],
+    )
+    content = _report_files(local_session_root, "report", "unresolved.md")[0].read_text()
+    assert "Unresolved:" in content
+    assert "retained" in content

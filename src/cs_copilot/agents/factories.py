@@ -25,6 +25,7 @@ from cs_copilot.tools import (
     SessionMemoryToolkit,
     SkillToolkit,
     SynPlannerToolkit,
+    get_report_evidence,
     save_gtm_landscape_plot,
     save_gtm_plot,
     save_markdown_report,
@@ -592,6 +593,7 @@ class ReportGeneratorFactory(BaseAgentFactory):
                 SessionMemoryToolkit(),
                 save_gtm_landscape_plot,  # For saved GTM landscape tables
                 save_gtm_plot,  # For GTM-specific visualizations
+                get_report_evidence,
                 save_rich_report,  # Persists image-rich HTML/PDF reports
                 save_markdown_report,  # Persists the final markdown report
                 SkillToolkit(),
@@ -743,6 +745,7 @@ class SingleAgentFactory(BaseAgentFactory):
                 # Plot / report callables.
                 save_gtm_landscape_plot,
                 save_gtm_plot,
+                get_report_evidence,
                 save_rich_report,
                 save_markdown_report,
             ],
