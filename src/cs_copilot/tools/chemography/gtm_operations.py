@@ -90,6 +90,7 @@ from ..constants import (
     GTM_MODEL_SUFFIXES,
     HTML_EXTENSION,
     HUGGINGFACE_GTM_REPO,
+    HUGGINGFACE_GTM_REVISION,
     MIN_ORGANISM_DATA_POINTS,
     PKL_GZ_EXTENSION,
     PNG_EXTENSION,
@@ -914,6 +915,7 @@ def resolve_gtm_model_path(
         logger.info(f"Downloading GTM model from HuggingFace: {HUGGINGFACE_GTM_REPO}")
         downloaded_path = snapshot_download(
             repo_id=HUGGINGFACE_GTM_REPO,
+            revision=HUGGINGFACE_GTM_REVISION,
             local_dir=str(default_path),
             local_dir_use_symlinks=False,
         )

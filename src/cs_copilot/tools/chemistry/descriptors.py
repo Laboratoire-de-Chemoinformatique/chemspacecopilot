@@ -54,6 +54,16 @@ class MolecularDescriptorEncoder:
         "morgan": "morgan_fingerprint",
     }
 
+    # Each descriptor family pins its latent engine. Resolving these through
+    # AUTOENCODER_BACKEND instead would make "autoencoder" mean whichever engine
+    # happened to be configured, writing one model's vectors into the other's
+    # cache column. The environment variable selects the engine used to
+    # *generate* molecules; it must not silently redefine a descriptor.
+    _DESCRIPTOR_ENGINES: Dict[str, str] = {
+        "autoencoder": "deepchemography",
+        "chembed": "chembed",
+    }
+
     def __init__(self, default_descriptor: str = DEFAULT_DESCRIPTOR_TYPE):
         self.default_descriptor = self._normalise_descriptor(default_descriptor)
         self._autoencoder_toolkits: Dict[str, AutoencoderToolkit] = {}
@@ -134,7 +144,7 @@ class MolecularDescriptorEncoder:
         device: Optional[str],
     ) -> np.ndarray:
         toolkit = self._get_autoencoder_toolkit(
-            backend=backend, model_path=model_path, device=device
+            backend=self._DESCRIPTOR_ENGINES[backend], model_path=model_path, device=device
         )
         embeddings = toolkit.encode_smiles_array(list(smiles), batch_size=batch_size)
         return np.asarray(embeddings, dtype=np.float32)

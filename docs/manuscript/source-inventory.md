@@ -22,13 +22,19 @@ All 50,000 author frameset SMILES match exact strings in the pinned MOSES traini
 
 ## chembed replaces the LSTM autoencoder for small molecules (10 October 2026)
 
-The small-molecule latent engine is now selectable, and chembed
-([3BioCompBio/chembed](https://github.com/3BioCompBio/chembed) 1.0.1, checkpoint
-`3BioCompBio/chembed-default`) is available alongside the deepchemography LSTM
-autoencoder. Everything under `results/generation`, `results/seh` and
+chembed ([3BioCompBio/chembed](https://github.com/3BioCompBio/chembed) 1.0.1,
+checkpoint `3BioCompBio/chembed-default`) replaces the deepchemography LSTM
+autoencoder as the default small-molecule generation engine. It reconstructs 12
+of 12 reference molecules where the LSTM manages 5, and the LSTM fails outright
+beyond roughly 50 SMILES characters, which covers most of the potent
+chemotypes. Everything under `results/generation`, `results/seh` and
 `results/architecture-pilot` was produced on the **deepchemography** engine and
-the 256-dimensional LSTM manifold. Reproduce those with
-`AUTOENCODER_BACKEND=deepchemography`, which is still the default.
+the 256-dimensional LSTM manifold; reproduce those with
+`AUTOENCODER_BACKEND=deepchemography`.
+
+That variable selects the generation engine only. Descriptor families pin their
+own engine, so `descriptor_type="autoencoder"` remains the LSTM and the
+published default map continues to receive the latent it was fitted on.
 
 Three consequences for provenance.
 

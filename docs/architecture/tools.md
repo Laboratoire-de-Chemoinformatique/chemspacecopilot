@@ -76,10 +76,19 @@ provenance string are the same whichever engine is active.
 | `max_length` | caller-set, default 100 | fixed at 256 by the checkpoint |
 | Long molecules | fails beyond roughly 50 SMILES characters | encodes the full frameset |
 
-Select an engine with the `AUTOENCODER_BACKEND` environment variable
-(`chembed` or `deepchemography`), or by passing `backend=` to
-`make_autoencoder_toolkit()`. Construct the toolkit through that factory rather
-than directly, so the choice is honoured.
+chembed is the default. Select the other with the `AUTOENCODER_BACKEND`
+environment variable (`chembed` or `deepchemography`), or by passing `backend=`
+to `make_autoencoder_toolkit()`. Construct the toolkit through that factory
+rather than directly, so the choice is honoured. Set
+`AUTOENCODER_BACKEND=deepchemography` to reproduce the frozen manuscript
+results.
+
+**The variable selects the generation engine only.** Descriptor families pin
+their own engine: `autoencoder` is always the deepchemography LSTM and
+`chembed` is always chembed, whatever the variable says. Otherwise
+`descriptor_type="autoencoder"` would emit chembed vectors into the
+`autoencoder_embedding` column, and the default map, which is fitted on LSTM
+embeddings, would silently receive the wrong latent.
 
 ### What chembed ignores
 
@@ -128,6 +137,13 @@ mechanisms prevent that, and both must be kept:
 - Manifolds carry a `descriptor_backend` tag, checked by
   `validate_gtm_descriptor_backend` before projection. Manifolds published
   before the tag existed pass with a warning.
+
+How little the shape tells you: encoding aspirin with both engines gives two
+`(1, 256)` vectors whose cosine similarity is 0.13. They are the same size and
+otherwise unrelated, so nothing but the tag and the column name can catch a
+swap. `HUGGINGFACE_GTM_REVISION` pins the published manifold for the same
+reason, so a repository update cannot exchange it under results that depend
+on it.
 
 Changing the engine therefore invalidates any manifold fitted on the previous
 latent space. `scripts/refit_gtm_manifold.py` refits one, reusing the published

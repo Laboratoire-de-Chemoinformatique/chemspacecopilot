@@ -352,3 +352,52 @@ class TestNoiseScale:
         # Zero noise must leave every neighbour exactly on the parent latent.
         assert captured["z"].shape == (4, D_MODEL)
         assert np.allclose(captured["z"], 0.0)
+
+
+class TestDescriptorEnginePinning:
+    """Descriptor families pin their engine; only generation follows the env.
+
+    AUTOENCODER_BACKEND selects the engine used to generate molecules. If it
+    also redefined a descriptor family, "autoencoder" would emit chembed vectors
+    into the autoencoder_embedding column, which _compute_descriptors reuses as
+    a cache without recording which model wrote it.
+    """
+
+    @pytest.mark.parametrize("configured", ["chembed", "deepchemography"])
+    def test_descriptor_family_engine_is_independent_of_the_env(self, configured, monkeypatch):
+        from cs_copilot.tools.chemistry.descriptors import MolecularDescriptorEncoder
+
+        monkeypatch.setenv("AUTOENCODER_BACKEND", configured)
+
+        engines = MolecularDescriptorEncoder._DESCRIPTOR_ENGINES
+        assert engines["autoencoder"] == "deepchemography"
+        assert engines["chembed"] == "chembed"
+
+    def test_columns_stay_one_per_engine(self):
+        from cs_copilot.tools.chemistry.descriptors import MolecularDescriptorEncoder
+
+        columns = {
+            family: MolecularDescriptorEncoder(family).column_name()
+            for family in MolecularDescriptorEncoder._DESCRIPTOR_ENGINES
+        }
+
+        assert columns == {
+            "autoencoder": "autoencoder_embedding",
+            "chembed": "chembed_embedding",
+        }
+        assert len(set(columns.values())) == len(columns)
+
+    def test_generation_default_is_chembed(self, monkeypatch):
+        from cs_copilot.tools.chemistry.autoencoder_toolkit import resolve_autoencoder_backend
+
+        monkeypatch.delenv("AUTOENCODER_BACKEND", raising=False)
+
+        assert resolve_autoencoder_backend(None) == "chembed"
+        assert resolve_autoencoder_backend("deepchemography") == "deepchemography"
+
+    def test_env_overrides_the_generation_default(self, monkeypatch):
+        from cs_copilot.tools.chemistry.autoencoder_toolkit import resolve_autoencoder_backend
+
+        monkeypatch.setenv("AUTOENCODER_BACKEND", "deepchemography")
+
+        assert resolve_autoencoder_backend(None) == "deepchemography"

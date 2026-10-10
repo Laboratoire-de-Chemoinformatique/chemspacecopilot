@@ -1,9 +1,9 @@
 # Retained standalone-generation pilot
 
 > **Engine provenance.** These results were produced with the deepchemography
-> LSTM autoencoder. The small-molecule latent engine is now selectable, so
-> reproduce them with `AUTOENCODER_BACKEND=deepchemography`, which remains the
-> default. See [source-inventory.md](../../source-inventory.md).
+> LSTM autoencoder, which is no longer the default generation engine. Reproduce
+> them with `AUTOENCODER_BACKEND=deepchemography`. See
+> [source-inventory.md](../../source-inventory.md).
 
 
 These are two implementation pilots run on 26 September 2026, one per arm,

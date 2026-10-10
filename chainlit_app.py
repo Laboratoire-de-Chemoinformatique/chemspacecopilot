@@ -65,8 +65,11 @@ def get_user_role(username: str) -> str:
 def _apply_map_settings(session_agent, map_choice: str) -> None:
     """Propagate the selected map to the team's session_state.
 
-    When the user picks the Default Map, molecular descriptors default to
-    autoencoder embeddings (compatible with the HuggingFace GTM model).
+    The Default Map is a published GTM manifold fitted on deepchemography
+    autoencoder embeddings, so it selects that descriptor family explicitly. The
+    family pins its own latent engine and does not follow AUTOENCODER_BACKEND:
+    projecting chembed vectors onto this manifold would raise no error and
+    return meaningless coordinates, because both latents are 256 wide.
     Otherwise, the project keeps its historical Morgan-fingerprint default.
     """
     if session_agent is None:
