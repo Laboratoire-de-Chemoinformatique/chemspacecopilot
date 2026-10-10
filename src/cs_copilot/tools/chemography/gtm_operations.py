@@ -5194,9 +5194,10 @@ def train_latent_gtm(
             num_nodes=num_nodes,
             basis_width=basis_width,
             reg_coeff=reg_coeff,
+            max_iter=200,
             device=device,
         )
-        gtm.fit(torch.from_numpy(X_scaled).to(torch.float64), n_iterations=200)
+        gtm.fit(torch.from_numpy(X_scaled).to(torch.float64))
         resps, _ = gtm.project(torch.from_numpy(X_scaled).to(torch.float64))
         score = shannon_entropy(resps.cpu().numpy())
 
@@ -5254,9 +5255,10 @@ def train_latent_gtm(
             num_nodes=num_nodes,
             basis_width=bw,
             reg_coeff=rc,
+            max_iter=200,
             device=device,
         )
-        gtm_trial.fit(torch.from_numpy(X_scaled).to(torch.float64), n_iterations=200)
+        gtm_trial.fit(torch.from_numpy(X_scaled).to(torch.float64))
         resps, _ = gtm_trial.project(torch.from_numpy(X_scaled).to(torch.float64))
         return shannon_entropy(resps.cpu().numpy())
 
@@ -5273,9 +5275,10 @@ def train_latent_gtm(
         num_nodes=num_nodes,
         basis_width=best["basis_width"],
         reg_coeff=best["reg_coeff"],
+        max_iter=200,
         device=device,
     )
-    gtm.fit(torch.from_numpy(X_scaled).to(torch.float64), n_iterations=200)
+    gtm.fit(torch.from_numpy(X_scaled).to(torch.float64))
     resps, _ = gtm.project(torch.from_numpy(X_scaled).to(torch.float64))
     best_score = shannon_entropy(resps.cpu().numpy())
 

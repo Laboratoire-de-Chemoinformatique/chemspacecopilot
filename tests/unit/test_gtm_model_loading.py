@@ -175,3 +175,45 @@ class TestLatentCentersFromGtm:
         gtm = SimpleNamespace(phi=np.ones((3, 2)), weights=np.ones((2, 4)))
 
         assert gtm_operations.latent_centers_from_gtm(gtm).shape == (3, 4)
+
+
+class TestTrainLatentGtm:
+    """The latent path must actually reach chemographykit's API.
+
+    GTM.fit takes only the data tensor; the iteration cap is a constructor
+    argument. Passing n_iterations to fit raised TypeError on every call, so
+    this path was unreachable.
+    """
+
+    def test_fixed_config_fits(self):
+        vectors = np.random.default_rng(0).standard_normal((120, 8))
+        config = {
+            "n_basis_functions_sqrt": 3,
+            "n_nodes_n_basis_diff": 3,
+            "basis_width": 1.0,
+            "reg_coeff": 100.0,
+        }
+
+        gtm, scaler, entropy = gtm_operations.train_latent_gtm(vectors, config=config)
+
+        assert gtm.num_nodes == 36
+        assert gtm.num_basis_functions == 9
+        assert 0.0 <= entropy <= 1.0
+        assert scaler is not None
+
+    def test_projection_and_centers_round_trip(self):
+        vectors = np.random.default_rng(1).standard_normal((80, 5))
+        config = {
+            "n_basis_functions_sqrt": 2,
+            "n_nodes_n_basis_diff": 2,
+            "basis_width": 1.0,
+            "reg_coeff": 100.0,
+        }
+        gtm, scaler, _ = gtm_operations.train_latent_gtm(vectors, config=config)
+
+        resps = gtm_operations.project_latent_on_gtm(vectors, gtm, scaler)
+        centers = gtm_operations.latent_centers_from_gtm(gtm, scaler=scaler)
+
+        assert resps.shape == (80, gtm.num_nodes)
+        # Centres come back in the original latent space, not the scaled one.
+        assert centers.shape == (gtm.num_nodes, 5)
