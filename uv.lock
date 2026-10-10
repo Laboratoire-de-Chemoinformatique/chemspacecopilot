@@ -12,6 +12,14 @@ constraints = [
     { name = "torchaudio", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'", specifier = "==2.10.0", index = "https://download.pytorch.org/whl/cu130" },
     { name = "torchvision", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'", specifier = "==0.25.0", index = "https://download.pytorch.org/whl/cu130" },
 ]
+excludes = [
+    "bio",
+    "duckdb",
+    "h5py",
+    "polars",
+    "tensorboard",
+    "tensorflow",
+]
 
 [[package]]
 name = "accelerate"
@@ -656,6 +664,53 @@ wheels = [
 ]
 
 [[package]]
+name = "chembed"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "chembl-structure-pipeline" },
+    { name = "fastparquet" },
+    { name = "huggingface-hub" },
+    { name = "lightning" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pandarallel" },
+    { name = "pandas" },
+    { name = "pyarrow" },
+    { name = "pyyaml" },
+    { name = "rdkit" },
+    { name = "requests" },
+    { name = "safetensors" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+    { name = "seaborn" },
+    { name = "selfies" },
+    { name = "torch", version = "2.10.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "torch", version = "2.10.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "torchmetrics" },
+    { name = "torchvision", version = "0.25.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "torchvision", version = "0.25.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4c/b4/f94714fa202920c321cb889be26bb73e4dd46024c799c3c060d9342b22ec/chembed-1.0.1.tar.gz", hash = "sha256:82896140266ffd29145a4f6957e59c2cf0b7607aaf84ed95564b9762953cf5bf", size = 61659, upload-time = "2025-12-01T16:05:21.648Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/e2/d325f7996e4db54d93cd371f32f470397c4d5769de7b7d0c446d38c45409/chembed-1.0.1-py3-none-any.whl", hash = "sha256:dae96a0e39af73ac8b7fe5a39da55fe30f97fde8e527f942954680052dea3aba", size = 48066, upload-time = "2025-12-01T16:05:19.928Z" },
+]
+
+[[package]]
+name = "chembl-structure-pipeline"
+version = "1.2.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "rdkit" },
+    { name = "setuptools" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/56/29/4ce697880f4b239dc96e89c371d7a86c43cd08e3f9b54c375510f49f19d8/chembl_structure_pipeline-1.2.4.tar.gz", hash = "sha256:e381500ac815ded31cc4841d1fbfe7c089788a07f2fbaa9bb818b52facfa9030", size = 16159, upload-time = "2025-11-24T16:41:34.971Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/5c/b9d714ff6381793e811ef96daa744350e1c5f233e0f15044e1f6160aeeaa/chembl_structure_pipeline-1.2.4-py3-none-any.whl", hash = "sha256:1bb5121b3714d564610c55e39e214ae6409001d0a50bb48a00831b3f5573c479", size = 17302, upload-time = "2025-11-24T16:41:34.053Z" },
+]
+
+[[package]]
 name = "chembl-webresource-client"
 version = "0.10.9"
 source = { registry = "https://pypi.org/simple" }
@@ -817,6 +872,31 @@ wheels = [
 ]
 
 [[package]]
+name = "cramjam"
+version = "2.13.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5f/f3/9b464fb2f9da3cb3e3293d94e510327262505e7de0ef646a858d2ed07ddd/cramjam-2.13.0.tar.gz", hash = "sha256:3c8f332b59b6c43fac9b2710aa3eeecffa5a6aa258350e782f7aa5db76ec5fa6", size = 93659, upload-time = "2026-09-29T14:28:52.058Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/3e/facd0368e867355dd3a2dcd9c37437a628ce924e4e77fbdddc499909a577/cramjam-2.13.0-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:3fd597caf1e9426da71b04612ef54177eb90c1c6ec9eb7fd121518f75bb4f0d2", size = 3426795, upload-time = "2026-09-29T14:25:09.507Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/04/129d95730f278fa8e0e22c842022662942e417f50778a1c5c0e801d9decd/cramjam-2.13.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:2cf702e440406b9b99debf88971248f36b3c24ba183247d70c0a77e19c468536", size = 1819503, upload-time = "2026-09-29T14:25:11.84Z" },
+    { url = "https://files.pythonhosted.org/packages/13/05/d44b313c553792db972cb5624395166c11846daa87385f20d065de6727f2/cramjam-2.13.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:61b74ef2983126e73a2076c23cc52b58319615f18b80a325cd9f0cdf74126689", size = 1627219, upload-time = "2026-09-29T14:25:13.641Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/29/c52d4a56b456fc4b5bb812f5382bef29131b8c50a53f575ed04ee44e69c4/cramjam-2.13.0-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:04c253646960ab562f436620f68ca37346f9d23ef360e06bf2c41eeeb3b8f1cc", size = 1850332, upload-time = "2026-09-29T14:25:15.604Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/2a/7667989d7ae35395c525e18da336c2e93cfc9584bc69bc48b2af2328be60/cramjam-2.13.0-cp312-cp312-manylinux_2_28_i686.whl", hash = "sha256:38f77dbcb812533871578d0da3df37ab5b953f2b82e9e0ed8c2e8532f36d0cb5", size = 1976619, upload-time = "2026-09-29T14:25:17.475Z" },
+    { url = "https://files.pythonhosted.org/packages/03/ac/d54aabae0613d5d6d8c3f38ab78f55f45cc6ee6ecd08994dbd09b9c3e513/cramjam-2.13.0-cp312-cp312-manylinux_2_28_ppc64le.whl", hash = "sha256:11661b0250d38b25c1129d02683f8f1bc3ecd1e35d4808a4ac62ee7aef0b80d2", size = 2168512, upload-time = "2026-09-29T14:25:19.531Z" },
+    { url = "https://files.pythonhosted.org/packages/69/a6/5c99d98eb3d4cff2fab462f74ebe5165110906f627e7eeaf17966cebe7ac/cramjam-2.13.0-cp312-cp312-manylinux_2_28_s390x.whl", hash = "sha256:b19c9b5abff7783728a23f3c1070dd5ba5bee13d1d9d2cdab878dc6355869395", size = 2391384, upload-time = "2026-09-29T14:25:21.954Z" },
+    { url = "https://files.pythonhosted.org/packages/02/d4/ceb71da125c1015dab1edb13134d7103ec523563f79ce56a93d2aa118a22/cramjam-2.13.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:59ca21ca8877d3cdb0cdd56ea8d2067f930c8b07abdd496bc7218dd135a8afaf", size = 1958757, upload-time = "2026-09-29T14:25:24.212Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/29/8a533f157701e0562e4f1a5b0d3c667b761e50d5106657044bcc875b4685/cramjam-2.13.0-cp312-cp312-manylinux_2_31_armv7l.whl", hash = "sha256:cbebe0099522d20d16581772f049dd9b86bfbd7964fef2373c63a942cfb6912a", size = 1820284, upload-time = "2026-09-29T14:25:26.553Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/69/6607e6c2acb46fffa08543360e935791c5fd97d73de2de7f86b9c80faac0/cramjam-2.13.0-cp312-cp312-manylinux_2_34_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:ad93e2942cd3f2222634318c47c1431ee48785288b502332d8c51669125a2c33", size = 2119455, upload-time = "2026-09-29T14:25:28.34Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/69/3ca66548764b306521e516067ece1a9a8105aaf49de1662c1ef33d627677/cramjam-2.13.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:ab02741d996f0241640b7e71104ece4f3810f3815f7c6a99626e9039efb3b21e", size = 1927267, upload-time = "2026-09-29T14:25:30.215Z" },
+    { url = "https://files.pythonhosted.org/packages/35/79/c5b5bcdfe61e6e7da0c18b791d87aacf736796dc353656f350f2fcf363eb/cramjam-2.13.0-cp312-cp312-musllinux_1_2_armv7l.whl", hash = "sha256:75ac61c7a16426278404dae82daa47f1ea1698f34f354a723ff3495032d1b9fb", size = 1778386, upload-time = "2026-09-29T14:25:32.015Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/42/31c553314ffd8fdff8e10a389149e8bc12cffd89a55095f4a1c7fc27f6a7/cramjam-2.13.0-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:7d0d2ae534213560f7b41aa571dce2f9afce9726ac10cd7003f1f166c5c56298", size = 2116989, upload-time = "2026-09-29T14:25:33.876Z" },
+    { url = "https://files.pythonhosted.org/packages/a7/f7/f0c8766f1d34b1f09b95c8b8e96cf76786f0fed5d32d8352dbd3257b3301/cramjam-2.13.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:5f0a4b00a8df115af1d137691c0995737a8fe31935c8c0edd65243ad6e0f68b2", size = 2045156, upload-time = "2026-09-29T14:25:36.002Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/b6/c6568599d279af26ae4fcc822353087814ebc08e7a30f50a7c3f0980fff1/cramjam-2.13.0-cp312-cp312-win32.whl", hash = "sha256:89c6b50d353733cbaa2655868780ba4267da790383497ad499f84abecfbe4ca2", size = 1660930, upload-time = "2026-09-29T14:25:37.818Z" },
+    { url = "https://files.pythonhosted.org/packages/59/3f/0383a575007131aba459b2f8824f61d9447b9b6217edb09f4a3143c1ed1b/cramjam-2.13.0-cp312-cp312-win_amd64.whl", hash = "sha256:7f8d13015b504d0e937e8a7475d9cc2228c10aede021285ec0d5db8b9d0c38fa", size = 1783758, upload-time = "2026-09-29T14:25:39.603Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/93/fe2e18149fe62d75e203347a5e6d20d02904b714a35748013474033b6e78/cramjam-2.13.0-cp312-cp312-win_arm64.whl", hash = "sha256:9f7f4c29d5d197ae5e63683bd20d2b873b22e92a11db4767a6b3429aa2fd169f", size = 1692979, upload-time = "2026-09-29T14:25:41.484Z" },
+]
+
+[[package]]
 name = "cryptography"
 version = "46.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -866,16 +946,20 @@ dependencies = [
     { name = "boto3" },
     { name = "cairosvg" },
     { name = "chainlit" },
+    { name = "chembed" },
+    { name = "chembl-structure-pipeline" },
     { name = "chembl-webresource-client" },
     { name = "chemographykit" },
     { name = "deepchemography" },
     { name = "dill" },
     { name = "exa-py" },
+    { name = "fastparquet" },
     { name = "huggingface-hub" },
     { name = "ipykernel" },
     { name = "ipywidgets" },
     { name = "jupyterlab" },
     { name = "lancedb" },
+    { name = "lightning" },
     { name = "lxml-html-clean" },
     { name = "marimo" },
     { name = "newspaper4k" },
@@ -894,7 +978,9 @@ dependencies = [
     { name = "rich" },
     { name = "s3fs" },
     { name = "seaborn" },
+    { name = "selfies" },
     { name = "sentence-transformers" },
+    { name = "setuptools" },
     { name = "sqlalchemy" },
     { name = "tabulate" },
     { name = "tantivy" },
@@ -944,16 +1030,20 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.42.30" },
     { name = "cairosvg", specifier = ">=2.8.2" },
     { name = "chainlit", specifier = ">=2.8.3" },
+    { name = "chembed", specifier = "==1.0.1" },
+    { name = "chembl-structure-pipeline", specifier = ">=1.2.2" },
     { name = "chembl-webresource-client", specifier = ">=0.10.9" },
     { name = "chemographykit", specifier = ">=0.1.0" },
     { name = "deepchemography", git = "https://github.com/AxelRolov/deepchemography.git?rev=301130e889a4697a876be2db8644cbba875ce0da" },
     { name = "dill", specifier = ">=0.4.0" },
     { name = "exa-py", specifier = ">=1.16.1" },
+    { name = "fastparquet", specifier = ">=2024.5.0" },
     { name = "huggingface-hub", specifier = "<1.0" },
     { name = "ipykernel", specifier = ">=7.0.1" },
     { name = "ipywidgets", specifier = ">=8.1.7" },
     { name = "jupyterlab", specifier = ">=4.4.9" },
     { name = "lancedb", specifier = ">=0.25.2" },
+    { name = "lightning", specifier = ">=2.4" },
     { name = "lxml-html-clean", specifier = ">=0.4.3" },
     { name = "marimo", specifier = ">=0.18.4" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
@@ -974,7 +1064,9 @@ requires-dist = [
     { name = "rich", specifier = ">=13.0.0" },
     { name = "s3fs", specifier = ">=2025.9.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
+    { name = "selfies", specifier = ">=2.1.2" },
     { name = "sentence-transformers", specifier = ">=5.2.0" },
+    { name = "setuptools", specifier = ">=70" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
     { name = "synplanner", marker = "extra == 'retrosynthesis'", specifier = "==1.7.0" },
     { name = "tabulate", specifier = ">=0.9.0" },
@@ -1282,6 +1374,30 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/20/b5/23b216d9d985a956623b6bd12d4086b60f0059b27799f23016af04a74ea1/fastjsonschema-2.21.2.tar.gz", hash = "sha256:b1eb43748041c880796cd077f1a07c3d94e93ae84bba5ed36800a33554ae05de", size = 374130, upload-time = "2025-08-14T18:49:36.666Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/a8/20d0723294217e47de6d9e2e40fd4a9d2f7c4b6ef974babd482a59743694/fastjsonschema-2.21.2-py3-none-any.whl", hash = "sha256:1c797122d0a86c5cace2e54bf4e819c36223b552017172f32c5c024a6b77e463", size = 24024, upload-time = "2025-08-14T18:49:34.776Z" },
+]
+
+[[package]]
+name = "fastparquet"
+version = "2026.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cramjam" },
+    { name = "fsspec" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pandas" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/dd/8a/931300515567b64646c54d3a03484db1c588b14c0f1128c9f60e04b2fb14/fastparquet-2026.9.0.tar.gz", hash = "sha256:bdf391e7d212707c884ad0ea6047719b7a1b2b4642b8d79d223b4d745f3bd4bb", size = 525182, upload-time = "2026-09-25T20:44:46.167Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e6/5b/9b6ed4352158a44e925d4c6b6adf823aadff883b8d1e9ddd14934aabc5f3/fastparquet-2026.9.0-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:2fcad74fae11ceece509ad083b2e22ec597a689d774db820d2f925e4e4e2c9b2", size = 990810, upload-time = "2026-09-25T20:47:19.963Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/19/52a2faa5eaa81d84d3e9c897052de9aff4f321f8897ff285c716b7386a8d/fastparquet-2026.9.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:adfe378592c591a1fd0ca555c90c75e39de89265e96f6b39fad96ade94446f4c", size = 759302, upload-time = "2026-09-25T20:47:22.408Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/89/61d3452a4bd8dd59bbb74aafcbc17a6743616fa4f5af9d30290d62481799/fastparquet-2026.9.0-cp312-cp312-manylinux1_i686.manylinux_2_28_i686.manylinux_2_5_i686.whl", hash = "sha256:fcf4e2ab06e0bc2433c4aedb63bedd139606e8ec5d0dd9626589e09196ef27a1", size = 1959863, upload-time = "2026-09-25T20:47:24.259Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/5a/ec35dfc9eb29a4fd29b794997e1d0c19ea31f5f6e2ba4455da9769de156c/fastparquet-2026.9.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8072a353a02f9397d2ac06d5da5a4818fa55df77db5adbbb59c75b04dd806ca6", size = 2016962, upload-time = "2026-09-25T20:47:26.328Z" },
+    { url = "https://files.pythonhosted.org/packages/63/c2/98429119a3477151c72852b7ccf19de50b2591bf591666b1a1f121c06baf/fastparquet-2026.9.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:97ff970749affeedc871bd7b277e4173344b6587b7823aac780ea6d298d78560", size = 2034826, upload-time = "2026-09-25T20:47:28.214Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/84/a0f4cd9af593f9d71ba1dd24fa59696fa24250a8e7ee76132d31eea67f8d/fastparquet-2026.9.0-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:30568dce92258edc6ecb80d472fa20b9bc54119e913a5b171f6a79ddac3a9786", size = 1982352, upload-time = "2026-09-25T20:47:29.833Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/61/48d21f493b0bf0b151b1d7689b335b53e53071c57cf192596699cc8dcb1a/fastparquet-2026.9.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:70ae1af7024ebb4b86b61effea6388e4d9a14bfc38cb5a3ffade1b9f7a8be84b", size = 2030063, upload-time = "2026-09-25T20:47:31.943Z" },
+    { url = "https://files.pythonhosted.org/packages/13/28/e0ae58137f2a53d30f1321db5d4f6e0b9bd6f4ed4a4818ff812a9471a3dc/fastparquet-2026.9.0-cp312-cp312-win32.whl", hash = "sha256:8db3e791d07271196af0bb91f6111904157361c21770f4d30503de6479d01a5a", size = 691761, upload-time = "2026-09-25T20:47:34.069Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/d9/6b44f4097c324208f7958b37123e868ee372653b209709374d51209ef1a8/fastparquet-2026.9.0-cp312-cp312-win_amd64.whl", hash = "sha256:7429a9c368eda9a31a54557ba7a2f6b26fd9fc754594337093e512e5e84037b5", size = 728553, upload-time = "2026-09-25T20:47:35.785Z" },
 ]
 
 [[package]]
@@ -2091,6 +2207,27 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/2b/24/e581ffed864cd33c1b445b5763d617448ebb880f48675fc9de0471a95cbc/lazy_object_proxy-1.12.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:c4fcbe74fb85df8ba7825fa05eddca764138da752904b378f0ae5ab33a36c308", size = 69329, upload-time = "2025-08-22T13:42:41.311Z" },
     { url = "https://files.pythonhosted.org/packages/78/be/15f8f5a0b0b2e668e756a152257d26370132c97f2f1943329b08f057eff0/lazy_object_proxy-1.12.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:563d2ec8e4d4b68ee7848c5ab4d6057a6d703cb7963b342968bb8758dda33a23", size = 70690, upload-time = "2025-08-22T13:42:42.51Z" },
     { url = "https://files.pythonhosted.org/packages/5d/aa/f02be9bbfb270e13ee608c2b28b8771f20a5f64356c6d9317b20043c6129/lazy_object_proxy-1.12.0-cp312-cp312-win_amd64.whl", hash = "sha256:53c7fd99eb156bbb82cbc5d5188891d8fdd805ba6c1e3b92b90092da2a837073", size = 26563, upload-time = "2025-08-22T13:42:43.685Z" },
+]
+
+[[package]]
+name = "lightning"
+version = "2.6.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fsspec", extra = ["http"] },
+    { name = "lightning-utilities" },
+    { name = "packaging" },
+    { name = "pytorch-lightning" },
+    { name = "pyyaml" },
+    { name = "torch", version = "2.10.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "torch", version = "2.10.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "torchmetrics" },
+    { name = "tqdm" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/39/b8/fbf1469d917c3ed3b22e00ab3a852fb9a5f85b9dc7f7060eedc3449098e7/lightning-2.6.6.tar.gz", hash = "sha256:1c6329e241f8a85f29fedead89c1ee138b36caa08de60c260c6a7eaee81c8295", size = 659902, upload-time = "2026-09-10T09:41:03.009Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/43/7da7fe42f254ce57777d1a86eece3f86d1b3329fc568d48e2bc16c8b7ebc/lightning-2.6.6-py3-none-any.whl", hash = "sha256:2bcbd6ee840071cd076c7dc9953d7ac1040df92f1c5fa76583aae644f037ab85", size = 849265, upload-time = "2026-09-10T09:41:00.882Z" },
 ]
 
 [[package]]
@@ -4773,6 +4910,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/86/59/a451d7420a77ab0b98f7affa3a1d78a313d2f7281a57afb1a34bae8ab412/seaborn-0.13.2.tar.gz", hash = "sha256:93e60a40988f4d65e9f4885df477e2fdaff6b73a9ded434c1ab356dd57eefff7", size = 1457696, upload-time = "2024-01-25T13:21:52.551Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/11/00d3c3dfc25ad54e731d91449895a79e4bf2384dc3ac01809010ba88f6d5/seaborn-0.13.2-py3-none-any.whl", hash = "sha256:636f8336facf092165e27924f223d3c62ca560b1f2bb5dff7ab7fad265361987", size = 294914, upload-time = "2024-01-25T13:21:49.598Z" },
+]
+
+[[package]]
+name = "selfies"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c9/de/466e2a24293929836690768eeda15ed2465e4527df05f569a0cddd2bf761/selfies-2.2.0.tar.gz", hash = "sha256:68dc2a0d8ef507fc01919c4490d6b712c5e5edab8fb6b85c38223d55ac0c65e2", size = 42263, upload-time = "2025-01-15T21:29:47.621Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d8/28/e55116335f778c734b1211d3abacd429599a2f0f664d267eb1282f9906a2/selfies-2.2.0-py3-none-any.whl", hash = "sha256:8b80796832c0b2f33e63d4fa1617ca541338c57b463a4d06cda3da510506ff73", size = 36021, upload-time = "2025-01-15T21:29:45.226Z" },
 ]
 
 [[package]]
