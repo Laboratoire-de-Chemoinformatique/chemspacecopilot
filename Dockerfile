@@ -2,7 +2,7 @@
 
 # Native CPU image on both amd64 and arm64. DGX users can opt into NGC
 # with BASE_IMAGE=nvcr.io/nvidia/pytorch:25.11-py3 and USE_SYSTEM_TORCH=true.
-ARG BASE_IMAGE=python:3.11-slim
+ARG BASE_IMAGE=python:3.12-slim
 FROM ${BASE_IMAGE} AS runtime
 ARG USE_SYSTEM_TORCH=false
 ARG INSTALL_RETROSYNTHESIS=false

@@ -7,7 +7,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: ${BASE_IMAGE:-python:3.11-slim}
+        BASE_IMAGE: ${BASE_IMAGE:-python:3.12-slim}
         USE_SYSTEM_TORCH: ${USE_SYSTEM_TORCH:-false}
         INSTALL_RETROSYNTHESIS: ${INSTALL_RETROSYNTHESIS:-false}
     image: cs_copilot_chainlit-app

@@ -13,7 +13,7 @@ uv run pytest tests/unit/ -v
 uv run --group docs mkdocs build --strict
 ```
 
-The project targets Python 3.11, Black's 100-character line length, the Black
+The project targets Python 3.12, Black's 100-character line length, the Black
 isort profile, and the configured Ruff rules. Toolkit method docstrings are
 required because they are visible to language models and generated API
 documentation.
