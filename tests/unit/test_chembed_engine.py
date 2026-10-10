@@ -1,0 +1,284 @@
+#!/usr/bin/env python
+# coding: utf-8
+"""Tests for the chembed latent engine.
+
+Every test here is offline. chembed's modules are imported lazily inside the
+engine, so they are replaced in ``sys.modules`` with fakes and the real 227 MB
+checkpoint is never downloaded.
+"""
+
+import sys
+from types import ModuleType, SimpleNamespace
+
+import numpy as np
+import pytest
+import torch
+
+from cs_copilot.tools.chemistry.autoencoder_toolkit import AutoencoderError, AutoencoderToolkit
+from cs_copilot.tools.chemistry.chembed_engine import ChembedEngine
+
+D_MODEL = 8
+
+
+def _fake_vae(d_bottleneck: int = 1, d_model: int = D_MODEL):
+    """Return a stand-in for chembed's SELFIESTransformerVAE."""
+    return SimpleNamespace(
+        d_model=d_model,
+        d_bottleneck=d_bottleneck,
+        max_len=256,
+        vocab=["<START>", "<STOP>", "[C]"],
+        model_config={
+            "nb_layers_encoder": 6,
+            "nb_layers_decoder": 6,
+            "dim_feedforward_encoder": 2048,
+            "dim_feedforward_decoder": 2048,
+            "nhead": 8,
+        },
+        eval=lambda: None,
+    )
+
+
+@pytest.fixture
+def fake_chembed(monkeypatch):
+    """Install fake chembed modules and return the recorder for their calls."""
+    calls = {}
+    vae = _fake_vae()
+
+    checkpoint_utils = ModuleType("chembed.checkpoint_utils")
+    checkpoint_utils.load_vae_from_hub = lambda **kw: (calls.update(hub=kw), vae)[1]
+    checkpoint_utils.load_vae_from_checkpoint = lambda path, **kw: (
+        calls.update(local={"path": path, **kw}),
+        vae,
+    )[1]
+
+    encode_mod = ModuleType("chembed.encode")
+
+    def _encode_multiple_smiles(smiles_list, model, **kw):
+        calls["encode"] = {"smiles": list(smiles_list), **kw}
+        return torch.zeros(len(smiles_list), model.d_bottleneck, model.d_model)
+
+    encode_mod.encode_multiple_smiles = _encode_multiple_smiles
+
+    decode_mod = ModuleType("chembed.decode")
+
+    def _decode_zs_to_smiles(zs, model, **kw):
+        calls["decode"] = {"shape": tuple(zs.shape), **kw}
+        return ["CCO"] * zs.shape[0]
+
+    decode_mod.decode_zs_to_smiles = _decode_zs_to_smiles
+
+    package = ModuleType("chembed")
+    for name, module in (
+        ("chembed", package),
+        ("chembed.checkpoint_utils", checkpoint_utils),
+        ("chembed.encode", encode_mod),
+        ("chembed.decode", decode_mod),
+    ):
+        monkeypatch.setitem(sys.modules, name, module)
+    package.checkpoint_utils = checkpoint_utils
+
+    calls["vae"] = vae
+    return calls
+
+
+@pytest.fixture
+def loaded_engine(fake_chembed):
+    """Return an engine with the fake checkpoint already loaded."""
+    engine = ChembedEngine()
+    engine.load(model_path=None, device="cpu")
+    return engine
+
+
+class TestLoad:
+    def test_loads_from_hub_by_default(self, fake_chembed):
+        engine = ChembedEngine()
+        model, vocab, config = engine.load(model_path=None, device="cpu")
+
+        assert fake_chembed["hub"]["repo_id"] == "3BioCompBio/chembed-default"
+        assert fake_chembed["hub"]["filename"] == "model.ckpt"
+        assert model is fake_chembed["vae"]
+        assert vocab is fake_chembed["vae"].vocab
+        assert config is fake_chembed["vae"].model_config
+        assert engine.checkpoint_path == "3BioCompBio/chembed-default/model.ckpt"
+
+    def test_toolkit_default_model_path_is_ignored(self, fake_chembed):
+        """The toolkit's default path names the deepchemography directory."""
+        engine = ChembedEngine()
+        engine.load(model_path="/does/not/exist/autoencoder", device="cpu")
+
+        assert "hub" in fake_chembed
+        assert "local" not in fake_chembed
+
+    def test_existing_file_loads_as_local_checkpoint(self, fake_chembed, tmp_path):
+        checkpoint = tmp_path / "model.ckpt"
+        checkpoint.write_bytes(b"")
+        engine = ChembedEngine()
+        engine.load(model_path=str(checkpoint), device="cpu")
+
+        assert fake_chembed["local"]["path"] == checkpoint
+        assert engine.checkpoint_path == str(checkpoint)
+
+    def test_wider_bottleneck_is_rejected(self, fake_chembed, monkeypatch):
+        """A bottleneck > 1 would not round-trip through the (n, 1, d) reshape."""
+        wide = SimpleNamespace(
+            load_vae_from_hub=lambda **kw: _fake_vae(d_bottleneck=2),
+            load_vae_from_checkpoint=lambda path, **kw: _fake_vae(d_bottleneck=2),
+        )
+        monkeypatch.setitem(sys.modules, "chembed.checkpoint_utils", wide)
+        monkeypatch.setattr(sys.modules["chembed"], "checkpoint_utils", wide)
+        with pytest.raises(AutoencoderError, match="d_bottleneck=2"):
+            ChembedEngine().load(model_path=None, device="cpu")
+
+    def test_missing_package_raises_autoencoder_error(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "chembed", None)
+        monkeypatch.setitem(sys.modules, "chembed.checkpoint_utils", None)
+        with pytest.raises(AutoencoderError, match="chembed"):
+            ChembedEngine().load(model_path=None, device="cpu")
+
+
+class TestEncode:
+    def test_flattens_bottleneck_axis(self, loaded_engine):
+        result = loaded_engine.encode(["CCO", "c1ccccc1"], batch_size=32)
+
+        assert result.shape == (2, D_MODEL)
+        assert result.dtype == np.float32
+
+    def test_replaces_unknown_tokens_rather_than_failing_the_batch(
+        self, loaded_engine, fake_chembed
+    ):
+        loaded_engine.encode(["CCO"], batch_size=32)
+
+        assert fake_chembed["encode"]["replace_if_not_in_vocab"] is True
+        assert fake_chembed["encode"]["use_sigma"] is False
+
+    def test_unparseable_smiles_keeps_the_row(self, loaded_engine, fake_chembed):
+        """GTM pairs rows with a dataframe, so the row count must not change."""
+        result = loaded_engine.encode(["CCO", "not-a-smiles", "c1ccccc1"], batch_size=32)
+
+        assert result.shape[0] == 3
+        assert fake_chembed["encode"]["smiles"] == ["CCO", "C", "c1ccccc1"]
+
+    def test_smiles_are_not_pre_standardized(self, loaded_engine, fake_chembed):
+        """chembed standardizes internally; doing it twice risks vocab misses."""
+        loaded_engine.encode(["CC(=O)OC1=CC=CC=C1C(=O)O"], batch_size=32)
+
+        assert fake_chembed["encode"]["smiles"] == ["CC(=O)OC1=CC=CC=C1C(=O)O"]
+
+
+class TestDecode:
+    def test_reshapes_flat_latents_for_chembed(self, loaded_engine, fake_chembed):
+        loaded_engine.decode(
+            np.zeros((4, D_MODEL), dtype=np.float32), max_len=100, temp=1.0, decode="greedy"
+        )
+
+        assert fake_chembed["decode"]["shape"] == (4, 1, D_MODEL)
+
+    def test_accepts_torch_input(self, loaded_engine, fake_chembed):
+        out = loaded_engine.decode(torch.zeros(3, D_MODEL), max_len=100, temp=1.0, decode="greedy")
+
+        assert fake_chembed["decode"]["shape"] == (3, 1, D_MODEL)
+        assert out == ["CCO"] * 3
+
+    def test_ignored_decode_parameters_do_not_raise(self, loaded_engine):
+        out = loaded_engine.decode(
+            np.zeros((2, D_MODEL), dtype=np.float32), max_len=40, temp=0.7, decode="sample"
+        )
+
+        assert out == ["CCO", "CCO"]
+
+
+class TestMetadata:
+    def test_latent_dim_is_the_flattened_width(self, loaded_engine):
+        assert loaded_engine.latent_dim() == D_MODEL
+
+    def test_info_declares_what_chembed_cannot_do(self, loaded_engine):
+        info = loaded_engine.info()
+
+        assert info["backend"] == "chembed"
+        assert info["supports_temperature"] is False
+        assert info["supports_stochastic_decode"] is False
+        assert info["latent_dimension"] == D_MODEL
+
+    def test_info_keeps_the_deepchemography_keys(self, loaded_engine):
+        """Callers formatting model info should not have to special-case engines."""
+        shared = {
+            "vocabulary_size",
+            "latent_dimension",
+            "encoder_type",
+            "encoder_layers",
+            "encoder_hidden_size",
+            "decoder_type",
+            "decoder_layers",
+            "decoder_hidden_size",
+            "batch_normalization",
+            "bidirectional_encoder",
+        }
+
+        assert shared <= set(loaded_engine.info())
+
+    def test_decode_settings_record_requested_and_applied(self, loaded_engine):
+        settings = loaded_engine.decode_settings(temp=0.7, decode="sample", max_len=40)
+
+        assert settings["temperature"] is None
+        assert settings["decode_mode"] == "greedy"
+        assert settings["max_length"] == 256
+        assert settings["requested_temperature"] == 0.7
+        assert settings["requested_decode_mode"] == "sample"
+        assert settings["requested_max_length"] == 40
+        assert "temperature" in settings["ignored_parameters"]
+
+
+class TestToolkitIntegration:
+    """The engine must not disturb the Agno tool surface.
+
+    ``execution_contracts`` names every tool after ``type(owner).__name__``, so
+    the toolkit class must stay ``AutoencoderToolkit`` whichever engine is used.
+    """
+
+    def _toolkit(self, engine=None):
+        toolkit = AutoencoderToolkit.__new__(AutoencoderToolkit)
+        toolkit.engine = engine
+        toolkit.device = torch.device("cpu")
+        toolkit.model_path = "test-only-no-download"
+        return toolkit
+
+    def test_registered_tool_names_are_engine_independent(self, fake_chembed, monkeypatch):
+        with_engine = AutoencoderToolkit(model_path="unused", device="cpu", engine=ChembedEngine())
+
+        monkeypatch.setattr(AutoencoderToolkit, "_ensure_model_exists", lambda self: None)
+        monkeypatch.setattr(AutoencoderToolkit, "_load_model", lambda self: None)
+        without_engine = AutoencoderToolkit(model_path="unused", device="cpu")
+
+        assert type(with_engine).__name__ == type(without_engine).__name__ == "AutoencoderToolkit"
+        assert set(with_engine.functions) == set(without_engine.functions)
+        assert {
+            "encode_smiles",
+            "decode_latent",
+            "sample_molecules",
+            "interpolate_molecules",
+            "reconstruct_smiles",
+            "get_latent_dimension",
+            "validate_model_loaded",
+            "explore_latent_neighborhood",
+            "get_model_info",
+        } <= set(with_engine.functions)
+
+    def test_toolkit_records_the_loaded_checkpoint(self, fake_chembed):
+        toolkit = AutoencoderToolkit(model_path="unused", device="cpu", engine=ChembedEngine())
+
+        assert toolkit.model_path == "3BioCompBio/chembed-default/model.ckpt"
+        assert toolkit.validate_model_loaded() is True
+        assert toolkit.get_latent_dimension() == D_MODEL
+        assert toolkit.get_model_info()["backend"] == "chembed"
+
+    def test_generation_audit_reports_the_applied_settings(self, fake_chembed):
+        toolkit = AutoencoderToolkit(model_path="unused", device="cpu", engine=ChembedEngine())
+
+        toolkit.sample_from_latent(n_samples=2, temp=0.7, decode="sample", audit_path=None)
+        settings = toolkit.last_generation_audit["settings"]
+
+        assert settings["backend"] == "chembed"
+        assert settings["temperature"] is None
+        assert settings["requested_temperature"] == 0.7
+        assert settings["decode_mode"] == "greedy"
+        assert toolkit.last_generation_audit["raw_outputs_available"] is True
