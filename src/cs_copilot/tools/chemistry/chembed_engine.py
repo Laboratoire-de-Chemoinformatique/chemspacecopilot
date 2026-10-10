@@ -42,6 +42,14 @@ logger = logging.getLogger(__name__)
 #: enough that the toolkit's LSTM-era default of 32 wastes most of the batch.
 DEFAULT_BATCH_SIZE = 256
 
+#: Latent perturbation for neighbourhood exploration. Measured over aspirin,
+#: lidocaine and a large peptidomimetic at 60 samples each: 0.1 returns the
+#: parent essentially every time (0-1 distinct molecules), 0.25 still returns
+#: the parent 21-96% of the time, and 0.5 gives 23-60 distinct molecules with a
+#: median Tanimoto to the parent of 0.25-0.55. Larger seeds drift further at any
+#: given scale, so analogue work on big molecules wants 0.25.
+DEFAULT_NOISE_SCALE = 0.5
+
 #: Stand-in for a SMILES RDKit cannot parse. Substituting keeps one latent row
 #: per input, which GTM relies on, rather than silently shortening the matrix.
 UNPARSEABLE_PLACEHOLDER = "C"
@@ -211,13 +219,22 @@ class ChembedEngine:
         from chembed.decode import decode_zs_to_smiles
 
         self._warn_ignored_parameters(temp=temp, decode=decode, max_len=max_len)
-        tensor = torch.as_tensor(np.asarray(z), dtype=torch.float32)
+        # Prior sampling hands us a tensor already on the model's device, and
+        # numpy cannot convert one of those, so only non-tensors go via asarray.
+        if isinstance(z, torch.Tensor):
+            tensor = z.detach().to(dtype=torch.float32)
+        else:
+            tensor = torch.as_tensor(np.asarray(z), dtype=torch.float32)
         tensor = tensor.reshape(tensor.shape[0], 1, -1)
         return decode_zs_to_smiles(tensor, self.vae, batch_size=DEFAULT_BATCH_SIZE)
 
     # ------------------------------------------------------------------
     # Metadata
     # ------------------------------------------------------------------
+    def default_noise_scale(self) -> float:
+        """Return the perturbation scale calibrated for chembed's latent."""
+        return DEFAULT_NOISE_SCALE
+
     def latent_dim(self) -> int:
         """Return the flattened latent width, ``d_bottleneck * d_model``."""
         return int(self.vae.d_bottleneck) * int(self.vae.d_model)

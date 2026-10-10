@@ -93,6 +93,23 @@ standard deviation near 0.72. Every generation audit records the requested
 settings alongside the applied ones, plus `ignored_parameters`, so no artifact
 claims a setting that was never used.
 
+Because diversity comes only from the noise, the scale matters more than it did
+for the LSTM. Measured over aspirin, lidocaine and a large peptidomimetic, 60
+samples each:
+
+| `noise_scale` | aspirin | lidocaine | large seed |
+|---|---|---|---|
+| 0.1 | 0 distinct | 0 distinct | 1 distinct |
+| 0.25 | 1, Tanimoto 0.55 | 6, Tanimoto 0.69 | 39, Tanimoto 0.52 |
+| 0.5 | 23, Tanimoto 0.55 | 35, Tanimoto 0.50 | 60, Tanimoto 0.25 |
+| 1.0 | 57, Tanimoto 0.30 | 60, Tanimoto 0.21 | 60, Tanimoto 0.17 |
+
+At the LSTM's 0.1 the decoder simply returns the parent. chembed therefore
+defaults to 0.5, which yields analogues across the size range. Larger seeds
+drift further at any given scale, so analogue work on big molecules wants 0.25.
+Omitting `noise_scale` uses the active engine's default rather than a fixed
+number, so the LSTM keeps its own 0.1.
+
 Sampling is also slower, because the decoder is autoregressive: 5000 molecules
 take roughly 35 s on a GPU and about 17 minutes on CPU. `sample_molecules`
 therefore defaults to 5000 on CUDA and 500 on CPU when no count is given, and
