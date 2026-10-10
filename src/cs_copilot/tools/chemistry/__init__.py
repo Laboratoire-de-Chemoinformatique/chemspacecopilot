@@ -9,7 +9,7 @@ This package provides comprehensive tools for:
 - Molecular fingerprinting and descriptor calculations
 """
 
-from .autoencoder_toolkit import AutoencoderToolkit
+from .autoencoder_toolkit import AutoencoderToolkit, make_autoencoder_toolkit
 from .base_chemistry import BaseChemistryToolkit
 from .descriptors import (
     DEFAULT_DESCRIPTOR_COLUMN,
@@ -25,6 +25,7 @@ __all__ = [
     "BaseChemistryToolkit",
     "ChemicalSimilarityToolkit",
     "AutoencoderToolkit",
+    "make_autoencoder_toolkit",
     "MolecularDesignerToolkit",
     "PeptideDesignerToolkit",
     "SynPlannerToolkit",

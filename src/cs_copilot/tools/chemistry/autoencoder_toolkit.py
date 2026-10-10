@@ -882,3 +882,65 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             "device": str(self.device),
             **self._engine_info(),
         }
+
+
+#: Backend selected when neither a caller nor ``AUTOENCODER_BACKEND`` names one.
+DEFAULT_AUTOENCODER_BACKEND = "deepchemography"
+
+#: Backend names that mean "whichever engine is configured", kept so persisted
+#: session state and descriptor aliases written as "autoencoder" keep resolving.
+_CONFIGURED_BACKEND_ALIASES = {"autoencoder", "default", ""}
+
+
+def resolve_autoencoder_backend(backend: Optional[str] = None) -> str:
+    """Resolve which latent engine to use.
+
+    Order: explicit *backend*, then ``AUTOENCODER_BACKEND``, then
+    :data:`DEFAULT_AUTOENCODER_BACKEND`.
+
+    Args:
+        backend: Caller-supplied backend name, or None to consult the
+            environment. ``"autoencoder"`` means "the configured default".
+
+    Returns:
+        Either ``"chembed"`` or ``"deepchemography"``.
+
+    Raises:
+        AutoencoderError: If the resolved name is not a known backend.
+    """
+    name = (backend or "").strip().lower()
+    if name in _CONFIGURED_BACKEND_ALIASES:
+        name = os.getenv("AUTOENCODER_BACKEND", DEFAULT_AUTOENCODER_BACKEND).strip().lower()
+    if name in _CONFIGURED_BACKEND_ALIASES:
+        name = DEFAULT_AUTOENCODER_BACKEND
+    if name not in {"chembed", "deepchemography"}:
+        raise AutoencoderError(
+            f"Unknown autoencoder backend {name!r}; expected 'chembed' or 'deepchemography'."
+        )
+    return name
+
+
+def make_autoencoder_toolkit(
+    backend: Optional[str] = None,
+    *,
+    model_path: Optional[str] = None,
+    device: Optional[str] = None,
+) -> AutoencoderToolkit:
+    """Build an :class:`AutoencoderToolkit` on the configured latent engine.
+
+    Args:
+        backend: ``"chembed"``, ``"deepchemography"``, or None/``"autoencoder"``
+            to use whichever :func:`resolve_autoencoder_backend` selects.
+        model_path: Model directory, or a chembed ``.ckpt`` file.
+        device: Device to run the model on.
+
+    Returns:
+        A toolkit whose class is always ``AutoencoderToolkit``, so the Agno tool
+        names it registers do not depend on the engine.
+    """
+    engine: Optional[AutoencoderEngine] = None
+    if resolve_autoencoder_backend(backend) == "chembed":
+        from .chembed_engine import ChembedEngine
+
+        engine = ChembedEngine()
+    return AutoencoderToolkit(model_path=model_path, device=device, engine=engine)

@@ -35,7 +35,7 @@ from cs_copilot.tools.io.session_memory import (
     update_state_targets,
 )
 
-from .autoencoder_toolkit import AutoencoderToolkit
+from .autoencoder_toolkit import AutoencoderToolkit, make_autoencoder_toolkit
 from .base_chemistry import ChemistryError
 from .standardize import standardize_smiles
 
@@ -404,7 +404,7 @@ class MolecularDesignerToolkit(Toolkit):
 
     def __init__(self, autoencoder_toolkit: Optional[AutoencoderToolkit] = None):
         super().__init__("molecular_designer")
-        self.autoencoder_toolkit = autoencoder_toolkit or AutoencoderToolkit()
+        self.autoencoder_toolkit = autoencoder_toolkit or make_autoencoder_toolkit()
         self.autoencoder_engine = AutoencoderDesignEngine(self.autoencoder_toolkit)
 
         self.register(self.list_design_engines)
