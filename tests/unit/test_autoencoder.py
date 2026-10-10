@@ -9,8 +9,14 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+import torch
 
-from cs_copilot.tools.chemistry.autoencoder_toolkit import AutoencoderError, AutoencoderToolkit
+from cs_copilot.tools.chemistry.autoencoder_toolkit import (
+    DEFAULT_SAMPLE_COUNT_CPU,
+    DEFAULT_SAMPLE_COUNT_GPU,
+    AutoencoderError,
+    AutoencoderToolkit,
+)
 from cs_copilot.tools.constants import HUGGINGFACE_AUTOENCODER_REPO
 from cs_copilot.tools.io.session_memory import load_candidate_set_artifact
 
@@ -229,3 +235,55 @@ def test_sample_molecules_registers_autoencoder_candidate_set(monkeypatch, tmp_p
     assert memory["compounds"]["cmp_001"]["candidate_set_id"] == "cset_001"
     artifact = load_candidate_set_artifact(session_state, "sampled_molecules")
     assert artifact["candidates"] == ["CCO", "CCN"]
+
+
+class TestSampleCountDefault:
+    """The prior-sampling default depends on the device.
+
+    chembed decodes autoregressively, so 5000 molecules take roughly 35 s on a
+    GPU and about 17 minutes on CPU. A CPU host therefore gets a smaller default
+    rather than a call that looks like a hang.
+    """
+
+    def _toolkit(self, device: str) -> AutoencoderToolkit:
+        toolkit = AutoencoderToolkit.__new__(AutoencoderToolkit)
+        toolkit.device = torch.device(device)
+        toolkit.engine = None
+        return toolkit
+
+    def test_gpu_default(self):
+        assert self._toolkit("cuda")._resolve_sample_count(None) == DEFAULT_SAMPLE_COUNT_GPU
+
+    def test_cpu_default_is_smaller(self):
+        assert self._toolkit("cpu")._resolve_sample_count(None) == DEFAULT_SAMPLE_COUNT_CPU
+        assert DEFAULT_SAMPLE_COUNT_CPU < DEFAULT_SAMPLE_COUNT_GPU
+
+    @pytest.mark.parametrize("device", ["cuda", "cpu"])
+    def test_explicit_count_wins_on_every_device(self, device):
+        """An explicit count must not depend on the host."""
+        assert self._toolkit(device)._resolve_sample_count(42) == 42
+
+    def test_summary_records_where_the_count_came_from(self, tmp_path, monkeypatch):
+        """Two runs of the same call can differ, so the record must say why."""
+        monkeypatch.setattr(AutoencoderToolkit, "_ensure_model_exists", lambda self: None)
+        monkeypatch.setattr(AutoencoderToolkit, "_load_model", lambda self: None)
+        toolkit = AutoencoderToolkit(model_path="unused", device="cpu")
+        monkeypatch.setattr(toolkit, "validate_model_loaded", lambda: True)
+        monkeypatch.setattr(toolkit, "sample_from_latent", lambda **kwargs: ["CCO"])
+
+        state: dict = {}
+        summary = toolkit.sample_molecules(
+            session_state=state, audit_path=str(tmp_path / "audit.json")
+        )
+        audit = summary["generation_audit"]
+
+        assert audit["n_samples_requested"] is None
+        assert audit["n_samples_resolved"] == DEFAULT_SAMPLE_COUNT_CPU
+        assert audit["n_samples_source"] == "default_cpu"
+
+        summary = toolkit.sample_molecules(
+            n_samples=7, session_state=state, audit_path=str(tmp_path / "audit2.json")
+        )
+
+        assert summary["generation_audit"]["n_samples_source"] == "caller"
+        assert summary["generation_audit"]["n_samples_resolved"] == 7

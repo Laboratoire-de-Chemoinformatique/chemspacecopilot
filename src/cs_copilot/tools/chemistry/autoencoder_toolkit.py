@@ -45,6 +45,14 @@ logger = logging.getLogger(__name__)
 
 SampleReturnFormat = Literal["summary", "list"]
 
+#: Prior-sampling default when the caller names no count. 5000 is the number the
+#: sampling docstring argues for: enough to survive validity/uniqueness filtering
+#: and still describe the chemical space. chembed decodes autoregressively, which
+#: costs roughly 35 s on a GPU but around 17 minutes on CPU, so a CPU host gets a
+#: smaller default rather than an interactive call that appears to hang.
+DEFAULT_SAMPLE_COUNT_GPU = 5000
+DEFAULT_SAMPLE_COUNT_CPU = 500
+
 
 def _filter_valid_unique_smiles(raw: List[Any]) -> List[str]:
     """Drop non-string entries, invalid SMILES, and duplicates (by canonical form).
@@ -379,6 +387,27 @@ class AutoencoderToolkit(BaseChemistryToolkit):
                 )
             )
 
+    def _resolve_sample_count(self, n_samples: Optional[int]) -> int:
+        """Return the sample count to use, and log when the device decided it.
+
+        Args:
+            n_samples: Caller-supplied count, or None to pick one for this device.
+
+        Returns:
+            The caller's count when given, else a device-dependent default.
+        """
+        if n_samples is not None:
+            return int(n_samples)
+        on_gpu = self.device.type == "cuda"
+        resolved = DEFAULT_SAMPLE_COUNT_GPU if on_gpu else DEFAULT_SAMPLE_COUNT_CPU
+        logger.info(
+            "n_samples not given; sampling %d molecules on %s. Pass n_samples "
+            "explicitly to make this independent of the host.",
+            resolved,
+            self.device.type,
+        )
+        return resolved
+
     def _engine_info(self) -> Dict[str, Any]:
         """Return engine-specific model metadata."""
         if self.engine is not None:
@@ -597,7 +626,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
     def sample_molecules(
         self,
-        n_samples: int = 5000,
+        n_samples: Optional[int] = None,
         latent_std: float = 1.0,
         temperature: float = 1.0,
         decode_mode: str = "sample",
@@ -613,9 +642,10 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         Sample new molecules from the latent space using Gaussian prior.
 
         Args:
-            n_samples: Number of molecules to generate. Defaults to 5000 for
-                meaningful chemical-space exploration; explicit smaller values
-                are respected.
+            n_samples: Number of molecules to generate. When omitted, defaults to
+                5000 on a GPU and 500 on CPU, because the transformer decoder is
+                roughly 30x slower without one. Pass a value explicitly for a
+                count that does not depend on the host.
             latent_std: Standard deviation for Gaussian sampling
             temperature: Temperature for sampling (higher = more random)
             decode_mode: 'greedy' for deterministic, 'sample' for stochastic
@@ -639,6 +669,8 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             no session state available).
         """
         self.last_generation_audit = None
+        requested_n_samples = n_samples
+        n_samples = self._resolve_sample_count(n_samples)
         raw = self.sample_from_latent(
             z=None,
             n_samples=n_samples,
@@ -663,6 +695,13 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         )
         audit_metadata = generation_audit_summary(audit)
         audit_metadata["artifact_path"] = audit_artifact_path
+        # A host-dependent default would otherwise make two runs of the same call
+        # differ with no record of why.
+        audit_metadata["n_samples_requested"] = requested_n_samples
+        audit_metadata["n_samples_resolved"] = n_samples
+        audit_metadata["n_samples_source"] = (
+            "caller" if requested_n_samples is not None else f"default_{self.device.type}"
+        )
         registered_compound_ids: List[str] = []
         registered_candidate_set_id: Optional[str] = None
         registered_artifact_path: Optional[str] = None
