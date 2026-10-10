@@ -25,6 +25,7 @@ from cs_copilot.tools import (
     SessionMemoryToolkit,
     SkillToolkit,
     SynPlannerToolkit,
+    make_autoencoder_toolkit,
     save_gtm_landscape_plot,
     save_gtm_plot,
     save_markdown_report,
@@ -480,7 +481,7 @@ class MolecularDesignerFactory(BaseAgentFactory):
     agent_type = "molecular_designer"
 
     def get_agent_config(self) -> AgentConfig:
-        autoencoder_toolkit = AutoencoderToolkit()
+        autoencoder_toolkit: AutoencoderToolkit = make_autoencoder_toolkit()
         return AgentConfig(
             name="molecular_designer_agent",
             description=MOLECULAR_DESIGNER_DESCRIPTION,
@@ -721,7 +722,7 @@ class SingleAgentFactory(BaseAgentFactory):
     agent_type = "single_agent"
 
     def get_agent_config(self) -> AgentConfig:
-        autoencoder_toolkit = AutoencoderToolkit()
+        autoencoder_toolkit: AutoencoderToolkit = make_autoencoder_toolkit()
         return AgentConfig(
             name="single_agent",
             description=SINGLE_AGENT_DESCRIPTION,

@@ -3002,12 +3002,14 @@ def resolve_neighborhood_metric(descriptor_type: str, metric: str = "auto") -> s
     """
     Descriptor-space metric for neighbourhood preservation.
 
-    Morgan descriptors here are count fingerprints and use Tanimoto; autoencoder
+    Morgan descriptors here are count fingerprints and use Tanimoto; latent
     embeddings use Euclidean (``"auto"``) or cosine.
     """
-    allowed = {"morgan": ("tanimoto",), "autoencoder": ("euclidean", "cosine")}[
-        MolecularDescriptorEncoder(descriptor_type).default_descriptor
-    ]
+    allowed = {
+        "morgan": ("tanimoto",),
+        "autoencoder": ("euclidean", "cosine"),
+        "chembed": ("euclidean", "cosine"),
+    }[MolecularDescriptorEncoder(descriptor_type).default_descriptor]
     metric = allowed[0] if metric.lower() == "auto" else metric.lower()
     if metric not in allowed:
         raise ValueError(f"Use {allowed} for {descriptor_type} descriptors, not {metric!r}.")

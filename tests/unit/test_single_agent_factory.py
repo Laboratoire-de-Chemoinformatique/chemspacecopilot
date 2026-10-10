@@ -84,7 +84,15 @@ def _named_dummy(name: str):
 
 def _patch_named_dummy_toolkits(monkeypatch):
     for name in _TOOLKIT_NAMES:
-        monkeypatch.setattr(factory_module, name, _named_dummy(name))
+        dummy = _named_dummy(name)
+        if name == "AutoencoderToolkit":
+            # The factory builds this one through make_autoencoder_toolkit so the
+            # latent engine is selectable; the class it returns is unchanged.
+            monkeypatch.setattr(
+                factory_module, "make_autoencoder_toolkit", lambda *a, _d=dummy, **kw: _d()
+            )
+        else:
+            monkeypatch.setattr(factory_module, name, dummy)
 
 
 def _toolkit_and_callable_names(config):

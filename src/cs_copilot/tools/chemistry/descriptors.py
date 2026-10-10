@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 
-from .autoencoder_toolkit import AutoencoderToolkit
+from .autoencoder_toolkit import AutoencoderToolkit, make_autoencoder_toolkit
 from .base_chemistry import calc_morgan_fp_batch
 
 logger = logging.getLogger(__name__)
@@ -34,20 +34,29 @@ class MolecularDescriptorEncoder:
         "latent": "autoencoder",
         "embedding": "autoencoder",
         "autoencoder_embedding": "autoencoder",
+        "chembed": "chembed",
+        "selfies_vae": "chembed",
+        "transformer_vae": "chembed",
+        "chembed_embedding": "chembed",
         "morgan": "morgan",
         "morgan_fp": "morgan",
         "fingerprint": "morgan",
         "mfp": "morgan",
     }
 
+    # chembed and the deepchemography autoencoder both produce 256-wide latents,
+    # so a shared column name would let vectors from one be silently reused as
+    # the other: _compute_descriptors treats an existing column as a cache and
+    # never checks which model wrote it. Distinct names are what prevents that.
     _COLUMN_NAMES: Dict[str, str] = {
         "autoencoder": "autoencoder_embedding",
+        "chembed": "chembed_embedding",
         "morgan": "morgan_fingerprint",
     }
 
     def __init__(self, default_descriptor: str = DEFAULT_DESCRIPTOR_TYPE):
         self.default_descriptor = self._normalise_descriptor(default_descriptor)
-        self._autoencoder_toolkit: Optional[AutoencoderToolkit] = None
+        self._autoencoder_toolkits: Dict[str, AutoencoderToolkit] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -78,9 +87,10 @@ class MolecularDescriptorEncoder:
         descriptor_key = self._normalise_descriptor(descriptor_type or self.default_descriptor)
         smiles = list(smiles_list)
 
-        if descriptor_key == "autoencoder":
+        if descriptor_key in {"autoencoder", "chembed"}:
             return self._encode_autoencoder(
                 smiles,
+                backend=descriptor_key,
                 batch_size=kwargs.pop("batch_size", 32),
                 model_path=kwargs.pop("model_path", None),
                 device=kwargs.pop("device", None),
@@ -118,11 +128,14 @@ class MolecularDescriptorEncoder:
         self,
         smiles: Sequence[str],
         *,
+        backend: str,
         batch_size: int,
         model_path: Optional[str],
         device: Optional[str],
     ) -> np.ndarray:
-        toolkit = self._get_autoencoder_toolkit(model_path=model_path, device=device)
+        toolkit = self._get_autoencoder_toolkit(
+            backend=backend, model_path=model_path, device=device
+        )
         embeddings = toolkit.encode_smiles_array(list(smiles), batch_size=batch_size)
         return np.asarray(embeddings, dtype=np.float32)
 
@@ -143,16 +156,18 @@ class MolecularDescriptorEncoder:
         return np.vstack(fingerprints)
 
     def _get_autoencoder_toolkit(
-        self, *, model_path: Optional[str], device: Optional[str]
+        self, *, backend: str, model_path: Optional[str], device: Optional[str]
     ) -> AutoencoderToolkit:
         # Allow callers to override the cached toolkit when explicit arguments
-        # are provided. Otherwise reuse a lazily initialised singleton.
+        # are provided. Otherwise reuse one lazily initialised toolkit per
+        # backend -- caching a single one would hand chembed latents to callers
+        # asking for the deepchemography model, and the reverse.
         if model_path or device:
-            return AutoencoderToolkit(model_path=model_path, device=device)
+            return make_autoencoder_toolkit(backend, model_path=model_path, device=device)
 
-        if self._autoencoder_toolkit is None:
-            self._autoencoder_toolkit = AutoencoderToolkit()
-        return self._autoencoder_toolkit
+        if backend not in self._autoencoder_toolkits:
+            self._autoencoder_toolkits[backend] = make_autoencoder_toolkit(backend)
+        return self._autoencoder_toolkits[backend]
 
 
 __all__ = [
