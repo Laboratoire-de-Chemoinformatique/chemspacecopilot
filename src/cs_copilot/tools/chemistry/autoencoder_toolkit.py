@@ -3,15 +3,16 @@
 """
 Autoencoder toolkit for SMILES encoding and molecular generation.
 
-This module provides integration with the deepchemography LSTM autoencoder
-for encoding SMILES strings to latent representations and sampling new molecules
-from the latent space.
+This module encodes SMILES strings to latent representations and samples new
+molecules from the latent space. The model behind it is pluggable: the latent
+engine is supplied as an ``AutoencoderEngine`` object, defaulting to the
+deepchemography LSTM autoencoder loaded from Hugging Face.
 """
 
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Protocol, Tuple, Union
 
 import numpy as np
 import torch
@@ -76,16 +77,62 @@ class AutoencoderError(ChemistryError):
     pass
 
 
+class AutoencoderEngine(Protocol):
+    """The latent model behind :class:`AutoencoderToolkit`.
+
+    Implementations are supplied to the toolkit by composition, never by
+    subclassing it: ``execution_contracts._default_contract`` builds each Agno
+    tool name from ``type(owner).__name__`` and memoises it under the method's
+    ``(module, qualname)``, which subclasses share. A toolkit subclass would
+    therefore rename every registered tool and poison the shared cache.
+    """
+
+    name: str
+
+    def load(self, *, model_path: Optional[str], device: Any) -> Tuple[Any, Any, Any]:
+        """Return ``(model, vocab, config)``; the toolkit assigns them onto itself."""
+        ...
+
+    def encode(self, smiles_list: List[str], *, batch_size: int) -> np.ndarray:
+        """Return one latent row per input SMILES, shape ``(n, latent_dim)`` float32."""
+        ...
+
+    def decode(self, z: Any, *, max_len: int, temp: float, decode: str) -> List[str]:
+        """Decode latent vectors to SMILES strings, unfiltered."""
+        ...
+
+    def latent_dim(self) -> int:
+        """Return the width of one latent row."""
+        ...
+
+    def info(self) -> Dict[str, Any]:
+        """Return model metadata for :meth:`AutoencoderToolkit.get_model_info`."""
+        ...
+
+    def decode_settings(self, *, temp: float, decode: str, max_len: int) -> Dict[str, Any]:
+        """Return the decode settings actually applied, for the generation audit."""
+        ...
+
+
 class AutoencoderToolkit(BaseChemistryToolkit):
     """
     Autoencoder toolkit for SMILES encoding and molecular generation.
 
-    This class provides integration with the deepchemography LSTM autoencoder
-    for encoding SMILES strings to latent representations and sampling new molecules
-    from the latent space.
+    Encodes SMILES strings to latent representations and samples new molecules
+    from the latent space, using whichever :class:`AutoencoderEngine` it is
+    given. With no engine it loads the deepchemography LSTM autoencoder.
     """
 
-    def __init__(self, model_path: Optional[str] = None, device: Optional[str] = None):
+    # Class-level default: tests build this toolkit with ``__new__`` and never
+    # run ``__init__``, so every hook below must still find the attribute.
+    engine: Optional[AutoencoderEngine] = None
+
+    def __init__(
+        self,
+        model_path: Optional[str] = None,
+        device: Optional[str] = None,
+        engine: Optional[AutoencoderEngine] = None,
+    ):
         """
         Initialize the AutoencoderToolkit.
 
@@ -93,8 +140,12 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             model_path: Path to the trained autoencoder model directory.
                        If None, uses default path from deepchemography.
             device: Device to run the model on ('cuda', 'cpu', or None for auto-detect)
+            engine: Latent engine to use. When None, the deepchemography LSTM
+                autoencoder is loaded from ``model_path``.
         """
         super().__init__("autoencoder")
+
+        self.engine = engine
 
         # Set up device
         if device is None:
@@ -149,7 +200,12 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         - Avoids temp dirs and symlinks
         - Respects env-provided cache if present (but doesn't require it)
         - Falls back to direct HTTP with Authorization when needed
+
+        An engine that manages its own checkpoint cache skips this entirely.
         """
+        if self.engine is not None:
+            return
+
         import os
         import time
         from pathlib import Path
@@ -254,6 +310,12 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
     def _load_model(self):
         """Load the trained autoencoder model and vocabulary."""
+        if self.engine is not None:
+            self.model, self.vocab, self.config = self.engine.load(
+                model_path=self.model_path, device=self.device
+            )
+            return
+
         try:
             # Import deepchemography components
             from deepchemography import LSTMAutoencoder
@@ -290,6 +352,50 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         except Exception as e:
             raise AutoencoderError(f"Failed to load autoencoder model: {e}") from e
 
+    # ------------------------------------------------------------------
+    # Engine hooks. None is registered as an Agno tool, so overriding them
+    # moves no contract name. Defaults are the deepchemography behaviour.
+    # ------------------------------------------------------------------
+    def _latent_dim(self) -> int:
+        """Return the width of one latent vector."""
+        if self.engine is not None:
+            return self.engine.latent_dim()
+        return self.config.d_z
+
+    def _decode_z(self, z: Any, *, max_len: int, temp: float, decode: str) -> List[str]:
+        """Decode latent vectors to raw, unfiltered SMILES strings."""
+        if self.engine is not None:
+            return self.engine.decode(z, max_len=max_len, temp=temp, decode=decode)
+        with torch.no_grad():
+            return list(
+                self.model.sample(
+                    n_batch=z.shape[0], max_len=max_len, z=z, temp=temp, decode=decode
+                )
+            )
+
+    def _engine_info(self) -> Dict[str, Any]:
+        """Return engine-specific model metadata."""
+        if self.engine is not None:
+            return self.engine.info()
+        return {
+            "vocabulary_size": len(self.vocab),
+            "latent_dimension": self.config.d_z,
+            "encoder_type": self.config.q_cell,
+            "encoder_layers": self.config.q_n_layers,
+            "encoder_hidden_size": self.config.q_d_h,
+            "decoder_type": self.config.d_cell,
+            "decoder_layers": self.config.d_n_layers,
+            "decoder_hidden_size": self.config.d_d_h,
+            "batch_normalization": self.config.use_batch_norm,
+            "bidirectional_encoder": self.config.q_bidir,
+        }
+
+    def _decode_settings(self, *, temp: float, decode: str, max_len: int) -> Dict[str, Any]:
+        """Return the decode settings actually applied, for the generation audit."""
+        if self.engine is not None:
+            return self.engine.decode_settings(temp=temp, decode=decode, max_len=max_len)
+        return {"temperature": temp, "decode_mode": decode, "max_length": max_len}
+
     def validate_model_loaded(self) -> bool:
         """
         Check if the autoencoder model is properly loaded.
@@ -308,7 +414,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         """
         if not self.validate_model_loaded():
             raise AutoencoderError("Model not loaded")
-        return self.config.d_z
+        return self._latent_dim()
 
     def _encode_smiles_ndarray(
         self, smiles_list: Union[str, List[str]], batch_size: int = 32
@@ -328,6 +434,10 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
         if not smiles_list:
             raise AutoencoderError("No SMILES strings provided")
+
+        if self.engine is not None:
+            result = self.engine.encode(list(smiles_list), batch_size=batch_size)
+            return result[0:1] if return_single else result
 
         self.model.eval()
         latent_vectors = []
@@ -422,21 +532,18 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         if not self.validate_model_loaded():
             raise AutoencoderError("Model not loaded")
 
-        self.model.eval()
+        if self.engine is None:
+            self.model.eval()
 
         # If no latent vectors provided, sample from Gaussian prior
         sampled_from_prior = z is None
         if z is None:
-            latent_dim = self.config.d_z
+            latent_dim = self._latent_dim()
             z = torch.randn(n_samples, latent_dim, device=self.device) * latent_std
         elif isinstance(z, np.ndarray):
             z = torch.tensor(z, dtype=torch.float32, device=self.device)
 
-        # Generate samples using the model's sample method
-        with torch.no_grad():
-            samples = self.model.sample(
-                n_batch=z.shape[0], max_len=max_len, z=z, temp=temp, decode=decode
-            )
+        samples = self._decode_z(z, max_len=max_len, temp=temp, decode=decode)
 
         # Preserve invalid outputs and duplicates before any toolkit standardization.
         samples = list(samples)
@@ -447,9 +554,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             raw_outputs_available=True,
         )
         self.last_generation_audit["settings"] = {
-            "temperature": temp,
-            "decode_mode": decode,
-            "max_length": max_len,
+            **self._decode_settings(temp=temp, decode=decode, max_len=max_len),
             "latent_std": latent_std if sampled_from_prior else None,
             "latent_source": "gaussian_prior" if sampled_from_prior else "provided_vectors",
             "model_path": str(self.model_path),
@@ -768,55 +873,6 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
         return {
             "model_path": str(self.model_path),
-            "vocabulary_size": len(self.vocab),
-            "latent_dimension": self.config.d_z,
             "device": str(self.device),
-            "encoder_type": self.config.q_cell,
-            "encoder_layers": self.config.q_n_layers,
-            "encoder_hidden_size": self.config.q_d_h,
-            "decoder_type": self.config.d_cell,
-            "decoder_layers": self.config.d_n_layers,
-            "decoder_hidden_size": self.config.d_d_h,
-            "batch_normalization": self.config.use_batch_norm,
-            "bidirectional_encoder": self.config.q_bidir,
-        }
-
-    def test_reconstruction_quality(
-        self, test_smiles: List[str], temperature: float = 0.1, decode_mode: str = "greedy"
-    ) -> Dict[str, Any]:
-        """
-        Test reconstruction quality on a list of SMILES strings.
-
-        Based on the reconstruction test from the notebook.
-
-        Args:
-            test_smiles: List of SMILES strings to test
-            temperature: Temperature for decoding
-            decode_mode: 'greedy' for deterministic, 'sample' for stochastic
-
-        Returns:
-            Dictionary with reconstruction results and statistics
-        """
-        if not self.validate_model_loaded():
-            raise AutoencoderError("Model not loaded")
-
-        results = []
-        matches = 0
-
-        for smiles in test_smiles:
-            smiles_std = standardize_smiles(smiles) or smiles
-            reconstructed = self.reconstruct_smiles(smiles_std, temperature, decode_mode)
-            match = smiles_std == reconstructed
-            if match:
-                matches += 1
-
-            results.append({"original": smiles_std, "reconstructed": reconstructed, "match": match})
-
-        accuracy = matches / len(test_smiles) if test_smiles else 0
-
-        return {
-            "results": results,
-            "accuracy": accuracy,
-            "total_tested": len(test_smiles),
-            "matches": matches,
+            **self._engine_info(),
         }
