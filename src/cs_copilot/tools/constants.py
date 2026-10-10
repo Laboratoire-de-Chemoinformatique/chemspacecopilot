@@ -89,12 +89,21 @@ HUGGINGFACE_PEPTIDE_WAE_REPO = "axelrolov/wae_peptides"
 
 # GTM model defaults
 DEFAULT_GTM_MODEL_PATH = os.path.expanduser("~/.cache/cs_copilot/models/gtm")
-HUGGINGFACE_GTM_REPO = "axelrolov/chemspacecopilot-gtm"
 # A GTM manifold is only valid for the latent space it was fitted on, and both
-# latent models are 256 wide, so a mismatch cannot be caught by shape. Pin the
-# revision rather than tracking a branch, so a repository update cannot swap the
-# manifold under results that depend on it.
-HUGGINGFACE_GTM_REVISION = os.getenv("HUGGINGFACE_GTM_REVISION", "main")
+# latent models are 256 wide, so a mismatch cannot be caught by shape. Each
+# manifold is pinned by revision rather than tracking a branch, so a repository
+# update cannot swap it under results that depend on it.
+HUGGINGFACE_GTM_REPO = "axelrolov/chemspacecopilot-gtm"  # deepchemography LSTM latents
+HUGGINGFACE_GTM_REVISION = os.getenv(
+    "HUGGINGFACE_GTM_REVISION", "ad9f1257cd80aaa84fc422a78b1a9fc579d0510b"
+)
+
+# Companion manifold fitted on chembed latents from the same pinned frameset,
+# with the LSTM manifold's hyperparameters unchanged.
+HUGGINGFACE_GTM_CHEMBED_REPO = "axelrolov/chemspacecopilot-gtm-chembed"
+HUGGINGFACE_GTM_CHEMBED_REVISION = os.getenv(
+    "HUGGINGFACE_GTM_CHEMBED_REVISION", "ca1d609ba58a0b2074cee8779d28af8ce435b6ef"
+)
 
 # DBAASP antimicrobial peptide data
 DEFAULT_DBAASP_DATA_PATH = os.path.expanduser(

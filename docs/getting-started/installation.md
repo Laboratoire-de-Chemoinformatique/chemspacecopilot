@@ -45,7 +45,8 @@ chembed's, which huggingface_hub caches itself.
 | deepchemography LSTM autoencoder | `axelrolov/lstm_autoencoder` | 8.8 MB |
 | chembed SELFIES transformer VAE | `3BioCompBio/chembed-default` | 227 MB |
 | Peptide WAE | `axelrolov/wae_peptides` | — |
-| GTM manifold | `axelrolov/chemspacecopilot-gtm` | 4 MB |
+| GTM manifold (LSTM latents) | `axelrolov/chemspacecopilot-gtm` | 4 MB |
+| GTM manifold (chembed latents) | `axelrolov/chemspacecopilot-gtm-chembed` | 3.5 MB |
 
 The small-molecule latent engine is chosen with `AUTOENCODER_BACKEND`, either
 `chembed` (the default) or `deepchemography`. The two produce different,

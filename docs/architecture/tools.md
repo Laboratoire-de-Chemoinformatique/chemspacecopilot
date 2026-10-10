@@ -141,9 +141,20 @@ mechanisms prevent that, and both must be kept:
 How little the shape tells you: encoding aspirin with both engines gives two
 `(1, 256)` vectors whose cosine similarity is 0.13. They are the same size and
 otherwise unrelated, so nothing but the tag and the column name can catch a
-swap. `HUGGINGFACE_GTM_REVISION` pins the published manifold for the same
-reason, so a repository update cannot exchange it under results that depend
-on it.
+swap.
+
+Each latent space has its own published manifold, and both are pinned by
+revision rather than tracking a branch, so a repository update cannot exchange
+one under results that depend on it:
+
+| Latents | Repository | Constant |
+|---|---|---|
+| deepchemography LSTM | `axelrolov/chemspacecopilot-gtm` | `HUGGINGFACE_GTM_REPO` / `_REVISION` |
+| chembed | `axelrolov/chemspacecopilot-gtm-chembed` | `HUGGINGFACE_GTM_CHEMBED_REPO` / `_REVISION` |
+
+The chembed manifold is refitted from the same pinned 50,000-molecule frameset
+with the LSTM manifold's hyperparameters unchanged, so the two maps differ only
+by the latent space they describe.
 
 Changing the engine therefore invalidates any manifold fitted on the previous
 latent space. `scripts/refit_gtm_manifold.py` refits one, reusing the published
