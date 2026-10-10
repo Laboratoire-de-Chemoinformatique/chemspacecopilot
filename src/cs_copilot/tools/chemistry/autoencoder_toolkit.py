@@ -948,7 +948,13 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
 
 #: Backend selected when neither a caller nor ``AUTOENCODER_BACKEND`` names one.
-DEFAULT_AUTOENCODER_BACKEND = "deepchemography"
+#: chembed reconstructs 12 of 12 reference molecules where the deepchemography
+#: LSTM manages 5, and the LSTM fails outright beyond roughly 50 SMILES
+#: characters, which is most of the potent chemotypes. Set
+#: ``AUTOENCODER_BACKEND=deepchemography`` to reproduce the frozen manuscript
+#: results. This selects the engine used to *generate* molecules; descriptor
+#: families pin their own engine, so the default map is unaffected.
+DEFAULT_AUTOENCODER_BACKEND = "chembed"
 
 #: Backend names that mean "whichever engine is configured", kept so persisted
 #: session state and descriptor aliases written as "autoencoder" keep resolving.

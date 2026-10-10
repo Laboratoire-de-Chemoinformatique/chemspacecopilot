@@ -48,7 +48,7 @@ chembed's, which huggingface_hub caches itself.
 | GTM manifold | `axelrolov/chemspacecopilot-gtm` | 4 MB |
 
 The small-molecule latent engine is chosen with `AUTOENCODER_BACKEND`, either
-`deepchemography` (the default) or `chembed`. The two produce different,
+`chembed` (the default) or `deepchemography`. The two produce different,
 non-interchangeable 256-dimensional latent spaces, so switching also requires a
 GTM manifold fitted on the matching one; see
 [Tools](../architecture/tools.md#molecular-latent-engines). A manifold is refit
