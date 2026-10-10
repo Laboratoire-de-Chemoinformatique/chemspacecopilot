@@ -3002,6 +3002,66 @@ def _knn_indices(points: np.ndarray, k: int, metric: str = "euclidean") -> np.nd
     return neighbors
 
 
+def _as_numpy(value: Any) -> np.ndarray:
+    """Return *value* as a numpy array, detaching a torch tensor if needed."""
+    if hasattr(value, "detach"):
+        return value.detach().cpu().numpy()
+    return np.asarray(value)
+
+
+def latent_centers_from_gtm(
+    gtm: Any,
+    node_ids: Optional[Sequence[int]] = None,
+    scaler: Any = None,
+) -> np.ndarray:
+    """Return the descriptor-space centre of each GTM node.
+
+    The GTM manifold maps its 2D nodes back into descriptor space through
+    ``phi @ weights``. Decoding those centres with a generative model is what
+    turns a region of the map into molecules, so this is the inverse step that
+    map-guided generation needs.
+
+    The centres land in whichever space the manifold was fitted on. A manifold
+    fitted through :func:`train_latent_gtm` was fitted on externally scaled
+    vectors, so pass that run's ``scaler`` to recover the original latent.
+    Manifolds fitted on raw descriptors, as the default map is, need no scaler.
+
+    Note that a 2D manifold cannot carry a high-dimensional latent faithfully:
+    reconstructing a molecule through the default map leaves a relative error
+    around 0.6. Decoded node centres are therefore regional summaries, not
+    reconstructions of any particular molecule.
+
+    Args:
+        gtm: Fitted GTM exposing ``phi`` and ``weights``.
+        node_ids: 1-based node identifiers, matching the landscape tables. When
+            omitted, every node is returned in order.
+        scaler: Scaler fitted alongside the manifold, if it was fitted on scaled
+            vectors. ``None`` leaves the centres untouched.
+
+    Returns:
+        ``(len(node_ids), n_descriptor_dimensions)`` array of node centres.
+
+    Raises:
+        ValueError: If a node identifier is outside the manifold's range.
+    """
+    phi = _as_numpy(gtm.phi).astype(float)
+    weights = _as_numpy(gtm.weights).astype(float)
+    centers = phi @ weights
+
+    if node_ids is not None:
+        indices = np.asarray(node_ids, dtype=int) - 1
+        if indices.size and (indices.min() < 0 or indices.max() >= centers.shape[0]):
+            raise ValueError(
+                f"Node identifiers must be within 1..{centers.shape[0]}; "
+                f"got {np.asarray(node_ids).min()}..{np.asarray(node_ids).max()}."
+            )
+        centers = centers[indices]
+
+    if scaler is not None:
+        centers = scaler.inverse_transform(centers)
+    return centers
+
+
 def validate_gtm_descriptor_backend(gtm: Any, descriptor_type: str) -> None:
     """Refuse a GTM manifold fitted on a different latent model.
 
@@ -4255,6 +4315,7 @@ def populate_gtm_data_from_latent_vectors(
     scaler: Any,
     sequences: Optional[List[str]] = None,
     source_df: Optional[pd.DataFrame] = None,
+    smiles: Optional[List[str]] = None,
 ) -> GTMData:
     """
     Populate a GTMData object from pre-computed latent vectors projected onto a latent GTM.
@@ -4269,6 +4330,9 @@ def populate_gtm_data_from_latent_vectors(
         scaler: StandardScaler fitted during training
         sequences: Optional list of peptide sequences (parallel to latent_vectors)
         source_df: Optional DataFrame with additional columns to include in source_mols
+        smiles: Optional list of SMILES (parallel to latent_vectors), for a
+            small-molecule latent map. Without it the structures are lost and
+            the map cannot report what occupies a region.
 
     Returns:
         Fully populated GTMData object ready for sampling
@@ -4289,8 +4353,16 @@ def populate_gtm_data_from_latent_vectors(
     # Compute 2D coordinates from responsibilities
     data.coords_mols = calculate_latent_coords(resps, correction=True, return_node=True)
 
-    # Build source_mols DataFrame with SEQUENCE column if available
-    if sequences is not None:
+    # Build source_mols DataFrame with the structure column, if either is given
+    if smiles is not None:
+        if len(smiles) != n_samples:
+            raise ValueError(
+                f"smiles has {len(smiles)} entries but there are {n_samples} latent vectors; "
+                "they are paired positionally."
+            )
+        smiles_df = pd.DataFrame({SMILES_COLUMN: smiles})
+        data.source_mols = pd.concat([data.coords_mols, smiles_df], axis=1)
+    elif sequences is not None:
         seq_df = pd.DataFrame({SEQUENCE_COLUMN: sequences})
         data.source_mols = pd.concat([data.coords_mols, seq_df], axis=1)
     elif source_df is not None and SEQUENCE_COLUMN in source_df.columns:
