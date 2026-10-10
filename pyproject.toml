@@ -51,7 +51,7 @@ dependencies = [
     "prompt_toolkit>=3.0.0",
     "boto3>=1.42.30",
 ]
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.12,<3.13"
 readme = "README.md"
 license = {text = "MIT"}
 
@@ -217,7 +217,7 @@ torchaudio = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux' and p
 
 [tool.black]
 line-length = 100
-target-version = ['py311']
+target-version = ['py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -241,7 +241,7 @@ known_third_party = ["mcp"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 exclude = [
     ".git",
     ".venv",

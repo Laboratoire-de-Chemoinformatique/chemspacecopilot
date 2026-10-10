@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.11
+- Python 3.12
 - [uv](https://docs.astral.sh/uv/) package manager
 - A [DeepSeek](https://platform.deepseek.com/) API key for the default cloud backend, or a local [Ollama](https://ollama.com/) instance
 
