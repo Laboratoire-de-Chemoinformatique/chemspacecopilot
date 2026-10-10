@@ -7,6 +7,7 @@ import logging
 from types import SimpleNamespace
 
 import dill
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -125,3 +126,52 @@ class TestDescriptorBackendGuard:
             gtm_operations.validate_gtm_descriptor_backend(SimpleNamespace(), "autoencoder")
 
         assert "no descriptor_backend" in caplog.text
+
+
+class TestLatentCentersFromGtm:
+    """Node centres are the inverse step map-guided generation needs."""
+
+    def _gtm(self, n_nodes=4, n_basis=3, n_dims=5):
+        return SimpleNamespace(
+            phi=torch.arange(n_nodes * n_basis, dtype=torch.float64).reshape(n_nodes, n_basis),
+            weights=torch.ones((n_basis, n_dims), dtype=torch.float64),
+        )
+
+    def test_returns_one_center_per_node(self):
+        centers = gtm_operations.latent_centers_from_gtm(self._gtm())
+
+        assert centers.shape == (4, 5)
+
+    def test_node_ids_are_one_based(self):
+        """Landscape tables number nodes from 1, so these do too."""
+        gtm = self._gtm()
+        every = gtm_operations.latent_centers_from_gtm(gtm)
+
+        selected = gtm_operations.latent_centers_from_gtm(gtm, node_ids=[1, 3])
+
+        assert selected.shape == (2, 5)
+        assert (selected[0] == every[0]).all()
+        assert (selected[1] == every[2]).all()
+
+    @pytest.mark.parametrize("bad", [[0], [5], [-1]])
+    def test_out_of_range_nodes_are_rejected(self, bad):
+        with pytest.raises(ValueError, match="within 1..4"):
+            gtm_operations.latent_centers_from_gtm(self._gtm(), node_ids=bad)
+
+    def test_scaler_is_applied_when_the_manifold_was_fitted_on_scaled_data(self):
+        """train_latent_gtm fits on scaled vectors and returns the scaler."""
+
+        class _Scaler:
+            def inverse_transform(self, x):
+                return x * 10.0
+
+        plain = gtm_operations.latent_centers_from_gtm(self._gtm())
+        unscaled = gtm_operations.latent_centers_from_gtm(self._gtm(), scaler=_Scaler())
+
+        assert (unscaled == plain * 10.0).all()
+
+    def test_accepts_numpy_attributes(self):
+        """A manifold restored from a frozen bundle holds arrays, not tensors."""
+        gtm = SimpleNamespace(phi=np.ones((3, 2)), weights=np.ones((2, 4)))
+
+        assert gtm_operations.latent_centers_from_gtm(gtm).shape == (3, 4)
