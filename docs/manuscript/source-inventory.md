@@ -64,7 +64,10 @@ descriptor columns are named per engine. The chembed manifold refitted from the
 same pinned frameset, with the published hyperparameters unchanged, is recorded
 in [results/chembed-latent-gtm](results/chembed-latent-gtm/README.md) together
 with the finding that map-guided generation does not outperform perturbing
-known actives.
+known actives. It is published at
+[`axelrolov/chemspacecopilot-gtm-chembed`](https://huggingface.co/axelrolov/chemspacecopilot-gtm-chembed)
+revision `ca1d609b`, and both manifolds are now pinned by revision rather than
+tracking `main`.
 
 The author repository and the current Hugging Face GTM resource have different bytes for the filename `GTM_manifold_900_100_8_100.pkl.gz` (approximately 2.8 MB versus 4.0 MB). A filename is not adequate parameter provenance. The pinned resources were inspected with the project's CPU-aware trusted loader on 28 September 2026; [actual model attributes](gtm-model-attributes.json) show that the molecular checkpoint has **900 nodes, 225 basis functions, basis width 1, regularization 100, maximum 200 iterations and 256 input dimensions**, despite its filename. The peptide runtime contains a `{model, scaler, config}` wrapper, a 100-dimensional scaler and a model with 900 nodes, 100 basis functions, width 1 and regularization 100. These are prospective checkpoint attributes; do not infer the selected historical sEH map from them.
 
