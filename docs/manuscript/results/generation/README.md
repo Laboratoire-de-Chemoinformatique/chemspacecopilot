@@ -1,5 +1,11 @@
 # Prospective molecular generation measurements
 
+> **Engine provenance.** These results were produced with the deepchemography
+> LSTM autoencoder. The small-molecule latent engine is now selectable, so
+> reproduce them with `AUTOENCODER_BACKEND=deepchemography`, which remains the
+> default. See [source-inventory.md](../../source-inventory.md).
+
+
 Three independent CPU runs generated 100 raw model outputs each around CHEMBL3327073 using seeds 11, 22 and 33, latent noise scale 0.1 and sampling temperature 0.5. All outputs, including invalid strings and duplicates, were retained in the archived raw audits named and hashed in `summary.json`. The checkpoint hashes, source commit, software and hardware are also recorded there.
 
 | Seed | Raw outputs | RDKit valid | Distinct standardized valid | Uniqueness among valid | Worker wall time (s) |

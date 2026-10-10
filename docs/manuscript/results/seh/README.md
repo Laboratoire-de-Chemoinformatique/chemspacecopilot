@@ -1,5 +1,11 @@
 # Prospective sEH projection results
 
+> **Engine provenance.** These results were produced with the deepchemography
+> LSTM autoencoder. The small-molecule latent engine is now selectable, so
+> reproduce them with `AUTOENCODER_BACKEND=deepchemography`, which remains the
+> default. See [source-inventory.md](../../source-inventory.md).
+
+
 These compact tables describe the ChEMBL 37 revision dataset projected onto the
 pinned pretrained autoencoder GTM. They are deterministic tool outputs, not
 autonomous agent benchmark successes and not recovered historical manuscript

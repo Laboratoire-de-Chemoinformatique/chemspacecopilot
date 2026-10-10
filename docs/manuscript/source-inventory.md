@@ -20,6 +20,46 @@ The author reports that original supporting material is on Zenodo. The DOI remai
 
 All 50,000 author frameset SMILES match exact strings in the pinned MOSES training split. This comparison uses literal strings, with no chemical standardization or stereochemistry removal; its results are recorded in the lock file. The full MOSES file SHA-256 matches the upstream Git LFS object ID. Neither the public HF model config nor the author model config records training/validation filenames or dataset checksums. Therefore report **novelty relative to the pinned MOSES reference** until the model author confirms the exact checkpoint training split; do not relabel it confirmed training-set novelty. The 50,000-row frameset alone is insufficient for that claim.
 
+## chembed replaces the LSTM autoencoder for small molecules (10 October 2026)
+
+The small-molecule latent engine is now selectable, and chembed
+([3BioCompBio/chembed](https://github.com/3BioCompBio/chembed) 1.0.1, checkpoint
+`3BioCompBio/chembed-default`) is available alongside the deepchemography LSTM
+autoencoder. Everything under `results/generation`, `results/seh` and
+`results/architecture-pilot` was produced on the **deepchemography** engine and
+the 256-dimensional LSTM manifold. Reproduce those with
+`AUTOENCODER_BACKEND=deepchemography`, which is still the default.
+
+Three consequences for provenance.
+
+**The MOSES novelty framing does not transfer.** The paragraph above reports
+novelty relative to the pinned MOSES reference because the author frameset
+matches MOSES exactly and the LSTM checkpoint's training split is unconfirmed.
+chembed was trained on a different corpus entirely
+([Zenodo 10.5281/zenodo.17277040](https://doi.org/10.5281/zenodo.17277040)), so
+for chembed-generated molecules MOSES is neither a training set nor a relevant
+reference. Any novelty claim about chembed output needs its own reference set
+stated explicitly; do not inherit the MOSES sentence.
+
+**`results/generation/source_verification.json` pins a SHA-256 of
+`src/cs_copilot/tools/chemistry/autoencoder_toolkit.py`.** That file changed
+when the engine seam was introduced, so re-running the generation study now
+produces a different `implementation_files` digest than the published one.
+Already-published results carry their own digests and are unaffected.
+`scripts/run_generation_study.py` is pinned to the deepchemography engine and
+refuses to run on any other, because chembed ignores the temperature and
+decode_mode its specification records.
+
+**A latent-space change invalidates a manifold silently.** chembed and the LSTM
+both emit 256-wide latents, so projecting one model's vectors onto the other's
+manifold raises no error and returns meaningless coordinates. Manifolds now
+carry a `descriptor_backend` tag that is checked before projection, and
+descriptor columns are named per engine. The chembed manifold refitted from the
+same pinned frameset, with the published hyperparameters unchanged, is recorded
+in [results/chembed-latent-gtm](results/chembed-latent-gtm/README.md) together
+with the finding that map-guided generation does not outperform perturbing
+known actives.
+
 The author repository and the current Hugging Face GTM resource have different bytes for the filename `GTM_manifold_900_100_8_100.pkl.gz` (approximately 2.8 MB versus 4.0 MB). A filename is not adequate parameter provenance. The pinned resources were inspected with the project's CPU-aware trusted loader on 28 September 2026; [actual model attributes](gtm-model-attributes.json) show that the molecular checkpoint has **900 nodes, 225 basis functions, basis width 1, regularization 100, maximum 200 iterations and 256 input dimensions**, despite its filename. The peptide runtime contains a `{model, scaler, config}` wrapper, a 100-dimensional scaler and a model with 900 nodes, 100 basis functions, width 1 and regularization 100. These are prospective checkpoint attributes; do not infer the selected historical sEH map from them.
 
 ## Peptide landscape resources

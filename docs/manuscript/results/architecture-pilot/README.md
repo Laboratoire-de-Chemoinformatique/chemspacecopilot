@@ -1,5 +1,11 @@
 # Retained standalone-generation pilot
 
+> **Engine provenance.** These results were produced with the deepchemography
+> LSTM autoencoder. The small-molecule latent engine is now selectable, so
+> reproduce them with `AUTOENCODER_BACKEND=deepchemography`, which remains the
+> default. See [source-inventory.md](../../source-inventory.md).
+
+
 These are two implementation pilots run on 26 September 2026, one per arm,
 using `deepseek-flash`, temperature 0 and `max_tokens=8192`. They are not the
 predeclared 48-execution frozen comparison or the 12 end-to-end stages. The
