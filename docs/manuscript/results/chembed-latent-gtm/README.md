@@ -66,6 +66,38 @@ because by then the baseline has also been pushed off the data manifold. Both
 are then producing dissimilar, hard-to-make molecules. Agreement there says the
 map is no worse than a broken baseline, not that it works.
 
+## The map is informative; the decoding is not
+
+![chembed GTM manifold](chembed_gtm_map.png)
+
+It would be easy to read the result above as "the map carries no signal". It
+does carry signal, and that is what makes the failure specific rather than
+general.
+
+The manifold is not flat. Across its 900 nodes the 50,000 frameset molecules
+vary 4.5-fold between the median node and the densest, with a coefficient of
+variation of 0.63, and the density is spatially autocorrelated (rook-contiguity
+Moran's I +0.266, permutation p = 0.001).
+
+More to the point, **activity is spatially organized**. The 2,212 sEH compounds
+occupy 313 of the 900 nodes, and the responsibility-weighted mean pIC50 over
+those nodes has Moran's I +0.352 (p = 0.001): neighbouring nodes hold compounds
+of similar potency, with a high-activity region in the upper right and a
+low-activity one toward the lower left. A map that highlights promising regions
+is doing its job.
+
+So the coupling does not fail because the map cannot find active regions. It
+fails at the step after that, turning a region back into molecules. A node
+centre is an average over a region of a 256-dimensional space compressed to
+two, and reconstructing a molecule through the map leaves a relative error near
+0.6. The centre is a real description of where the actives are and a poor
+starting point for generating one.
+
+That suggests the useful way to spend this map is to select regions or
+compounds with it and then perturb **real molecules** found there, rather than
+decoding the geometry itself. That is close to what the baseline already does,
+which is consistent with the baseline winning.
+
 ## Why
 
 A GTM manifold is two-dimensional and the chembed latent is 256-dimensional.
