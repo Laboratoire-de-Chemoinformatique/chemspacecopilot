@@ -12,6 +12,7 @@ from agno.agent import Agent
 from agno.tools import Toolkit
 from agno.tools.function import Function, FunctionCall
 
+from cs_copilot.agents.agno_compat import patch_tool_result_coercion
 from cs_copilot.agents.execution_binding import (
     ExecutionMode,
     attach_execution,
@@ -66,6 +67,18 @@ def plot_probe(title: str) -> str:
         title: Plot title.
     """
     return f"saved {title}"
+
+
+@pytest.fixture(autouse=True)
+def agno_result_coercion():
+    """Install the tool-result fix these tests exercise.
+
+    In production it is applied when :mod:`cs_copilot.agents.factories` builds
+    an agent, which is the only way a tool-bearing agent is ever created. These
+    tests build the Agent directly, so without this they would only pass when an
+    earlier test file happened to import the factories first.
+    """
+    assert patch_tool_result_coercion()
 
 
 @pytest.fixture
