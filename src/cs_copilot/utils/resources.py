@@ -21,6 +21,7 @@ from cs_copilot.tools.constants import (
     DEFAULT_GTM_MODEL_PATH,
     DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH,
     HUGGINGFACE_AUTOENCODER_REPO,
+    HUGGINGFACE_CHEMBED_REPO,
     HUGGINGFACE_GTM_REPO,
     HUGGINGFACE_PEPTIDE_WAE_REPO,
 )
@@ -189,10 +190,24 @@ def _dir_has_files(path: str) -> bool:
         return False
 
 
+def _hf_repo_is_cached(repo_id: str) -> bool:
+    """Report whether a Hugging Face repo is already in the local hub cache."""
+    try:
+        from huggingface_hub.constants import HF_HUB_CACHE
+
+        folder = Path(HF_HUB_CACHE) / f"models--{repo_id.replace('/', '--')}"
+        return any(folder.glob("snapshots/*/*"))
+    except Exception:  # noqa: BLE001 - detection must never break a resource probe
+        return False
+
+
 def _detect_cached_models() -> Dict[str, bool]:
     """Check which models are cached locally."""
     return {
         "autoencoder": _dir_has_files(DEFAULT_AUTOENCODER_MODEL_PATH),
+        # chembed's checkpoint is managed by huggingface_hub, which keeps it in
+        # its own cache rather than under ~/.cache/cs_copilot/models.
+        "chembed": _hf_repo_is_cached(HUGGINGFACE_CHEMBED_REPO),
         "peptide_designer": _dir_has_files(DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH),
         "gtm": _dir_has_files(DEFAULT_GTM_MODEL_PATH),
         "dbaasp_data": Path(DEFAULT_DBAASP_DATA_PATH).is_file(),

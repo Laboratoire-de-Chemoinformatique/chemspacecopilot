@@ -79,6 +79,10 @@ def build_specification(args: argparse.Namespace) -> dict:
             "noise_scale": args.noise_scale,
             "temperature": args.temperature,
             "decode_mode": args.decode_mode,
+            # Pinned, so published results stay reproducible whichever engine is
+            # the toolkit default. chembed would also silently ignore the
+            # temperature and decode_mode recorded above.
+            "backend": "deepchemography",
             "device": args.device,
         },
         "case_timeout_seconds": args.case_timeout_seconds,
@@ -100,6 +104,12 @@ def run_worker(worker_spec: Path) -> None:
             raise ValueError("Model checkpoint changed after study declaration")
     apply_seed(job["seed"])
     backend = AutoencoderToolkit(model_path=config["model_dir"], device=config["device"])
+    if backend.engine is not None:
+        raise RuntimeError(
+            "This study is pinned to the deepchemography autoencoder, but the toolkit "
+            f"was built on {type(backend.engine).__name__}. Its recorded temperature "
+            "and decode_mode would not have been applied."
+        )
     seed_control = apply_seed(job["seed"])
     backend.explore_latent_neighborhood(
         base_smiles=config["parent_smiles"],

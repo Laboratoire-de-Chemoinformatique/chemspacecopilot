@@ -29,6 +29,8 @@ CORE_PACKAGES = (
     "chemographykit",
     "ugtm",
     "deepchemography",
+    "chembed",
+    "selfies",
     "optuna",
     "huggingface-hub",
     "transformers",
