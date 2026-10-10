@@ -76,6 +76,11 @@ CHEMBL_MOLECULE_FIELDS = ["molecule_chembl_id", "canonical_smiles", "molecule_st
 DEFAULT_AUTOENCODER_MODEL_PATH = os.path.expanduser("~/.cache/cs_copilot/models/autoencoder")
 HUGGINGFACE_AUTOENCODER_REPO = "axelrolov/lstm_autoencoder"  # Hugging Face model repository
 
+# chembed SELFIES transformer VAE defaults. The checkpoint is downloaded and
+# cached by huggingface_hub itself, so there is no cs_copilot model directory.
+HUGGINGFACE_CHEMBED_REPO = "3BioCompBio/chembed-default"
+CHEMBED_CHECKPOINT_FILENAME = "model.ckpt"
+
 # Peptide Designer model defaults
 DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH = os.path.expanduser(
     "~/.cache/cs_copilot/models/peptide_designer"

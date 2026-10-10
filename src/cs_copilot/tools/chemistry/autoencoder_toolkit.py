@@ -314,6 +314,12 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             self.model, self.vocab, self.config = self.engine.load(
                 model_path=self.model_path, device=self.device
             )
+            # Record what was actually loaded: the toolkit's default model_path
+            # names the deepchemography directory, which would otherwise end up
+            # in every generation audit regardless of the engine used.
+            checkpoint_path = getattr(self.engine, "checkpoint_path", None)
+            if checkpoint_path:
+                self.model_path = checkpoint_path
             return
 
         try:
