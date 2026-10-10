@@ -1798,6 +1798,10 @@ def project_data_on_gtm(
     # -------------------------------------------------------------------------
     # Step 4: Validate descriptor compatibility via trial projection
     # -------------------------------------------------------------------------
+    # A trial projection only catches a width mismatch. Two latent models of the
+    # same width need the recorded backend tag to be told apart.
+    validate_gtm_descriptor_backend(gtm, prepared.effective_descriptor)
+
     # Validate descriptor compatibility by doing a trial projection
     logger.debug("Validating descriptor compatibility with GTM model...")
     try:
@@ -2998,6 +3002,59 @@ def _knn_indices(points: np.ndarray, k: int, metric: str = "euclidean") -> np.nd
     return neighbors
 
 
+def validate_gtm_descriptor_backend(gtm: Any, descriptor_type: str) -> None:
+    """Refuse a GTM manifold fitted on a different latent model.
+
+    The deepchemography autoencoder and chembed both produce 256-wide latents,
+    so a trial projection cannot tell them apart: the shapes agree and the
+    coordinates come back silently meaningless. Manifolds fitted after this
+    check existed carry a ``descriptor_backend`` tag; older ones do not, and
+    are let through with a warning rather than being rejected outright.
+
+    Args:
+        gtm: Loaded GTM model.
+        descriptor_type: Descriptor backend the caller is about to project.
+
+    Raises:
+        ValueError: If the manifold records a different descriptor backend.
+    """
+    recorded = getattr(gtm, "descriptor_backend", None)
+    expected = MolecularDescriptorEncoder(descriptor_type).default_descriptor
+    if recorded is None:
+        logger.warning(
+            "GTM manifold records no descriptor_backend; assuming %r. Latent spaces of equal "
+            "width cannot be distinguished by shape, so refit or re-tag the manifold to make "
+            "this check meaningful.",
+            expected,
+        )
+        return
+    if recorded != expected:
+        raise ValueError(
+            f"GTM manifold was fitted on {recorded!r} descriptors but {expected!r} descriptors "
+            f"were supplied. Both are the same width, so projection would succeed and return "
+            f"meaningless coordinates. Use a manifold fitted on {expected!r}, or set "
+            f"descriptor_type={recorded!r}."
+        )
+
+
+def shannon_entropy(responsibilities: np.ndarray) -> float:
+    """Normalized node-occupancy entropy of a GTM projection, in [0, 1].
+
+    Args:
+        responsibilities: ``(n_samples, n_nodes)`` projection responsibilities.
+
+    Returns:
+        1.0 when molecules spread evenly over the nodes, approaching 0.0 when
+        they pile onto a few.
+    """
+    cumR = responsibilities.sum(axis=0)
+    p = cumR / cumR.sum()
+    nonzero = p > 0
+    H = -np.sum(p[nonzero] * np.log(p[nonzero]))
+    K = responsibilities.shape[1]
+    return H / np.log(K)
+
+
 def resolve_neighborhood_metric(descriptor_type: str, metric: str = "auto") -> str:
     """
     Descriptor-space metric for neighbourhood preservation.
@@ -3156,18 +3213,6 @@ def optimize_gtm(
             device = "cpu"
     else:
         logger.info("CUDA not available, using CPU for GTM optimization")
-
-    def shannon_entropy(responsibilities: np.ndarray) -> float:
-        """
-        Compute normalized node-occupancy entropy on the interval [0, 1].
-        """
-        cumR = responsibilities.sum(axis=0)
-        p = cumR / cumR.sum()
-        nonzero = p > 0
-        H = -np.sum(p[nonzero] * np.log(p[nonzero]))
-        K = responsibilities.shape[1]
-        E = H / np.log(K)
-        return E
 
     # Define the objective function for hyperparameter optimization
     def objective(trial):
@@ -5061,14 +5106,6 @@ def train_latent_gtm(
             logger.info("Using CUDA device for latent GTM training")
         except Exception:
             logger.info("CUDA not functional, using CPU")
-
-    def shannon_entropy(responsibilities: np.ndarray) -> float:
-        cumR = responsibilities.sum(axis=0)
-        p = cumR / cumR.sum()
-        nonzero = p > 0
-        H = -np.sum(p[nonzero] * np.log(p[nonzero]))
-        K = responsibilities.shape[1]
-        return H / np.log(K)
 
     if config is not None:
         # Direct training with provided config

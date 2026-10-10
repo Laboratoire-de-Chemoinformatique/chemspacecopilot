@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import logging
 from types import SimpleNamespace
 
 import dill
@@ -91,3 +92,36 @@ def test_corrupt_gzip_is_not_reinterpreted_as_plain_pickle(tmp_path, monkeypatch
     path.write_bytes(b"\x1f\x8btruncated")
     with pytest.raises((OSError, EOFError)):
         gtm_operations.load_gtm_model(str(path))
+
+
+class TestDescriptorBackendGuard:
+    """A manifold must refuse descriptors from a different latent model.
+
+    chembed and the deepchemography autoencoder both emit 256-wide latents, so
+    a trial projection cannot tell them apart: it succeeds and returns
+    meaningless coordinates. The recorded tag is the only defence.
+    """
+
+    def test_matching_backend_passes(self):
+        gtm = SimpleNamespace(descriptor_backend="chembed")
+        gtm_operations.validate_gtm_descriptor_backend(gtm, "chembed")
+
+    def test_aliases_resolve_to_the_same_family(self):
+        gtm = SimpleNamespace(descriptor_backend="autoencoder")
+        gtm_operations.validate_gtm_descriptor_backend(gtm, "latent")
+
+    @pytest.mark.parametrize(
+        ("recorded", "supplied"),
+        [("autoencoder", "chembed"), ("chembed", "autoencoder")],
+    )
+    def test_mismatched_backend_is_refused(self, recorded, supplied):
+        gtm = SimpleNamespace(descriptor_backend=recorded)
+        with pytest.raises(ValueError, match="meaningless coordinates"):
+            gtm_operations.validate_gtm_descriptor_backend(gtm, supplied)
+
+    def test_untagged_manifold_warns_but_is_allowed(self, caplog):
+        """Manifolds published before the tag existed must keep working."""
+        with caplog.at_level(logging.WARNING):
+            gtm_operations.validate_gtm_descriptor_backend(SimpleNamespace(), "autoencoder")
+
+        assert "no descriptor_backend" in caplog.text
