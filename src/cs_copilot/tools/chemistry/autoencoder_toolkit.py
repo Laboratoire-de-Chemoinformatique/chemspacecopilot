@@ -53,6 +53,10 @@ SampleReturnFormat = Literal["summary", "list"]
 DEFAULT_SAMPLE_COUNT_GPU = 5000
 DEFAULT_SAMPLE_COUNT_CPU = 500
 
+#: Latent perturbation for neighbourhood exploration on the deepchemography
+#: LSTM, whose latent this value was tuned against. Engines expose their own.
+DEFAULT_NOISE_SCALE = 0.1
+
 
 def _filter_valid_unique_smiles(raw: List[Any]) -> List[str]:
     """Drop non-string entries, invalid SMILES, and duplicates (by canonical form).
@@ -121,6 +125,10 @@ class AutoencoderEngine(Protocol):
         """Return the decode settings actually applied, for the generation audit."""
         ...
 
+    def default_noise_scale(self) -> float:
+        """Return the latent perturbation scale suited to this engine's latent."""
+        ...
+
 
 class AutoencoderToolkit(BaseChemistryToolkit):
     """
@@ -165,7 +173,12 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         if model_path is None:
             # Get path from environment variable or use default
             model_path = os.getenv("AUTOENCODER_MODEL_PATH", DEFAULT_AUTOENCODER_MODEL_PATH)
-            if model_path == DEFAULT_AUTOENCODER_MODEL_PATH:
+            if engine is not None:
+                # An engine resolves its own checkpoint and overwrites model_path
+                # once loaded; announcing the deepchemography directory here would
+                # misreport which model is in use.
+                pass
+            elif model_path == DEFAULT_AUTOENCODER_MODEL_PATH:
                 logger.info(f"Using default autoencoder model path: {model_path}")
             else:
                 logger.info(f"Using AUTOENCODER_MODEL_PATH from environment: {model_path}")
@@ -407,6 +420,12 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             self.device.type,
         )
         return resolved
+
+    def _default_noise_scale(self) -> float:
+        """Return the latent perturbation this engine needs to leave the parent."""
+        if self.engine is not None:
+            return self.engine.default_noise_scale()
+        return DEFAULT_NOISE_SCALE
 
     def _engine_info(self) -> Dict[str, Any]:
         """Return engine-specific model metadata."""
@@ -870,7 +889,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
     def explore_latent_neighborhood(
         self,
         base_smiles: str,
-        noise_scale: float = 0.1,
+        noise_scale: Optional[float] = None,
         n_neighbors: int = 5,
         temperature: float = 0.5,
         decode_mode: str = "sample",
@@ -882,7 +901,9 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
         Args:
             base_smiles: Base molecule SMILES string
-            noise_scale: Standard deviation of noise to add
+            noise_scale: Standard deviation of the latent noise. When omitted, the
+                active engine's own default is used, because a value tuned for
+                one latent space produces either nothing or noise in another.
             n_neighbors: Number of neighbors to generate
             temperature: Temperature for sampling
             decode_mode: 'greedy' for deterministic, 'sample' for stochastic
@@ -892,6 +913,9 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         """
         if not self.validate_model_loaded():
             raise AutoencoderError("Model not loaded")
+
+        if noise_scale is None:
+            noise_scale = self._default_noise_scale()
 
         # Encode base molecule
         z_base = self.encode_smiles_array([base_smiles])

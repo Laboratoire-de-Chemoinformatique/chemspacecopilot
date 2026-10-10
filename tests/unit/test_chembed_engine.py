@@ -282,3 +282,73 @@ class TestToolkitIntegration:
         assert settings["requested_temperature"] == 0.7
         assert settings["decode_mode"] == "greedy"
         assert toolkit.last_generation_audit["raw_outputs_available"] is True
+
+
+class TestDecodeDeviceHandling:
+    """Prior sampling passes a tensor on the model's device, not a numpy array."""
+
+    def test_device_tensor_is_not_routed_through_numpy(self, loaded_engine, fake_chembed):
+        """np.asarray raises on a CUDA tensor, so tensors must bypass it."""
+
+        class _TensorRefusingNumpy(torch.Tensor):
+            @staticmethod
+            def __new__(cls, data):
+                return torch.Tensor._make_subclass(cls, data)
+
+            def __array__(self, *args, **kwargs):
+                raise TypeError("can't convert cuda:0 device type tensor to numpy")
+
+        z = _TensorRefusingNumpy(torch.zeros(5, D_MODEL))
+        loaded_engine.decode(z, max_len=100, temp=1.0, decode="greedy")
+
+        assert fake_chembed["decode"]["shape"] == (5, 1, D_MODEL)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cuda_tensor_decodes(self, loaded_engine, fake_chembed):
+        loaded_engine.decode(
+            torch.zeros(3, D_MODEL, device="cuda"), max_len=100, temp=1.0, decode="greedy"
+        )
+
+        assert fake_chembed["decode"]["shape"] == (3, 1, D_MODEL)
+
+
+class TestNoiseScale:
+    """Noise tuned for one latent space does not transfer to another.
+
+    Measured over aspirin, lidocaine and a large peptidomimetic at 60 samples
+    each: at 0.1 chembed returns the parent essentially every time.
+    """
+
+    def test_engine_default_is_larger_than_the_lstm_value(self, loaded_engine):
+        from cs_copilot.tools.chemistry.autoencoder_toolkit import DEFAULT_NOISE_SCALE
+
+        assert loaded_engine.default_noise_scale() > DEFAULT_NOISE_SCALE
+
+    def test_toolkit_uses_the_engine_default_when_none_given(self, fake_chembed, monkeypatch):
+        from cs_copilot.tools.chemistry.chembed_engine import DEFAULT_NOISE_SCALE
+
+        toolkit = AutoencoderToolkit(model_path="unused", device="cpu", engine=ChembedEngine())
+        assert toolkit._default_noise_scale() == DEFAULT_NOISE_SCALE
+
+    def test_deepchemography_default_is_unchanged(self):
+        from cs_copilot.tools.chemistry.autoencoder_toolkit import DEFAULT_NOISE_SCALE
+
+        toolkit = AutoencoderToolkit.__new__(AutoencoderToolkit)
+        toolkit.engine = None
+        assert toolkit._default_noise_scale() == DEFAULT_NOISE_SCALE == 0.1
+
+    def test_explicit_noise_scale_is_respected(self, fake_chembed, monkeypatch):
+        toolkit = AutoencoderToolkit(model_path="unused", device="cpu", engine=ChembedEngine())
+        captured = {}
+
+        def _capture(z, **kwargs):
+            captured["z"] = z
+            return []
+
+        monkeypatch.setattr(toolkit, "decode_latent", _capture)
+        monkeypatch.setattr(toolkit, "encode_smiles_array", lambda s: np.zeros((1, D_MODEL), "f"))
+        toolkit.explore_latent_neighborhood("CCO", noise_scale=0.0, n_neighbors=4)
+
+        # Zero noise must leave every neighbour exactly on the parent latent.
+        assert captured["z"].shape == (4, D_MODEL)
+        assert np.allclose(captured["z"], 0.0)
