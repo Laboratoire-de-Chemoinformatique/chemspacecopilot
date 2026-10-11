@@ -45,7 +45,13 @@ EXPECTED_ROLES = {
     "report_generator": (
         "reporting",
         {"pandas", "report", "skills", "session"},
-        {"save_gtm_landscape_plot", "save_gtm_plot", "save_rich_report", "save_markdown_report"},
+        {
+            "save_gtm_landscape_plot",
+            "save_gtm_plot",
+            "save_rich_report",
+            "save_markdown_report",
+            "get_report_evidence",
+        },
         set(),
     ),
     "molecular_designer": (
@@ -81,7 +87,13 @@ EXPECTED_ROLES = {
             "report",
             "skills",
         },
-        {"save_gtm_landscape_plot", "save_gtm_plot", "save_rich_report", "save_markdown_report"},
+        {
+            "save_gtm_landscape_plot",
+            "save_gtm_plot",
+            "save_rich_report",
+            "save_markdown_report",
+            "get_report_evidence",
+        },
         {"workflow"},
     ),
 }

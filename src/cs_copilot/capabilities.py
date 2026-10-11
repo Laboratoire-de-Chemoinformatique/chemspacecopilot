@@ -131,6 +131,7 @@ AGNO_FUNCTION_TWINS: Mapping[str, str] = MappingProxyType(
         "save_gtm_landscape_plot": "gtm_save_landscape_plot",
         "save_gtm_plot": "gtm_save_density_plot",
         "save_rich_report": "report_save_rich",
+        "get_report_evidence": "report_get_evidence",
         "save_markdown_report": "report_save_markdown",
     }
 )
@@ -147,7 +148,7 @@ MCP_ROLE_ALIASES: Mapping[str, str] = MappingProxyType({COORDINATOR_ROLE: SUPERV
 MCP_UNIVERSAL_GROUPS = frozenset({"llm", "session"})
 
 _GTM_PLOTS = ("save_gtm_landscape_plot", "save_gtm_plot")
-_REPORT_WRITERS = ("save_rich_report", "save_markdown_report")
+_REPORT_WRITERS = ("save_rich_report", "save_markdown_report", "get_report_evidence")
 
 
 def _role(

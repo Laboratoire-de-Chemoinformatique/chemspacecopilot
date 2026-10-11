@@ -31,6 +31,7 @@ AGNO_TWINS: Mapping[str, tuple[str, ...]] = MappingProxyType(
         "pandas_load_dataframe_from_session": (f"{_PANDAS}.load_dataframe_from_session",),
         "report_save_markdown": (f"{_REPORTS}:save_markdown_report",),
         "report_save_rich": (f"{_REPORTS}:save_rich_report",),
+        "report_get_evidence": ("cs_copilot.tools.io.reporting_evidence:get_report_evidence",),
         "skill_list": (f"{_SKILLS}.list_skills",),
         "skill_search": (f"{_SKILLS}.search_skills",),
         "skill_fetch": (f"{_SKILLS}.fetch_skill",),

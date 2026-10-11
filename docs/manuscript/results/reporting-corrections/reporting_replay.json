@@ -1,0 +1,115 @@
+{
+  "scope": "Offline deterministic replay through registered team/single reporting readers and shared renderer; no LLM inference or benchmark rescoring",
+  "script_sha256": "98847cb18a3ba040657351e2355a53eec8e0d814f9e276aeabbde50b9d0dfcd0",
+  "runtime_sha256": "ef28615831dba9b29a2f49db8b2b5355805d156f0c93b8641313ca15923ee009",
+  "runs": [
+    {
+      "run": "team_rep1",
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_161325_139120_team_20261004_161325_p0_v0_8d42c596/workflows/chemical_space-7a556d3b51a8/01_chemical_space/datasets/clean/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_clean.csv",
+        "sha256": "832c351efcc9c1a9e6253403b5f4ac00de1f0c7faf07e88d206292e1d7853620",
+        "kind": "original"
+      },
+      "report_path": "/home/aorlov/.codex/worktrees/c063/chemspacecopilot/reports/reporting_evidence_replay/team_rep1/report.md",
+      "report_sha256": "f661ce7abcae67ef29a4a08d5ffc750a28b6b8551722f50ba65fdfc653b0b9f8",
+      "counts_match_independent_reconciliation": true,
+      "metadata_reference_bytes": 239,
+      "coverage_payload_bytes": 1138,
+      "scaffold_page_payload_bytes": 1570,
+      "full_evidence_bytes": 109560,
+      "evidence_tool_calls": 2,
+      "repeated_evidence_tool_calls": 0,
+      "renderer_revalidates_sources": true
+    },
+    {
+      "run": "team_rep2",
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_164118_371994_team_20261004_164118_p0_v0_d70a65e7/workflows/chemical_space-573d6adf1d00/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_seh_ephx2_and_more_clean.csv",
+        "sha256": "f38c0c77021b936267103e4508d23702aa5cb187bc55063cc544f95f82c67b34",
+        "kind": "original"
+      },
+      "report_path": "/home/aorlov/.codex/worktrees/c063/chemspacecopilot/reports/reporting_evidence_replay/team_rep2/report.md",
+      "report_sha256": "c56f3257f8ad282ce5422c5d6211409c59f7a85a1d28463275ce3de77e2d811f",
+      "counts_match_independent_reconciliation": true,
+      "metadata_reference_bytes": 239,
+      "coverage_payload_bytes": 1137,
+      "scaffold_page_payload_bytes": 1531,
+      "full_evidence_bytes": 55255,
+      "evidence_tool_calls": 2,
+      "repeated_evidence_tool_calls": 0,
+      "renderer_revalidates_sources": true
+    },
+    {
+      "run": "team_rep3",
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_165746_311162_team_20261004_165746_p0_v0_a61c1ed2/workflows/chemical_space-bac3f8ce3179/01_chemical_space/datasets/clean/chembl_ephx2_soluble_epoxide_hydrolase_sEH_and_more_clean.csv",
+        "sha256": "4831a29e9449386649589066002b04d8501235a4b8432d1ac08f64a99ad7fec0",
+        "kind": "original"
+      },
+      "report_path": "/home/aorlov/.codex/worktrees/c063/chemspacecopilot/reports/reporting_evidence_replay/team_rep3/report.md",
+      "report_sha256": "e8cf6e4d3993d485b1eae27bec1ac119b93a9e9929f186168bb344c127c2d46a",
+      "counts_match_independent_reconciliation": true,
+      "metadata_reference_bytes": 239,
+      "coverage_payload_bytes": 1137,
+      "scaffold_page_payload_bytes": 1531,
+      "full_evidence_bytes": 55255,
+      "evidence_tool_calls": 2,
+      "repeated_evidence_tool_calls": 0,
+      "renderer_revalidates_sources": true
+    },
+    {
+      "run": "single_agent_rep1",
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173245_139895_single_agent_20261004_173245_p0_v0_3abb5317/workflows/chemical_space-e9fc38cef8b0/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+        "sha256": "c785ddc73ceb5d70a17b7adc237b1ae63febbd268809f58b3d2ca91e0e50d487",
+        "kind": "original"
+      },
+      "report_path": "/home/aorlov/.codex/worktrees/c063/chemspacecopilot/reports/reporting_evidence_replay/single_agent_rep1/report.md",
+      "report_sha256": "ceaaaa5c4a9d18fb1086bde340f10ad936a54f1c878b46c3652cf47b7ee9576f",
+      "counts_match_independent_reconciliation": true,
+      "metadata_reference_bytes": 247,
+      "coverage_payload_bytes": 1162,
+      "scaffold_page_payload_bytes": 1594,
+      "full_evidence_bytes": 109592,
+      "evidence_tool_calls": 2,
+      "repeated_evidence_tool_calls": 0,
+      "renderer_revalidates_sources": true
+    },
+    {
+      "run": "single_agent_rep2",
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_173903_469546_single_agent_20261004_173903_p0_v0_cbb62211/workflows/chemical_space-90171aedb72e/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+        "sha256": "ea4be6c250190ebb13d80e6106bd717837ee232b7249d0a08a6addb4f6a0a317",
+        "kind": "original"
+      },
+      "report_path": "/home/aorlov/.codex/worktrees/c063/chemspacecopilot/reports/reporting_evidence_replay/single_agent_rep2/report.md",
+      "report_sha256": "4082c613693cedaaefe7e5f926ea02046ecc3548befda84dea3a0a815bbb0dc4",
+      "counts_match_independent_reconciliation": true,
+      "metadata_reference_bytes": 247,
+      "coverage_payload_bytes": 1161,
+      "scaffold_page_payload_bytes": 1555,
+      "full_evidence_bytes": 55287,
+      "evidence_tool_calls": 2,
+      "repeated_evidence_tool_calls": 0,
+      "renderer_revalidates_sources": true
+    },
+    {
+      "run": "single_agent_rep3",
+      "source": {
+        "path": "/home/aorlov/Programs/agents/chemspacecopilot-v4/data/sessions/robustness_20261004_174429_336882_single_agent_20261004_174429_p0_v0_71137831/workflows/chemical_space-5478e2b65e37/01_chemical_space/datasets/clean/chembl_soluble_epoxide_hydrolase_sEH_EPHX2_and_more_clean.csv",
+        "sha256": "ea4be6c250190ebb13d80e6106bd717837ee232b7249d0a08a6addb4f6a0a317",
+        "kind": "original"
+      },
+      "report_path": "/home/aorlov/.codex/worktrees/c063/chemspacecopilot/reports/reporting_evidence_replay/single_agent_rep3/report.md",
+      "report_sha256": "26e86195316415863ccc4f4ec5e351125a280e39fe5d2c564c04ffa51403c967",
+      "counts_match_independent_reconciliation": true,
+      "metadata_reference_bytes": 247,
+      "coverage_payload_bytes": 1161,
+      "scaffold_page_payload_bytes": 1555,
+      "full_evidence_bytes": 55287,
+      "evidence_tool_calls": 2,
+      "repeated_evidence_tool_calls": 0,
+      "renderer_revalidates_sources": true
+    }
+  ]
+}

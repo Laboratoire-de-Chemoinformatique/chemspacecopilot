@@ -9,6 +9,14 @@ from ..tool_adapter import ToolSpec
 
 SPECS: List[ToolSpec] = [
     ToolSpec(
+        mcp_name="report_get_evidence",
+        toolkit_factory=report_facade,
+        method="get_evidence",
+        summary="Read a bounded page of scoped coverage/scaffold facts; stale evidence is unresolved.",
+        read_only=True,
+        read_artifact_fields=("evidence_path",),
+    ),
+    ToolSpec(
         mcp_name="report_save_markdown",
         toolkit_factory=report_facade,
         method="save_markdown",
