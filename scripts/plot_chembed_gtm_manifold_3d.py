@@ -62,7 +62,14 @@ def local_stretch(sheet: np.ndarray, grid: np.ndarray) -> np.ndarray:
 
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--frameset", type=Path, required=True)
+    parser.add_argument(
+        "--frameset",
+        type=Path,
+        required=True,
+        help="Dataset defining both the principal components and the point cloud. The "
+        "manifold itself is always the published one; this chooses the space it is "
+        "viewed in.",
+    )
     parser.add_argument("--smiles-column", default="SMILES")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--no-html", action="store_true")
@@ -76,6 +83,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     )
     parser.add_argument("--cloud-stride", type=int, default=25)
     parser.add_argument("--node-size", type=float, default=16.0)
+    parser.add_argument("--cloud-label", default="frameset molecules")
     parser.add_argument("--device", default=None)
     return parser.parse_args(argv)
 
@@ -234,7 +242,7 @@ def main(argv: Optional[list] = None) -> int:
                     color="none",
                     markerfacecolor="black",
                     markersize=5,
-                    label=f"frameset molecules ({len(cloud):,} shown)",
+                    label=f"{args.cloud_label} ({len(cloud):,} shown)",
                 ),
             ],
             loc="lower center",
@@ -250,7 +258,7 @@ def main(argv: Optional[list] = None) -> int:
         )
     figure.suptitle(
         f"chembed GTM manifold in the first 3 principal components  -  {label}\n"
-        f"the {side*side}-node sheet inside {n_molecules:,} frameset molecules "
+        f"the {side*side}-node sheet inside {n_molecules:,} {args.cloud_label} "
         f"({'black dots' if args.style == 'points' else 'grey'}). "
         f"PC1-3 hold {variance[:3].sum()*100:.1f}% of the variance, so apparent folds are "
         "largely projection:\nlocal stretch has p90/p10 of only "
@@ -276,7 +284,7 @@ def main(argv: Optional[list] = None) -> int:
                 if args.style == "points"
                 else {"size": 1.6, "color": "rgba(130,130,130,0.35)"}
             ),
-            name="frameset molecules",
+            name=args.cloud_label,
             hoverinfo="skip",
         )
         if args.style == "points":
