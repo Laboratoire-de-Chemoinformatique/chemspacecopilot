@@ -136,6 +136,33 @@ two-dimensional object standing in for 256 dimensions, and the reconstruction
 error near 0.6 is the cost of that substitution regardless of how evenly the
 substitution is made.
 
+### The sEH set sits at the edge of this map
+
+![manifold against the sEH compounds](chembed_gtm_manifold_3d_seh.png)
+
+The same manifold against the 2,212 sEH compounds instead of the frameset
+([rotatable](chembed_gtm_manifold_3d_seh.html)). The compounds spill past the
+node envelope in several directions, and measuring the distance from each
+compound to its nearest node centre in the full 256 dimensions confirms it:
+
+| | median | p95 |
+|---|---|---|
+| frameset, which the map was fitted on | 7.28 | 9.41 |
+| sEH compounds | 8.70 | 12.19 |
+
+sEH compounds sit **1.20x farther** from the nearest node, and **27.5%** of
+them fall beyond the frameset's 95th percentile. More than a quarter of this
+target's chemistry lies in territory the map covers worse than 95% of its own
+training data.
+
+Responsibilities do not reveal this, and that is a trap worth naming. Median
+maximum responsibility is 0.991 for sEH against 0.994 for the frameset, so by
+that measure the compounds look confidently placed. GTM responsibilities are a
+softmax over nodes: a point far from every node still assigns almost all of its
+mass to the nearest one. **A confident assignment is not evidence of good
+coverage**, and reading the landscape without checking distance would silently
+treat extrapolation as interpolation.
+
 ## Why
 
 A GTM manifold is two-dimensional and the chembed latent is 256-dimensional.
