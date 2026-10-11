@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.11
+- Python 3.12
 - [uv](https://docs.astral.sh/uv/) package manager
 - A [DeepSeek](https://platform.deepseek.com/) API key for the default cloud backend, or a local [Ollama](https://ollama.com/) instance
 
@@ -33,6 +33,35 @@ support Linux x86_64 and macOS ARM64. Linux ARM64 currently lacks
 on a supported host. The new version uses chython and its matching TSV rules
 and policy preset. Historical CGRtools-based manuscript results retain their
 original software and asset manifests.
+
+## Model checkpoints
+
+Model weights are not shipped with the package. They download from Hugging Face
+on first use and are cached under `~/.cache/cs_copilot/models/`, except
+chembed's, which huggingface_hub caches itself.
+
+| Model | Repository | Size |
+|---|---|---|
+| deepchemography LSTM autoencoder | `axelrolov/lstm_autoencoder` | 8.8 MB |
+| chembed SELFIES transformer VAE | `3BioCompBio/chembed-default` | 227 MB |
+| Peptide WAE | `axelrolov/wae_peptides` | — |
+| GTM manifold (LSTM latents) | `axelrolov/chemspacecopilot-gtm` | 4 MB |
+| GTM manifold (chembed latents) | `axelrolov/chemspacecopilot-gtm-chembed` | 3.5 MB |
+
+The small-molecule latent engine is chosen with `AUTOENCODER_BACKEND`, either
+`chembed` (the default) or `deepchemography`. The two produce different,
+non-interchangeable 256-dimensional latent spaces, so switching also requires a
+GTM manifold fitted on the matching one; see
+[Tools](../architecture/tools.md#molecular-latent-engines). A manifold is refit
+with:
+
+```bash
+uv run --no-sync python scripts/refit_gtm_manifold.py \
+    --frameset gtm_frameset_training.csv \
+    --output ~/.cache/cs_copilot/models/gtm/GTM_manifold_chembed_900_225.pkl.gz
+```
+
+Peptide design keeps the deepchemography WAE regardless of this setting.
 
 ## Environment Configuration
 

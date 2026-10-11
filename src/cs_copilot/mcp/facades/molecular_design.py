@@ -41,12 +41,16 @@ class MolecularDesignerFacade:
     def _toolkit(self) -> Any:
         if self._inner is None:
             try:
-                from cs_copilot.tools.chemistry.autoencoder_toolkit import AutoencoderToolkit
+                from cs_copilot.tools.chemistry.autoencoder_toolkit import (
+                    make_autoencoder_toolkit,
+                )
                 from cs_copilot.tools.chemistry.molecular_designer_toolkit import (
                     MolecularDesignerToolkit,
                 )
 
-                self._inner = MolecularDesignerToolkit(autoencoder_toolkit=AutoencoderToolkit())
+                self._inner = MolecularDesignerToolkit(
+                    autoencoder_toolkit=make_autoencoder_toolkit()
+                )
             except Exception as exc:  # noqa: BLE001
                 raise backend_unavailable("Molecular designer", exc) from exc
         return self._inner

@@ -12,7 +12,11 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from cs_copilot.tools.constants import HUGGINGFACE_GTM_REPO, DEFAULT_GTM_MODEL_PATH
+from cs_copilot.tools.constants import (
+    DEFAULT_GTM_MODEL_PATH,
+    HUGGINGFACE_GTM_REPO,
+    HUGGINGFACE_GTM_REVISION,
+)
 
 
 def download_gtm_model(target_dir: str = None):
@@ -70,7 +74,7 @@ def download_gtm_model(target_dir: str = None):
     try:
         sd_kwargs = dict(
             repo_id=HUGGINGFACE_GTM_REPO,
-            revision="main",
+            revision=HUGGINGFACE_GTM_REVISION,
             local_dir=str(target_dir),
             allow_patterns=["*.pkl", "*.pkl.gz", "*.dill", "*.pt"],
         )

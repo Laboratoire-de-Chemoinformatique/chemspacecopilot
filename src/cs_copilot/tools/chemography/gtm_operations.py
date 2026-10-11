@@ -90,6 +90,7 @@ from ..constants import (
     GTM_MODEL_SUFFIXES,
     HTML_EXTENSION,
     HUGGINGFACE_GTM_REPO,
+    HUGGINGFACE_GTM_REVISION,
     MIN_ORGANISM_DATA_POINTS,
     PKL_GZ_EXTENSION,
     PNG_EXTENSION,
@@ -914,6 +915,7 @@ def resolve_gtm_model_path(
         logger.info(f"Downloading GTM model from HuggingFace: {HUGGINGFACE_GTM_REPO}")
         downloaded_path = snapshot_download(
             repo_id=HUGGINGFACE_GTM_REPO,
+            revision=HUGGINGFACE_GTM_REVISION,
             local_dir=str(default_path),
             local_dir_use_symlinks=False,
         )
@@ -1798,6 +1800,10 @@ def project_data_on_gtm(
     # -------------------------------------------------------------------------
     # Step 4: Validate descriptor compatibility via trial projection
     # -------------------------------------------------------------------------
+    # A trial projection only catches a width mismatch. Two latent models of the
+    # same width need the recorded backend tag to be told apart.
+    validate_gtm_descriptor_backend(gtm, prepared.effective_descriptor)
+
     # Validate descriptor compatibility by doing a trial projection
     logger.debug("Validating descriptor compatibility with GTM model...")
     try:
@@ -2998,16 +3004,131 @@ def _knn_indices(points: np.ndarray, k: int, metric: str = "euclidean") -> np.nd
     return neighbors
 
 
+def _as_numpy(value: Any) -> np.ndarray:
+    """Return *value* as a numpy array, detaching a torch tensor if needed."""
+    if hasattr(value, "detach"):
+        return value.detach().cpu().numpy()
+    return np.asarray(value)
+
+
+def latent_centers_from_gtm(
+    gtm: Any,
+    node_ids: Optional[Sequence[int]] = None,
+    scaler: Any = None,
+) -> np.ndarray:
+    """Return the descriptor-space centre of each GTM node.
+
+    The GTM manifold maps its 2D nodes back into descriptor space through
+    ``phi @ weights``. Decoding those centres with a generative model is what
+    turns a region of the map into molecules, so this is the inverse step that
+    map-guided generation needs.
+
+    The centres land in whichever space the manifold was fitted on. A manifold
+    fitted through :func:`train_latent_gtm` was fitted on externally scaled
+    vectors, so pass that run's ``scaler`` to recover the original latent.
+    Manifolds fitted on raw descriptors, as the default map is, need no scaler.
+
+    Note that a 2D manifold cannot carry a high-dimensional latent faithfully:
+    reconstructing a molecule through the default map leaves a relative error
+    around 0.6. Decoded node centres are therefore regional summaries, not
+    reconstructions of any particular molecule.
+
+    Args:
+        gtm: Fitted GTM exposing ``phi`` and ``weights``.
+        node_ids: 1-based node identifiers, matching the landscape tables. When
+            omitted, every node is returned in order.
+        scaler: Scaler fitted alongside the manifold, if it was fitted on scaled
+            vectors. ``None`` leaves the centres untouched.
+
+    Returns:
+        ``(len(node_ids), n_descriptor_dimensions)`` array of node centres.
+
+    Raises:
+        ValueError: If a node identifier is outside the manifold's range.
+    """
+    phi = _as_numpy(gtm.phi).astype(float)
+    weights = _as_numpy(gtm.weights).astype(float)
+    centers = phi @ weights
+
+    if node_ids is not None:
+        indices = np.asarray(node_ids, dtype=int) - 1
+        if indices.size and (indices.min() < 0 or indices.max() >= centers.shape[0]):
+            raise ValueError(
+                f"Node identifiers must be within 1..{centers.shape[0]}; "
+                f"got {np.asarray(node_ids).min()}..{np.asarray(node_ids).max()}."
+            )
+        centers = centers[indices]
+
+    if scaler is not None:
+        centers = scaler.inverse_transform(centers)
+    return centers
+
+
+def validate_gtm_descriptor_backend(gtm: Any, descriptor_type: str) -> None:
+    """Refuse a GTM manifold fitted on a different latent model.
+
+    The deepchemography autoencoder and chembed both produce 256-wide latents,
+    so a trial projection cannot tell them apart: the shapes agree and the
+    coordinates come back silently meaningless. Manifolds fitted after this
+    check existed carry a ``descriptor_backend`` tag; older ones do not, and
+    are let through with a warning rather than being rejected outright.
+
+    Args:
+        gtm: Loaded GTM model.
+        descriptor_type: Descriptor backend the caller is about to project.
+
+    Raises:
+        ValueError: If the manifold records a different descriptor backend.
+    """
+    recorded = getattr(gtm, "descriptor_backend", None)
+    expected = MolecularDescriptorEncoder(descriptor_type).default_descriptor
+    if recorded is None:
+        logger.warning(
+            "GTM manifold records no descriptor_backend; assuming %r. Latent spaces of equal "
+            "width cannot be distinguished by shape, so refit or re-tag the manifold to make "
+            "this check meaningful.",
+            expected,
+        )
+        return
+    if recorded != expected:
+        raise ValueError(
+            f"GTM manifold was fitted on {recorded!r} descriptors but {expected!r} descriptors "
+            f"were supplied. Both are the same width, so projection would succeed and return "
+            f"meaningless coordinates. Use a manifold fitted on {expected!r}, or set "
+            f"descriptor_type={recorded!r}."
+        )
+
+
+def shannon_entropy(responsibilities: np.ndarray) -> float:
+    """Normalized node-occupancy entropy of a GTM projection, in [0, 1].
+
+    Args:
+        responsibilities: ``(n_samples, n_nodes)`` projection responsibilities.
+
+    Returns:
+        1.0 when molecules spread evenly over the nodes, approaching 0.0 when
+        they pile onto a few.
+    """
+    cumR = responsibilities.sum(axis=0)
+    p = cumR / cumR.sum()
+    nonzero = p > 0
+    H = -np.sum(p[nonzero] * np.log(p[nonzero]))
+    K = responsibilities.shape[1]
+    return H / np.log(K)
+
+
 def resolve_neighborhood_metric(descriptor_type: str, metric: str = "auto") -> str:
     """
     Descriptor-space metric for neighbourhood preservation.
 
-    Morgan descriptors here are count fingerprints and use Tanimoto; autoencoder
+    Morgan descriptors here are count fingerprints and use Tanimoto; latent
     embeddings use Euclidean (``"auto"``) or cosine.
     """
-    allowed = {"morgan": ("tanimoto",), "autoencoder": ("euclidean", "cosine")}[
-        MolecularDescriptorEncoder(descriptor_type).default_descriptor
-    ]
+    allowed = {
+        "morgan": ("tanimoto",),
+        "autoencoder": ("euclidean", "cosine"),
+        "chembed": ("euclidean", "cosine"),
+    }[MolecularDescriptorEncoder(descriptor_type).default_descriptor]
     metric = allowed[0] if metric.lower() == "auto" else metric.lower()
     if metric not in allowed:
         raise ValueError(f"Use {allowed} for {descriptor_type} descriptors, not {metric!r}.")
@@ -3154,18 +3275,6 @@ def optimize_gtm(
             device = "cpu"
     else:
         logger.info("CUDA not available, using CPU for GTM optimization")
-
-    def shannon_entropy(responsibilities: np.ndarray) -> float:
-        """
-        Compute normalized node-occupancy entropy on the interval [0, 1].
-        """
-        cumR = responsibilities.sum(axis=0)
-        p = cumR / cumR.sum()
-        nonzero = p > 0
-        H = -np.sum(p[nonzero] * np.log(p[nonzero]))
-        K = responsibilities.shape[1]
-        E = H / np.log(K)
-        return E
 
     # Define the objective function for hyperparameter optimization
     def objective(trial):
@@ -4208,6 +4317,7 @@ def populate_gtm_data_from_latent_vectors(
     scaler: Any,
     sequences: Optional[List[str]] = None,
     source_df: Optional[pd.DataFrame] = None,
+    smiles: Optional[List[str]] = None,
 ) -> GTMData:
     """
     Populate a GTMData object from pre-computed latent vectors projected onto a latent GTM.
@@ -4222,6 +4332,9 @@ def populate_gtm_data_from_latent_vectors(
         scaler: StandardScaler fitted during training
         sequences: Optional list of peptide sequences (parallel to latent_vectors)
         source_df: Optional DataFrame with additional columns to include in source_mols
+        smiles: Optional list of SMILES (parallel to latent_vectors), for a
+            small-molecule latent map. Without it the structures are lost and
+            the map cannot report what occupies a region.
 
     Returns:
         Fully populated GTMData object ready for sampling
@@ -4242,8 +4355,16 @@ def populate_gtm_data_from_latent_vectors(
     # Compute 2D coordinates from responsibilities
     data.coords_mols = calculate_latent_coords(resps, correction=True, return_node=True)
 
-    # Build source_mols DataFrame with SEQUENCE column if available
-    if sequences is not None:
+    # Build source_mols DataFrame with the structure column, if either is given
+    if smiles is not None:
+        if len(smiles) != n_samples:
+            raise ValueError(
+                f"smiles has {len(smiles)} entries but there are {n_samples} latent vectors; "
+                "they are paired positionally."
+            )
+        smiles_df = pd.DataFrame({SMILES_COLUMN: smiles})
+        data.source_mols = pd.concat([data.coords_mols, smiles_df], axis=1)
+    elif sequences is not None:
         seq_df = pd.DataFrame({SEQUENCE_COLUMN: sequences})
         data.source_mols = pd.concat([data.coords_mols, seq_df], axis=1)
     elif source_df is not None and SEQUENCE_COLUMN in source_df.columns:
@@ -5072,14 +5193,6 @@ def train_latent_gtm(
         except Exception:
             logger.info("CUDA not functional, using CPU")
 
-    def shannon_entropy(responsibilities: np.ndarray) -> float:
-        cumR = responsibilities.sum(axis=0)
-        p = cumR / cumR.sum()
-        nonzero = p > 0
-        H = -np.sum(p[nonzero] * np.log(p[nonzero]))
-        K = responsibilities.shape[1]
-        return H / np.log(K)
-
     if config is not None:
         # Direct training with provided config
         n_basis_sqrt = config.get("n_basis_functions_sqrt", 10)
@@ -5095,9 +5208,10 @@ def train_latent_gtm(
             num_nodes=num_nodes,
             basis_width=basis_width,
             reg_coeff=reg_coeff,
+            max_iter=200,
             device=device,
         )
-        gtm.fit(torch.from_numpy(X_scaled).to(torch.float64), n_iterations=200)
+        gtm.fit(torch.from_numpy(X_scaled).to(torch.float64))
         resps, _ = gtm.project(torch.from_numpy(X_scaled).to(torch.float64))
         score = shannon_entropy(resps.cpu().numpy())
 
@@ -5155,9 +5269,10 @@ def train_latent_gtm(
             num_nodes=num_nodes,
             basis_width=bw,
             reg_coeff=rc,
+            max_iter=200,
             device=device,
         )
-        gtm_trial.fit(torch.from_numpy(X_scaled).to(torch.float64), n_iterations=200)
+        gtm_trial.fit(torch.from_numpy(X_scaled).to(torch.float64))
         resps, _ = gtm_trial.project(torch.from_numpy(X_scaled).to(torch.float64))
         return shannon_entropy(resps.cpu().numpy())
 
@@ -5174,9 +5289,10 @@ def train_latent_gtm(
         num_nodes=num_nodes,
         basis_width=best["basis_width"],
         reg_coeff=best["reg_coeff"],
+        max_iter=200,
         device=device,
     )
-    gtm.fit(torch.from_numpy(X_scaled).to(torch.float64), n_iterations=200)
+    gtm.fit(torch.from_numpy(X_scaled).to(torch.float64))
     resps, _ = gtm.project(torch.from_numpy(X_scaled).to(torch.float64))
     best_score = shannon_entropy(resps.cpu().numpy())
 

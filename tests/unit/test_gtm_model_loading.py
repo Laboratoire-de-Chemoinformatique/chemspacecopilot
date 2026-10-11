@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import gzip
+import logging
 from types import SimpleNamespace
 
 import dill
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -91,3 +93,127 @@ def test_corrupt_gzip_is_not_reinterpreted_as_plain_pickle(tmp_path, monkeypatch
     path.write_bytes(b"\x1f\x8btruncated")
     with pytest.raises((OSError, EOFError)):
         gtm_operations.load_gtm_model(str(path))
+
+
+class TestDescriptorBackendGuard:
+    """A manifold must refuse descriptors from a different latent model.
+
+    chembed and the deepchemography autoencoder both emit 256-wide latents, so
+    a trial projection cannot tell them apart: it succeeds and returns
+    meaningless coordinates. The recorded tag is the only defence.
+    """
+
+    def test_matching_backend_passes(self):
+        gtm = SimpleNamespace(descriptor_backend="chembed")
+        gtm_operations.validate_gtm_descriptor_backend(gtm, "chembed")
+
+    def test_aliases_resolve_to_the_same_family(self):
+        gtm = SimpleNamespace(descriptor_backend="autoencoder")
+        gtm_operations.validate_gtm_descriptor_backend(gtm, "latent")
+
+    @pytest.mark.parametrize(
+        ("recorded", "supplied"),
+        [("autoencoder", "chembed"), ("chembed", "autoencoder")],
+    )
+    def test_mismatched_backend_is_refused(self, recorded, supplied):
+        gtm = SimpleNamespace(descriptor_backend=recorded)
+        with pytest.raises(ValueError, match="meaningless coordinates"):
+            gtm_operations.validate_gtm_descriptor_backend(gtm, supplied)
+
+    def test_untagged_manifold_warns_but_is_allowed(self, caplog):
+        """Manifolds published before the tag existed must keep working."""
+        with caplog.at_level(logging.WARNING):
+            gtm_operations.validate_gtm_descriptor_backend(SimpleNamespace(), "autoencoder")
+
+        assert "no descriptor_backend" in caplog.text
+
+
+class TestLatentCentersFromGtm:
+    """Node centres are the inverse step map-guided generation needs."""
+
+    def _gtm(self, n_nodes=4, n_basis=3, n_dims=5):
+        return SimpleNamespace(
+            phi=torch.arange(n_nodes * n_basis, dtype=torch.float64).reshape(n_nodes, n_basis),
+            weights=torch.ones((n_basis, n_dims), dtype=torch.float64),
+        )
+
+    def test_returns_one_center_per_node(self):
+        centers = gtm_operations.latent_centers_from_gtm(self._gtm())
+
+        assert centers.shape == (4, 5)
+
+    def test_node_ids_are_one_based(self):
+        """Landscape tables number nodes from 1, so these do too."""
+        gtm = self._gtm()
+        every = gtm_operations.latent_centers_from_gtm(gtm)
+
+        selected = gtm_operations.latent_centers_from_gtm(gtm, node_ids=[1, 3])
+
+        assert selected.shape == (2, 5)
+        assert (selected[0] == every[0]).all()
+        assert (selected[1] == every[2]).all()
+
+    @pytest.mark.parametrize("bad", [[0], [5], [-1]])
+    def test_out_of_range_nodes_are_rejected(self, bad):
+        with pytest.raises(ValueError, match="within 1..4"):
+            gtm_operations.latent_centers_from_gtm(self._gtm(), node_ids=bad)
+
+    def test_scaler_is_applied_when_the_manifold_was_fitted_on_scaled_data(self):
+        """train_latent_gtm fits on scaled vectors and returns the scaler."""
+
+        class _Scaler:
+            def inverse_transform(self, x):
+                return x * 10.0
+
+        plain = gtm_operations.latent_centers_from_gtm(self._gtm())
+        unscaled = gtm_operations.latent_centers_from_gtm(self._gtm(), scaler=_Scaler())
+
+        assert (unscaled == plain * 10.0).all()
+
+    def test_accepts_numpy_attributes(self):
+        """A manifold restored from a frozen bundle holds arrays, not tensors."""
+        gtm = SimpleNamespace(phi=np.ones((3, 2)), weights=np.ones((2, 4)))
+
+        assert gtm_operations.latent_centers_from_gtm(gtm).shape == (3, 4)
+
+
+class TestTrainLatentGtm:
+    """The latent path must actually reach chemographykit's API.
+
+    GTM.fit takes only the data tensor; the iteration cap is a constructor
+    argument. Passing n_iterations to fit raised TypeError on every call, so
+    this path was unreachable.
+    """
+
+    def test_fixed_config_fits(self):
+        vectors = np.random.default_rng(0).standard_normal((120, 8))
+        config = {
+            "n_basis_functions_sqrt": 3,
+            "n_nodes_n_basis_diff": 3,
+            "basis_width": 1.0,
+            "reg_coeff": 100.0,
+        }
+
+        gtm, scaler, entropy = gtm_operations.train_latent_gtm(vectors, config=config)
+
+        assert gtm.num_nodes == 36
+        assert gtm.num_basis_functions == 9
+        assert 0.0 <= entropy <= 1.0
+        assert scaler is not None
+
+    def test_projection_and_centers_round_trip(self):
+        vectors = np.random.default_rng(1).standard_normal((80, 5))
+        config = {
+            "n_basis_functions_sqrt": 2,
+            "n_nodes_n_basis_diff": 2,
+            "basis_width": 1.0,
+            "reg_coeff": 100.0,
+        }
+        gtm, scaler, _ = gtm_operations.train_latent_gtm(vectors, config=config)
+
+        resps = gtm_operations.project_latent_on_gtm(vectors, gtm, scaler)
+        centers = gtm_operations.latent_centers_from_gtm(gtm, scaler=scaler)
+
+        assert resps.shape == (80, gtm.num_nodes)
+        # Centres come back in the original latent space, not the scaled one.
+        assert centers.shape == (gtm.num_nodes, 5)

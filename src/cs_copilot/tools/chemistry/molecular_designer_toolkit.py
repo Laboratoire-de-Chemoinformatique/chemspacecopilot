@@ -35,7 +35,7 @@ from cs_copilot.tools.io.session_memory import (
     update_state_targets,
 )
 
-from .autoencoder_toolkit import AutoencoderToolkit
+from .autoencoder_toolkit import AutoencoderToolkit, make_autoencoder_toolkit
 from .base_chemistry import ChemistryError
 from .standardize import standardize_smiles
 
@@ -61,7 +61,7 @@ class MolecularDesignRequest:
     generation_mode: str = "sample"
     temperature: float = 1.0
     decode_mode: str = "sample"
-    noise_scale: float = 0.1
+    noise_scale: Optional[float] = None
 
 
 @dataclass
@@ -404,7 +404,7 @@ class MolecularDesignerToolkit(Toolkit):
 
     def __init__(self, autoencoder_toolkit: Optional[AutoencoderToolkit] = None):
         super().__init__("molecular_designer")
-        self.autoencoder_toolkit = autoencoder_toolkit or AutoencoderToolkit()
+        self.autoencoder_toolkit = autoencoder_toolkit or make_autoencoder_toolkit()
         self.autoencoder_engine = AutoencoderDesignEngine(self.autoencoder_toolkit)
 
         self.register(self.list_design_engines)
@@ -448,7 +448,7 @@ class MolecularDesignerToolkit(Toolkit):
         generation_mode: str = "sample",
         temperature: float = 1.0,
         decode_mode: str = "sample",
-        noise_scale: float = 0.1,
+        noise_scale: Optional[float] = None,
         include_invalid: bool = False,
         return_format: SampleReturnFormat = "summary",
         session_key: str = "designed_molecules",
@@ -469,7 +469,8 @@ class MolecularDesignerToolkit(Toolkit):
             generation_mode: "sample", "analog", "neighborhood", or "interpolate".
             temperature: Sampling temperature for compatible engines.
             decode_mode: Decode mode for compatible engines.
-            noise_scale: Latent perturbation scale for analog generation.
+            noise_scale: Latent perturbation scale for analog generation. When
+                omitted, the active latent engine's own default is used.
             include_invalid: Whether to keep invalid candidates in returned/stored results.
             return_format: "summary" saves full results as a candidate-set artifact and
                 stores a compact session-state pointer; "list" returns all inline.
@@ -631,7 +632,7 @@ class MolecularDesignerToolkit(Toolkit):
         goal: str = "Generate close small-molecule analogs of the seed structure.",
         engine: str = "autoencoder",
         n_analogs: int = 10,
-        noise_scale: float = 0.1,
+        noise_scale: Optional[float] = None,
         temperature: float = 0.5,
         include_invalid: bool = False,
         return_format: SampleReturnFormat = "summary",
@@ -648,6 +649,7 @@ class MolecularDesignerToolkit(Toolkit):
             engine: "autoencoder" or "llm".
             n_analogs: Number of analogs to generate.
             noise_scale: Latent perturbation scale for the autoencoder engine.
+                When omitted, the active latent engine's own default is used.
             temperature: Sampling temperature.
             include_invalid: Whether to keep invalid candidates.
             return_format: "summary" or "list".

@@ -71,7 +71,14 @@ def _patch_lightweight_factory_toolkits(monkeypatch):
         "SessionMemoryToolkit",
         "SynPlannerToolkit",
     ):
-        monkeypatch.setattr(factory_module, name, _DummyToolkit)
+        if name == "AutoencoderToolkit":
+            # Built through make_autoencoder_toolkit so the latent engine is
+            # selectable; the toolkit class itself is unchanged.
+            monkeypatch.setattr(
+                factory_module, "make_autoencoder_toolkit", lambda *a, **kw: _DummyToolkit()
+            )
+        else:
+            monkeypatch.setattr(factory_module, name, _DummyToolkit)
 
 
 def test_team_keeps_session_history_without_cross_session_memories(monkeypatch, tmp_path):

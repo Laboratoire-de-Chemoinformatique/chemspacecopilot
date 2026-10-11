@@ -44,6 +44,14 @@ dependencies = [
     "numba>=0.62.1",
     "huggingface-hub<1.0",
     "deepchemography @ git+https://github.com/AxelRolov/deepchemography.git@301130e889a4697a876be2db8644cbba875ce0da",
+    # chembed is the small-molecule autoencoder; deepchemography above is retained
+    # because the peptide WAE (Case Study 4) still imports it.
+    "chembed==1.0.1",
+    "selfies>=2.1.2",
+    "chembl-structure-pipeline>=1.2.2",
+    "fastparquet>=2024.5.0",
+    "lightning>=2.4",
+    "setuptools>=70",
     "marimo>=0.18.4",
     "transformers>=4.57.3",
     "sentence-transformers>=5.2.0",
@@ -51,7 +59,7 @@ dependencies = [
     "prompt_toolkit>=3.0.0",
     "boto3>=1.42.30",
 ]
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.12,<3.13"
 readme = "README.md"
 license = {text = "MIT"}
 
@@ -199,6 +207,11 @@ docs = [
 # take torch from PyTorch's CUDA 13.0 index. Other platforms stay on PyPI. That index's
 # torchaudio wheels declare no torch pin, so keep the trio on the versions PyPI resolves.
 [tool.uv]
+# chembed declares these and imports none of them (checked against the import
+# block of every module in the package). Excluding them keeps TensorFlow, and
+# its missing aarch64/CUDA-13 wheel story, out of the image entirely.
+# Not torchmetrics: pytorch_lightning imports it at module level.
+exclude-dependencies = ["tensorflow", "tensorboard", "bio", "duckdb", "polars", "h5py"]
 constraint-dependencies = [
     "torch==2.10.0; sys_platform == 'linux' and platform_machine == 'aarch64'",
     "torchvision==0.25.0; sys_platform == 'linux' and platform_machine == 'aarch64'",
@@ -217,7 +230,7 @@ torchaudio = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux' and p
 
 [tool.black]
 line-length = 100
-target-version = ['py311']
+target-version = ['py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -241,7 +254,7 @@ known_third_party = ["mcp"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 exclude = [
     ".git",
     ".venv",

@@ -29,6 +29,7 @@ from .chemistry import (
     MolecularDesignerToolkit,
     PeptideDesignerToolkit,
     SynPlannerToolkit,
+    make_autoencoder_toolkit,
 )
 
 # GTM Toolkit
@@ -61,6 +62,7 @@ __all__ = [
     "BaseChemistryToolkit",
     "ChemicalSimilarityToolkit",
     "AutoencoderToolkit",
+    "make_autoencoder_toolkit",
     "MolecularDesignerToolkit",
     "PeptideDesignerToolkit",
     "SynPlannerToolkit",

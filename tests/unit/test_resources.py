@@ -285,7 +285,13 @@ class TestDetectCachedModels:
 
     def test_detect_cached_models_structure(self):
         result = _detect_cached_models()
-        assert set(result.keys()) == {"autoencoder", "peptide_designer", "gtm", "dbaasp_data"}
+        assert set(result.keys()) == {
+            "autoencoder",
+            "chembed",
+            "peptide_designer",
+            "gtm",
+            "dbaasp_data",
+        }
         for v in result.values():
             assert isinstance(v, bool)
 

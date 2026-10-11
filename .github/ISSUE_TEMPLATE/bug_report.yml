@@ -58,6 +58,6 @@ body:
       description: System details.
       placeholder: |
         - OS: Ubuntu 22.04
-        - Python: 3.11.x
+        - Python: 3.12.x
         - Docker: yes/no
         - USE_S3: true/false
