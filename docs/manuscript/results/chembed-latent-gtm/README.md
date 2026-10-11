@@ -106,6 +106,16 @@ The same 900 nodes, projected into the leading principal components of the
 frameset latents rather than laid out on the map grid. Rotatable version:
 [`chembed_gtm_manifold_3d.html`](chembed_gtm_manifold_3d.html).
 
+A second rendering draws the node centres as discrete red points over the
+compounds as black dots
+([PNG](chembed_gtm_manifold_3d_points.png),
+[rotatable](chembed_gtm_manifold_3d_points.html)), produced with
+`--style points`. It shows where the nodes actually sit instead of
+interpolating a surface between them, which makes two things plain: the nodes
+lie inside the compound cloud rather than beside it, and the cloud extends
+past the node envelope, because a node centre is a posterior mean and means do
+not reach the edges of the distribution they summarise.
+
 The sheet appears to fold through itself, and it is worth being careful about
 what that means. PC1, PC2 and PC3 hold 12.7%, 9.0% and 7.2% of the variance,
 **28.8% together**, so roughly seven tenths of the structure is projected away.
