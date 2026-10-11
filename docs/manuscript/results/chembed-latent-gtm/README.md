@@ -98,6 +98,34 @@ compounds with it and then perturb **real molecules** found there, rather than
 decoding the geometry itself. That is close to what the baseline already does,
 which is consistent with the baseline winning.
 
+## The manifold in three dimensions
+
+![chembed GTM manifold in PC1-3](chembed_gtm_manifold_3d.png)
+
+The same 900 nodes, projected into the leading principal components of the
+frameset latents rather than laid out on the map grid. Rotatable version:
+[`chembed_gtm_manifold_3d.html`](chembed_gtm_manifold_3d.html).
+
+The sheet appears to fold through itself, and it is worth being careful about
+what that means. PC1, PC2 and PC3 hold 12.7%, 9.0% and 7.2% of the variance,
+**28.8% together**, so roughly seven tenths of the structure is projected away.
+A surface that is smooth in 256 dimensions will self-intersect when squeezed
+into three.
+
+The local geometry says the sheet is in fact well behaved. Measuring latent
+distance per unit map distance across every grid edge gives a median of 23.5
+with a p90/p10 ratio of **1.5** and a coefficient of variation of 0.15. Equal
+steps on the map correspond to roughly equal moves in latent space wherever you
+stand on it, which is what makes map distance a fair proxy for chemical
+distance. The sheet also spans 91-93% of the data's standard deviation along
+each of the first three components, so it stretches across the cloud rather
+than hugging one part of it.
+
+None of that rescues decoding node centres. A regular sheet is still a
+two-dimensional object standing in for 256 dimensions, and the reconstruction
+error near 0.6 is the cost of that substitution regardless of how evenly the
+substitution is made.
+
 ## Why
 
 A GTM manifold is two-dimensional and the chembed latent is 256-dimensional.
