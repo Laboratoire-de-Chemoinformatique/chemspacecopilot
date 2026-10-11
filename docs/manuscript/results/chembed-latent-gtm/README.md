@@ -163,6 +163,59 @@ mass to the nearest one. **A confident assignment is not evidence of good
 coverage**, and reading the landscape without checking distance would silently
 treat extrapolation as interpolation.
 
+### Neighbourhood preservation
+
+Does proximity on the map mean chemical similarity? Neighbourhood preservation
+is the mean fraction of each molecule's k nearest neighbours in latent space
+that stay among its k nearest on the map. All figures below use n = 2,212, the
+size of the sEH set, because preservation falls as a sample grows and comparing
+unequal sizes measures the sizes.
+
+| k | chembed map | deepchemography map | fitted on the set itself | chance |
+|---|---|---|---|---|
+| 5 | 0.222 | 0.166 | 0.319 | 0.0025 |
+| 10 | 0.259 | 0.193 | 0.395 | 0.0048 |
+| 20 | 0.290 | 0.213 | 0.471 | 0.0086 |
+| 50 | 0.321 | 0.233 | 0.483 | 0.0226 |
+
+(sEH compounds; `scripts/evaluate_gtm_neighborhood.py`, full output in
+[`neighborhood_preservation.json`](neighborhood_preservation.json).)
+
+**The chembed map beats the deepchemography map by a steady 1.34-1.38x** at
+every k, on the same molecules, with both manifolds built to the same shape and
+fitted on the same 50,000 frameset molecules. The gap is the latent space, not
+the fitting. A check worth making first: the deepchemography toolkit silently
+substitutes `"C"` when encoding fails, which would give failed molecules
+identical latents and inflate its score, but all 2,212 latents came back
+distinct, so it never fired.
+
+Even so, at k = 10 only about a quarter of each compound's neighbours survive
+the projection. It is 61x chance, so the map is far from arbitrary, but three
+quarters of local neighbourhood is lost to 256 dimensions becoming two.
+
+**Fitting a map on the sEH set itself reaches 0.395, and that does not
+generalise.** The same configuration fitted on a random 2,212-molecule slice of
+the frameset scores **0.068** at k = 5, far worse than the published map's
+0.211 on those same molecules. The reason is visible in the responsibilities:
+
+| | median max responsibility | median 10-NN latent distance |
+|---|---|---|
+| frameset slice | 0.678 | 9.16 |
+| sEH set | 0.941 | 6.86 |
+
+A diffuse set spreads each molecule's responsibility over many nodes, so its map
+coordinate, a responsibility-weighted average of node positions, regresses
+toward the centre of the map and distinct molecules land on top of one another.
+A tight set lets each molecule claim a node. 900 nodes for 2,212 molecules is
+over-parameterised either way; sEH survives it because the set is focused, and
+the frameset slice does not.
+
+So the gain is not "fitting on your own data helps". It is that congeneric,
+focused sets map well at this node density and diffuse ones do not. For reading
+sEH structure the sEH-fitted map is the better instrument; the published map is
+the right choice when a coordinate system shared across datasets matters more
+than local fidelity.
+
 ## Why
 
 A GTM manifold is two-dimensional and the chembed latent is 256-dimensional.
