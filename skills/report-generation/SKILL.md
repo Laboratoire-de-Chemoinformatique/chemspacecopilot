@@ -36,6 +36,7 @@ metadata:
   required_tools:
     - report_save_markdown
     - report_save_rich
+    - report_get_evidence
   optional_tools:
     - session_list_session_objects
     - session_list_loadable_session_data
@@ -53,7 +54,7 @@ Use this skill when the user asks for a report, presentation artifact, or consol
 
 1. Inspect session memory with `session_list_session_objects`, `session_list_loadable_session_data`, and/or `session_summarize_session_memory` to identify available datasets, GTM maps, landscapes, candidate sets, synthesis plans, and figures.
 2. Choose the report type from the available session objects and the user request. Detect from session_state keys: `chemotype_analysis` → chemotype; `analysis_results.density_csv` → GTM density; `analysis_results.activity_csv` or `landscape_files` → GTM activity; molecular-designer/analog outputs → analog generation; `synplanner_plan` → synthesis; multiple present → combined. Common types: chemotype, GTM density, GTM activity, analog generation, molecular designer, synthesis, combined, custom.
-3. Load relevant CSV/DataFrame artifacts rather than inferring facts from chat. Use clean datasets for downstream summaries and include raw dataset provenance when present.
+3. Retrieve only the coverage or scaffold facts needed for this section with `report_get_evidence` (Agno: `get_report_evidence`). Find `evidence_path` in dataset/session metadata or scaffold analysis results. Select the named population explicitly: search-matched assays, retrieved activities, retained activities, contributing records, clean molecules, or selected GTM nodes. Fetch once and reuse the returned facts; do not load full identifier lists or evidence JSON into routine context. Load source CSVs only when investigating missing/conflicting evidence or additional analyses.
 4. Create or collect visualizations section by section. For activity landscape reports, include only figures that directly support the surrounding interpretation and mark discussed GTM nodes when possible.
 5. Include provenance paths for raw data, clean data, descriptor Parquet, standardization reports, GTM models, landscape CSVs, plots, generated candidates, and synthesis artifacts when present.
 6. For synthesis reports, source content in order: `session_state['synplanner_plan']` → prior tool/member `synthesis_report_data` → the visible SynPlanner response; do not regenerate routes. Verify real synthesis content (target SMILES plus route details, attempt summaries, visualization paths, or an explicitly labeled LLM fallback). Do not save an empty synthesis report.
@@ -65,6 +66,16 @@ Use this skill when the user asks for a report, presentation artifact, or consol
 - Markdown, HTML, or PDF report artifacts.
 - Clear references to source datasets and analysis artifacts.
 - Compact interpretation of the scientific result rather than a raw dump of tool output.
+
+## Numerical Evidence Rules
+
+- Use computed evidence for numerical claims. State the population and, for percentages, the denominator. A search-matched assay may have no retrieved or retained activity.
+- Never interpret distinct serialized identifier combinations as distinct entities. Pipe-joined IDs require splitting and global deduplication; categorical `describe().unique` / cell `nunique()` is not an assay or document count.
+- Carry evidence references in specialist handoffs, not full tables. Use the same evidence reader in team and single-agent workflows. Reuse a retrieved result within a report; request another page only if needed. Partial tables do not change population totals.
+- For exact scaffold counts, retain the structure definition, dataset version, selected node IDs or other selection, counted unit and population size. Do not generalize regional/sample counts to the entire dataset or confuse exact Murcko assignments with substructure matches.
+- Pass coverage/scaffold queries in `report_save_rich` / `save_rich_report`'s `evidence_requests` so tables are rendered from verified facts. For Markdown, use the same argument on the Markdown exporter. Narrative counts must agree with these facts.
+- Missing regional evidence does not invalidate independently verified whole-set facts; query the whole population when that is the scope of the requested claim.
+- Missing, stale, or conflicting evidence produces an explicitly **unresolved** claim. Do not replace it with a remembered count, a different repetition, or a plausible estimate. Verification establishes artifact consistency, not scientific validity or experimental confirmation.
 
 ## Figure and Structure Rules
 
