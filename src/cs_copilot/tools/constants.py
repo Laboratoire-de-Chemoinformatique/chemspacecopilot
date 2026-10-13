@@ -104,6 +104,10 @@ HUGGINGFACE_GTM_CHEMBED_REPO = "axelrolov/chemspacecopilot-gtm-chembed"
 HUGGINGFACE_GTM_CHEMBED_REVISION = os.getenv(
     "HUGGINGFACE_GTM_CHEMBED_REVISION", "ca1d609ba58a0b2074cee8779d28af8ce435b6ef"
 )
+# Kept apart from the LSTM cache on purpose: the resolver returns any loadable
+# file it finds in one directory, so two manifolds sharing a directory would
+# hand a projection the wrong latent space without failing, both being 256 wide.
+DEFAULT_GTM_CHEMBED_MODEL_PATH = os.path.expanduser("~/.cache/cs_copilot/models/gtm-chembed")
 
 # DBAASP antimicrobial peptide data
 DEFAULT_DBAASP_DATA_PATH = os.path.expanduser(

@@ -237,6 +237,29 @@ def test_sample_molecules_registers_autoencoder_candidate_set(monkeypatch, tmp_p
     assert artifact["candidates"] == ["CCO", "CCN"]
 
 
+def test_lstm_generation_audit_names_its_engine(monkeypatch):
+    """An LSTM audit names deepchemography rather than naming nothing.
+
+    chembed names itself, so an unnamed engine used to be the only way to tell
+    the two apart in an audit -- a reading that stopped holding once chembed
+    became the generation default.
+    """
+    monkeypatch.setattr(AutoencoderToolkit, "_ensure_model_exists", lambda self: None)
+    monkeypatch.setattr(AutoencoderToolkit, "_load_model", lambda self: None)
+    toolkit = AutoencoderToolkit(model_path="unused", device="cpu")
+    monkeypatch.setattr(toolkit, "validate_model_loaded", lambda: True)
+    monkeypatch.setattr(toolkit, "_latent_dim", lambda: 4)
+    monkeypatch.setattr(toolkit, "_decode_z", lambda z, **_kwargs: ["CCO"] * len(z))
+    toolkit.model = SimpleNamespace(eval=lambda: None)
+
+    toolkit.sample_from_latent(n_samples=2, temp=0.7, decode="sample")
+
+    settings = toolkit.last_generation_audit["settings"]
+    assert settings["backend"] == "deepchemography"
+    assert settings["temperature"] == 0.7
+    assert settings["decode_mode"] == "sample"
+
+
 class TestSampleCountDefault:
     """The prior-sampling default depends on the device.
 

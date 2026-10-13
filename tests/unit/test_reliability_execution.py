@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+import yaml
 
 ROBUSTNESS_DIR = Path(__file__).parents[1] / "robustness"
 sys.path.insert(0, str(ROBUSTNESS_DIR))
@@ -459,3 +461,50 @@ def test_dataframe_content_renders_instead_of_failing_the_completed_run():
     assert response_text_of(pd.DataFrame()) == str(pd.DataFrame())
     assert response_text_of(None) == ""
     assert response_text_of("") == ""
+
+
+class TestLatentEnginePinning:
+    """A suite pins its generation engine; it does not inherit one.
+
+    No prompt can select the latent engine, so without a pin "which engine
+    produced these molecules" is a property of the operator's shell rather than
+    of the config, and two runs of the same config can disagree silently.
+    """
+
+    def _config(self, tmp_path, latent_engine):
+        return RobustnessConfig(
+            output_dir=str(tmp_path / "reports"),
+            latent_engine=latent_engine,
+        )
+
+    def test_configured_engine_is_exported(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("AUTOENCODER_BACKEND", raising=False)
+
+        RobustnessRunner(self._config(tmp_path, "chembed"))
+
+        assert os.environ["AUTOENCODER_BACKEND"] == "chembed"
+
+    def test_config_overrides_an_inherited_environment(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("AUTOENCODER_BACKEND", "chembed")
+
+        RobustnessRunner(self._config(tmp_path, "deepchemography"))
+
+        assert os.environ["AUTOENCODER_BACKEND"] == "deepchemography"
+
+    def test_unset_engine_leaves_the_environment_alone(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("AUTOENCODER_BACKEND", "deepchemography")
+
+        RobustnessRunner(self._config(tmp_path, ""))
+
+        assert os.environ["AUTOENCODER_BACKEND"] == "deepchemography"
+
+    def test_unknown_engine_is_refused(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("AUTOENCODER_BACKEND", raising=False)
+
+        with pytest.raises(ValueError, match="latent_engine"):
+            RobustnessRunner(self._config(tmp_path, "lstm"))
+
+    def test_the_shipped_reliability_config_pins_an_engine(self):
+        config = yaml.safe_load((ROBUSTNESS_DIR / "manuscript_reliability.yaml").read_text())
+
+        assert config["general"]["latent_engine"] in {"chembed", "deepchemography"}

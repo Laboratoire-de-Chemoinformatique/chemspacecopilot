@@ -165,6 +165,10 @@ class RobustnessConfig:
     scientific_seed: Optional[int] = None
     stop_on_timeout: bool = False
     reliability_min_success_rate: float = 0.8
+    # Latent engine to generate molecules on, pinned for the whole suite. No
+    # prompt can select it, so a run that leaves this empty reports numbers from
+    # whichever engine the operator's environment happened to supply.
+    latent_engine: str = ""
     pricing: Dict[str, float] = field(default_factory=dict)
     inference_settings: Dict[str, Any] = field(default_factory=dict)
     tool_settings: Dict[str, Any] = field(default_factory=dict)
@@ -275,6 +279,7 @@ def load_config(config_path: Path) -> RobustnessConfig:
         scientific_seed=general.get("scientific_seed"),
         stop_on_timeout=general.get("stop_on_timeout", False),
         reliability_min_success_rate=general.get("reliability_min_success_rate", 0.8),
+        latent_engine=general.get("latent_engine", ""),
         pricing=model.get("pricing", {}),
         inference_settings=model.get("inference_settings", {}),
         tool_settings=data.get("tool_settings", {}),
@@ -302,6 +307,7 @@ class RobustnessRunner:
         self.test_run_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         self.system = getattr(config, "system", "team")
         self.results: Dict[str, Dict] = {}
+        self._pin_latent_engine()
 
         # Setup output directory (per-arm so team vs single_agent don't collide)
         self.output_dir = (
@@ -320,6 +326,36 @@ class RobustnessRunner:
 
         # Use shared S3SessionManager for safe session isolation
         self._s3_session_manager = S3SessionManager()
+
+    def _pin_latent_engine(self) -> None:
+        """Fix the generation engine for the suite, before any toolkit is built.
+
+        The engine is chosen by ``AUTOENCODER_BACKEND`` at construction time and
+        cannot be selected by a prompt, so leaving it to the ambient environment
+        makes "which engine produced these molecules" a property of the operator's
+        shell rather than of the config. An explicit setting is also what lets a
+        reproduction run pin ``deepchemography`` and say so.
+        """
+        engine = (getattr(self.config, "latent_engine", "") or "").strip().lower()
+        if not engine:
+            logger.info(
+                "latent_engine is unset; generation uses AUTOENCODER_BACKEND=%s",
+                os.environ.get("AUTOENCODER_BACKEND", "<unset, engine default>"),
+            )
+            return
+        if engine not in {"chembed", "deepchemography"}:
+            raise ValueError(
+                f"latent_engine must be 'chembed' or 'deepchemography', got {engine!r}"
+            )
+        previous = os.environ.get("AUTOENCODER_BACKEND")
+        if previous and previous.strip().lower() != engine:
+            logger.warning(
+                "Overriding AUTOENCODER_BACKEND=%s with latent_engine=%s from the config",
+                previous,
+                engine,
+            )
+        os.environ["AUTOENCODER_BACKEND"] = engine
+        logger.info("Pinned generation engine: AUTOENCODER_BACKEND=%s", engine)
 
     @property
     def prompt_generator(self):

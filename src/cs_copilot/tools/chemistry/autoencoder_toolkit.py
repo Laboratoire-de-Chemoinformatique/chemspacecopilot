@@ -427,11 +427,23 @@ class AutoencoderToolkit(BaseChemistryToolkit):
             return self.engine.default_noise_scale()
         return DEFAULT_NOISE_SCALE
 
+    @property
+    def backend_name(self) -> str:
+        """Name the latent engine actually behind this toolkit.
+
+        The LSTM is the engine that is present by its absence, so it is the one
+        that has to be named explicitly. Callers recording provenance use this
+        rather than the design-engine name, which stays ``"autoencoder"`` for
+        both engines.
+        """
+        return self.engine.name if self.engine is not None else "deepchemography"
+
     def _engine_info(self) -> Dict[str, Any]:
         """Return engine-specific model metadata."""
         if self.engine is not None:
             return self.engine.info()
         return {
+            "backend": self.backend_name,
             "vocabulary_size": len(self.vocab),
             "latent_dimension": self.config.d_z,
             "encoder_type": self.config.q_cell,
@@ -448,7 +460,15 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         """Return the decode settings actually applied, for the generation audit."""
         if self.engine is not None:
             return self.engine.decode_settings(temp=temp, decode=decode, max_len=max_len)
-        return {"temperature": temp, "decode_mode": decode, "max_length": max_len}
+        # Named here as chembed names itself, so every audit says which engine
+        # ran. Without it an LSTM audit was only one that mentioned no engine,
+        # which stopped being a safe reading once chembed became the default.
+        return {
+            "temperature": temp,
+            "decode_mode": decode,
+            "max_length": max_len,
+            "backend": self.backend_name,
+        }
 
     def validate_model_loaded(self) -> bool:
         """
@@ -739,6 +759,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
                     "origin_type": "generated",
                     "origin_agent": "autoencoder_toolkit",
                     "generation_engine": "autoencoder",
+                    "latent_engine": self.backend_name,
                 },
                 set_current_first=bool(sampled),
             )
@@ -758,6 +779,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
                 metadata={
                     "generation_audit": audit_metadata,
                     "count_attempted_scope": "requested_samples_not_backend_attempts",
+                    "latent_engine": self.backend_name,
                     "latent_std": latent_std,
                     "temperature": temperature,
                     "decode_mode": decode_mode,

@@ -156,6 +156,13 @@ The chembed manifold is refitted from the same pinned 50,000-molecule frameset
 with the LSTM manifold's hyperparameters unchanged, so the two maps differ only
 by the latent space they describe.
 
+`resolve_gtm_model_path` chooses between them from the descriptor family in
+play: `descriptor_type="chembed"` resolves to the chembed manifold,
+`"autoencoder"` to the LSTM one, and each caches into its own directory. The
+Chainlit "Default Map" selects the chembed family, matching the default
+generation engine; the LSTM stays reachable as `descriptor_type="autoencoder"`,
+kept as a fallback pending removal. A session that has pinned a map keeps it.
+
 Changing the engine therefore invalidates any manifold fitted on the previous
 latent space. `scripts/refit_gtm_manifold.py` refits one, reusing the published
 hyperparameters rather than re-tuning them.

@@ -755,9 +755,16 @@ def validate_retrosynthesis(output):
     if plan.get("plan_path"):
         fresh = bool(_artifact_bytes(output, plan["plan_path"], fresh=True))
     target = _canonical_smiles(plan.get("smiles"))
-    candidates = [
-        smiles for _, _, _, valid in _molecular_evidence(output, new=False) for smiles in valid
-    ]
+    # A candidate set is ranked by similarity to its seed, so an engine that
+    # reconstructs the seed exactly puts the seed itself at rank 0. The seed is
+    # the input, not an analogue of itself, and "the first valid analogue"
+    # means the first candidate that is not the seed.
+    candidates = []
+    for record, metadata, _unique, valid in _molecular_evidence(output, new=False):
+        seed = _canonical_smiles(
+            (metadata or {}).get("seed_smiles") or (record or {}).get("seed_smiles")
+        )
+        candidates.extend(smiles for smiles in valid if smiles != seed)
     target_matches = bool(target) and (not candidates or target in candidates)
     if "first valid" in str(output.get("prompt", "")).lower() and candidates:
         target_matches = target == candidates[0]
@@ -969,6 +976,30 @@ def validate_clarification(output: Mapping[str, Any]) -> List[ValidationResult]:
     )
 
 
+def validate_uncertain_relevance(output: Mapping[str, Any]) -> List[ValidationResult]:
+    """An ambiguous target abbreviation must be questioned, not silently resolved.
+
+    Retrieval guidance requires the agent to stop when a keyword, synonym or
+    target mapping has uncertain relevance. This is scored as its own case
+    because stopping is the correct outcome: inside a workflow case the same
+    behaviour reads as a failure to produce artifacts, which is how it was first
+    mistaken for a landscape-analysis regression.
+    """
+    return _validate_recovery(
+        output,
+        name="uncertain_relevance",
+        forbidden_tools=("fetch_compounds", "gtm_optimization"),
+        required_response=lambda response: "?" in response
+        and bool(
+            re.search(
+                r"(which|what|clarify|confirm|specify|ambiguous|uncertain|could (also )?(refer|mean))",
+                response,
+                re.I,
+            )
+        ),
+    )
+
+
 def validate_missing_gtm(output: Mapping[str, Any]) -> List[ValidationResult]:
     return _validate_recovery(
         output,
@@ -1011,6 +1042,7 @@ _VALIDATORS: Dict[str, Validator] = {
     "retrosynthesis": validate_retrosynthesis,
     "peptide_design": validate_peptide_design,
     "clarification": validate_clarification,
+    "uncertain_relevance": validate_uncertain_relevance,
     "missing_gtm": validate_missing_gtm,
     "missing_design_seed": validate_missing_design_seed,
     "invalid_retrosynthesis": validate_invalid_retrosynthesis,

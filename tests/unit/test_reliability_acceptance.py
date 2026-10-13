@@ -505,3 +505,72 @@ def test_descriptor_evidence_survives_state_that_cannot_be_json_serialised(tmp_p
         json.dumps(base["session_state"]["node_lookup_by_coords"])
 
     assert _check_of(evaluate_run("seh_analysis", base), "descriptor_artifact_registered")["passed"]
+
+
+class TestUncertainRelevance:
+    """Stopping to question an ambiguous target is the pass condition here.
+
+    The live workflow case scored the same behaviour as seven missing
+    artifacts, which read as a landscape-analysis regression until the response
+    was inspected. This validator scores the question itself.
+    """
+
+    QUESTION = (
+        "AR is ambiguous: it could refer to the androgen receptor, aldose "
+        "reductase, or amphiregulin. Which target did you mean?"
+    )
+
+    def test_question_without_retrieval_passes(self):
+        result = evaluate_run("uncertain_relevance", output(response=self.QUESTION))
+
+        assert result["task_success"] is True
+
+    def test_retrieving_anyway_fails(self):
+        run = output(
+            response=self.QUESTION,
+            telemetry={"tool_calls": [call("fetch_compounds")]},
+        )
+
+        assert "no_inappropriate_downstream_call" in failures(evaluate_run("uncertain_relevance", run))
+
+    def test_silently_picking_a_target_fails(self):
+        run = output(response="Retrieved 2,980 androgen receptor activities and built the map.")
+
+        assert "uncertain_relevance_response" in failures(
+            evaluate_run("uncertain_relevance", run)
+        )
+
+    def test_the_shipped_config_exercises_this_case(self):
+        config = yaml.safe_load(
+            (Path(__file__).parents[1] / "robustness/manuscript_reliability.yaml").read_text()
+        )
+        case = config["tests"]["recovery_uncertain_target_synonym"]
+
+        assert case["validator"] == "uncertain_relevance"
+        assert case["enabled"] is True
+
+
+def test_seed_reconstruction_is_not_the_first_analogue(tmp_path):
+    """A seed the engine reproduced exactly must not count as its own analogue.
+
+    Candidates are ranked by similarity to the seed, so an engine that
+    reconstructs the seed puts it at rank 0 with score 1.0. chembed does this
+    reliably, which made this check fail live runs where the agent correctly
+    planned the first genuine analogue.
+    """
+    analogue = _SEH_PARENT + "C"
+    run = molecular_output(tmp_path, smiles=(_SEH_PARENT, analogue))
+    run["prompt"] = "Run SynPlanner for the first valid generated analogue."
+    run["session_state"]["synplanner_plan"] = {
+        "smiles": analogue,
+        "routes": [],
+        "attempts": [{"stop_reason": "no_routes", "route_count": 0, "iterations": 100}],
+    }
+    run["response"] = "SynPlanner completed the search: no route was found."
+    run["telemetry"]["tool_calls"] = [call("plan_synthesis")]
+
+    assert "target_structure_resolved" not in failures(evaluate_run("retrosynthesis", run))
+
+    # Planning the seed itself is still wrong: it is the input, not an analogue.
+    run["session_state"]["synplanner_plan"]["smiles"] = _SEH_PARENT
+    assert "target_structure_resolved" in failures(evaluate_run("retrosynthesis", run))

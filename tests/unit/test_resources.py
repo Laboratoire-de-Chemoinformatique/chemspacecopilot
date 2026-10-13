@@ -290,6 +290,7 @@ class TestDetectCachedModels:
             "chembed",
             "peptide_designer",
             "gtm",
+            "gtm_chembed",
             "dbaasp_data",
         }
         for v in result.values():
@@ -350,6 +351,7 @@ class TestBuildRecommendations:
                 "autoencoder": True,
                 "peptide_designer": True,
                 "gtm": True,
+                "gtm_chembed": True,
                 "dbaasp_data": True,
             },
         }

@@ -15,6 +15,10 @@ from cs_copilot.tools.io.session_memory import load_candidate_set_artifact, reso
 
 
 class _FakeAutoencoderToolkit:
+    # The real toolkit names its latent engine here. The design engine is called
+    # "autoencoder" whichever engine is loaded, so this is what provenance uses.
+    backend_name = "chembed"
+
     def __init__(self):
         self.calls = []
 
@@ -97,9 +101,14 @@ def test_design_molecules_summary_saves_full_result_as_artifact(monkeypatch, tmp
         "CCO",
         "c1ccccc1",
     }
+    # generation_engine names the design engine, which stays "autoencoder" for
+    # both latent engines, so latent_engine is what identifies the model that
+    # actually wrote these structures.
+    assert shared_state["session_objects"]["compounds"]["cmp_001"]["latent_engine"] == "chembed"
     candidate_set = shared_state["session_objects"]["candidate_sets"]["cset_001"]
     assert candidate_set["origin_agent"] == "molecular_designer"
     assert candidate_set["generation_engine"] == "autoencoder"
+    assert "latent_engine" in candidate_set["metadata_keys"]
     assert candidate_set["compound_ids"] == ["cmp_001", "cmp_002"]
     assert candidate_set["artifact_path"] == summary["artifact_path"]
     assert summary["registered_candidate_set_id"] == "cset_001"

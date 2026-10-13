@@ -15,18 +15,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
+from reliability.validators import _VALIDATORS as _VALIDATOR_REGISTRY
 
-RELIABILITY_VALIDATORS = {
-    "execution_only",
-    "seh_analysis",
-    "molecular_generation",
-    "retrosynthesis",
-    "peptide_design",
-    "clarification",
-    "missing_gtm",
-    "missing_design_seed",
-    "invalid_retrosynthesis",
-}
+# Derived from the validators themselves. A second hand-maintained list drifts,
+# and the drift only surfaces as a config rejected for naming a validator that
+# does exist.
+RELIABILITY_VALIDATORS = frozenset(_VALIDATOR_REGISTRY)
 
 
 @dataclass
@@ -271,6 +265,7 @@ class GeneralConfigSchema:
     tier: str = "both"
     timeout_seconds: int = 0
     reliability_min_success_rate: float = 0.8
+    latent_engine: str = ""
 
     def validate(self):
         """Validate general configuration."""
@@ -287,6 +282,10 @@ class GeneralConfigSchema:
             raise ValueError("timeout_seconds must be zero or positive")
         if not 0 <= self.reliability_min_success_rate <= 1:
             raise ValueError("reliability_min_success_rate must be between 0 and 1")
+        if self.latent_engine and self.latent_engine not in {"chembed", "deepchemography"}:
+            raise ValueError(
+                f"latent_engine must be 'chembed' or 'deepchemography', got {self.latent_engine!r}"
+            )
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> GeneralConfigSchema:
@@ -302,6 +301,7 @@ class GeneralConfigSchema:
             tier=data.get("tier", "both"),
             timeout_seconds=data.get("timeout_seconds", 0),
             reliability_min_success_rate=data.get("reliability_min_success_rate", 0.8),
+            latent_engine=str(data.get("latent_engine", "") or "").strip().lower(),
         )
 
 

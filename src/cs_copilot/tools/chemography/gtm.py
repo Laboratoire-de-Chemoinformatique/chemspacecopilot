@@ -553,7 +553,7 @@ class GTMToolkit(BaseDRToolkit):
         """
         use_default = _auto_use_default(agent, use_default)
         resolved_model = gtm_operations.resolve_gtm_model_path(
-            gtm_file, agent=agent, use_default=use_default
+            gtm_file, agent=agent, use_default=use_default, descriptor_type=descriptor_type
         )
         result = gtm_operations.load_gtm_density_matrix(
             dataset_file, resolved_model, descriptor_type=descriptor_type, agent=agent
@@ -613,7 +613,7 @@ class GTMToolkit(BaseDRToolkit):
         else:
             # Resolve model path (will check session state path, then explicit, then default)
             resolved_model = gtm_operations.resolve_gtm_model_path(
-                gtm_model, agent=agent, use_default=use_default
+                gtm_model, agent=agent, use_default=use_default, descriptor_type=descriptor_type
             )
             # Load the model
             gtm_for_projection = gtm_operations.load_gtm_model(resolved_model)
@@ -1266,7 +1266,7 @@ class GTMToolkit(BaseDRToolkit):
         """
         use_default = _auto_use_default(agent, use_default)
         resolved_model = gtm_operations.resolve_gtm_model_path(
-            gtm_model, agent=agent, use_default=use_default
+            gtm_model, agent=agent, use_default=use_default, descriptor_type=descriptor_type
         )
         artifact = gtm_operations.create_activity_landscape_artifact(
             dataset,
@@ -1449,15 +1449,16 @@ class GTMToolkit(BaseDRToolkit):
             use_default: If True, force use of default model even when an
                 explicit path is provided.
             descriptor_type: Optional descriptor backend override. When omitted,
-                resolves from the agent's session state (``"autoencoder"`` for
-                the Default Map, ``"morgan"`` otherwise).
+                resolves from the agent's session state (``"chembed"`` for the
+                Default Map, ``"morgan"`` otherwise). It also decides which
+                published manifold a default resolution returns.
 
         Returns:
             Summary with path to preprocessed dataset CSV
         """
         use_default = _auto_use_default(agent, use_default)
         resolved_model = gtm_operations.resolve_gtm_model_path(
-            gtm_model_file, agent=agent, use_default=use_default
+            gtm_model_file, agent=agent, use_default=use_default, descriptor_type=descriptor_type
         )
         result = gtm_operations.project_data_on_gtm(
             dataset_file,

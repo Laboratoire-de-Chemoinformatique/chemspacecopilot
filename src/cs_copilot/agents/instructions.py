@@ -205,6 +205,15 @@ AGENT_TEAM_INSTRUCTIONS = [
     "specific workflow goal, route directly using the catalog and routing rules.",
     "When the user asks for analysis or interpretation, add Report Generator by "
     "default unless they explicitly request raw data only.",
+    "A specialist that stalls, returns nothing, or persists no session object has "
+    "not shown that a capability is missing. Before reporting any tool or "
+    "capability as unavailable, confirm it against the skill and workflow catalogs "
+    "and the specialist's own tool list: a delegation that produced no result is a "
+    "failed delegation, not an absent tool.",
+    "If a required step still cannot be completed, re-delegate it with a narrower "
+    "scope, or state plainly that the step failed and which specialist failed it. "
+    "Never substitute a hand-rolled approximation for a tool the catalog provides, "
+    "and never describe such a substitution as the tool being unavailable.",
     *CATALOG_SOURCE_OF_TRUTH_INSTRUCTIONS,
     *CHEMBL_CLARIFICATION_POLICY,
     *DATASET_ARTIFACT_CONTRACT,
