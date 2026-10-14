@@ -2953,9 +2953,9 @@ def calculate_map_ruggedness(df: pd.DataFrame, gtm: Any) -> str:
     density = get_density_matrix(resps)
 
     size = gtm.num_nodes
-    assert has_integer_sqrt(size), (
-        f"The resps array (len {size}) doesn't have an integer square root"
-    )
+    assert has_integer_sqrt(
+        size
+    ), f"The resps array (len {size}) doesn't have an integer square root"
     side_size = int(math.sqrt(size))
 
     density_grid = density.reshape(side_size, side_size)

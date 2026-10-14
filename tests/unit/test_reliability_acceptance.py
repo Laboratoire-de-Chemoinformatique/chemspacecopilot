@@ -531,14 +531,14 @@ class TestUncertainRelevance:
             telemetry={"tool_calls": [call("fetch_compounds")]},
         )
 
-        assert "no_inappropriate_downstream_call" in failures(evaluate_run("uncertain_relevance", run))
+        assert "no_inappropriate_downstream_call" in failures(
+            evaluate_run("uncertain_relevance", run)
+        )
 
     def test_silently_picking_a_target_fails(self):
         run = output(response="Retrieved 2,980 androgen receptor activities and built the map.")
 
-        assert "uncertain_relevance_response" in failures(
-            evaluate_run("uncertain_relevance", run)
-        )
+        assert "uncertain_relevance_response" in failures(evaluate_run("uncertain_relevance", run))
 
     def test_the_shipped_config_exercises_this_case(self):
         config = yaml.safe_load(
