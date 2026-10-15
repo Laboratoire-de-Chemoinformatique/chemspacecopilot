@@ -282,10 +282,20 @@ class GeneralConfigSchema:
             raise ValueError("timeout_seconds must be zero or positive")
         if not 0 <= self.reliability_min_success_rate <= 1:
             raise ValueError("reliability_min_success_rate must be between 0 and 1")
-        if self.latent_engine and self.latent_engine not in {"chembed", "deepchemography"}:
-            raise ValueError(
-                f"latent_engine must be 'chembed' or 'deepchemography', got {self.latent_engine!r}"
+        if self.latent_engine:
+            # The toolkit owns the engine names, including explicit spellings
+            # such as "deepchemography_lstm"; a second list here would drift.
+            from cs_copilot.tools.chemistry.autoencoder_toolkit import (
+                AutoencoderError,
+                resolve_autoencoder_backend,
             )
+
+            try:
+                resolve_autoencoder_backend(self.latent_engine)
+            except AutoencoderError as exc:
+                raise ValueError(
+                    f"latent_engine {self.latent_engine!r} is not a known engine: {exc}"
+                ) from exc
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> GeneralConfigSchema:

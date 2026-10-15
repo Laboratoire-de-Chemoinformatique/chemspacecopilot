@@ -982,6 +982,21 @@ DEFAULT_AUTOENCODER_BACKEND = "chembed"
 #: session state and descriptor aliases written as "autoencoder" keep resolving.
 _CONFIGURED_BACKEND_ALIASES = {"autoencoder", "default", ""}
 
+#: Unambiguous spellings accepted for the small-molecule LSTM engine.
+#:
+#: ``"deepchemography"`` names this engine after the package it loads
+#: ``LSTMAutoencoder`` from, and that same package ships the peptide WAE that
+#: ``peptide_designer_toolkit`` imports. They are unrelated models: retiring
+#: this small-molecule engine does not retire the dependency, and peptide
+#: design keeps needing it. ``"deepchemography_lstm"`` says which of the two is
+#: meant, and is the spelling to prefer in new prompts, configs and docs. The
+#: canonical value is unchanged so recorded provenance stays comparable.
+_BACKEND_ALIASES = {
+    "deepchemography_lstm": "deepchemography",
+    "lstm_autoencoder": "deepchemography",
+}
+_CANONICAL_BACKENDS = {"chembed", "deepchemography"}
+
 
 def resolve_autoencoder_backend(backend: Optional[str] = None) -> str:
     """Resolve which latent engine to use.
@@ -991,7 +1006,8 @@ def resolve_autoencoder_backend(backend: Optional[str] = None) -> str:
 
     Args:
         backend: Caller-supplied backend name, or None to consult the
-            environment. ``"autoencoder"`` means "the configured default".
+            environment. ``"autoencoder"`` means "the configured default";
+            ``"deepchemography_lstm"`` is the unambiguous spelling of the LSTM.
 
     Returns:
         Either ``"chembed"`` or ``"deepchemography"``.
@@ -1004,9 +1020,12 @@ def resolve_autoencoder_backend(backend: Optional[str] = None) -> str:
         name = os.getenv("AUTOENCODER_BACKEND", DEFAULT_AUTOENCODER_BACKEND).strip().lower()
     if name in _CONFIGURED_BACKEND_ALIASES:
         name = DEFAULT_AUTOENCODER_BACKEND
-    if name not in {"chembed", "deepchemography"}:
+    name = _BACKEND_ALIASES.get(name, name)
+    if name not in _CANONICAL_BACKENDS:
         raise AutoencoderError(
-            f"Unknown autoencoder backend {name!r}; expected 'chembed' or 'deepchemography'."
+            f"Unknown autoencoder backend {name!r}; expected 'chembed' or 'deepchemography' "
+            f"(spell the LSTM 'deepchemography_lstm' to distinguish it from the "
+            f"deepchemography package, which also provides the peptide WAE)."
         )
     return name
 

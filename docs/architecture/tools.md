@@ -83,6 +83,15 @@ rather than directly, so the choice is honoured. Set
 `AUTOENCODER_BACKEND=deepchemography` to reproduce the frozen manuscript
 results.
 
+**`deepchemography` names a package and an engine, and they are not the same
+thing.** The package ships two unrelated models: `LSTMAutoencoder`, the
+small-molecule engine chembed replaces, and `peptides.PeptideWAE`, which backs
+peptide design and has no chembed counterpart. Retiring the small-molecule
+engine therefore does not retire the dependency, and peptide generation keeps
+needing it. Write `deepchemography_lstm` when you mean the small-molecule
+engine: it resolves to the same engine as `deepchemography` and says which of
+the two you meant.
+
 **The variable selects the generation engine only.** Descriptor families pin
 their own engine: `autoencoder` is always the deepchemography LSTM and
 `chembed` is always chembed, whatever the variable says. Otherwise

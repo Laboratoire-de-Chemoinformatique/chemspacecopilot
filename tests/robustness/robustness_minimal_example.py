@@ -343,10 +343,18 @@ class RobustnessRunner:
                 os.environ.get("AUTOENCODER_BACKEND", "<unset, engine default>"),
             )
             return
-        if engine not in {"chembed", "deepchemography"}:
-            raise ValueError(
-                f"latent_engine must be 'chembed' or 'deepchemography', got {engine!r}"
-            )
+        # Canonicalise through the toolkit so an explicit spelling such as
+        # "deepchemography_lstm" pins the same engine, and so the environment
+        # downstream carries the canonical name.
+        from cs_copilot.tools.chemistry.autoencoder_toolkit import (
+            AutoencoderError,
+            resolve_autoencoder_backend,
+        )
+
+        try:
+            engine = resolve_autoencoder_backend(engine)
+        except AutoencoderError as exc:
+            raise ValueError(f"latent_engine {engine!r} is not a known engine: {exc}") from exc
         previous = os.environ.get("AUTOENCODER_BACKEND")
         if previous and previous.strip().lower() != engine:
             logger.warning(
