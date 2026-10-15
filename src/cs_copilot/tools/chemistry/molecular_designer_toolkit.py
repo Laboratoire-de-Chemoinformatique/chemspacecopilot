@@ -305,6 +305,9 @@ class AutoencoderDesignEngine:
                 "generation_mode": mode,
                 "n_requested": request.n_candidates,
                 "seed_smiles": request.seed_smiles,
+                # engine= stays "autoencoder" for both latent engines, so this
+                # is the only field that says which model wrote the structures.
+                "latent_engine": self.toolkit.backend_name,
             },
         )
 
@@ -510,6 +513,7 @@ class MolecularDesignerToolkit(Toolkit):
         )
         audit["seed_smiles"] = seed_smiles
         audit["engine"] = result.engine
+        audit["latent_engine"] = result.metadata.get("latent_engine")
         audit["generation_mode"] = generation_mode
         audit["requested_settings"] = {
             "temperature": temperature,
@@ -548,6 +552,7 @@ class MolecularDesignerToolkit(Toolkit):
                     "origin_type": "generated",
                     "origin_agent": "molecular_designer",
                     "generation_engine": result.engine,
+                    "latent_engine": result.metadata.get("latent_engine"),
                 },
                 set_current_first=bool(candidate_dicts),
             )

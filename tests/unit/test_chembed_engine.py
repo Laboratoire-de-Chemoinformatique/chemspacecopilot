@@ -8,6 +8,7 @@ checkpoint is never downloaded.
 """
 
 import sys
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import numpy as np
@@ -401,3 +402,51 @@ class TestDescriptorEnginePinning:
         monkeypatch.setenv("AUTOENCODER_BACKEND", "deepchemography")
 
         assert resolve_autoencoder_backend(None) == "deepchemography"
+
+
+class TestEngineNamingAndPeptideDependency:
+    """chembed replaces the small-molecule LSTM, not the deepchemography package.
+
+    The package provides two unrelated models: LSTMAutoencoder for small
+    molecules, which chembed supersedes, and the peptide WAE, which has no
+    chembed counterpart. A cleanup that reads "chembed is the autoencoder now,
+    drop deepchemography" would delete peptide generation.
+    """
+
+    def test_lstm_has_an_unambiguous_spelling(self):
+        from cs_copilot.tools.chemistry.autoencoder_toolkit import resolve_autoencoder_backend
+
+        assert resolve_autoencoder_backend("deepchemography_lstm") == "deepchemography"
+        assert resolve_autoencoder_backend("lstm_autoencoder") == "deepchemography"
+
+    def test_canonical_names_are_unchanged_so_records_stay_comparable(self):
+        from cs_copilot.tools.chemistry.autoencoder_toolkit import resolve_autoencoder_backend
+
+        assert resolve_autoencoder_backend("deepchemography") == "deepchemography"
+        assert resolve_autoencoder_backend("chembed") == "chembed"
+
+    def test_unknown_backend_explains_the_package_collision(self):
+        from cs_copilot.tools.chemistry.autoencoder_toolkit import (
+            AutoencoderError,
+            resolve_autoencoder_backend,
+        )
+
+        with pytest.raises(AutoencoderError, match="peptide WAE"):
+            resolve_autoencoder_backend("vae")
+
+    def test_peptide_designer_imports_the_package_independently(self):
+        """Peptide generation must not route through the small-molecule engine."""
+        source = (
+            Path(__file__).parents[2] / "src/cs_copilot/tools/chemistry/peptide_designer_toolkit.py"
+        ).read_text()
+
+        # Its own import of the package, not a call into the molecule engine.
+        assert "from deepchemography.peptides import" in source
+        assert "import LSTMAutoencoder" not in source
+        assert "resolve_autoencoder_backend" not in source
+
+    def test_the_dependency_is_still_declared(self):
+        """Retiring the LSTM engine must not remove the package peptides need."""
+        pyproject = (Path(__file__).parents[2] / "pyproject.toml").read_text()
+
+        assert "deepchemography" in pyproject

@@ -15,18 +15,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
+from reliability.validators import _VALIDATORS as _VALIDATOR_REGISTRY
 
-RELIABILITY_VALIDATORS = {
-    "execution_only",
-    "seh_analysis",
-    "molecular_generation",
-    "retrosynthesis",
-    "peptide_design",
-    "clarification",
-    "missing_gtm",
-    "missing_design_seed",
-    "invalid_retrosynthesis",
-}
+# Derived from the validators themselves. A second hand-maintained list drifts,
+# and the drift only surfaces as a config rejected for naming a validator that
+# does exist.
+RELIABILITY_VALIDATORS = frozenset(_VALIDATOR_REGISTRY)
 
 
 @dataclass
@@ -271,6 +265,7 @@ class GeneralConfigSchema:
     tier: str = "both"
     timeout_seconds: int = 0
     reliability_min_success_rate: float = 0.8
+    latent_engine: str = ""
 
     def validate(self):
         """Validate general configuration."""
@@ -287,6 +282,20 @@ class GeneralConfigSchema:
             raise ValueError("timeout_seconds must be zero or positive")
         if not 0 <= self.reliability_min_success_rate <= 1:
             raise ValueError("reliability_min_success_rate must be between 0 and 1")
+        if self.latent_engine:
+            # The toolkit owns the engine names, including explicit spellings
+            # such as "deepchemography_lstm"; a second list here would drift.
+            from cs_copilot.tools.chemistry.autoencoder_toolkit import (
+                AutoencoderError,
+                resolve_autoencoder_backend,
+            )
+
+            try:
+                resolve_autoencoder_backend(self.latent_engine)
+            except AutoencoderError as exc:
+                raise ValueError(
+                    f"latent_engine {self.latent_engine!r} is not a known engine: {exc}"
+                ) from exc
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> GeneralConfigSchema:
@@ -302,6 +311,7 @@ class GeneralConfigSchema:
             tier=data.get("tier", "both"),
             timeout_seconds=data.get("timeout_seconds", 0),
             reliability_min_success_rate=data.get("reliability_min_success_rate", 0.8),
+            latent_engine=str(data.get("latent_engine", "") or "").strip().lower(),
         )
 
 

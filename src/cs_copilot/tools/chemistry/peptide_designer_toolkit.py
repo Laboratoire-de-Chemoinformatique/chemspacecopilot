@@ -1416,7 +1416,14 @@ class PeptideDesignerToolkit(Toolkit):
             ) from e
 
     def _load_model(self):
-        """Load the trained Peptide Designer WAE model and vocabulary."""
+        """Load the trained Peptide Designer WAE model and vocabulary.
+
+        The peptide WAE ships in the same ``deepchemography`` package that
+        provides the small-molecule ``LSTMAutoencoder``, but it is an unrelated
+        model on an unrelated latent space. chembed replaces that small-molecule
+        engine and has no peptide counterpart, so retiring the LSTM must not
+        drop this dependency: peptide design would lose its only engine.
+        """
         try:
             from deepchemography.peptides import PeptideVocab, PeptideWAE, get_default_config
 

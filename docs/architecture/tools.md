@@ -83,6 +83,15 @@ rather than directly, so the choice is honoured. Set
 `AUTOENCODER_BACKEND=deepchemography` to reproduce the frozen manuscript
 results.
 
+**`deepchemography` names a package and an engine, and they are not the same
+thing.** The package ships two unrelated models: `LSTMAutoencoder`, the
+small-molecule engine chembed replaces, and `peptides.PeptideWAE`, which backs
+peptide design and has no chembed counterpart. Retiring the small-molecule
+engine therefore does not retire the dependency, and peptide generation keeps
+needing it. Write `deepchemography_lstm` when you mean the small-molecule
+engine: it resolves to the same engine as `deepchemography` and says which of
+the two you meant.
+
 **The variable selects the generation engine only.** Descriptor families pin
 their own engine: `autoencoder` is always the deepchemography LSTM and
 `chembed` is always chembed, whatever the variable says. Otherwise
@@ -155,6 +164,13 @@ one under results that depend on it:
 The chembed manifold is refitted from the same pinned 50,000-molecule frameset
 with the LSTM manifold's hyperparameters unchanged, so the two maps differ only
 by the latent space they describe.
+
+`resolve_gtm_model_path` chooses between them from the descriptor family in
+play: `descriptor_type="chembed"` resolves to the chembed manifold,
+`"autoencoder"` to the LSTM one, and each caches into its own directory. The
+Chainlit "Default Map" selects the chembed family, matching the default
+generation engine; the LSTM stays reachable as `descriptor_type="autoencoder"`,
+kept as a fallback pending removal. A session that has pinned a map keeps it.
 
 Changing the engine therefore invalidates any manifold fitted on the previous
 latent space. `scripts/refit_gtm_manifold.py` refits one, reusing the published

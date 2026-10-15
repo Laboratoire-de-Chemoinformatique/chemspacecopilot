@@ -82,6 +82,7 @@ from ..constants import (
     DEFAULT_DBAASP_DATA_PATH,
     DEFAULT_GRADIENT_MAX_LENGTH,
     DEFAULT_GRADIENT_THICKNESS,
+    DEFAULT_GTM_CHEMBED_MODEL_PATH,
     DEFAULT_GTM_MODEL_PATH,
     DEFAULT_LEGEND_FONT_SIZE,
     DEFAULT_NODE_THRESHOLD,
@@ -89,6 +90,8 @@ from ..constants import (
     DEFAULT_TICK_COUNT,
     GTM_MODEL_SUFFIXES,
     HTML_EXTENSION,
+    HUGGINGFACE_GTM_CHEMBED_REPO,
+    HUGGINGFACE_GTM_CHEMBED_REVISION,
     HUGGINGFACE_GTM_REPO,
     HUGGINGFACE_GTM_REVISION,
     MIN_ORGANISM_DATA_POINTS,
@@ -820,12 +823,41 @@ def _prepare_gtm_training_data(
     return _copy_prepared_gtm_data(prepared, cache_hit=False)
 
 
+def resolve_default_manifold(
+    agent: Optional[Agent] = None,
+    descriptor_type: Optional[str] = None,
+) -> tuple[str, str, str]:
+    """Return ``(repo, revision, cache directory)`` for the right default manifold.
+
+    A manifold is valid only for the latent space it was fitted on, so the
+    published default follows the descriptor family instead of being one fixed
+    repository. Morgan sessions take the LSTM branch and are unaffected by it:
+    they project fingerprints, which ``_assert_descriptor_backend_matches``
+    refuses against either latent manifold.
+
+    The two caches stay in separate directories because the resolver returns
+    whatever loadable file it finds there, and both latents are 256 wide, so a
+    shared directory would mean projecting onto the wrong manifold in silence.
+    """
+    family = MolecularDescriptorEncoder(
+        get_session_descriptor_type(agent, descriptor_type)
+    ).default_descriptor
+    if family == "chembed":
+        return (
+            HUGGINGFACE_GTM_CHEMBED_REPO,
+            HUGGINGFACE_GTM_CHEMBED_REVISION,
+            DEFAULT_GTM_CHEMBED_MODEL_PATH,
+        )
+    return (HUGGINGFACE_GTM_REPO, HUGGINGFACE_GTM_REVISION, DEFAULT_GTM_MODEL_PATH)
+
+
 def resolve_gtm_model_path(
     gtm_file: Optional[str] = None,
     *,
     agent: Optional[Agent] = None,
     use_default: bool = False,
     generate_framesets: bool = False,
+    descriptor_type: Optional[str] = None,
 ) -> str:
     """
     Resolve GTM model path with priority:
@@ -841,6 +873,9 @@ def resolve_gtm_model_path(
         agent: Optional Agent instance to check session state
         use_default: If True, force use of default model even if session model exists
         generate_framesets: When True, generate cached frameset CSVs when downloading
+        descriptor_type: Descriptor family the caller is about to project. It
+            decides which published manifold the default resolves to; when
+            omitted, the session's descriptor type decides.
 
     Returns:
         Resolved path to the GTM model file
@@ -878,13 +913,15 @@ def resolve_gtm_model_path(
         )
         use_default = True
 
-    # Priority 3: Default model resolution
-    logger.debug("Resolving default GTM model path")
+    # Priority 3: Default model resolution, on the manifold fitted for this
+    # descriptor family rather than on one fixed repository.
+    repo_id, revision, cache_dir = resolve_default_manifold(agent, descriptor_type)
+    logger.debug("Resolving default GTM model path from %s", repo_id)
 
     tried: list[str] = []
 
     # Try default directory
-    default_path = Path(DEFAULT_GTM_MODEL_PATH).expanduser()
+    default_path = Path(cache_dir).expanduser()
     if default_path.exists():
         # Look for model files in the default directory
         for suffix in GTM_MODEL_SUFFIXES:
@@ -912,10 +949,10 @@ def resolve_gtm_model_path(
 
         default_path.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Downloading GTM model from HuggingFace: {HUGGINGFACE_GTM_REPO}")
+        logger.info(f"Downloading GTM model from HuggingFace: {repo_id}@{revision}")
         downloaded_path = snapshot_download(
-            repo_id=HUGGINGFACE_GTM_REPO,
-            revision=HUGGINGFACE_GTM_REVISION,
+            repo_id=repo_id,
+            revision=revision,
             local_dir=str(default_path),
             local_dir_use_symlinks=False,
         )
@@ -935,7 +972,7 @@ def resolve_gtm_model_path(
                 return model_path
 
         tried.append(
-            f"HuggingFace repo {HUGGINGFACE_GTM_REPO} "
+            f"HuggingFace repo {repo_id} "
             f"(download succeeded but no files matching {list(GTM_MODEL_SUFFIXES)})"
         )
     except ImportError:
@@ -943,7 +980,7 @@ def resolve_gtm_model_path(
         tried.append("HuggingFace (huggingface_hub package not installed)")
     except Exception as e:
         logger.warning(f"Failed to download from HuggingFace: {e}")
-        tried.append(f"HuggingFace repo {HUGGINGFACE_GTM_REPO} ({e})")
+        tried.append(f"HuggingFace repo {repo_id} ({e})")
 
     bullets = "\n  - ".join(tried)
     raise FileNotFoundError(
@@ -952,7 +989,7 @@ def resolve_gtm_model_path(
         "Fix by one of:\n"
         "  - Pass an explicit model path via the `gtm_file`/`gtm_model` argument.\n"
         f"  - Place a GTM model file (e.g. *.pkl.gz) in {default_path}.\n"
-        f"  - Ensure the HuggingFace repo {HUGGINGFACE_GTM_REPO} exists and is accessible "
+        f"  - Ensure the HuggingFace repo {repo_id} exists and is accessible "
         "(run `huggingface-cli login` if it is gated)."
     )
 
@@ -3743,8 +3780,7 @@ def create_activity_landscape_artifact(
     normalized_renderer = _normalize_landscape_renderer(renderer)
 
     logger.info(
-        f"Creating {normalized_renderer} activity landscapes for {dataset} "
-        f"with model {gtm_model}"
+        f"Creating {normalized_renderer} activity landscapes for {dataset} with model {gtm_model}"
     )
 
     try:
@@ -3764,7 +3800,7 @@ def create_activity_landscape_artifact(
         # Generate output paths (embed renderer + detected type so altair/plotly
         # variants produced in the same run do not collide).
         artifact_base = (
-            f"{Path(dataset).stem}_gtm_activity_landscape_" f"{normalized_renderer}_{detected_type}"
+            f"{Path(dataset).stem}_gtm_activity_landscape_{normalized_renderer}_{detected_type}"
         )
         s3_html = _chemical_space_artifact_path(
             f"{artifact_base}{HTML_EXTENSION}",

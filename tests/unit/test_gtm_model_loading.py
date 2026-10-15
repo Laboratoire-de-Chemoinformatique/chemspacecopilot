@@ -217,3 +217,58 @@ class TestTrainLatentGtm:
         assert resps.shape == (80, gtm.num_nodes)
         # Centres come back in the original latent space, not the scaled one.
         assert centers.shape == (gtm.num_nodes, 5)
+
+
+class TestDefaultManifoldFollowsDescriptor:
+    """The default map is per latent space, not one fixed repository.
+
+    Both latents are 256 wide, so projecting chembed vectors onto the LSTM
+    manifold returns coordinates that are meaningless but never raise. The
+    published default therefore has to follow the descriptor family.
+    """
+
+    def _agent(self, descriptor):
+        return SimpleNamespace(
+            session_state={gtm_operations.SESSION_DESCRIPTOR_TYPE_KEY: descriptor}
+        )
+
+    def test_chembed_sessions_get_the_chembed_manifold(self):
+        repo, revision, cache = gtm_operations.resolve_default_manifold(self._agent("chembed"))
+
+        assert repo == gtm_operations.HUGGINGFACE_GTM_CHEMBED_REPO
+        assert revision == gtm_operations.HUGGINGFACE_GTM_CHEMBED_REVISION
+        assert cache == gtm_operations.DEFAULT_GTM_CHEMBED_MODEL_PATH
+
+    def test_autoencoder_sessions_keep_the_lstm_manifold(self):
+        repo, revision, cache = gtm_operations.resolve_default_manifold(self._agent("autoencoder"))
+
+        assert repo == gtm_operations.HUGGINGFACE_GTM_REPO
+        assert revision == gtm_operations.HUGGINGFACE_GTM_REVISION
+        assert cache == gtm_operations.DEFAULT_GTM_MODEL_PATH
+
+    def test_explicit_descriptor_outranks_the_session(self):
+        repo, _, _ = gtm_operations.resolve_default_manifold(self._agent("autoencoder"), "chembed")
+
+        assert repo == gtm_operations.HUGGINGFACE_GTM_CHEMBED_REPO
+
+    def test_the_two_caches_are_separate_directories(self):
+        # One directory would mean the resolver returning whichever manifold it
+        # happened to find there first, with nothing to catch the mismatch.
+        assert (
+            gtm_operations.DEFAULT_GTM_CHEMBED_MODEL_PATH != gtm_operations.DEFAULT_GTM_MODEL_PATH
+        )
+
+    def test_chembed_default_resolves_into_the_chembed_cache(self, tmp_path, monkeypatch):
+        chembed_cache = tmp_path / "gtm-chembed"
+        chembed_cache.mkdir()
+        chembed_map = chembed_cache / "chembed.pkl.gz"
+        chembed_map.write_text("placeholder")
+        monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_CHEMBED_MODEL_PATH", str(chembed_cache))
+        monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_MODEL_PATH", str(tmp_path / "gtm-lstm"))
+        monkeypatch.setattr(gtm_operations, "load_gtm_model", lambda _path: object())
+
+        resolved = gtm_operations.resolve_gtm_model_path(
+            agent=self._agent("chembed"), use_default=True
+        )
+
+        assert resolved == str(chembed_map)

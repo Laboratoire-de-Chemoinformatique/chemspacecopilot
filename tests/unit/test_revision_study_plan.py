@@ -1,4 +1,4 @@
-"""The declared matrix must never accidentally run 72 or duplicate60 studies."""
+"""The declared matrix is 48 frozen + 24 live; it must never silently change size."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ planner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(planner)
 
 
-def test_counterbalanced_matrix_is_exactly_48_frozen_plus_12_live(tmp_path):
+def test_counterbalanced_matrix_is_exactly_48_frozen_plus_24_live(tmp_path):
     base = yaml.safe_load((ROOT / "tests/robustness/manuscript_reliability.yaml").read_text())
     fixtures = {
         key: {"required": True, "session_state_path": key, "sha256": "a" * 64}
@@ -26,8 +26,16 @@ def test_counterbalanced_matrix_is_exactly_48_frozen_plus_12_live(tmp_path):
     )
     assert len(batches) == 9
     assert sum(batch["expected_executions"] for batch in batches[:6]) == 48
-    assert sum(batch["expected_executions"] for batch in batches[6:]) == 12
+    assert sum(batch["expected_executions"] for batch in batches[6:]) == 24
     assert [b["arm_order"] for b in batches[:6]] == ["team-first", "single-agent-first"] * 3
+    # Live runs both arms, counterbalanced across repetitions, so that the
+    # architecture comparison is not confounded with ChEMBL drift between arms.
+    assert all(b["system"] == "both" for b in batches[6:])
+    assert [b["arm_order"] for b in batches[6:]] == [
+        "team-first",
+        "single-agent-first",
+        "team-first",
+    ]
     cells = set()
     for batch in batches[:6]:
         config = batch["configuration"]

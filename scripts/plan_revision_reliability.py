@@ -157,9 +157,13 @@ def build_matrix(
                 "tier": "live",
                 "global_prompt_variant": 0,
                 "global_repetition": repetition,
-                "system": "team",
-                "arm_order": "team-first",
-                "expected_executions": 4,
+                "system": "both",
+                # Counterbalanced like the frozen batches. Running both arms in
+                # one batch also holds the ChEMBL state fixed between them: the
+                # live tier retrieves prospectively, so arms measured hours
+                # apart would differ by data drift as well as by architecture.
+                "arm_order": "team-first" if repetition % 2 == 0 else "single-agent-first",
+                "expected_executions": 8,
                 "configuration": config,
             }
         )
@@ -278,8 +282,8 @@ def prepare(args):
         "provider_credential": "Ambient DEEPSEEK_API_KEY; its value is never recorded",
         "local_index_mapping": "Each config contains one explicit variant and repetition. Aggregate using global indices in this plan; retain original local indices.",
         "frozen_executions": 48,
-        "live_stage_executions": 12,
-        "total_executions": 60,
+        "live_stage_executions": 24,
+        "total_executions": 72,
         "batches": batches,
     }
     (output / "study_plan.json").write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n")

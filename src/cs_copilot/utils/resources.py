@@ -18,10 +18,12 @@ from typing import Any, Dict, List, Optional
 from cs_copilot.tools.constants import (
     DEFAULT_AUTOENCODER_MODEL_PATH,
     DEFAULT_DBAASP_DATA_PATH,
+    DEFAULT_GTM_CHEMBED_MODEL_PATH,
     DEFAULT_GTM_MODEL_PATH,
     DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH,
     HUGGINGFACE_AUTOENCODER_REPO,
     HUGGINGFACE_CHEMBED_REPO,
+    HUGGINGFACE_GTM_CHEMBED_REPO,
     HUGGINGFACE_GTM_REPO,
     HUGGINGFACE_PEPTIDE_WAE_REPO,
 )
@@ -210,6 +212,9 @@ def _detect_cached_models() -> Dict[str, bool]:
         "chembed": _hf_repo_is_cached(HUGGINGFACE_CHEMBED_REPO),
         "peptide_designer": _dir_has_files(DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH),
         "gtm": _dir_has_files(DEFAULT_GTM_MODEL_PATH),
+        # The chembed manifold caches separately, because a shared directory
+        # would let the resolver return a manifold fitted on the other latent.
+        "gtm_chembed": _dir_has_files(DEFAULT_GTM_CHEMBED_MODEL_PATH),
         "dbaasp_data": Path(DEFAULT_DBAASP_DATA_PATH).is_file(),
     }
 
@@ -270,6 +275,8 @@ def _build_recommendations(profile: Dict[str, Any]) -> List[str]:
         not_cached.append(f"Peptide Designer ({HUGGINGFACE_PEPTIDE_WAE_REPO})")
     if not models["gtm"]:
         not_cached.append(f"GTM ({HUGGINGFACE_GTM_REPO})")
+    if not models.get("gtm_chembed"):
+        not_cached.append(f"GTM chembed ({HUGGINGFACE_GTM_CHEMBED_REPO})")
 
     if not_cached:
         recs.append(

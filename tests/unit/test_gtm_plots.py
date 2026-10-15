@@ -936,7 +936,7 @@ def test_gtm_toolkit_create_activity_landscapes_forwards_renderer(monkeypatch):
 
     captured = {}
 
-    def _fake_resolve(gtm_model, *, agent=None, use_default=False):
+    def _fake_resolve(gtm_model, *, agent=None, use_default=False, descriptor_type=None):
         return "resolved/model.pkl.gz"
 
     def _fake_artifact(

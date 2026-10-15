@@ -4,9 +4,23 @@
 #   Prospective ChEMBL retrieval for Cases 1-3; Case 4 orchestrates a pinned
 #   public aggregate peptide landscape, not fresh DBAASP retrieval or retraining.
 #   Both tiers reuse the same cached checkpoint files; each run has fresh state.
+#   Case 1 names its search keywords and marks them confirmed. Retrieval
+#   guidance makes the agent stop and ask when a synonym's relevance is
+#   uncertain, and with no human to answer that ends the run having retrieved
+#   nothing, scoring as seven missing artifacts rather than as the correct
+#   question. Authorising only these keywords keeps the cell measuring the
+#   analysis; recovery_uncertain_target_synonym measures the question itself.
 # Frozen tier:
 #   Uses versioned session-state snapshots to isolate orchestration/tool reliability
 #   from changing ChEMBL/model artifacts. Required fixtures never fall back to live data.
+# Latent engine:
+#   Generation prompts name the "autoencoder design engine", which is the engine=
+#   argument of the design tools and picks it over the LLM engine. It does not name
+#   a latent engine: no prompt can, because the engine is fixed before the agent
+#   starts. general.latent_engine below pins it and overrides AUTOENCODER_BACKEND,
+#   so a run cannot inherit an engine from the operator's shell. Set it to
+#   deepchemography to reproduce earlier results recorded on the LSTM. Every
+#   run's generation audit records the backend that ran.
 general:
   n_variations: 2
   repetitions: 3
@@ -18,6 +32,7 @@ general:
   tier: "both"
   timeout_seconds: 1800
   reliability_min_success_rate: 0.80
+  latent_engine: "chembed"
 
 model:
   provider: "deepseek"
@@ -41,7 +56,11 @@ tests:
         validator: "seh_analysis"
         prompt: >-
           Analyze the chemical space of human soluble epoxide hydrolase
-          (sEH/EPHX2). Use Homo sapiens binding and functional assays from ChEMBL
+          (sEH/EPHX2). Search ChEMBL with exactly these keywords, which are
+          confirmed correct for this target and need no further confirmation:
+          EPHX2, soluble epoxide hydrolase, epoxide hydrolase 2. Do not add
+          other synonyms. Raise any other ambiguity you find as usual.
+          Use Homo sapiens binding and functional assays from ChEMBL
           with no mechanism-of-action filter. Complete the retrieval preflight,
           retrieve and describe the clean dataset, use the cached default GTM map,
           and use descriptor_type=autoencoder for all GTM loading, projection, and
@@ -53,7 +72,7 @@ tests:
         prompt: >-
           Using the sEH activity landscape and compounds from this session, generate
           10 analogues of the highly active compound CHEMBL3327073 with the
-          autoencoder. Its seed SMILES is
+          autoencoder design engine. Its seed SMILES is
           CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
           Return the valid generated structures and retain CHEMBL3327073 and the
           seed SMILES as parent provenance.
@@ -133,20 +152,20 @@ tests:
       sha256: "${CS_COPILOT_SEH_ANALYSIS_SHA256}"
     prompt_variants:
       - >-
-        Generate 10 autoencoder analogues of CHEMBL3327073, guided by the preloaded
-        sEH activity landscape. The seed SMILES is
+        Generate 10 analogues of CHEMBL3327073 with the autoencoder design engine,
+        guided by the preloaded sEH activity landscape. The seed SMILES is
         CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
         Return valid structures, report the actual number obtained, and preserve
         the parent identifier and seed SMILES as provenance.
       - >-
-        From the current sEH GTM analysis, use the autoencoder to design 10 analogues
-        around CHEMBL3327073 with seed SMILES
+        From the current sEH GTM analysis, use the autoencoder design engine to
+        design 10 analogues around CHEMBL3327073 with seed SMILES
         CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
         Register the valid resulting candidate set, report its actual size, and
         retain the parent identifier and seed SMILES.
       - >-
-        Use the autoencoder and the session's sEH activity map to sample 10
-        candidate analogues of CHEMBL3327073, starting from seed SMILES
+        Use the autoencoder design engine and the session's sEH activity map to
+        sample 10 candidate analogues of CHEMBL3327073, starting from seed SMILES
         CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1.
         Report the valid generated structures and actual count, retaining the
         parent identifier and seed SMILES as provenance.
@@ -211,6 +230,18 @@ tests:
     description: "Ambiguous opening prompt should elicit clarification without work"
     prompt_variants:
       - "Explore a chemical space for me."
+
+  recovery_uncertain_target_synonym:
+    enabled: true
+    tier: "frozen"
+    validator: "uncertain_relevance"
+    description: "An ambiguous target abbreviation should be questioned before retrieval"
+    prompt_variants:
+      # "AR" is androgen receptor, aldose reductase and amphiregulin. Retrieval
+      # guidance requires the agent to ask rather than pick one, and this case
+      # exists so that stopping is scored as success: inside the live workflow
+      # case the same behaviour only showed up as missing artifacts.
+      - "Retrieve ChEMBL binding data for AR and analyze the chemical space."
 
   recovery_missing_gtm:
     enabled: true
