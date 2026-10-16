@@ -47,3 +47,4 @@ docker-compose.chembl-local.yml
 
 # Manuscript evidence: kept locally, never published.
 docs/manuscript/
+synplan_data
