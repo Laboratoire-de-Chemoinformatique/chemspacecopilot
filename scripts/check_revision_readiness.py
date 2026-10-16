@@ -313,10 +313,16 @@ def check_readiness(
         prerequisite_cases[name] = item
 
     if "seh_analysis" in validators:
-        gtm_root = home / ".cache/cs_copilot/models/gtm"
+        # Each descriptor family caches its manifold in its own directory, so a
+        # chembed session's map is not under the LSTM path. Accept either.
+        gtm_roots = (
+            home / ".cache/cs_copilot/models/gtm",
+            home / ".cache/cs_copilot/models/gtm-chembed",
+        )
         model_files["cached_gtm"] = [
             artifact(str(item), base=project_root, env=env, home=home)
-            for item in sorted(gtm_root.glob("*.pkl*"))
+            for root in gtm_roots
+            for item in sorted(root.glob("*.pkl*"))
         ]
         cached_map_present = any(item["status"] == "present" for item in model_files["cached_gtm"])
         for name, spec in selected.items():

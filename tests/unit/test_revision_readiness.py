@@ -281,3 +281,30 @@ def test_readiness_accepts_a_populated_chembed_manifold_cache(tmp_path, versions
     assert not any("chembed manifold" in blocker for blocker in report["blockers"]), report[
         "blockers"
     ]
+
+
+def test_cached_chembed_manifold_satisfies_the_seh_map_requirement(tmp_path, versions):
+    """A chembed session's map lives in the chembed cache, not the LSTM one.
+
+    The check globbed ~/.cache/cs_copilot/models/gtm only, so once the chembed
+    manifold moved to its own directory the gate reported "GTM unavailable" for
+    the sEH workflow while the map every reported projection uses sat beside it.
+    """
+    create_models(tmp_path)
+    tests = {
+        "seh": {
+            "enabled": True,
+            "tier": "frozen",
+            "validator": "seh_analysis",
+            "prompt_variants": ["analyse the chemical space"],
+        }
+    }
+    report = readiness.check_readiness(
+        write_config(tmp_path, tests=tests),
+        project_root=tmp_path,
+        env={"TEST_PROVIDER_KEY": "present"},
+        home=tmp_path,
+    )
+    assert not any("GTM unavailable" in blocker for blocker in report["blockers"]), report[
+        "blockers"
+    ]
