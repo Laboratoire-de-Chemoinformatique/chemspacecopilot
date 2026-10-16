@@ -809,7 +809,12 @@ print('planned / retained:', data['planned_total_executions'], '/', data['retain
 for tier, stats in data['by_tier'].items():
     print(tier, 'completion_rate', stats['completion_rate'], 'executions', stats['executions'])
 print('overall', data['overall']['completion_rate'])
-assert data['by_tier']['frozen']['completion_rate'] >= 0.80, 'frozen tier below the configured floor'
+for tier, stats in data['by_tier'].items():
+    print(tier, 'task_success_rate', stats['task_success_rate'])
+# reliability_min_success_rate governs task_success_rate, not completion_rate:
+# robustness_minimal_example.py:1605 compares task_success_rate >= the floor.
+# completion_rate only counts runs that finished without an agent exception.
+assert data['by_tier']['frozen']['task_success_rate'] >= 0.80, 'frozen tier below the configured floor'
 print('ok')
 "
 ```
