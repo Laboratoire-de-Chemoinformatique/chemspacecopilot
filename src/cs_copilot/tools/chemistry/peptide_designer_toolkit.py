@@ -975,16 +975,23 @@ class PeptideDesignerToolkit(Toolkit):
         self,
         reference: str = "landscape_sampled_peptides",
         session_key: str = "peptide_sequence_analysis",
+        align: bool = False,
         agent: Optional[Agent] = None,
         session_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Analyze saved candidates and produce numerical tables plus PNG/SVG logos.
 
         Similarity is N-terminal positional matches divided by the longer sequence
-        length (missing tails mismatch), not an alignment score. Logos use N-terminal
-        alignment, not MSA; position-specific denominators exclude shorter sequences.
-        Exact sequence uniqueness is not training-set novelty. Use these artifacts
-        and the actual sequences when preparing the final report.
+        length (missing tails mismatch), not an alignment score. Exact sequence
+        uniqueness is not training-set novelty.
+
+        By default logos use N-terminal alignment, not MSA, and position-specific
+        denominators exclude shorter sequences. Set ``align=True`` to align the
+        sequences with PyFAMSA first and render with Logomaker, which is how the
+        published node-level logo was produced; each column's frequency is then taken
+        over its non-gap residues, so a column held by few sequences still sums to 1.
+        The alignment method actually used is recorded in the metrics. Use these
+        artifacts and the actual sequences when preparing the final report.
         """
         import hashlib
 
@@ -1003,7 +1010,7 @@ class PeptideDesignerToolkit(Toolkit):
             for row in payload["candidates"]
             if row.get("valid") and row.get("sequence")
         ]
-        metrics, pairwise, frequency = analyze_sequences(sequences)
+        metrics, pairwise, frequency = analyze_sequences(sequences, align=align)
         generation = payload.get("metadata") or {}
         metrics["source_generation_statistics"] = {
             key: generation.get(key)
@@ -1048,7 +1055,17 @@ class PeptideDesignerToolkit(Toolkit):
             "_position_frequencies.csv", frequency.to_csv(index=False).encode()
         )
         artifacts["metrics_json"] = save("_metrics.json", json.dumps(metrics, indent=2).encode())
-        for extension, data in render_frequency_logo(frequency).items():
+        aligned = metrics["alignment"]["method"] == "pyfamsa"
+        logo = render_frequency_logo(
+            frequency,
+            engine="logomaker" if aligned else "matplotlib",
+            xlabel=(
+                "Alignment position (PyFAMSA)"
+                if aligned
+                else "N-terminal position (no multiple-sequence alignment)"
+            ),
+        )
+        for extension, data in logo.items():
             artifacts[f"sequence_logo_{extension}"] = save(f"_sequence_logo.{extension}", data)
         artifacts["manifest_json"] = save(
             "_manifest.json", json.dumps({"artifacts": list(manifest)}, indent=2).encode()

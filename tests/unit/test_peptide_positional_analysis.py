@@ -9,10 +9,14 @@ import pytest
 
 from cs_copilot.tools.chemistry import peptide_designer_toolkit as toolkit_module
 from cs_copilot.tools.chemistry.peptide_analysis import (
+    align_sequences,
     analyze_sequences,
     positional_identity,
     render_frequency_logo,
 )
+
+# PyFAMSA leaves the third sequence with leading gaps, which is what anchoring then moves.
+RAGGED = ["GIGKFLHSAKKFGKAFVGEIMNS", "GIGAVLKVLTTGLPALISWIKRKRQQ", "FLPIIAKLLGGLL"]
 
 
 def test_identity_distinguishes_permutations_and_variable_lengths():
@@ -47,6 +51,67 @@ def test_logo_outputs_real_png_and_vector_svg():
     assert b"<svg" in outputs["svg"]
     assert b"N-terminal" in outputs["svg"]
     assert len(outputs["png"]) > 1000
+
+
+def test_pyfamsa_pads_ragged_sequences_into_equal_length_columns():
+    aligned, summary = align_sequences(RAGGED)
+    assert summary["method"] == "pyfamsa"
+    assert summary["guide_tree"] == "upgma"
+    assert len({len(sequence) for sequence in aligned}) == 1
+    assert summary["gap_count"] > 0
+    assert [sequence.replace("-", "") for sequence in aligned] == RAGGED
+
+
+def test_anchoring_the_n_terminus_is_not_reported_as_pyfamsa():
+    """Anchoring discards PyFAMSA's columns, so it must not claim to be PyFAMSA."""
+    plain, plain_summary = align_sequences(RAGGED)
+    anchored, anchored_summary = align_sequences(RAGGED, anchor_n_terminus=True)
+    assert plain_summary["method"] == "pyfamsa"
+    assert anchored_summary["method"] == "n_terminal"
+    assert anchored_summary["anchor_n_terminus"] is True
+    assert any(sequence.startswith("-") for sequence in plain)
+    assert not any(sequence.startswith("-") for sequence in anchored)
+    assert plain != anchored
+
+
+def test_alignment_degrades_without_two_sequences():
+    aligned, summary = align_sequences(["ACD"])
+    assert aligned == ["ACD"]
+    assert summary["method"] == "none"
+    assert "Fewer than two" in summary["reason"]
+
+
+def test_aligned_analysis_records_provenance_and_renders_with_logomaker():
+    metrics, _, frequency = analyze_sequences(RAGGED, align=True)
+    assert metrics["alignment"]["method"] == "pyfamsa"
+    assert metrics["aligned_sequences"] is not None
+    assert "PyFAMSA" in metrics["logo_definition"]
+    assert metrics["low_support"] is True
+    np.testing.assert_allclose(frequency.drop(columns=["position", "n_observed"]).sum(axis=1), 1)
+    outputs = render_frequency_logo(
+        frequency,
+        engine="logomaker",
+        title="Peptide Sequence Logo for GTM Node 509",
+        xlabel="Alignment position (PyFAMSA)",
+    )
+    assert outputs["png"].startswith(b"\x89PNG\r\n\x1a\n")
+    assert b"<svg" in outputs["svg"]
+    assert len(outputs["png"]) > 1000
+    # The title and axis label must reach the figure; a silently ignored label is how a
+    # logo ends up claiming an alignment it does not show.
+    assert b"Alignment position" in outputs["svg"]
+    assert b"GTM Node 509" in outputs["svg"]
+
+
+def test_unaligned_analysis_keeps_its_own_provenance_and_rejects_unknown_engines():
+    metrics, _, frequency = analyze_sequences(RAGGED)
+    assert metrics["alignment"]["method"] == "n_terminal"
+    assert metrics["aligned_sequences"] is None
+    assert "not multiple-sequence alignment" in metrics["logo_definition"]
+    with pytest.raises(ValueError, match="Unknown logo engine"):
+        render_frequency_logo(frequency, engine="weblogo")
+    with pytest.raises(ValueError, match="only applies to align=True"):
+        analyze_sequences(RAGGED, anchor_n_terminus=True)
 
 
 def test_analysis_tool_persists_checksummed_artifacts(monkeypatch, tmp_path):
