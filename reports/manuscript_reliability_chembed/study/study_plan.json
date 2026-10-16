@@ -254,7 +254,7 @@
     "USE_S3": "false"
   },
   "frozen_executions": 48,
-  "git_commit_at_planning": "e3f57b29fe05f68bf89343029af4314bea721a48",
+  "git_commit_at_planning": "f8d3c4d7b925ff250dba31a39898b282114d15b4",
   "input_sha256": {
     "/home/aorlov/.cache/cs_copilot/models/gtm-chembed/GTM_manifold_chembed_900_225.pkl.gz": "45d37ae167ed4ab0c0afefcee8e76bf4c5cacbb90d660e6666d1b904a24280e0",
     "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/assets/autoencoder/config.pt": "d15f0fc66da95bfcfa96c31861de71f28e5ce625ebb5d3a542ed9b3d56626a7e",
@@ -289,7 +289,7 @@
   "provider_credential": "Ambient DEEPSEEK_API_KEY; its value is never recorded",
   "purpose": "Predeclared prospective study, no executions performed by this planning script",
   "runtime_sha256": {
-    "pyproject.toml": "ed6fe4e2ea2b491cbbcb4d416f1352ee211ff3ebb1b4019775200e278a0a95b1",
+    "pyproject.toml": "b9cec9014732774bb2ea37abe5d8cefe970c96bef9ce1516217d950abeda128d",
     "src/cs_copilot/agents/__init__.py": "10182358beef0cb23c17b39fbf4cafd077692c79ec5d7817a8c1ecababe1f145",
     "src/cs_copilot/agents/agno_compat.py": "9c079fde7b88138a2a41148d6c9e543bd2f89d8cdf6c0de52ed2f2f0e83e3b4f",
     "src/cs_copilot/agents/config.py": "998bd1c8b3d6a279c31172cb75bdec7f39d68f10ac54dee4af6d7272d8db2459",
@@ -396,8 +396,8 @@
     "src/cs_copilot/tools/chemistry/clean_dataset.py": "0cfa2425cc43a10ca9d3fd358202b960065c3e12377beb32677d418fdf8d8e16",
     "src/cs_copilot/tools/chemistry/descriptors.py": "648d705d2d50d2e21f1de1c3269a9e3b8cd1e79586cbe7f5b125cf5732511f11",
     "src/cs_copilot/tools/chemistry/molecular_designer_toolkit.py": "507787a346060e40ed7840cbbfcda097a2537b739934148fa3554c7a313e81bd",
-    "src/cs_copilot/tools/chemistry/peptide_analysis.py": "c5bab3db32fe9fd83e0027bbadd2386056dddc81edbab744ba37750d639d5ed7",
-    "src/cs_copilot/tools/chemistry/peptide_designer_toolkit.py": "0458d6efbddd0a76b98137eb5924edb4c18212e1a74d7addf00b47059014c6df",
+    "src/cs_copilot/tools/chemistry/peptide_analysis.py": "8074205dbf813fbe816b31af5c17b05dac113c080f2dc3ee72256cb2ee977b6a",
+    "src/cs_copilot/tools/chemistry/peptide_designer_toolkit.py": "145ee81d2b9edba6facf944ccd7f8f654ec26e5d20f52d4d3627b4d8ed6b70ad",
     "src/cs_copilot/tools/chemistry/peptide_landscape_store.py": "b6341ca34961dd2275099418d167cd6b0cf7bbe2ea183ba336daa5233ded39ca",
     "src/cs_copilot/tools/chemistry/similarity_toolkit.py": "ab11ff7c8958606b4264819aa9a3fc42f1dcd99ce802b3b0892b638eaf34af28",
     "src/cs_copilot/tools/chemistry/smiles_columns.py": "d69050573185d6101ab060d4d1ad8b331bfe21387630574612b7cd0d0f46a7bf",
@@ -475,7 +475,7 @@
     "tests/robustness/test_pipeline_robustness.py": "4bdc631933e74d00a754f35bb1edcd29f5156f553bb3b56db698886cbe065c68",
     "tests/robustness/test_utils.py": "27aac64b7c9c770e726028d3091d1a79c69d656f99d98c6a797546f6da20d006",
     "tests/robustness/tool_tracker.py": "d2d040347245af6ca84450102e1e18fab7f8705a2ea283b0176fec525105854f",
-    "uv.lock": "95f61ed18cfa72b44a0e7d7489f91818968a744c8b6ca5d42fde31c0b2b914d0"
+    "uv.lock": "9d286b9aeeac31712bae72e23ab1b977fec17b0d247f70631b7ad2bfcb7f7ab1"
   },
   "schema_version": "1.0",
   "total_executions": 72
