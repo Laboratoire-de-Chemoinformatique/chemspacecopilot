@@ -170,6 +170,24 @@ def build_matrix(
     return batches
 
 
+def live_model_state(seh_input_path: Path) -> dict:
+    """Pair the live-tier map with the descriptor family its own fixture records.
+
+    The manifold path and the descriptor family are read from one session state,
+    so they cannot drift apart. Hardcoding either one reintroduces the failure
+    this guards: both latent spaces are 256 wide, so projecting one family's
+    vectors onto the other's manifold succeeds and returns meaningless
+    coordinates. KeyError if the snapshot records no family -- a live tier must
+    not fall back to a default nobody declared.
+    """
+    state = json.loads(Path(seh_input_path).read_text())["session_state"]
+    return {
+        "_current_gtm_model_path": str(Path(state["_current_gtm_model_path"])),
+        "default_descriptor": state["default_descriptor"],
+        "map_type": "default_map",
+    }
+
+
 def prepare(args):
     root = Path(__file__).resolve().parents[1]
     output = args.output_dir.resolve()
@@ -198,20 +216,9 @@ def prepare(args):
         + "\n"
     )
     model = fixture_dir / "live_model.json"
-    model_path = Path(
-        json.loads(Path(seh["fixtures"]["seh_input"]["path"]).read_text())["session_state"][
-            "_current_gtm_model_path"
-        ]
-    )
     model.write_text(
         json.dumps(
-            {
-                "session_state": {
-                    "_current_gtm_model_path": str(model_path),
-                    "default_descriptor": "autoencoder",
-                    "map_type": "default_map",
-                }
-            },
+            {"session_state": live_model_state(Path(seh["fixtures"]["seh_input"]["path"]))},
             indent=2,
         )
         + "\n"

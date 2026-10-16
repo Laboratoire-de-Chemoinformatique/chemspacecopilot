@@ -257,6 +257,29 @@ def check_readiness(
                 f"Missing/invalid {name} checkpoint; agent construction would fail or download assets"
             )
 
+    # Every reported map projects onto the chembed manifold, which caches in its
+    # own directory under a filename carrying its hyperparameters. Check the
+    # directory, not a fixed name, and check it separately from the .pt
+    # checkpoints above because it is a pickled manifold rather than weights.
+    manifold_directory = Path(
+        expand(env.get("GTM_CHEMBED_MODEL_PATH") or "~/.cache/cs_copilot/models/gtm-chembed", env, home)
+    )
+    manifold_files = (
+        sorted(str(item) for item in manifold_directory.glob("*.pkl.gz") if item.is_file())
+        if manifold_directory.is_dir()
+        else []
+    )
+    model_files["gtm_chembed"] = [
+        artifact(item, base=project_root, env=env, home=home) for item in manifold_files
+    ]
+    if not manifold_files or any(
+        item["status"] != "present" for item in model_files["gtm_chembed"]
+    ):
+        blockers.append(
+            "Missing/invalid chembed manifold; every reported map projects onto it and it "
+            "would be downloaded mid-run"
+        )
+
     prerequisite_cases = {}
     per_arm_count = 0
     for name, spec in selected.items():

@@ -832,7 +832,7 @@ def resolve_default_manifold(
     A manifold is valid only for the latent space it was fitted on, so the
     published default follows the descriptor family instead of being one fixed
     repository. Morgan sessions take the LSTM branch and are unaffected by it:
-    they project fingerprints, which ``_assert_descriptor_backend_matches``
+    they project fingerprints, which ``validate_gtm_descriptor_backend``
     refuses against either latent manifold.
 
     The two caches stay in separate directories because the resolver returns

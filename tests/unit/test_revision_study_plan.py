@@ -83,3 +83,47 @@ def test_frozen_plan_guard_detects_changed_source_input_and_config(tmp_path):
     for path in (source, artifact, config):
         path.write_text("changed")
     assert len(planner.verify_plan(plan, tmp_path)) == 3
+
+
+def test_live_model_fixture_takes_its_descriptor_family_from_the_same_fixture_as_its_map(tmp_path):
+    """The live tier must not pair one family's manifold with another family's descriptors.
+
+    Both latents are 256 wide, so a cross-family projection returns meaningless
+    coordinates without raising. Reading the map path and the descriptor family
+    from the same session state keeps them consistent by construction.
+    """
+    import json
+
+    seh_input = tmp_path / "seh_input.json"
+    seh_input.write_text(
+        json.dumps(
+            {
+                "session_state": {
+                    "_current_gtm_model_path": "/models/gtm-chembed/GTM_manifold_chembed_900_225.pkl.gz",
+                    "default_descriptor": "chembed",
+                    "map_type": "default_map",
+                }
+            }
+        )
+    )
+
+    state = planner.live_model_state(seh_input)
+
+    assert state["default_descriptor"] == "chembed"
+    assert state["_current_gtm_model_path"].endswith("GTM_manifold_chembed_900_225.pkl.gz")
+    assert state["map_type"] == "default_map"
+
+
+def test_live_model_fixture_refuses_a_fixture_with_no_descriptor_family(tmp_path):
+    """A snapshot that records no family cannot be silently defaulted to one."""
+    import json
+
+    import pytest
+
+    seh_input = tmp_path / "seh_input.json"
+    seh_input.write_text(
+        json.dumps({"session_state": {"_current_gtm_model_path": "/models/m.pkl.gz"}})
+    )
+
+    with pytest.raises(KeyError):
+        planner.live_model_state(seh_input)

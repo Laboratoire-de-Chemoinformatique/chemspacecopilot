@@ -42,11 +42,15 @@ def write_config(tmp_path, tests=None):
     return path
 
 
-def create_models(tmp_path):
-    for folder, filenames in {
+def create_models(tmp_path, *, chembed_manifold=True):
+    folders = {
         "autoencoder": ["config.pt", "vocab.pt", "model.pt"],
         "peptide_designer": ["model.pt", "vocab.dict"],
-    }.items():
+    }
+    if chembed_manifold:
+        # Every reported map projects onto this manifold, so a ready environment has it.
+        folders["gtm-chembed"] = ["GTM_manifold_chembed_900_225.pkl.gz"]
+    for folder, filenames in folders.items():
         directory = tmp_path / ".cache/cs_copilot/models" / folder
         directory.mkdir(parents=True)
         for name in filenames:
@@ -247,3 +251,33 @@ def test_modern_synplanner_requires_matching_tsv_preset(tmp_path, monkeypatch):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b"fixture")
     assert readiness.check_readiness(path, **kwargs)["ready_for_pilot"]
+
+
+def test_readiness_blocks_when_the_chembed_manifold_cache_is_empty(tmp_path, versions):
+    """The gate must check the asset the chembed study actually maps on.
+
+    It blocked on the deepchemography checkpoint and never looked at the chembed
+    manifold, so Task 6's "no missing fixture or model" passed while the map the
+    study projects onto was absent and would be re-downloaded mid-run.
+    """
+    create_models(tmp_path, chembed_manifold=False)
+    report = readiness.check_readiness(
+        write_config(tmp_path),
+        project_root=tmp_path,
+        env={"TEST_PROVIDER_KEY": "present"},
+        home=tmp_path,
+    )
+    assert any("chembed manifold" in blocker for blocker in report["blockers"]), report["blockers"]
+
+
+def test_readiness_accepts_a_populated_chembed_manifold_cache(tmp_path, versions):
+    create_models(tmp_path)
+    report = readiness.check_readiness(
+        write_config(tmp_path),
+        project_root=tmp_path,
+        env={"TEST_PROVIDER_KEY": "present"},
+        home=tmp_path,
+    )
+    assert not any("chembed manifold" in blocker for blocker in report["blockers"]), report[
+        "blockers"
+    ]
