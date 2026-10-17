@@ -981,17 +981,20 @@ class PeptideDesignerToolkit(Toolkit):
     ) -> Dict[str, Any]:
         """Analyze saved candidates and produce numerical tables plus PNG/SVG logos.
 
-        Similarity is N-terminal positional matches divided by the longer sequence
-        length (missing tails mismatch), not an alignment score. Exact sequence
-        uniqueness is not training-set novelty.
+        By default similarity and logos use N-terminal positions, not an alignment:
+        similarity is positional matches divided by the longer sequence length
+        (missing tails mismatch), and position-specific denominators exclude shorter
+        sequences. Set ``align=True`` to align the sequences with PyFAMSA first and
+        render with Logomaker, the method behind the published node-level logos;
+        similarity and the logo then both use the alignment columns, and each column's
+        frequency is taken over its non-gap residues, so a column held by few sequences
+        still sums to 1. The logo pools the whole candidate set, so it shows one GTM
+        node only when every candidate comes from that node.
 
-        By default logos use N-terminal alignment, not MSA, and position-specific
-        denominators exclude shorter sequences. Set ``align=True`` to align the
-        sequences with PyFAMSA first and render with Logomaker, which is how the
-        published node-level logo was produced; each column's frequency is then taken
-        over its non-gap residues, so a column held by few sequences still sums to 1.
-        The alignment method actually used is recorded in the metrics. Use these
-        artifacts and the actual sequences when preparing the final report.
+        The result's ``alignment`` records the method actually used and, if alignment
+        did not run, why. ``low_support_positions`` lists positions held by fewer than
+        five distinct sequences. Exact sequence uniqueness is not training-set novelty.
+        Use these artifacts and the actual sequences when preparing the final report.
         """
         import hashlib
 
@@ -1055,16 +1058,7 @@ class PeptideDesignerToolkit(Toolkit):
             "_position_frequencies.csv", frequency.to_csv(index=False).encode()
         )
         artifacts["metrics_json"] = save("_metrics.json", json.dumps(metrics, indent=2).encode())
-        aligned = metrics["alignment"]["method"] == "pyfamsa"
-        logo = render_frequency_logo(
-            frequency,
-            engine="logomaker" if aligned else "matplotlib",
-            xlabel=(
-                "Alignment position (PyFAMSA)"
-                if aligned
-                else "N-terminal position (no multiple-sequence alignment)"
-            ),
-        )
+        logo = render_frequency_logo(frequency, aligned=metrics["alignment"]["method"] == "pyfamsa")
         for extension, data in logo.items():
             artifacts[f"sequence_logo_{extension}"] = save(f"_sequence_logo.{extension}", data)
         artifacts["manifest_json"] = save(
@@ -1081,6 +1075,8 @@ class PeptideDesignerToolkit(Toolkit):
             "artifacts": artifacts,
             "similarity_definition": metrics["similarity_definition"],
             "logo_definition": metrics["logo_definition"],
+            "alignment": metrics["alignment"],
+            "low_support_positions": metrics["low_support_positions"],
             "note": "Generated activity and training-set novelty are unverified. Use the recorded definitions in the report.",
         }
         for target in states:

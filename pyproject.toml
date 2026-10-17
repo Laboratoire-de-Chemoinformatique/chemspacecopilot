@@ -58,10 +58,6 @@ dependencies = [
     "rich>=13.0.0",
     "prompt_toolkit>=3.0.0",
     "boto3>=1.42.30",
-    # Peptide sequence logos: PyFAMSA aligns, Logomaker renders. Both are needed to
-    # reproduce the published node-level logo (introduced in 70b7442).
-    "pyfamsa>=0.7.0",
-    "logomaker>=0.8.7",
 ]
 requires-python = ">=3.12,<3.13"
 readme = "README.md"
@@ -189,6 +185,13 @@ postgresql = [
 ]
 mcp = [
     "mcp>=1.2,<2",
+]
+# Aligned peptide sequence logos (analyze_peptide_candidates(align=True)): PyFAMSA
+# aligns and Logomaker renders, as for the published node-level logos. Optional because
+# PyFAMSA is GPL-3.0 and ships Linux wheels only for glibc >= 2.34.
+peptide-logos = [
+    "pyfamsa>=0.7.0",
+    "logomaker>=0.8.7",
 ]
 
 [dependency-groups]

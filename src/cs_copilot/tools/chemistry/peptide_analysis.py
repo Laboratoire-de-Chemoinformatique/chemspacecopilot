@@ -2,9 +2,10 @@
 
 The frequency and positional-identity definitions follow ee6156fdc9ee15b8169af8441c150e16b31ecf99.
 Logos align sequences at their N termini by default and infer no multiple-sequence alignment.
-Passing ``align=True`` restores the PyFAMSA path introduced in 70b7442, which produced the
-published node-level sequence logo; ``render_frequency_logo(engine="logomaker")`` restores
-its Logomaker rendering.
+``align=True`` restores branch 114's PyFAMSA alignment (9dce3e6) and
+``render_frequency_logo(aligned=True)`` its Logomaker rendering (ee6156f), the method behind the
+published node-level logos. Those were drawn one GTM node at a time, so reproducing one takes
+that node's sequences only. PyFAMSA and Logomaker come from the ``peptide-logos`` extra.
 """
 
 from __future__ import annotations
@@ -20,9 +21,21 @@ logger = logging.getLogger(__name__)
 
 AMINO_ACIDS = tuple("ACDEFGHIKLMNPQRSTVWY")
 GAP = "-"
+INSTALL_HINT = "install the peptide-logos extra (uv sync --extra peptide-logos)"
 
-# Below this many sequences a logo shows agreement among a handful of sequences rather than a
-# position preference. Artifacts stay readable either way because every logo prints its counts.
+# Logomaker's "chemistry" scheme. Both engines use it, so a residue keeps its colour whether
+# or not the sequences were aligned.
+RESIDUE_COLORS = {
+    **dict.fromkeys("GSTYC", "#008000"),
+    **dict.fromkeys("QN", "#800080"),
+    **dict.fromkeys("KRH", "#0000ff"),
+    **dict.fromkeys("DE", "#ff0000"),
+    **dict.fromkeys("AVLIPWFM", "#000000"),
+}
+
+# Below this many distinct sequences a column shows agreement among a handful of sequences
+# rather than a position preference. Aligned columns are renormalised over their residues, so a
+# column held by one sequence still draws a full-height letter.
 LOW_SUPPORT_SEQUENCES = 5
 
 
@@ -31,52 +44,56 @@ def compact_sequence(sequence: str) -> str:
 
 
 def positional_identity(left: str, right: str) -> float:
-    """N-terminal matching residues divided by the longer sequence length."""
+    """Matching residues at shared positions divided by the longer sequence length.
+
+    Gaps never match and do not count towards length, so aligned rows compare alignment columns
+    and raw sequences compare N-terminal positions.
+    """
     left, right = compact_sequence(left), compact_sequence(right)
-    denominator = max(len(left), len(right))
+    denominator = max(len(left.replace(GAP, "")), len(right.replace(GAP, "")))
     if not denominator:
         return 0.0
-    return sum(a == b for a, b in zip(left, right, strict=False)) / denominator
+    return sum(a == b != GAP for a, b in zip(left, right, strict=False)) / denominator
 
 
-def _anchor_n_terminus(aligned: str) -> str:
-    """Slide leading gaps to the C terminus so every sequence starts at position 1."""
-    leading = len(aligned) - len(aligned.lstrip(GAP))
-    return aligned if leading <= 0 else aligned[leading:] + GAP * leading
+def _alignment_summary(rows: list[str], method: str, reason: str | None, **details) -> dict:
+    gap_count = sum(row.count(GAP) for row in rows)
+    length = max(map(len, rows), default=0)
+    cells = length * len(rows)
+    return {
+        "method": method,
+        "reason": reason,
+        **details,
+        "n_sequences": len(rows),
+        "alignment_length": length,
+        "gap_count": gap_count,
+        "gap_fraction": round(gap_count / cells, 6) if cells else 0.0,
+    }
 
 
-def align_sequences(
-    sequences: list[str], *, anchor_n_terminus: bool = False
-) -> tuple[list[str], dict]:
+def align_sequences(sequences: list[str]) -> tuple[list[str], dict]:
     """Align sequences with PyFAMSA, falling back to raw N-terminal positions.
 
-    ``anchor_n_terminus`` re-anchors every sequence at position 1 after alignment. That
-    discards the column correspondence PyFAMSA computed, so the result is reported as
-    ``n_terminal`` rather than ``pyfamsa``: the two are different alignments and a logo
-    built on them means different things.
+    The published logos used a UPGMA guide tree, but PyFAMSA's UPGMA segfaults (which no
+    ``except`` can catch) when two sequences share no residue type, so such sets use single
+    linkage instead. Refinement is off because it does not give the same alignment twice.
     """
     sequences = [compact_sequence(sequence) for sequence in sequences]
-
-    def unaligned(reason: str) -> tuple[list[str], dict]:
-        return list(sequences), {
-            "method": "none",
-            "reason": reason,
-            "n_sequences": len(sequences),
-            "alignment_length": max(map(len, sequences), default=0),
-            "gap_count": 0,
-            "gap_fraction": 0.0,
-            "anchor_n_terminus": anchor_n_terminus,
-        }
-
     if len(sequences) < 2:
-        return unaligned("Fewer than two sequences; nothing to align.")
+        return sequences, _alignment_summary(
+            sequences, "n_terminal", "Fewer than two sequences; nothing to align."
+        )
     try:
         import pyfamsa
     except ImportError as exc:
-        return unaligned(f"PyFAMSA is unavailable: {exc}.")
+        return sequences, _alignment_summary(
+            sequences, "n_terminal", f"PyFAMSA is unavailable ({exc}); {INSTALL_HINT}."
+        )
+    residue_sets = {frozenset(sequence) for sequence in sequences}
+    disjoint = any(a.isdisjoint(b) for a, b in combinations(residue_sets, 2))
+    guide_tree = "sl" if disjoint else "upgma"
     try:
-        aligner = pyfamsa.Aligner(guide_tree="upgma")
-        alignment = aligner.align(
+        alignment = pyfamsa.Aligner(guide_tree=guide_tree, threads=1, refine=False).align(
             [
                 pyfamsa.Sequence(f"seq_{index}".encode("ascii"), sequence.encode("ascii"))
                 for index, sequence in enumerate(sequences)
@@ -84,41 +101,36 @@ def align_sequences(
         )
     except Exception as exc:  # pragma: no cover - defensive, PyFAMSA raises many types
         logger.warning("PyFAMSA alignment failed; falling back to raw positions: %s", exc)
-        return unaligned(f"PyFAMSA alignment failed: {exc}.")
+        return sequences, _alignment_summary(
+            sequences, "n_terminal", f"PyFAMSA alignment failed: {exc}."
+        )
 
     by_index = {
         int(record.id.decode("ascii").removeprefix("seq_")): record.sequence.decode("ascii")
         for record in alignment
     }
-    aligned = [by_index.get(index, sequence) for index, sequence in enumerate(sequences)]
-    if anchor_n_terminus:
-        aligned = [_anchor_n_terminus(sequence) for sequence in aligned]
-    gap_count = sum(sequence.count(GAP) for sequence in aligned)
-    length = max(map(len, aligned), default=0)
-    cells = length * len(aligned)
-    return aligned, {
-        "method": "n_terminal" if anchor_n_terminus else "pyfamsa",
-        "reason": None,
-        "guide_tree": "upgma",
-        "n_sequences": len(aligned),
-        "alignment_length": length,
-        "gap_count": gap_count,
-        "gap_fraction": round(gap_count / cells, 6) if cells else 0.0,
-        "anchor_n_terminus": anchor_n_terminus,
-    }
+    aligned = [by_index[index] for index in range(len(sequences))]
+    return aligned, _alignment_summary(
+        aligned, "pyfamsa", None, guide_tree=guide_tree, refine=False
+    )
 
 
 def analyze_sequences(
-    sequences: list[str], *, align: bool = False, anchor_n_terminus: bool = False
+    sequences: list[str], *, align: bool = False
 ) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
-    """Summarize every sequence and unordered pair, using observed-position counts."""
+    """Summarize every sequence and unordered pair on the logo's own columns."""
     sequences = [compact_sequence(sequence) for sequence in sequences]
     if not sequences or any(not s or not set(s).issubset(AMINO_ACIDS) for s in sequences):
         raise ValueError("Analysis requires nonempty sequences of the 20 standard amino acids")
     if len(sequences) > 1000:
         raise ValueError("At most 1000 sequences can be analyzed in one call")
-    if anchor_n_terminus and not align:
-        raise ValueError("anchor_n_terminus only applies to align=True; without it, nothing aligns")
+    if align:
+        columns, alignment = align_sequences(sequences)
+    else:
+        columns, alignment = sequences, _alignment_summary(
+            sequences, "n_terminal", "Alignment not requested."
+        )
+    aligned = alignment["method"] == "pyfamsa"
     pairs = pd.DataFrame(
         [
             {
@@ -126,31 +138,22 @@ def analyze_sequences(
                 "sequence_j": j,
                 "positional_identity": positional_identity(left, right),
             }
-            for (i, left), (j, right) in combinations(enumerate(sequences), 2)
+            for (i, left), (j, right) in combinations(enumerate(columns), 2)
         ],
         columns=["sequence_i", "sequence_j", "positional_identity"],
     )
-    if align:
-        columns, alignment = align_sequences(sequences, anchor_n_terminus=anchor_n_terminus)
-    else:
-        columns, alignment = list(sequences), {
-            "method": "n_terminal",
-            "reason": "Alignment not requested.",
-            "n_sequences": len(sequences),
-            "alignment_length": max(map(len, sequences)),
-            "gap_count": 0,
-            "gap_fraction": 0.0,
-            "anchor_n_terminus": False,
-        }
-    rows = []
+    rows, low_support_positions = [], []
     for position in range(max(map(len, columns))):
-        residues = [
-            sequence[position]
+        holders = [
+            sequence
             for sequence in columns
             if len(sequence) > position and sequence[position] != GAP
         ]
-        if not residues:
+        if not holders:
             continue
+        residues = [sequence[position] for sequence in holders]
+        if len(set(holders)) < LOW_SUPPORT_SEQUENCES:
+            low_support_positions.append(position + 1)
         rows.append(
             {
                 "position": position + 1,
@@ -168,17 +171,21 @@ def analyze_sequences(
         "mean_pairwise_similarity": float(np.mean(values)) if len(values) else None,
         "minimum_pairwise_similarity": float(np.min(values)) if len(values) else None,
         "maximum_pairwise_similarity": float(np.max(values)) if len(values) else None,
-        "similarity_definition": "N-terminal positional residue matches / longer sequence length; missing tail positions are mismatches",
+        "similarity_definition": (
+            "Residue matches in PyFAMSA alignment columns (gaps never match) / longer sequence length"
+            if aligned
+            else "N-terminal positional residue matches / longer sequence length; missing tail positions are mismatches"
+        ),
         "logo_definition": (
             "PyFAMSA multiple-sequence alignment; frequency at each position is taken over the "
             "non-gap residues in that column, so a column held by few sequences still sums to 1"
-            if alignment["method"] == "pyfamsa"
+            if aligned
             else "N-terminal alignment, not multiple-sequence alignment; frequency at each "
             "position uses only sequences reaching that position"
         ),
         "alignment": alignment,
-        "aligned_sequences": list(columns) if alignment["method"] == "pyfamsa" else None,
-        "low_support": len(sequences) < LOW_SUPPORT_SEQUENCES,
+        "aligned_sequences": columns if aligned else None,
+        "low_support_positions": low_support_positions,
         "sequences": sequences,
         "training_set_novelty": None,
     }
@@ -194,86 +201,35 @@ def _save_figure(figure) -> dict[str, bytes]:
     return outputs
 
 
-def _probability_matrix(frequency: pd.DataFrame) -> pd.DataFrame:
-    """Per-position residue probabilities, dropping positions with no residue mass."""
-    matrix = frequency.set_index("position")[list(AMINO_ACIDS)].astype(float)
-    totals = matrix.sum(axis=1)
-    keep = totals > 1e-9
-    return matrix[keep].div(totals[keep], axis=0)
-
-
-def _render_logomaker(frequency: pd.DataFrame, title: str, xlabel: str) -> dict[str, bytes]:
-    """Render with Logomaker, as the published node-level logo was rendered."""
-    from matplotlib.backends.backend_agg import FigureCanvasAgg
-    from matplotlib.figure import Figure
-
+def _draw_logomaker(axis, frequency: pd.DataFrame) -> None:
+    """Draw letter stacks with Logomaker, as the published node-level logos were drawn."""
     try:
         import logomaker
     except ImportError as exc:  # do not silently swap in a different-looking renderer
-        raise ImportError(
-            "engine='logomaker' requires logomaker. Install it with: pip install logomaker"
-        ) from exc
+        raise ImportError(f"Aligned logos need Logomaker; {INSTALL_HINT}") from exc
 
-    matrix = _probability_matrix(frequency)
-    if matrix.empty:
-        raise ValueError("No position carries non-gap residue mass; nothing to render")
-    figure = Figure(figsize=(max(8, min(18, len(matrix) * 0.45)), 3.6))
-    FigureCanvasAgg(figure)
-    axis = figure.subplots()
-    logomaker.Logo(
-        matrix,
-        color_scheme="chemistry",
+    logo = logomaker.Logo(
+        frequency.set_index("position")[list(AMINO_ACIDS)],
+        color_scheme=RESIDUE_COLORS,
         stack_order="big_on_top",
-        fade_probabilities=True,
         ax=axis,
         vpad=0.02,
         width=0.9,
     )
-    axis.set(xlabel=xlabel, ylabel="Frequency", ylim=(0, 1), title=title)
-    axis.set_xticks(matrix.index.tolist())
-    axis.set_xticklabels([str(value) for value in matrix.index], fontsize=8)
-    axis.spines[["top", "right"]].set_visible(False)
-    figure.text(
-        0.5,
-        0.01,
-        "Per-position sample counts: " + ", ".join(map(str, frequency["n_observed"])),
-        ha="center",
-        fontsize=8,
-    )
-    figure.tight_layout(rect=(0, 0.05, 1, 1))
-    return _save_figure(figure)
+    # Same alpha as fade_probabilities=True, which rebuilds every glyph to apply it.
+    for glyph in logo.glyph_list:
+        if glyph.patch is not None:
+            glyph.patch.set_alpha(glyph.ceiling - glyph.floor)
 
 
-def render_frequency_logo(
-    frequency: pd.DataFrame,
-    *,
-    engine: str = "matplotlib",
-    title: str = "Generated peptide positional sequence logo",
-    xlabel: str = "N-terminal position (no multiple-sequence alignment)",
-) -> dict[str, bytes]:
-    """Render vector letter stacks using Matplotlib; preserve frequency denominators."""
-    if engine == "logomaker":
-        return _render_logomaker(frequency, title, xlabel)
-    if engine != "matplotlib":
-        raise ValueError(f"Unknown logo engine '{engine}'; expected matplotlib or logomaker")
-
-    from matplotlib.backends.backend_agg import FigureCanvasAgg
-    from matplotlib.figure import Figure
+def _draw_text_paths(axis, frequency: pd.DataFrame) -> None:
+    """Draw letter stacks as Matplotlib text paths scaled to each residue frequency."""
     from matplotlib.font_manager import FontProperties
     from matplotlib.patches import PathPatch
     from matplotlib.textpath import TextPath
     from matplotlib.transforms import Affine2D
 
-    figure = Figure(figsize=(max(8, len(frequency) * 0.4), 4.0))
-    FigureCanvasAgg(figure)
-    axis = figure.subplots()
     font = FontProperties(family="DejaVu Sans", weight="bold")
-    colors = {
-        **dict.fromkeys("KRH", "#1565c0"),
-        **dict.fromkeys("DE", "#d32f2f"),
-        **dict.fromkeys("STNQ", "#2e7d32"),
-        **dict.fromkeys("CGP", "#8e24aa"),
-    }
     for row in frequency.to_dict(orient="records"):
         bottom = 0.0
         for residue in sorted(AMINO_ACIDS, key=lambda letter: (row[letter], letter)):
@@ -292,16 +248,43 @@ def render_frequency_logo(
                 PathPatch(
                     letter,
                     transform=transform + axis.transData,
-                    facecolor=colors.get(residue, "#424242"),
+                    facecolor=RESIDUE_COLORS[residue],
                     linewidth=0,
                 )
             )
             bottom += height
+
+
+def render_frequency_logo(
+    frequency: pd.DataFrame,
+    *,
+    aligned: bool = False,
+    title: str = "Generated peptide positional sequence logo",
+) -> dict[str, bytes]:
+    """Render vector letter stacks; preserve frequency denominators.
+
+    Aligned tables are drawn with Logomaker and labelled as alignment positions; N-terminal
+    tables are drawn as Matplotlib text paths. Both share colours, axes and per-position counts.
+    """
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+
+    last = int(frequency["position"].max())
+    figure = Figure(figsize=(max(8, last * 0.4), 4.0))
+    FigureCanvasAgg(figure)
+    axis = figure.subplots()
+    (_draw_logomaker if aligned else _draw_text_paths)(axis, frequency)
+    for patch in axis.patches:  # glyphs stay inside the axes; measuring each one is slow
+        patch.set_in_layout(False)
     axis.set(
-        xlim=(0.4, len(frequency) + 0.6),
+        xlim=(0.4, last + 0.6),
         ylim=(0, 1.01),
         ylabel="Residue frequency",
-        xlabel=xlabel,
+        xlabel=(
+            "Alignment position (PyFAMSA)"
+            if aligned
+            else "N-terminal position (no multiple-sequence alignment)"
+        ),
         title=title,
     )
     axis.set_xticks(frequency["position"].tolist())
