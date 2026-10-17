@@ -742,35 +742,34 @@ team arm on one day and the single agent on another would confound architecture
 with database drift, so both arms share a batch and therefore the same retrieved
 data.
 
-### The live tier is only partially counterbalanced
+### Both tiers are fully counterbalanced
 
 Alternation keys off a different index in each tier:
 
 | Tier | Expression | Balance |
 |---|---|---|
-| Frozen | `"team-first" if variant == 0 else "single-agent-first"` (`:127`) | 2 formulations x 3 repetitions, 3/3 |
-| Live | `"team-first" if repetition % 2 == 0 else "single-agent-first"` (`:166`) | 1 formulation, repetitions 0 and 2 team-first, 2/1 |
+| Frozen | `"team-first" if variant == 0 else "single-agent-first"` | 2 formulations x 3 repetitions, 3/3 |
+| Live | `"team-first" if repetition % 2 == 0 else "single-agent-first"` | 1 formulation x 4 repetitions, 2/2 |
 
 Frozen gets balance for free because the prompt-formulation index carries the
 alternation. Live has a single formulation, so the only free index is the
-repetition number, and three is odd. The emitted plan shows it directly:
+repetition number -- and an odd count cannot split evenly. Three live
+repetitions gave 2 team-first against 1 single-agent-first; `LIVE_REPETITIONS`
+is therefore 4 while `FROZEN_REPETITIONS` stays 3.
 
-```
-frozen_p0_r0  variant=0 team-first      live_r0  variant=0 team-first
-frozen_p1_r0  variant=1 single-agent-first   live_r1  variant=0 single-agent-first
-...                                      live_r2  variant=0 team-first
-```
+`test_both_tiers_counterbalance_arm_order_evenly` pins this, so an odd
+repetition count fails the suite rather than silently reintroducing the bias.
 
-A fourth live repetition would make it 2/2 and remove the caveat. That is one
-extra live batch, not a redesign.
+### Why these repetition counts
 
-### Why three repetitions
+The planner sets repetition counts itself, as `FROZEN_REPETITIONS = 3` and
+`LIVE_REPETITIONS = 4`; `repetitions: 3` in `manuscript_reliability.yaml` is the
+per-batch value the runner sees, not the matrix size. Scientific seeds are
+`SCIENTIFIC_SEEDS = (11, 22, 33, 44)`, one per repetition, so the first three
+repetitions are seed-matched across tiers and the fourth is live-only.
 
-`repetitions: 3` is suite-wide (`manuscript_reliability.yaml:28`) and shared by
-both tiers, with scientific seeds `(11, 22, 33)`, one per repetition
-(`plan_revision_reliability.py:108` and `:138`), so the tiers are seed-matched.
-It sets the design arithmetic: frozen 4 x 2 x 3 x 2 = 48, live 4 x 1 x 3 x 2 =
-24, for 72 executions in 9 batches.
+The arithmetic: frozen 4 x 2 x 3 x 2 = 48, live 4 x 1 x 4 x 2 = 32, for 80
+executions in 10 batches.
 
 **No recorded justification exists for three specifically.** It is the suite
 default. Per-run cost is bounded by `timeout_seconds: 1800`, which makes budget

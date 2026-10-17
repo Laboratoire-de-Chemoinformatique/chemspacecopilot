@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Prepare an offline, counterbalanced 48+24 execution plan; never call a provider."""
+"""Prepare an offline, fully counterbalanced 48+32 execution plan; never call a provider."""
 
 from __future__ import annotations
 
@@ -20,6 +20,14 @@ FROZEN = (
     ("frozen_case_3_retrosynthesis", "seh_candidates"),
     ("frozen_case_4_peptide_design", "peptide_input"),
 )
+# Arm order alternates on the prompt-formulation index in the frozen tier and on
+# the repetition index in the live tier, which has only one formulation. An odd
+# live repetition count therefore cannot balance: three gave 2 team-first
+# against 1 single-agent-first. Four gives 2/2.
+FROZEN_REPETITIONS = 3
+LIVE_REPETITIONS = 4
+SCIENTIFIC_SEEDS = (11, 22, 33, 44)
+
 BUNDLE_FILES = ("landscape.json", "landscape.safetensors", "nodes.parquet", "sampler.json")
 
 
@@ -98,14 +106,14 @@ def build_matrix(
         }
     }
     batches = []
-    for repetition in range(3):
+    for repetition in range(FROZEN_REPETITIONS):
         for variant in range(2):
             batch_id = f"frozen_p{variant}_r{repetition}"
             config = copy.deepcopy(base)
             config["general"].update(
                 n_variations=1,
                 repetitions=1,
-                scientific_seed=(11, 22, 33)[repetition],
+                scientific_seed=SCIENTIFIC_SEEDS[repetition],
                 stop_on_timeout=True,
                 tier="frozen",
                 output_dir=str(output / "runs" / batch_id),
@@ -129,13 +137,13 @@ def build_matrix(
                     "configuration": config,
                 }
             )
-    for repetition in range(3):
+    for repetition in range(LIVE_REPETITIONS):
         batch_id = f"live_r{repetition}"
         config = copy.deepcopy(base)
         config["general"].update(
             n_variations=1,
             repetitions=1,
-            scientific_seed=(11, 22, 33)[repetition],
+            scientific_seed=SCIENTIFIC_SEEDS[repetition],
             stop_on_timeout=True,
             tier="live",
             output_dir=str(output / "runs" / batch_id),
@@ -322,9 +330,13 @@ def prepare(args):
         },
         "provider_credential": "Ambient DEEPSEEK_API_KEY; its value is never recorded",
         "local_index_mapping": "Each config contains one explicit variant and repetition. Aggregate using global indices in this plan; retain original local indices.",
-        "frozen_executions": 48,
-        "live_stage_executions": 24,
-        "total_executions": 72,
+        "frozen_executions": sum(
+            b["expected_executions"] for b in batches if b["tier"] == "frozen"
+        ),
+        "live_stage_executions": sum(
+            b["expected_executions"] for b in batches if b["tier"] == "live"
+        ),
+        "total_executions": sum(b["expected_executions"] for b in batches),
         "batches": batches,
     }
     (output / "study_plan.json").write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n")
