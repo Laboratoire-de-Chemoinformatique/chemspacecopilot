@@ -242,6 +242,33 @@
       "global_repetition": 2,
       "system": "both",
       "tier": "live"
+    },
+    {
+      "arm_order": "single-agent-first",
+      "batch_id": "live_r3",
+      "command": [
+        "/home/aorlov/Programs/agents/chemspacecopilot/.venv/bin/python",
+        "/home/aorlov/Programs/agents/chemspacecopilot/.claude/worktrees/chemembed-maps-rebuild-5a00d4/tests/robustness/robustness_minimal_example.py",
+        "--config",
+        "/home/aorlov/Programs/agents/chemspacecopilot/.claude/worktrees/chemembed-maps-rebuild-5a00d4/reports/manuscript_reliability_chembed/study/configs/live_r3.yaml",
+        "--tier",
+        "live",
+        "--system",
+        "both",
+        "--arm-order",
+        "single-agent-first",
+        "--n-variations",
+        "1",
+        "--repetitions",
+        "1"
+      ],
+      "config_path": "/home/aorlov/Programs/agents/chemspacecopilot/.claude/worktrees/chemembed-maps-rebuild-5a00d4/reports/manuscript_reliability_chembed/study/configs/live_r3.yaml",
+      "config_sha256": "581f9183837a38de5ca487cd84eabb07f46c956b454fa8580700a8bfc3ac2798",
+      "expected_executions": 8,
+      "global_prompt_variant": 0,
+      "global_repetition": 3,
+      "system": "both",
+      "tier": "live"
     }
   ],
   "environment": {
@@ -250,11 +277,11 @@
     "HF_HUB_OFFLINE": "1",
     "OMP_NUM_THREADS": "1",
     "PEPTIDE_DESIGNER_MODEL_PATH": "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/assets/peptide_designer",
-    "PYTHONPATH": "/home/aorlov/Programs/agents/chemspacecopilot/.claude/worktrees/chemembed-maps-rebuild-5a00d4/src",
+    "PYTHONPATH": "/home/aorlov/Programs/agents/chemspacecopilot/.claude/worktrees/chemembed-maps-rebuild-5a00d4/src:/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/python-deps",
     "USE_S3": "false"
   },
   "frozen_executions": 48,
-  "git_commit_at_planning": "f8d3c4d7b925ff250dba31a39898b282114d15b4",
+  "git_commit_at_planning": "ed23d5943fae6ef83d5689e12a64290e9628ba18",
   "input_sha256": {
     "/home/aorlov/.cache/cs_copilot/models/gtm-chembed/GTM_manifold_chembed_900_225.pkl.gz": "45d37ae167ed4ab0c0afefcee8e76bf4c5cacbb90d660e6666d1b904a24280e0",
     "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/assets/autoencoder/config.pt": "d15f0fc66da95bfcfa96c31861de71f28e5ce625ebb5d3a542ed9b3d56626a7e",
@@ -284,7 +311,7 @@
     "/home/aorlov/Programs/agents/chemspacecopilot/.claude/worktrees/chemembed-maps-rebuild-5a00d4/reports/manuscript_reliability_chembed/study/fixtures/live_model.json": "6832684f7740da6012a7cbc8b2f3b9aeeecddf1c8d4a172c9c4f1158b68bb3b6",
     "/home/aorlov/Programs/agents/chemspacecopilot/.claude/worktrees/chemembed-maps-rebuild-5a00d4/reports/manuscript_reliability_chembed/study/fixtures/peptide_input.json": "19ac32231d8283fbf469c5e76ef2544bf85715910b2225d28b4fd8767c486fbb"
   },
-  "live_stage_executions": 24,
+  "live_stage_executions": 32,
   "local_index_mapping": "Each config contains one explicit variant and repetition. Aggregate using global indices in this plan; retain original local indices.",
   "provider_credential": "Ambient DEEPSEEK_API_KEY; its value is never recorded",
   "purpose": "Predeclared prospective study, no executions performed by this planning script",
@@ -439,7 +466,7 @@
     "src/cs_copilot/workflows/chemical_space_policy.py": "4924f01e5c87edc65ff5dfb3de2be1117c2aa7f0290b3c4ceba192fa1638d3a8",
     "src/cs_copilot/workflows/registry.py": "309f575cc8ee36ab9dfbebd9f953f33d0dfe9a2988ab5fba7de541269e5a117f",
     "src/cs_copilot/workflows/runtime.py": "d9b1ebdaa8d4a39d22b42dd61485843597ff0f506787bca0e66280f520d6e99a",
-    "tests/robustness/README.md": "a3351c0edfa339b458c7960803e5bff667926e83af0a36a318f135dc2adf68c8",
+    "tests/robustness/README.md": "a6e8798af45fafb42db70f1952f10cbb4e650fbf6f1e5ec61e3d01dc93e32b81",
     "tests/robustness/__init__.py": "dfdbd7099e9d3e98c2a6d2a746e89a1c8f4be6540f1f575b7f356fc1b1bc9e02",
     "tests/robustness/comparators.py": "ab6c383b2f43e8a8eb2f7ead823a14fac801e306c81d5d0f07957c17eb1a18e3",
     "tests/robustness/config_schema.py": "294d1c353cd3dd2b0c2abb0e5358dee3de3e0f2b3305e1dd57dce27b650b66b2",
@@ -478,5 +505,5 @@
     "uv.lock": "9d286b9aeeac31712bae72e23ab1b977fec17b0d247f70631b7ad2bfcb7f7ab1"
   },
   "schema_version": "1.0",
-  "total_executions": 72
+  "total_executions": 80
 }
