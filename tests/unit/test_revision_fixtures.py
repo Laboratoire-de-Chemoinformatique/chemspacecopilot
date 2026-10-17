@@ -41,7 +41,7 @@ def test_missing_curated_labels_cannot_silently_be_inferred():
         module.curated_view(pd.DataFrame({"canonical_smiles": ["CCO"]}))
 
 
-def _fake_build_env(tmp_path, monkeypatch, validate, *, backend='chembed', candidate_smiles=None):
+def _fake_build_env(tmp_path, monkeypatch, validate, *, backend="chembed", candidate_smiles=None):
     """Stand up a minimal build() environment; `validate` replaces the backend guard."""
     import numpy as np
 
@@ -62,9 +62,9 @@ def _fake_build_env(tmp_path, monkeypatch, validate, *, backend='chembed', candi
     model_file = tmp_path / "manifold.pkl.gz"
     model_file.write_bytes(b"not-a-real-pickle")
     candidates = tmp_path / "candidates.csv"
-    pd.DataFrame(
-        {"canonical_smiles": candidate_smiles or ["CCOC", "CCNC"]}
-    ).to_csv(candidates, index=False)
+    pd.DataFrame({"canonical_smiles": candidate_smiles or ["CCOC", "CCNC"]}).to_csv(
+        candidates, index=False
+    )
 
     gtm = types.SimpleNamespace(num_nodes=2)
     if backend is not None:
@@ -156,7 +156,9 @@ def test_builder_writes_no_projection_when_the_manifold_backend_is_wrong(tmp_pat
         module.build(args)
 
     out = tmp_path / "out"
-    assert not (out / "seh_projection.csv").exists(), "projection written despite a refused manifold"
+    assert not (
+        out / "seh_projection.csv"
+    ).exists(), "projection written despite a refused manifold"
     assert not (out / "seh_analysis.json").exists(), "analysis fixture written despite refusal"
     assert not (out / "manifest.json").exists(), "manifest written despite refusal"
 
@@ -174,9 +176,7 @@ def test_builder_refuses_a_manifold_that_records_no_descriptor_backend(tmp_path,
     def permissive_validate(model, descriptor_type):
         return None  # mimics the library's warn-and-continue on an untagged manifold
 
-    args, _gtm, _calls = _fake_build_env(
-        tmp_path, monkeypatch, permissive_validate, backend=None
-    )
+    args, _gtm, _calls = _fake_build_env(tmp_path, monkeypatch, permissive_validate, backend=None)
 
     with pytest.raises(ValueError, match="descriptor_backend"):
         module.build(args)

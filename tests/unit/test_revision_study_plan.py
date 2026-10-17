@@ -175,6 +175,6 @@ def test_both_tiers_counterbalance_arm_order_evenly(tmp_path):
         orders = collections.Counter(
             batch["arm_order"] for batch in batches if batch["tier"] == tier
         )
-        assert orders["team-first"] == orders["single-agent-first"], (
-            f"{tier} tier is not counterbalanced: {dict(orders)}"
-        )
+        assert (
+            orders["team-first"] == orders["single-agent-first"]
+        ), f"{tier} tier is not counterbalanced: {dict(orders)}"
