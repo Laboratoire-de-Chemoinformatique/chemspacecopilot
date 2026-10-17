@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +17,6 @@ from cs_copilot.tools.chemistry.peptide_analysis import (
     render_frequency_logo,
 )
 
-# PyFAMSA leaves the third sequence with leading gaps, which is what anchoring then moves.
 RAGGED = ["GIGKFLHSAKKFGKAFVGEIMNS", "GIGAVLKVLTTGLPALISWIKRKRQQ", "FLPIIAKLLGGLL"]
 
 
@@ -54,6 +55,7 @@ def test_logo_outputs_real_png_and_vector_svg():
 
 
 def test_pyfamsa_pads_ragged_sequences_into_equal_length_columns():
+    pytest.importorskip("pyfamsa")
     aligned, summary = align_sequences(RAGGED)
     assert summary["method"] == "pyfamsa"
     assert summary["guide_tree"] == "upgma"
@@ -62,56 +64,93 @@ def test_pyfamsa_pads_ragged_sequences_into_equal_length_columns():
     assert [sequence.replace("-", "") for sequence in aligned] == RAGGED
 
 
-def test_anchoring_the_n_terminus_is_not_reported_as_pyfamsa():
-    """Anchoring discards PyFAMSA's columns, so it must not claim to be PyFAMSA."""
-    plain, plain_summary = align_sequences(RAGGED)
-    anchored, anchored_summary = align_sequences(RAGGED, anchor_n_terminus=True)
-    assert plain_summary["method"] == "pyfamsa"
-    assert anchored_summary["method"] == "n_terminal"
-    assert anchored_summary["anchor_n_terminus"] is True
-    assert any(sequence.startswith("-") for sequence in plain)
-    assert not any(sequence.startswith("-") for sequence in anchored)
-    assert plain != anchored
+def test_alignment_survives_sequences_that_share_no_residue():
+    """PyFAMSA's UPGMA tree segfaults here, which no except clause can catch."""
+    pytest.importorskip("pyfamsa")
+    script = (
+        "from cs_copilot.tools.chemistry.peptide_analysis import analyze_sequences\n"
+        "for sequences in (['AC', 'DE'], ['CI', 'E', 'DEH', 'ICDI']):\n"
+        "    metrics, _, _ = analyze_sequences(sequences, align=True)\n"
+        "    print(metrics['alignment']['method'], metrics['alignment']['guide_tree'])\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=300, check=False
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert result.stdout.split() == ["pyfamsa", "sl", "pyfamsa", "sl"]
+
+
+def test_alignment_disables_nondeterministic_refinement(monkeypatch):
+    pyfamsa = pytest.importorskip("pyfamsa")
+    calls = []
+    real_aligner = pyfamsa.Aligner
+
+    def recording_aligner(**kwargs):
+        calls.append(kwargs)
+        return real_aligner(**kwargs)
+
+    monkeypatch.setattr(pyfamsa, "Aligner", recording_aligner)
+    _, summary = align_sequences(RAGGED)
+    assert [call["refine"] for call in calls] == [False]
+    assert summary["refine"] is False
 
 
 def test_alignment_degrades_without_two_sequences():
     aligned, summary = align_sequences(["ACD"])
     assert aligned == ["ACD"]
-    assert summary["method"] == "none"
+    assert summary["method"] == "n_terminal"
     assert "Fewer than two" in summary["reason"]
 
 
+def test_aligned_similarity_compares_the_logo_columns():
+    pytest.importorskip("pyfamsa")
+    extended = ["WKLAKLAKK", "KLAKLAKK"]
+    aligned, _, _ = analyze_sequences(extended, align=True)
+    raw, _, _ = analyze_sequences(extended)
+    assert aligned["mean_pairwise_similarity"] == pytest.approx(8 / 9)
+    assert raw["mean_pairwise_similarity"] < 0.5
+    assert "PyFAMSA" in aligned["similarity_definition"]
+    assert "N-terminal" in raw["similarity_definition"]
+
+
+def test_low_support_counts_distinct_sequences_per_position():
+    metrics, _, _ = analyze_sequences(["ACDEF"] * 5)
+    assert metrics["low_support_positions"] == [1, 2, 3, 4, 5]
+    metrics, _, _ = analyze_sequences(["ACDEF", "ACDEG", "ACDEH", "ACDEI", "ACDEKL"])
+    assert metrics["low_support_positions"] == [6]
+
+
 def test_aligned_analysis_records_provenance_and_renders_with_logomaker():
+    pytest.importorskip("pyfamsa")
+    pytest.importorskip("logomaker")
     metrics, _, frequency = analyze_sequences(RAGGED, align=True)
     assert metrics["alignment"]["method"] == "pyfamsa"
     assert metrics["aligned_sequences"] is not None
     assert "PyFAMSA" in metrics["logo_definition"]
-    assert metrics["low_support"] is True
+    assert metrics["low_support_positions"] == frequency["position"].tolist()
     np.testing.assert_allclose(frequency.drop(columns=["position", "n_observed"]).sum(axis=1), 1)
     outputs = render_frequency_logo(
-        frequency,
-        engine="logomaker",
-        title="Peptide Sequence Logo for GTM Node 509",
-        xlabel="Alignment position (PyFAMSA)",
+        frequency, aligned=True, title="Peptide Sequence Logo for GTM Node 509"
     )
     assert outputs["png"].startswith(b"\x89PNG\r\n\x1a\n")
     assert b"<svg" in outputs["svg"]
     assert len(outputs["png"]) > 1000
-    # The title and axis label must reach the figure; a silently ignored label is how a
-    # logo ends up claiming an alignment it does not show.
+    # The title and axis label must reach the figure; a wrong label is how a logo ends up
+    # claiming an alignment it does not show.
     assert b"Alignment position" in outputs["svg"]
+    assert b"no multiple-sequence alignment" not in outputs["svg"]
     assert b"GTM Node 509" in outputs["svg"]
+    # Both engines colour a residue the same way (G is green in Logomaker's chemistry scheme).
+    assert b"#008000" in outputs["svg"]
+    assert b"#008000" in render_frequency_logo(frequency)["svg"]
 
 
-def test_unaligned_analysis_keeps_its_own_provenance_and_rejects_unknown_engines():
-    metrics, _, frequency = analyze_sequences(RAGGED)
+def test_unaligned_analysis_keeps_its_own_provenance():
+    metrics, _, _ = analyze_sequences(RAGGED)
     assert metrics["alignment"]["method"] == "n_terminal"
+    assert metrics["alignment"]["reason"] == "Alignment not requested."
     assert metrics["aligned_sequences"] is None
     assert "not multiple-sequence alignment" in metrics["logo_definition"]
-    with pytest.raises(ValueError, match="Unknown logo engine"):
-        render_frequency_logo(frequency, engine="weblogo")
-    with pytest.raises(ValueError, match="only applies to align=True"):
-        analyze_sequences(RAGGED, anchor_n_terminus=True)
 
 
 def test_analysis_tool_persists_checksummed_artifacts(monkeypatch, tmp_path):
@@ -151,3 +190,5 @@ def test_analysis_tool_persists_checksummed_artifacts(monkeypatch, tmp_path):
     for record in manifest["artifacts"]:
         assert hashlib.sha256(Path(record["path"]).read_bytes()).hexdigest() == record["sha256"]
     assert state["peptide_sequence_analysis"] == result
+    assert result["alignment"]["reason"] == "Alignment not requested."
+    assert result["low_support_positions"] == [1, 2, 3]

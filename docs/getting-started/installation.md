@@ -17,6 +17,9 @@ Optional extras:
 ```bash
 # MCP server for ChatGPT/Codex/Claude-style external clients
 uv sync --frozen --extra mcp
+
+# Aligned peptide sequence logos (PyFAMSA is GPL-3.0; Linux wheels need glibc >= 2.34)
+uv sync --frozen --extra peptide-logos
 ```
 
 Retrosynthesis is optional and uses SynPlanner 1.7.0:

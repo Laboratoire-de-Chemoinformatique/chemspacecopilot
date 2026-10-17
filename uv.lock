@@ -960,7 +960,6 @@ dependencies = [
     { name = "jupyterlab" },
     { name = "lancedb" },
     { name = "lightning" },
-    { name = "logomaker" },
     { name = "lxml-html-clean" },
     { name = "marimo" },
     { name = "newspaper4k" },
@@ -971,7 +970,6 @@ dependencies = [
     { name = "pandarallel" },
     { name = "prompt-toolkit" },
     { name = "pubchempy" },
-    { name = "pyfamsa" },
     { name = "pymysql" },
     { name = "pypdf" },
     { name = "rdkit" },
@@ -1000,6 +998,10 @@ dependencies = [
 [package.optional-dependencies]
 mcp = [
     { name = "mcp" },
+]
+peptide-logos = [
+    { name = "logomaker" },
+    { name = "pyfamsa" },
 ]
 postgresql = [
     { name = "psycopg2-binary" },
@@ -1046,7 +1048,7 @@ requires-dist = [
     { name = "jupyterlab", specifier = ">=4.4.9" },
     { name = "lancedb", specifier = ">=0.25.2" },
     { name = "lightning", specifier = ">=2.4" },
-    { name = "logomaker", specifier = ">=0.8.7" },
+    { name = "logomaker", marker = "extra == 'peptide-logos'", specifier = ">=0.8.7" },
     { name = "lxml-html-clean", specifier = ">=0.4.3" },
     { name = "marimo", specifier = ">=0.18.4" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
@@ -1059,7 +1061,7 @@ requires-dist = [
     { name = "prompt-toolkit", specifier = ">=3.0.0" },
     { name = "psycopg2-binary", marker = "extra == 'postgresql'", specifier = ">=2.9.9" },
     { name = "pubchempy", specifier = ">=1.0.5" },
-    { name = "pyfamsa", specifier = ">=0.7.0" },
+    { name = "pyfamsa", marker = "extra == 'peptide-logos'", specifier = ">=0.7.0" },
     { name = "pymysql", specifier = ">=1.1.0" },
     { name = "pypdf", specifier = ">=6.1.2" },
     { name = "rdkit", specifier = ">=2025.9.1" },
@@ -1085,7 +1087,7 @@ requires-dist = [
     { name = "ugtm", specifier = ">=2.1.0.post2" },
     { name = "vl-convert-python", specifier = ">=1.8.0" },
 ]
-provides-extras = ["retrosynthesis", "postgresql", "mcp"]
+provides-extras = ["retrosynthesis", "postgresql", "mcp", "peptide-logos"]
 
 [package.metadata.requires-dev]
 dev = [
