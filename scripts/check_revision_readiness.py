@@ -257,6 +257,29 @@ def check_readiness(
                 f"Missing/invalid {name} checkpoint; agent construction would fail or download assets"
             )
 
+    # Every reported map projects onto the chembed manifold, which caches in its
+    # own directory under a filename carrying its hyperparameters. Check the
+    # directory, not a fixed name, and check it separately from the .pt
+    # checkpoints above because it is a pickled manifold rather than weights.
+    manifold_directory = Path(
+        expand(env.get("GTM_CHEMBED_MODEL_PATH") or "~/.cache/cs_copilot/models/gtm-chembed", env, home)
+    )
+    manifold_files = (
+        sorted(str(item) for item in manifold_directory.glob("*.pkl.gz") if item.is_file())
+        if manifold_directory.is_dir()
+        else []
+    )
+    model_files["gtm_chembed"] = [
+        artifact(item, base=project_root, env=env, home=home) for item in manifold_files
+    ]
+    if not manifold_files or any(
+        item["status"] != "present" for item in model_files["gtm_chembed"]
+    ):
+        blockers.append(
+            "Missing/invalid chembed manifold; every reported map projects onto it and it "
+            "would be downloaded mid-run"
+        )
+
     prerequisite_cases = {}
     per_arm_count = 0
     for name, spec in selected.items():
@@ -290,10 +313,16 @@ def check_readiness(
         prerequisite_cases[name] = item
 
     if "seh_analysis" in validators:
-        gtm_root = home / ".cache/cs_copilot/models/gtm"
+        # Each descriptor family caches its manifold in its own directory, so a
+        # chembed session's map is not under the LSTM path. Accept either.
+        gtm_roots = (
+            home / ".cache/cs_copilot/models/gtm",
+            home / ".cache/cs_copilot/models/gtm-chembed",
+        )
         model_files["cached_gtm"] = [
             artifact(str(item), base=project_root, env=env, home=home)
-            for item in sorted(gtm_root.glob("*.pkl*"))
+            for root in gtm_roots
+            for item in sorted(root.glob("*.pkl*"))
         ]
         cached_map_present = any(item["status"] == "present" for item in model_files["cached_gtm"])
         for name, spec in selected.items():

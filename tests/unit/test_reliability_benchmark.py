@@ -1005,3 +1005,18 @@ def test_runner_summary_serializes_non_json_session_keys(tmp_path):
     saved = json.loads((runner.output_dir / "summary.json").read_text())
     state = saved["results"]["case"]["outputs"][0]["session_state"]
     assert state["('autoencoder', 256)"]["api_key"] == "[REDACTED]"
+
+
+def test_manuscript_config_maps_and_generates_in_one_latent_space():
+    """Every GTM prompt must pin chembed, matching general.latent_engine."""
+    import yaml
+
+    path = Path(__file__).parents[2] / "tests/robustness/manuscript_reliability.yaml"
+    text = path.read_text()
+    assert "descriptor_type=autoencoder" not in text, (
+        "a GTM prompt still pins the LSTM descriptor family; maps and generation "
+        "would run in different latent spaces"
+    )
+    assert "descriptor_type=chembed" in text
+    config = yaml.safe_load(text)
+    assert config["general"]["latent_engine"] == "chembed"

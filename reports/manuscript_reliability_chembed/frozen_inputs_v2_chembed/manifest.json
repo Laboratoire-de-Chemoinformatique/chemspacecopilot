@@ -1,0 +1,42 @@
+{
+  "fixtures": {
+    "seh_analysis": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot/.claude/worktrees/chemembed-maps-rebuild-5a00d4/reports/manuscript_reliability_chembed/frozen_inputs_v2_chembed/seh_analysis.json",
+      "sha256": "46416a2ad0157a11420ade9b4b76e96073050daca2c927241090bd218a147b3b"
+    },
+    "seh_candidates": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot/.claude/worktrees/chemembed-maps-rebuild-5a00d4/reports/manuscript_reliability_chembed/frozen_inputs_v2_chembed/seh_candidates.json",
+      "sha256": "70087b8f1325b6b1a479ee41f709b4ab8ef649c2da47a7c4707e499a239d1e56"
+    },
+    "seh_input": {
+      "path": "/home/aorlov/Programs/agents/chemspacecopilot/.claude/worktrees/chemembed-maps-rebuild-5a00d4/reports/manuscript_reliability_chembed/frozen_inputs_v2_chembed/seh_input.json",
+      "sha256": "facc17889c6e7634a5d650e6915255653a95f9c515cab8258a1b21d74985898a"
+    }
+  },
+  "inputs": {
+    "/home/aorlov/.cache/cs_copilot/models/gtm-chembed/GTM_manifold_chembed_900_225.pkl.gz": "45d37ae167ed4ab0c0afefcee8e76bf4c5cacbb90d660e6666d1b904a24280e0",
+    "/home/aorlov/Programs/agents/chemspacecopilot-reviewer-revision/reports/reviewer_revision/seh/clean_compounds.csv": "bc4b51eeb040892bb4199d4c7e09345b6e34a1a0bb78ec18fcc5a5d976024bb7",
+    "/home/aorlov/Programs/agents/chemspacecopilot/.claude/worktrees/chemembed-maps-rebuild-5a00d4/reports/manuscript_reliability_chembed/generation_chembed/unique_candidates.csv": "0d55fb93adb090cc60a0042523efdfb8420e5e5fc4adf8c5754a8a0b6b4da6c6"
+  },
+  "projection_summary": {
+    "criterion_scope": "descriptive projection occupancy; not a model-selection score",
+    "hard_occupied_nodes": 376,
+    "input_dimensions": 256,
+    "mean_normalized_sample_responsibility_entropy": 0.032631780098519705,
+    "model_attributes": {
+      "basis_width": 1,
+      "max_iter": 200,
+      "num_basis_functions": 225,
+      "num_nodes": 900,
+      "pca_scale": true,
+      "reg_coeff": 100,
+      "standardize": false
+    },
+    "model_sha256": "45d37ae167ed4ab0c0afefcee8e76bf4c5cacbb90d660e6666d1b904a24280e0",
+    "node_count": 900,
+    "normalized_occupancy_entropy": 0.775966228126799,
+    "sample_count": 2212,
+    "soft_occupancy_sum": 2212.0
+  },
+  "purpose": "prospective frozen inputs, not autonomous benchmark outputs"
+}

@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+from rdkit import Chem
 
 
 def checksum(path: Path) -> str:
@@ -59,7 +60,7 @@ def build(args) -> dict:
     frame.to_csv(view_path, index=False)
     state = {
         "_current_gtm_model_path": str(model_path),
-        "default_descriptor": "autoencoder",
+        "default_descriptor": "chembed",
         "map_type": "default_map",
         "data_file_paths": {
             "dataset_path": str(view_path),
@@ -87,13 +88,25 @@ def build(args) -> dict:
     write_json(input_fixture, {"session_state": state})
 
     model, projected_frame, descriptors, responsibilities = ops.data_load_and_prep(
-        str(view_path), str(model_path), descriptor_type="autoencoder"
+        str(view_path), str(model_path), descriptor_type="chembed"
     )
     if not np.isfinite(responsibilities).all() or responsibilities.shape != (
         len(frame),
         model.num_nodes,
     ):
         raise ValueError("Projection changed row count or produced invalid responsibilities")
+    # validate_gtm_descriptor_backend lets an untagged manifold through with a
+    # warning, which is right for the library and wrong here: this script freezes
+    # manuscript fixtures and its stdout is a JSON manifest, so a stderr warning
+    # is easy to miss. Require the tag, then reuse the shipped guard for the
+    # tagged-mismatch case and its canonical message.
+    if getattr(model, "descriptor_backend", None) is None:
+        raise ValueError(
+            "GTM manifold records no descriptor_backend. Both latent spaces are 256 wide, "
+            "so projection would succeed and return meaningless coordinates. Re-tag or "
+            "refetch a manifold fitted on chembed before freezing fixtures."
+        )
+    ops.validate_gtm_descriptor_backend(model, "chembed")
     coordinates = ops.calculate_latent_coords(responsibilities, correction=True, return_node=True)
     projection = projected_frame.drop(
         columns=[
@@ -172,7 +185,7 @@ def build(args) -> dict:
             "map_type": "gtm",
             "model_path": str(model_path),
             "dataset_path": str(view_path),
-            "descriptor_type": "autoencoder",
+            "descriptor_type": "chembed",
             "projection_csv": str(projection_path),
             "density_csv": str(density_path),
             "activity_csv": str(activity_path),
@@ -185,15 +198,40 @@ def build(args) -> dict:
 
     generated = pd.read_csv(candidates_path)
     # The frozen order is the published deterministic unique-candidate CSV order.
-    candidates = [{"smiles": value} for value in generated["canonical_smiles"].tolist()]
-    if not candidates:
+    candidate_smiles = generated["canonical_smiles"].tolist()
+    if not candidate_smiles:
         raise ValueError("No generated candidates")
+    # read_csv drops a whitespace-only line as blank, so the frame can be shorter
+    # than the file without raising. Compare against the file's own row count.
+    present_rows = [
+        line for line in candidates_path.read_text().splitlines()[1:] if line != ""
+    ]
+    if len(present_rows) != len(candidate_smiles):
+        raise ValueError(
+            f"Candidate CSV has {len(present_rows)} data row(s) but parsed "
+            f"{len(candidate_smiles)} candidate(s); rows were dropped silently"
+        )
+    # Rejecting only an empty list let a single unparseable or blank entry into the
+    # frozen candidate set, and a bad row 0 became the fixed planning target.
+    unusable = [
+        value
+        for value in candidate_smiles
+        if not isinstance(value, str)
+        or not value.strip()
+        or Chem.MolFromSmiles(value) is None
+    ]
+    if unusable:
+        raise ValueError(
+            f"{len(unusable)} unusable candidate SMILES (blank or unparseable), "
+            f"first: {unusable[:3]}"
+        )
+    candidates = [{"smiles": value} for value in candidate_smiles]
     candidate_artifact = destination / "candidates.json"
     parent = "CCC(C)C(=O)N1CCC(NC(=O)Nc2ccc(C(F)(C(F)(F)F)C(F)(F)F)cc2)CC1"
     metadata = {
         "seed_compound_id": "CHEMBL3327073",
         "seed_smiles": parent,
-        "engine": "autoencoder",
+        "engine": "chembed",
         "source_csv": str(candidates_path),
         "source_sha256": inputs[str(candidates_path)],
         "ordering": "source CSV order; first valid candidate is the fixed planning target",
@@ -203,7 +241,7 @@ def build(args) -> dict:
         state,
         "candidate_set",
         {"artifact_path": str(candidate_artifact), "count_returned": len(candidates), **metadata},
-        label="Measured seeded autoencoder candidates",
+        label="Measured seeded chembed candidates",
         source_tool="prepare_revision_fixtures",
     )
     candidate_fixture = destination / "seh_candidates.json"

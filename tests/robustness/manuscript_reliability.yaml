@@ -14,13 +14,15 @@
 #   Uses versioned session-state snapshots to isolate orchestration/tool reliability
 #   from changing ChEMBL/model artifacts. Required fixtures never fall back to live data.
 # Latent engine:
-#   Generation prompts name the "autoencoder design engine", which is the engine=
-#   argument of the design tools and picks it over the LLM engine. It does not name
-#   a latent engine: no prompt can, because the engine is fixed before the agent
-#   starts. general.latent_engine below pins it and overrides AUTOENCODER_BACKEND,
-#   so a run cannot inherit an engine from the operator's shell. Set it to
-#   deepchemography to reproduce earlier results recorded on the LSTM. Every
-#   run's generation audit records the backend that ran.
+#   Maps and small-molecule generation run in one latent space. Generation
+#   prompts name the "autoencoder design engine", which is the engine= argument
+#   of the design tools and picks it over the LLM engine; it does not name a
+#   latent engine, because the latent engine is fixed before the agent starts.
+#   general.latent_engine below pins it and overrides AUTOENCODER_BACKEND, so a
+#   run cannot inherit an engine from the operator's shell. The GTM prompts pin
+#   descriptor_type=chembed to match, so every reported map is projected on the
+#   same latents the generator samples. Every run's generation audit records the
+#   backend that ran.
 general:
   n_variations: 2
   repetitions: 3
@@ -63,7 +65,7 @@ tests:
           Use Homo sapiens binding and functional assays from ChEMBL
           with no mechanism-of-action filter. Complete the retrieval preflight,
           retrieve and describe the clean dataset, use the cached default GTM map,
-          and use descriptor_type=autoencoder for all GTM loading, projection, and
+          and use descriptor_type=chembed for all GTM loading, projection, and
           activity operations. Create and summarize density and activity landscapes,
           identify prominent scaffolds or chemotypes, compare active and inactive
           compounds, summarize assay coverage, and save a grounded report.
@@ -123,7 +125,7 @@ tests:
     prompt_variants:
       - >-
         Analyze the chemical space of the sEH compounds already loaded in this
-        session. Use the cached default GTM map and descriptor_type=autoencoder
+        session. Use the cached default GTM map and descriptor_type=chembed
         for loading, projection, and activity operations. Create and interpret
         density and activity landscapes, identify
         chemotypes in dense nodes, summarize assays, and compare active and inactive
@@ -131,12 +133,12 @@ tests:
       - >-
         Using the preloaded soluble epoxide hydrolase dataset, perform the complete
         GTM chemical-space analysis with the cached default GTM map and
-        descriptor_type=autoencoder for loading, projection, and activity operations:
+        descriptor_type=chembed for loading, projection, and activity operations:
         density, activity, dense-node scaffolds or chemotypes, assay distribution,
         active/inactive separation, and a saved grounded report.
       - >-
         Explore the current session's sEH inhibitor data using the cached default
-        GTM map and descriptor_type=autoencoder for loading, projection, and activity
+        GTM map and descriptor_type=chembed for loading, projection, and activity
         operations. Produce the map
         artifacts and a grounded report covering density, activity, prominent
         chemotypes, assays, and class separation.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Prepare an offline, counterbalanced 48+12 execution plan; never call a provider."""
+"""Prepare an offline, fully counterbalanced 48+32 execution plan; never call a provider."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,14 @@ FROZEN = (
     ("frozen_case_3_retrosynthesis", "seh_candidates"),
     ("frozen_case_4_peptide_design", "peptide_input"),
 )
+# Arm order alternates on the prompt-formulation index in the frozen tier and on
+# the repetition index in the live tier, which has only one formulation. An odd
+# live repetition count therefore cannot balance: three gave 2 team-first
+# against 1 single-agent-first. Four gives 2/2.
+FROZEN_REPETITIONS = 3
+LIVE_REPETITIONS = 4
+SCIENTIFIC_SEEDS = (11, 22, 33, 44)
+
 BUNDLE_FILES = ("landscape.json", "landscape.safetensors", "nodes.parquet", "sampler.json")
 
 
@@ -97,14 +106,14 @@ def build_matrix(
         }
     }
     batches = []
-    for repetition in range(3):
+    for repetition in range(FROZEN_REPETITIONS):
         for variant in range(2):
             batch_id = f"frozen_p{variant}_r{repetition}"
             config = copy.deepcopy(base)
             config["general"].update(
                 n_variations=1,
                 repetitions=1,
-                scientific_seed=(11, 22, 33)[repetition],
+                scientific_seed=SCIENTIFIC_SEEDS[repetition],
                 stop_on_timeout=True,
                 tier="frozen",
                 output_dir=str(output / "runs" / batch_id),
@@ -128,13 +137,13 @@ def build_matrix(
                     "configuration": config,
                 }
             )
-    for repetition in range(3):
+    for repetition in range(LIVE_REPETITIONS):
         batch_id = f"live_r{repetition}"
         config = copy.deepcopy(base)
         config["general"].update(
             n_variations=1,
             repetitions=1,
-            scientific_seed=(11, 22, 33)[repetition],
+            scientific_seed=SCIENTIFIC_SEEDS[repetition],
             stop_on_timeout=True,
             tier="live",
             output_dir=str(output / "runs" / batch_id),
@@ -170,11 +179,62 @@ def build_matrix(
     return batches
 
 
+def _can_import_synplan(python_path: str) -> bool:
+    """Probe a child interpreter, because the study runs in one, not in this process."""
+    probe = subprocess.run(
+        [sys.executable, "-c", "import synplan"],
+        env={**os.environ, "PYTHONPATH": python_path},
+        capture_output=True,
+    )
+    return probe.returncode == 0
+
+
+def verify_retrosynthesis_runtime(config: dict, python_path: str, probe=None) -> None:
+    """Refuse to plan a retrosynthesis study whose runtime cannot import synplan.
+
+    ``_python_path`` falls back to ``src`` alone when the vendored directory is
+    absent, and does so silently. Every route search then fails for a reason
+    unrelated to what the study measures, producing task-success zeros that read
+    like a result. Fail here instead, before the executions are spent.
+    """
+    validators = {
+        (spec or {}).get("validator") for spec in (config.get("tests") or {}).values()
+    }
+    if "retrosynthesis" not in validators:
+        return
+    if not (probe or _can_import_synplan)(python_path):
+        raise ValueError(
+            "This study runs retrosynthesis but its runtime cannot import synplan. "
+            f"PYTHONPATH={python_path}. Vendor SynPlanner under "
+            "reports/<study>/python-deps, or disable the retrosynthesis cases; "
+            "planning anyway would score every route search as a failure."
+        )
+
+
+def live_model_state(seh_input_path: Path) -> dict:
+    """Pair the live-tier map with the descriptor family its own fixture records.
+
+    The manifold path and the descriptor family are read from one session state,
+    so they cannot drift apart. Hardcoding either one reintroduces the failure
+    this guards: both latent spaces are 256 wide, so projecting one family's
+    vectors onto the other's manifold succeeds and returns meaningless
+    coordinates. KeyError if the snapshot records no family -- a live tier must
+    not fall back to a default nobody declared.
+    """
+    state = json.loads(Path(seh_input_path).read_text())["session_state"]
+    return {
+        "_current_gtm_model_path": str(Path(state["_current_gtm_model_path"])),
+        "default_descriptor": state["default_descriptor"],
+        "map_type": "default_map",
+    }
+
+
 def prepare(args):
     root = Path(__file__).resolve().parents[1]
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=False)
     base = yaml.safe_load(args.config.read_text())
+    verify_retrosynthesis_runtime(base, _python_path(root))
     seh = json.loads(args.seh_manifest.read_text())
     fixture_dir = output / "fixtures"
     fixture_dir.mkdir()
@@ -198,20 +258,9 @@ def prepare(args):
         + "\n"
     )
     model = fixture_dir / "live_model.json"
-    model_path = Path(
-        json.loads(Path(seh["fixtures"]["seh_input"]["path"]).read_text())["session_state"][
-            "_current_gtm_model_path"
-        ]
-    )
     model.write_text(
         json.dumps(
-            {
-                "session_state": {
-                    "_current_gtm_model_path": str(model_path),
-                    "default_descriptor": "autoencoder",
-                    "map_type": "default_map",
-                }
-            },
+            {"session_state": live_model_state(Path(seh["fixtures"]["seh_input"]["path"]))},
             indent=2,
         )
         + "\n"
@@ -281,9 +330,13 @@ def prepare(args):
         },
         "provider_credential": "Ambient DEEPSEEK_API_KEY; its value is never recorded",
         "local_index_mapping": "Each config contains one explicit variant and repetition. Aggregate using global indices in this plan; retain original local indices.",
-        "frozen_executions": 48,
-        "live_stage_executions": 24,
-        "total_executions": 72,
+        "frozen_executions": sum(
+            b["expected_executions"] for b in batches if b["tier"] == "frozen"
+        ),
+        "live_stage_executions": sum(
+            b["expected_executions"] for b in batches if b["tier"] == "live"
+        ),
+        "total_executions": sum(b["expected_executions"] for b in batches),
         "batches": batches,
     }
     (output / "study_plan.json").write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n")

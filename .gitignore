@@ -47,3 +47,6 @@ docker-compose.chembl-local.yml
 
 # Manuscript evidence: kept locally, never published.
 docs/manuscript/
+synplan_data
+assay_active_inactive_bundle.json
+peptide_candidates_ecoli_table.json
