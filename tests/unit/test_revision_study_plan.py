@@ -127,3 +127,28 @@ def test_live_model_fixture_refuses_a_fixture_with_no_descriptor_family(tmp_path
 
     with pytest.raises(KeyError):
         planner.live_model_state(seh_input)
+
+
+def test_planning_a_retrosynthesis_study_refuses_a_runtime_without_synplan():
+    """_python_path falls back to src alone when the vendored directory is absent.
+
+    That fallback is silent, and every route search then fails for a reason
+    unrelated to what the study measures -- 0/18 task success that looks like a
+    result. Refuse at plan time instead.
+    """
+    import pytest
+
+    config = {"tests": {"case_3": {"validator": "retrosynthesis"}}}
+
+    with pytest.raises(ValueError, match="synplan"):
+        planner.verify_retrosynthesis_runtime(config, "/only/src", probe=lambda path: False)
+
+
+def test_planning_accepts_a_runtime_that_can_import_synplan():
+    config = {"tests": {"case_3": {"validator": "retrosynthesis"}}}
+    planner.verify_retrosynthesis_runtime(config, "/src:/vendored", probe=lambda path: True)
+
+
+def test_a_study_without_retrosynthesis_does_not_need_synplan():
+    config = {"tests": {"case_1": {"validator": "seh_analysis"}}}
+    planner.verify_retrosynthesis_runtime(config, "/only/src", probe=lambda path: False)

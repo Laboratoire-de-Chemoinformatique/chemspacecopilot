@@ -7,6 +7,7 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -170,6 +171,38 @@ def build_matrix(
     return batches
 
 
+def _can_import_synplan(python_path: str) -> bool:
+    """Probe a child interpreter, because the study runs in one, not in this process."""
+    probe = subprocess.run(
+        [sys.executable, "-c", "import synplan"],
+        env={**os.environ, "PYTHONPATH": python_path},
+        capture_output=True,
+    )
+    return probe.returncode == 0
+
+
+def verify_retrosynthesis_runtime(config: dict, python_path: str, probe=None) -> None:
+    """Refuse to plan a retrosynthesis study whose runtime cannot import synplan.
+
+    ``_python_path`` falls back to ``src`` alone when the vendored directory is
+    absent, and does so silently. Every route search then fails for a reason
+    unrelated to what the study measures, producing task-success zeros that read
+    like a result. Fail here instead, before the executions are spent.
+    """
+    validators = {
+        (spec or {}).get("validator") for spec in (config.get("tests") or {}).values()
+    }
+    if "retrosynthesis" not in validators:
+        return
+    if not (probe or _can_import_synplan)(python_path):
+        raise ValueError(
+            "This study runs retrosynthesis but its runtime cannot import synplan. "
+            f"PYTHONPATH={python_path}. Vendor SynPlanner under "
+            "reports/<study>/python-deps, or disable the retrosynthesis cases; "
+            "planning anyway would score every route search as a failure."
+        )
+
+
 def live_model_state(seh_input_path: Path) -> dict:
     """Pair the live-tier map with the descriptor family its own fixture records.
 
@@ -193,6 +226,7 @@ def prepare(args):
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=False)
     base = yaml.safe_load(args.config.read_text())
+    verify_retrosynthesis_runtime(base, _python_path(root))
     seh = json.loads(args.seh_manifest.read_text())
     fixture_dir = output / "fixtures"
     fixture_dir.mkdir()
