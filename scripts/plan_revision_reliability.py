@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Prepare an offline, counterbalanced 48+12 execution plan; never call a provider."""
+"""Prepare an offline, counterbalanced 48+24 execution plan; never call a provider."""
 
 from __future__ import annotations
 

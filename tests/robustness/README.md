@@ -721,3 +721,58 @@ tests/robustness/
 ## Support
 
 For issues or questions, please open an issue on the repository or contact the maintainers.
+
+## Counterbalancing and repetition count in the manuscript suite
+
+Two separate design decisions, both expressed in `scripts/plan_revision_reliability.py`.
+
+### Both arms run inside one live batch
+
+`plan_revision_reliability.py:162-165`:
+
+```
+# Counterbalanced like the frozen batches. Running both arms in
+# one batch also holds the ChEMBL state fixed between them: the
+# live tier retrieves prospectively, so arms measured hours
+# apart would differ by data drift as well as by architecture.
+```
+
+The live tier retrieves from ChEMBL prospectively for Cases 1-3. Running the
+team arm on one day and the single agent on another would confound architecture
+with database drift, so both arms share a batch and therefore the same retrieved
+data.
+
+### The live tier is only partially counterbalanced
+
+Alternation keys off a different index in each tier:
+
+| Tier | Expression | Balance |
+|---|---|---|
+| Frozen | `"team-first" if variant == 0 else "single-agent-first"` (`:127`) | 2 formulations x 3 repetitions, 3/3 |
+| Live | `"team-first" if repetition % 2 == 0 else "single-agent-first"` (`:166`) | 1 formulation, repetitions 0 and 2 team-first, 2/1 |
+
+Frozen gets balance for free because the prompt-formulation index carries the
+alternation. Live has a single formulation, so the only free index is the
+repetition number, and three is odd. The emitted plan shows it directly:
+
+```
+frozen_p0_r0  variant=0 team-first      live_r0  variant=0 team-first
+frozen_p1_r0  variant=1 single-agent-first   live_r1  variant=0 single-agent-first
+...                                      live_r2  variant=0 team-first
+```
+
+A fourth live repetition would make it 2/2 and remove the caveat. That is one
+extra live batch, not a redesign.
+
+### Why three repetitions
+
+`repetitions: 3` is suite-wide (`manuscript_reliability.yaml:28`) and shared by
+both tiers, with scientific seeds `(11, 22, 33)`, one per repetition
+(`plan_revision_reliability.py:108` and `:138`), so the tiers are seed-matched.
+It sets the design arithmetic: frozen 4 x 2 x 3 x 2 = 48, live 4 x 1 x 3 x 2 =
+24, for 72 executions in 9 batches.
+
+**No recorded justification exists for three specifically.** It is the suite
+default. Per-run cost is bounded by `timeout_seconds: 1800`, which makes budget
+the plausible driver, but nothing in the repository states it. Do not attribute a
+rationale that is not written down.
