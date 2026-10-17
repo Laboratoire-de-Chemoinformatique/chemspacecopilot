@@ -3169,7 +3169,9 @@ def node_roundtrip_fidelity(
     decoded = engine.decode(centers.astype(np.float32), max_len=max_len, temp=temp, decode=decode)
     kept = [
         (origin, smiles)
-        for origin, smiles in zip(origins, decoded)
+        # strict: one decode per centre. A different count is an engine bug,
+        # and pairing them off silently would mislabel every node after it.
+        for origin, smiles in zip(origins, decoded, strict=True)
         if _smiles_to_mol_or_none(smiles) is not None
     ]
     if not kept:
