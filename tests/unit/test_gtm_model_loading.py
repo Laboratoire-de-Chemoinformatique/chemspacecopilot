@@ -176,6 +176,38 @@ class TestLatentCentersFromGtm:
 
         assert gtm_operations.latent_centers_from_gtm(gtm).shape == (3, 4)
 
+    def test_the_manifolds_own_scaler_is_used_when_none_is_passed(self):
+        """A dropped scaler returns z-scored centres that a decoder accepts in
+        silence, so the manifold carries its own and the caller cannot lose it."""
+
+        class _Scaler:
+            def inverse_transform(self, x):
+                return x * 10.0
+
+        gtm = self._gtm()
+        gtm.latent_scaler = _Scaler()
+
+        assert (
+            gtm_operations.latent_centers_from_gtm(gtm)
+            == gtm_operations.latent_centers_from_gtm(self._gtm()) * 10.0
+        ).all()
+
+    def test_an_explicit_scaler_overrides_the_stored_one(self):
+        class _Stored:
+            def inverse_transform(self, x):
+                return x * 10.0
+
+        class _Explicit:
+            def inverse_transform(self, x):
+                return x * 2.0
+
+        gtm = self._gtm()
+        gtm.latent_scaler = _Stored()
+
+        centers = gtm_operations.latent_centers_from_gtm(gtm, scaler=_Explicit())
+
+        assert (centers == gtm_operations.latent_centers_from_gtm(self._gtm()) * 2.0).all()
+
 
 class TestTrainLatentGtm:
     """The latent path must actually reach chemographykit's API.
@@ -194,12 +226,51 @@ class TestTrainLatentGtm:
             "reg_coeff": 100.0,
         }
 
-        gtm, scaler, entropy = gtm_operations.train_latent_gtm(vectors, config=config)
+        gtm, scaler, entropy = gtm_operations.train_latent_gtm(
+            vectors, config=config, descriptor_backend="chembed"
+        )
 
         assert gtm.num_nodes == 36
         assert gtm.num_basis_functions == 9
         assert 0.0 <= entropy <= 1.0
         assert scaler is not None
+
+    def test_the_fitted_manifold_carries_its_backend_and_scaler(self):
+        """Untagged, the guard warns and passes; scaler-less, centres stay z-scored."""
+        vectors = np.random.default_rng(0).standard_normal((60, 4))
+        config = {
+            "n_basis_functions_sqrt": 2,
+            "n_nodes_n_basis_diff": 2,
+            "basis_width": 1.0,
+            "reg_coeff": 100.0,
+        }
+
+        gtm, scaler, _ = gtm_operations.train_latent_gtm(
+            vectors, config=config, descriptor_backend="chembed"
+        )
+
+        assert gtm.descriptor_backend == "chembed"
+        assert gtm.latent_scaler is scaler
+        # The guard can now do its job on a manifold this function produced.
+        with pytest.raises(ValueError, match="meaningless coordinates"):
+            gtm_operations.validate_gtm_descriptor_backend(gtm, "autoencoder")
+
+    @pytest.mark.parametrize(
+        ("supplied", "recorded"),
+        [
+            ("latent", "autoencoder"),  # an alias resolves to its family
+            ("chembed", "chembed"),
+            ("peptide_latent", "peptide_latent"),  # not a descriptor, kept verbatim
+        ],
+    )
+    def test_backend_names_are_canonicalised_but_unknown_ones_survive(self, supplied, recorded):
+        """Peptide latents have no descriptor alias and must keep their own name,
+        so they still fail the check against any small-molecule projection."""
+        gtm = SimpleNamespace()
+
+        gtm_operations._tag_latent_gtm(gtm, scaler=None, descriptor_backend=supplied)
+
+        assert gtm.descriptor_backend == recorded
 
     def test_projection_and_centers_round_trip(self):
         vectors = np.random.default_rng(1).standard_normal((80, 5))
@@ -209,7 +280,9 @@ class TestTrainLatentGtm:
             "basis_width": 1.0,
             "reg_coeff": 100.0,
         }
-        gtm, scaler, _ = gtm_operations.train_latent_gtm(vectors, config=config)
+        gtm, scaler, _ = gtm_operations.train_latent_gtm(
+            vectors, config=config, descriptor_backend="chembed"
+        )
 
         resps = gtm_operations.project_latent_on_gtm(vectors, gtm, scaler)
         centers = gtm_operations.latent_centers_from_gtm(gtm, scaler=scaler)

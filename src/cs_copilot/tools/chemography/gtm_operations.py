@@ -3062,8 +3062,9 @@ def latent_centers_from_gtm(
 
     The centres land in whichever space the manifold was fitted on. A manifold
     fitted through :func:`train_latent_gtm` was fitted on externally scaled
-    vectors, so pass that run's ``scaler`` to recover the original latent.
-    Manifolds fitted on raw descriptors, as the default map is, need no scaler.
+    vectors, and carries the scaler that recovers the original latent, so the
+    inverse transform happens without the caller arranging it. Manifolds fitted
+    on raw descriptors, as the default map is, carry none and need none.
 
     Note that a 2D manifold cannot carry a high-dimensional latent faithfully:
     reconstructing a molecule through the default map leaves a relative error
@@ -3074,8 +3075,9 @@ def latent_centers_from_gtm(
         gtm: Fitted GTM exposing ``phi`` and ``weights``.
         node_ids: 1-based node identifiers, matching the landscape tables. When
             omitted, every node is returned in order.
-        scaler: Scaler fitted alongside the manifold, if it was fitted on scaled
-            vectors. ``None`` leaves the centres untouched.
+        scaler: Scaler to invert with, overriding the one on the manifold. When
+            omitted, the manifold's own ``latent_scaler`` is used; a manifold
+            carrying none leaves the centres untouched.
 
     Returns:
         ``(len(node_ids), n_descriptor_dimensions)`` array of node centres.
@@ -3096,6 +3098,8 @@ def latent_centers_from_gtm(
             )
         centers = centers[indices]
 
+    if scaler is None:
+        scaler = getattr(gtm, "latent_scaler", None)
     if scaler is not None:
         centers = scaler.inverse_transform(centers)
     return centers
@@ -5183,10 +5187,31 @@ SESSION_LATENT_GTM_MODEL_KEY = "_current_latent_gtm_model"
 SESSION_LATENT_GTM_SCALER_KEY = "_current_latent_gtm_scaler"
 
 
+def _tag_latent_gtm(gtm: Any, scaler: Any, descriptor_backend: str) -> None:
+    """Record on the manifold which latent space it was fitted on, and its scaler.
+
+    Without the tag, :func:`validate_gtm_descriptor_backend` takes its
+    warn-and-pass branch, which is exactly the chembed-versus-autoencoder case
+    it exists to catch: both latents are 256-wide, so nothing else tells them
+    apart. Without the scaler, :func:`latent_centers_from_gtm` returns z-scored
+    centres that a decoder consumes without complaint.
+
+    Names that are not descriptor aliases, peptide latents among them, are kept
+    verbatim, so they still fail the check against a small-molecule projection.
+    """
+    try:
+        gtm.descriptor_backend = MolecularDescriptorEncoder(descriptor_backend).default_descriptor
+    except ValueError:
+        gtm.descriptor_backend = descriptor_backend
+    gtm.latent_scaler = scaler
+
+
 def train_latent_gtm(
     latent_vectors: np.ndarray,
     config: Optional[dict] = None,
     strategy: str = "low",
+    *,
+    descriptor_backend: str,
 ) -> tuple:
     """
     Train a GTM on pre-computed latent vectors (e.g. from Peptide Designer).
@@ -5200,10 +5225,15 @@ def train_latent_gtm(
                 Supported keys: n_basis_functions_sqrt, n_nodes_n_basis_diff, basis_width, reg_coeff
         strategy: Optimization effort level — ``"low"``, ``"medium"``, or ``"high"``.
             Only used when *config* is None.
+        descriptor_backend: Latent space these vectors came from, such as
+            ``"chembed"``, ``"autoencoder"`` or ``"peptide_latent"``. Recorded on
+            the manifold so a projection in the wrong space is refused rather
+            than returning coordinates that look fine and mean nothing.
 
     Returns:
         tuple: (gtm_model, scaler, best_score) where:
-            - gtm_model: Trained GTM model
+            - gtm_model: Trained GTM model, tagged with ``descriptor_backend``
+              and carrying its ``latent_scaler``
             - scaler: StandardScaler fitted on the latent vectors
             - best_score: Shannon entropy score of the trained model
     """
@@ -5252,6 +5282,7 @@ def train_latent_gtm(
         score = shannon_entropy(resps.cpu().numpy())
 
         logger.info(f"Latent GTM trained with entropy: {score:.4f}")
+        _tag_latent_gtm(gtm, scaler, descriptor_backend)
         return gtm, scaler, score
 
     # --- Strategy dispatch ---------------------------------------------------
@@ -5333,6 +5364,7 @@ def train_latent_gtm(
     best_score = shannon_entropy(resps.cpu().numpy())
 
     logger.info(f"Latent GTM optimized with best entropy: {best_score:.4f}")
+    _tag_latent_gtm(gtm, scaler, descriptor_backend)
     return gtm, scaler, best_score
 
 

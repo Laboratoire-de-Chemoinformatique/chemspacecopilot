@@ -174,7 +174,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         engine.unknown_token_substitutions,
     )
 
-    gtm, scaler, entropy = train_latent_gtm(latents.astype(np.float64), config=GTM_CONFIG)
+    gtm, scaler, entropy = train_latent_gtm(
+        latents.astype(np.float64), config=GTM_CONFIG, descriptor_backend="chembed"
+    )
     resps = project_latent_on_gtm(latents.astype(np.float64), gtm, scaler)
     logger.info("Fitted latent GTM, Shannon entropy %.4f", entropy)
 
