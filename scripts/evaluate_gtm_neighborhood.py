@@ -187,6 +187,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "basis_width": 1.0,
                     "reg_coeff": 100.0,
                 },
+                descriptor_backend="chembed",
             )
             logger.info("%s: fitted a GTM on it, Shannon entropy %.4f", name, entropy)
             own = {}

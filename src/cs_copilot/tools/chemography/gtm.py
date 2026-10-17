@@ -1525,8 +1525,12 @@ class GTMToolkit(BaseDRToolkit):
         X = df[numeric_cols].values.astype(np.float64)
         logger.info(f"Loaded {X.shape[0]} latent vectors with {X.shape[1]} dimensions")
 
-        # Train the GTM
-        gtm_model, scaler, best_score = gtm_operations.train_latent_gtm(X, strategy=strategy)
+        # Train the GTM. The latents arrive as a bare CSV, so the only backend
+        # this tool can honestly claim is its own: peptide latents, which no
+        # small-molecule projection should ever be allowed to reuse.
+        gtm_model, scaler, best_score = gtm_operations.train_latent_gtm(
+            X, strategy=strategy, descriptor_backend="peptide_latent"
+        )
 
         # Store in session state
         if agent.session_state is None:

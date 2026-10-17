@@ -23,10 +23,14 @@ Read the output with two cautions:
 * SELFIES decode to a valid molecule by construction, so validity is 1.0 for
   both arms by definition and says nothing. Compare distinct yield, novelty,
   Tanimoto to the actives, and SA.
-* A 2D manifold cannot carry a 256D latent faithfully; reconstructing through
-  the default map leaves a relative error near 0.6. Decoded node centres are
-  regional summaries, not neighbours of any particular compound, so the GTM arm
-  is expected to range wider. Wider is only better if the molecules are good.
+* A 2D manifold cannot carry a 256D latent faithfully, so decoded node centres
+  are regional summaries rather than neighbours of any particular compound, and
+  the GTM arm is expected to range wider. Wider is only better if the molecules
+  are good. How much the manifold actually loses is measured per run, not
+  assumed: ``roundtrip`` in the summary reports the fraction of decoded node
+  centres that re-encode back into their own node. Read the two arms in its
+  light — a low fraction means the GTM arm was seeded from points the manifold
+  cannot place, which is a finding about the map, not about generation.
 
 Usage::
 
@@ -149,6 +153,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     from cs_copilot.tools.chemistry.chembed_engine import ChembedEngine
     from cs_copilot.tools.chemography.gtm_operations import (
         latent_centers_from_gtm,
+        node_roundtrip_fidelity,
         project_latent_on_gtm,
         train_latent_gtm,
     )
@@ -174,7 +179,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         engine.unknown_token_substitutions,
     )
 
-    gtm, scaler, entropy = train_latent_gtm(latents.astype(np.float64), config=GTM_CONFIG)
+    gtm, scaler, entropy = train_latent_gtm(
+        latents.astype(np.float64), config=GTM_CONFIG, descriptor_backend="chembed"
+    )
     resps = project_latent_on_gtm(latents.astype(np.float64), gtm, scaler)
     logger.info("Fitted latent GTM, Shannon entropy %.4f", entropy)
 
@@ -212,6 +219,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     node_centers = latent_centers_from_gtm(
         gtm, node_ids=selected["node_id"].tolist(), scaler=scaler
     )
+
+    # What the 2D bottleneck costs this manifold, measured rather than quoted.
+    # Noise-free, because this asks about the centres themselves, not about the
+    # sampling around them.
+    roundtrip = node_roundtrip_fidelity(
+        gtm, engine, node_ids=selected["node_id"].tolist(), scaler=scaler
+    )
+    logger.info(
+        "Round trip: %s of %s decoded node centres re-encode into their own node, "
+        "median responsibility to it %s",
+        roundtrip["same_node"],
+        roundtrip["decoded"],
+        roundtrip["origin_responsibility_median"],
+    )
+
     top_compounds = np.argsort(activity)[::-1][: len(selected)]
     active_latents = latents[top_compounds].astype(np.float64)
 
@@ -260,12 +282,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             "n_candidates": args.n_candidates,
             "seed": args.seed,
         },
+        "roundtrip": roundtrip,
         "arms_by_noise_scale": arms,
         "caveats": [
             "SELFIES decode to a valid molecule by construction; validity is not "
             "comparable with a SMILES decoder and is not reported as evidence.",
             "A 2D manifold cannot carry a 256D latent faithfully, so decoded node "
-            "centres are regional summaries rather than neighbours of any compound.",
+            "centres are regional summaries rather than neighbours of any compound. "
+            "'roundtrip' measures what that costs on this manifold: a low "
+            "same_node fraction means the GTM arm was seeded from points the map "
+            "cannot place, which is a finding about the map, not about generation.",
             "Generated activity is unproven; node enrichment guides sampling only.",
         ],
     }

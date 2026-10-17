@@ -176,6 +176,191 @@ class TestLatentCentersFromGtm:
 
         assert gtm_operations.latent_centers_from_gtm(gtm).shape == (3, 4)
 
+    def test_the_manifolds_own_scaler_is_used_when_none_is_passed(self):
+        """A dropped scaler returns z-scored centres that a decoder accepts in
+        silence, so the manifold carries its own and the caller cannot lose it."""
+
+        class _Scaler:
+            def inverse_transform(self, x):
+                return x * 10.0
+
+        gtm = self._gtm()
+        gtm.latent_scaler = _Scaler()
+
+        assert (
+            gtm_operations.latent_centers_from_gtm(gtm)
+            == gtm_operations.latent_centers_from_gtm(self._gtm()) * 10.0
+        ).all()
+
+    def test_an_explicit_scaler_overrides_the_stored_one(self):
+        class _Stored:
+            def inverse_transform(self, x):
+                return x * 10.0
+
+        class _Explicit:
+            def inverse_transform(self, x):
+                return x * 2.0
+
+        gtm = self._gtm()
+        gtm.latent_scaler = _Stored()
+
+        centers = gtm_operations.latent_centers_from_gtm(gtm, scaler=_Explicit())
+
+        assert (centers == gtm_operations.latent_centers_from_gtm(self._gtm()) * 2.0).all()
+
+
+class TestNodeRoundtripFidelity:
+    """Latent error does not say whether a decoded centre stayed on its node.
+
+    The decoder is nonlinear, so the only honest reading is the round trip:
+    decode a node centre, re-encode what comes back, see where it lands.
+    """
+
+    _VECTORS = np.random.default_rng(3).standard_normal((60, 4))
+    _CONFIG = {
+        "n_basis_functions_sqrt": 2,
+        "n_nodes_n_basis_diff": 2,
+        "basis_width": 1.0,
+        "reg_coeff": 0.1,
+    }
+
+    def _fitted(self):
+        return gtm_operations.train_latent_gtm(
+            self._VECTORS, config=self._CONFIG, descriptor_backend="chembed"
+        )
+
+    def _fitted_with_double_standardization(self):
+        """What train_latent_gtm produced before it passed standardize=False.
+
+        Built by hand because the function no longer has a way to produce it,
+        which is the point of the test that uses this.
+        """
+        from sklearn.preprocessing import StandardScaler
+
+        scaler = StandardScaler()
+        scaled = scaler.fit_transform(self._VECTORS).astype(np.float64)
+        gtm = gtm_operations.GTM(
+            num_basis_functions=4,
+            num_nodes=16,
+            basis_width=1.0,
+            reg_coeff=0.1,
+            max_iter=200,
+            device="cpu",
+            standardize=True,
+        )
+        gtm.fit(torch.from_numpy(scaled).to(torch.float64))
+        gtm_operations._tag_latent_gtm(gtm, scaler, "chembed")
+        return gtm, scaler
+
+    class _PerfectEngine:
+        """Decodes each centre to its own name and encodes it straight back.
+
+        A lossless engine isolates the manifold: whatever the round trip loses
+        here is the 2D bottleneck, not the decoder.
+        """
+
+        # Alkanes of increasing length: distinct, and valid, which "C0" is not --
+        # RDKit reads that as an unclosed ring bond.
+        @staticmethod
+        def _name(index):
+            return "C" * (index + 1)
+
+        def __init__(self, centers):
+            self._by_smiles = {self._name(i): row for i, row in enumerate(centers)}
+
+        def decode(self, z, *, max_len, temp, decode):
+            return [self._name(i) for i in range(len(z))]
+
+        def encode(self, smiles_list, *, batch_size):
+            return np.array([self._by_smiles[s] for s in smiles_list])
+
+    def test_a_lossless_engine_round_trips_perfectly(self):
+        """A node centre is the point its own node is most responsible for, so
+        with a lossless decoder every centre must come back to itself. Anything
+        less is the manifold, not the engine — which is what makes this metric
+        readable on a real one."""
+        gtm, scaler, _ = self._fitted()
+        centers = gtm_operations.latent_centers_from_gtm(gtm, scaler=scaler)
+
+        result = gtm_operations.node_roundtrip_fidelity(
+            gtm, self._PerfectEngine(centers), scaler=scaler
+        )
+
+        assert result["nodes"] == gtm.num_nodes
+        assert result["decoded"] == gtm.num_nodes
+        assert result["same_node"] == 1.0
+        assert 0.0 <= result["origin_responsibility_median"] <= 1.0
+
+    def test_double_standardization_would_break_the_round_trip(self):
+        """Why train_latent_gtm passes standardize=False.
+
+        chemographykit standardizes by default, re-fitting its own scaler on
+        each batch, so node centres end up measured against a frame they were
+        not written in and a lossless engine stops round-tripping. This pins
+        the failure the flag prevents; it is not reachable through
+        train_latent_gtm any more.
+        """
+        gtm, scaler = self._fitted_with_double_standardization()
+        centers = gtm_operations.latent_centers_from_gtm(gtm, scaler=scaler)
+
+        result = gtm_operations.node_roundtrip_fidelity(
+            gtm, self._PerfectEngine(centers), scaler=scaler
+        )
+
+        assert result["decoded"] == gtm.num_nodes
+        assert result["same_node"] < 1.0
+
+    def test_unparseable_decodes_are_excluded_not_counted_as_failures(self):
+        gtm, scaler, _ = self._fitted()
+        centers = gtm_operations.latent_centers_from_gtm(gtm, scaler=scaler)
+
+        class _HalfBroken(self._PerfectEngine):
+            def decode(self, z, *, max_len, temp, decode):
+                return [self._name(i) if i % 2 == 0 else "not a molecule(((" for i in range(len(z))]
+
+        result = gtm_operations.node_roundtrip_fidelity(gtm, _HalfBroken(centers), scaler=scaler)
+
+        assert result["decoded"] < result["nodes"]
+        assert result["same_node"] == 1.0
+
+    def test_nothing_decoding_is_reported_as_unknown_not_as_zero(self):
+        """Zero would read as 'the map is useless'; it means 'no evidence'."""
+        gtm, scaler, _ = self._fitted()
+
+        class _Broken(self._PerfectEngine):
+            def decode(self, z, *, max_len, temp, decode):
+                return ["not a molecule((("] * len(z)
+
+        result = gtm_operations.node_roundtrip_fidelity(gtm, _Broken({}), scaler=scaler)
+
+        assert result["decoded"] == 0
+        assert result["same_node"] is None
+        assert result["origin_responsibility_median"] is None
+
+    def test_responsibilities_do_not_depend_on_the_rest_of_the_batch(self):
+        """A compound's node is a property of the compound.
+
+        chemographykit's standardize re-fits on each call's input, so with it
+        on, projecting five compounds alone gave different nodes than
+        projecting the same five inside a larger set. That reaches node
+        assignment and every activity landscape built on it, not only
+        generation.
+        """
+        gtm, scaler, _ = self._fitted()
+
+        alone = gtm_operations.project_latent_on_gtm(self._VECTORS[:5], gtm, scaler)
+        in_batch = gtm_operations.project_latent_on_gtm(self._VECTORS, gtm, scaler)[:5]
+
+        assert (alone.argmax(axis=1) == in_batch.argmax(axis=1)).all()
+        np.testing.assert_allclose(alone, in_batch)
+
+    def test_a_manifold_without_a_scaler_is_refused(self):
+        """Projecting would need one; a silent skip would return nonsense."""
+        gtm = SimpleNamespace(phi=np.ones((4, 2)), weights=np.ones((2, 3)))
+
+        with pytest.raises(ValueError, match="scaler the manifold was fitted with"):
+            gtm_operations.node_roundtrip_fidelity(gtm, self._PerfectEngine({}))
+
 
 class TestTrainLatentGtm:
     """The latent path must actually reach chemographykit's API.
@@ -194,12 +379,51 @@ class TestTrainLatentGtm:
             "reg_coeff": 100.0,
         }
 
-        gtm, scaler, entropy = gtm_operations.train_latent_gtm(vectors, config=config)
+        gtm, scaler, entropy = gtm_operations.train_latent_gtm(
+            vectors, config=config, descriptor_backend="chembed"
+        )
 
         assert gtm.num_nodes == 36
         assert gtm.num_basis_functions == 9
         assert 0.0 <= entropy <= 1.0
         assert scaler is not None
+
+    def test_the_fitted_manifold_carries_its_backend_and_scaler(self):
+        """Untagged, the guard warns and passes; scaler-less, centres stay z-scored."""
+        vectors = np.random.default_rng(0).standard_normal((60, 4))
+        config = {
+            "n_basis_functions_sqrt": 2,
+            "n_nodes_n_basis_diff": 2,
+            "basis_width": 1.0,
+            "reg_coeff": 100.0,
+        }
+
+        gtm, scaler, _ = gtm_operations.train_latent_gtm(
+            vectors, config=config, descriptor_backend="chembed"
+        )
+
+        assert gtm.descriptor_backend == "chembed"
+        assert gtm.latent_scaler is scaler
+        # The guard can now do its job on a manifold this function produced.
+        with pytest.raises(ValueError, match="meaningless coordinates"):
+            gtm_operations.validate_gtm_descriptor_backend(gtm, "autoencoder")
+
+    @pytest.mark.parametrize(
+        ("supplied", "recorded"),
+        [
+            ("latent", "autoencoder"),  # an alias resolves to its family
+            ("chembed", "chembed"),
+            ("peptide_latent", "peptide_latent"),  # not a descriptor, kept verbatim
+        ],
+    )
+    def test_backend_names_are_canonicalised_but_unknown_ones_survive(self, supplied, recorded):
+        """Peptide latents have no descriptor alias and must keep their own name,
+        so they still fail the check against any small-molecule projection."""
+        gtm = SimpleNamespace()
+
+        gtm_operations._tag_latent_gtm(gtm, scaler=None, descriptor_backend=supplied)
+
+        assert gtm.descriptor_backend == recorded
 
     def test_projection_and_centers_round_trip(self):
         vectors = np.random.default_rng(1).standard_normal((80, 5))
@@ -209,7 +433,9 @@ class TestTrainLatentGtm:
             "basis_width": 1.0,
             "reg_coeff": 100.0,
         }
-        gtm, scaler, _ = gtm_operations.train_latent_gtm(vectors, config=config)
+        gtm, scaler, _ = gtm_operations.train_latent_gtm(
+            vectors, config=config, descriptor_backend="chembed"
+        )
 
         resps = gtm_operations.project_latent_on_gtm(vectors, gtm, scaler)
         centers = gtm_operations.latent_centers_from_gtm(gtm, scaler=scaler)

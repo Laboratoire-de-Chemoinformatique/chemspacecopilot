@@ -3062,20 +3062,24 @@ def latent_centers_from_gtm(
 
     The centres land in whichever space the manifold was fitted on. A manifold
     fitted through :func:`train_latent_gtm` was fitted on externally scaled
-    vectors, so pass that run's ``scaler`` to recover the original latent.
-    Manifolds fitted on raw descriptors, as the default map is, need no scaler.
+    vectors, and carries the scaler that recovers the original latent, so the
+    inverse transform happens without the caller arranging it. Manifolds fitted
+    on raw descriptors, as the default map is, carry none and need none.
 
-    Note that a 2D manifold cannot carry a high-dimensional latent faithfully:
-    reconstructing a molecule through the default map leaves a relative error
-    around 0.6. Decoded node centres are therefore regional summaries, not
-    reconstructions of any particular molecule.
+    A 2D manifold cannot carry a high-dimensional latent faithfully, so a
+    decoded centre is a regional summary rather than a reconstruction of any
+    particular molecule. How much that costs is not a constant and is not
+    assumed here: measure it for your own manifold with
+    :func:`node_roundtrip_fidelity`, which asks the question that matters for
+    generation — whether a decoded centre re-encodes back into its own node.
 
     Args:
         gtm: Fitted GTM exposing ``phi`` and ``weights``.
         node_ids: 1-based node identifiers, matching the landscape tables. When
             omitted, every node is returned in order.
-        scaler: Scaler fitted alongside the manifold, if it was fitted on scaled
-            vectors. ``None`` leaves the centres untouched.
+        scaler: Scaler to invert with, overriding the one on the manifold. When
+            omitted, the manifold's own ``latent_scaler`` is used; a manifold
+            carrying none leaves the centres untouched.
 
     Returns:
         ``(len(node_ids), n_descriptor_dimensions)`` array of node centres.
@@ -3096,9 +3100,100 @@ def latent_centers_from_gtm(
             )
         centers = centers[indices]
 
+    if scaler is None:
+        scaler = getattr(gtm, "latent_scaler", None)
     if scaler is not None:
         centers = scaler.inverse_transform(centers)
     return centers
+
+
+def node_roundtrip_fidelity(
+    gtm: Any,
+    engine: Any,
+    node_ids: Optional[Sequence[int]] = None,
+    *,
+    scaler: Any = None,
+    batch_size: int = 32,
+    max_len: int = 100,
+    temp: float = 1.0,
+    decode: str = "greedy",
+) -> dict[str, Any]:
+    """Measure whether a decoded node centre still belongs to the node it came from.
+
+    Relative error in latent space is the wrong yardstick for map-guided
+    generation. The decoder is autoregressive and nonlinear, so a large error
+    across hundreds of dimensions need not move the molecule anywhere else on
+    the map, and a small one does not promise it stayed. What decides whether a
+    node centre can seed generation for its own region is the round trip:
+    decode the centre, re-encode what comes back, and see where it lands.
+
+    The result reports no grid distance, because it assumes nothing about how
+    nodes are laid out. ``origin_responsibility_median`` is the softer reading
+    of the same question: how much of the re-encoded molecule's mass still sits
+    on the node that produced it.
+
+    Args:
+        gtm: Fitted GTM, carrying its ``latent_scaler`` if it came from
+            :func:`train_latent_gtm`.
+        engine: Latent engine for this manifold's descriptor backend, following
+            the ``LatentEngine`` protocol.
+        node_ids: 1-based nodes to test. When omitted every node is tested,
+            which costs one decode and one encode per node.
+        scaler: Scaler to project with, overriding the manifold's own.
+        batch_size: Encoding batch size.
+        max_len: Decode length cap.
+        temp: Decode temperature.
+        decode: Decode strategy passed to the engine.
+
+    Returns:
+        ``nodes`` tested, how many ``decoded`` to a parseable molecule, the
+        ``same_node`` fraction of those, and ``origin_responsibility_median``.
+        The last two are ``None`` when nothing decoded.
+
+    Raises:
+        ValueError: If no scaler is available to project with.
+    """
+    scaler = scaler if scaler is not None else getattr(gtm, "latent_scaler", None)
+    if scaler is None:
+        raise ValueError(
+            "node_roundtrip_fidelity needs the scaler the manifold was fitted with. "
+            "Manifolds fitted through train_latent_gtm carry their own; older ones "
+            "must be passed one explicitly."
+        )
+
+    centers = latent_centers_from_gtm(gtm, node_ids=node_ids, scaler=scaler)
+    origins = (
+        np.arange(1, centers.shape[0] + 1) if node_ids is None else np.asarray(node_ids, dtype=int)
+    )
+
+    decoded = engine.decode(centers.astype(np.float32), max_len=max_len, temp=temp, decode=decode)
+    kept = [
+        (origin, smiles)
+        # strict: one decode per centre. A different count is an engine bug,
+        # and pairing them off silently would mislabel every node after it.
+        for origin, smiles in zip(origins, decoded, strict=True)
+        if _smiles_to_mol_or_none(smiles) is not None
+    ]
+    if not kept:
+        return {
+            "nodes": int(len(origins)),
+            "decoded": 0,
+            "same_node": None,
+            "origin_responsibility_median": None,
+        }
+
+    kept_origins = np.array([origin for origin, _ in kept])
+    latents = engine.encode([smiles for _, smiles in kept], batch_size=batch_size)
+    resps = project_latent_on_gtm(np.asarray(latents, dtype=np.float64), gtm, scaler)
+
+    return {
+        "nodes": int(len(origins)),
+        "decoded": int(len(kept)),
+        "same_node": float((resps.argmax(axis=1) + 1 == kept_origins).mean()),
+        "origin_responsibility_median": float(
+            np.median(resps[np.arange(len(kept)), kept_origins - 1])
+        ),
+    }
 
 
 def validate_gtm_descriptor_backend(gtm: Any, descriptor_type: str) -> None:
@@ -5183,10 +5278,31 @@ SESSION_LATENT_GTM_MODEL_KEY = "_current_latent_gtm_model"
 SESSION_LATENT_GTM_SCALER_KEY = "_current_latent_gtm_scaler"
 
 
+def _tag_latent_gtm(gtm: Any, scaler: Any, descriptor_backend: str) -> None:
+    """Record on the manifold which latent space it was fitted on, and its scaler.
+
+    Without the tag, :func:`validate_gtm_descriptor_backend` takes its
+    warn-and-pass branch, which is exactly the chembed-versus-autoencoder case
+    it exists to catch: both latents are 256-wide, so nothing else tells them
+    apart. Without the scaler, :func:`latent_centers_from_gtm` returns z-scored
+    centres that a decoder consumes without complaint.
+
+    Names that are not descriptor aliases, peptide latents among them, are kept
+    verbatim, so they still fail the check against a small-molecule projection.
+    """
+    try:
+        gtm.descriptor_backend = MolecularDescriptorEncoder(descriptor_backend).default_descriptor
+    except ValueError:
+        gtm.descriptor_backend = descriptor_backend
+    gtm.latent_scaler = scaler
+
+
 def train_latent_gtm(
     latent_vectors: np.ndarray,
     config: Optional[dict] = None,
     strategy: str = "low",
+    *,
+    descriptor_backend: str,
 ) -> tuple:
     """
     Train a GTM on pre-computed latent vectors (e.g. from Peptide Designer).
@@ -5194,16 +5310,30 @@ def train_latent_gtm(
     Follows the pattern from the Peptides_WAE notebook: StandardScaler → torch float64 → GTM.fit().
     Uses Optuna hyperparameter optimization identical to optimize_gtm but skips descriptor computation.
 
+    The GTM is built with ``standardize=False`` because the scaling is done
+    here. chemographykit standardizes by default, and its ``_standardize``
+    fits a fresh ``DataStandardizer`` on whatever it is handed rather than
+    reusing the training statistics. Left on, it would scale twice: ``phi @
+    weights`` would land in a frame the returned scaler cannot undo, so
+    :func:`latent_centers_from_gtm` would not return latents at all, and
+    ``project`` would re-scale by each call's own batch, making a compound's
+    responsibilities depend on what was projected alongside it.
+
     Args:
         latent_vectors: numpy array of shape (n_samples, latent_dim)
         config: Optional dict with GTM hyperparameters. If None, uses Optuna optimization.
                 Supported keys: n_basis_functions_sqrt, n_nodes_n_basis_diff, basis_width, reg_coeff
         strategy: Optimization effort level — ``"low"``, ``"medium"``, or ``"high"``.
             Only used when *config* is None.
+        descriptor_backend: Latent space these vectors came from, such as
+            ``"chembed"``, ``"autoencoder"`` or ``"peptide_latent"``. Recorded on
+            the manifold so a projection in the wrong space is refused rather
+            than returning coordinates that look fine and mean nothing.
 
     Returns:
         tuple: (gtm_model, scaler, best_score) where:
-            - gtm_model: Trained GTM model
+            - gtm_model: Trained GTM model, tagged with ``descriptor_backend``
+              and carrying its ``latent_scaler``
             - scaler: StandardScaler fitted on the latent vectors
             - best_score: Shannon entropy score of the trained model
     """
@@ -5246,12 +5376,14 @@ def train_latent_gtm(
             reg_coeff=reg_coeff,
             max_iter=200,
             device=device,
+            standardize=False,
         )
         gtm.fit(torch.from_numpy(X_scaled).to(torch.float64))
         resps, _ = gtm.project(torch.from_numpy(X_scaled).to(torch.float64))
         score = shannon_entropy(resps.cpu().numpy())
 
         logger.info(f"Latent GTM trained with entropy: {score:.4f}")
+        _tag_latent_gtm(gtm, scaler, descriptor_backend)
         return gtm, scaler, score
 
     # --- Strategy dispatch ---------------------------------------------------
@@ -5307,6 +5439,7 @@ def train_latent_gtm(
             reg_coeff=rc,
             max_iter=200,
             device=device,
+            standardize=False,
         )
         gtm_trial.fit(torch.from_numpy(X_scaled).to(torch.float64))
         resps, _ = gtm_trial.project(torch.from_numpy(X_scaled).to(torch.float64))
@@ -5327,12 +5460,14 @@ def train_latent_gtm(
         reg_coeff=best["reg_coeff"],
         max_iter=200,
         device=device,
+        standardize=False,
     )
     gtm.fit(torch.from_numpy(X_scaled).to(torch.float64))
     resps, _ = gtm.project(torch.from_numpy(X_scaled).to(torch.float64))
     best_score = shannon_entropy(resps.cpu().numpy())
 
     logger.info(f"Latent GTM optimized with best entropy: {best_score:.4f}")
+    _tag_latent_gtm(gtm, scaler, descriptor_backend)
     return gtm, scaler, best_score
 
 
