@@ -260,8 +260,10 @@ PATH_RX = re.compile(
 )  # Caption: /path/file.png
 # Prefer explicit SMILES tags from the agent prompts, but also accept common
 # backticked SMILES output so structures still render when the model omits tags.
+# Backticked tokens need 5+ characters, like report_export's plain SMILES:
+# RDKit also parses short codes such as `B` (BH3) or `CNS`.
 SMI_RX = re.compile(
-    r"`?<smiles>\s*([^<`]+?)\s*</smiles>`?" r"|`([A-Za-z0-9@+\-\[\]\(\)=#$%\\/.:*]+)`",
+    r"`?<smiles>\s*([^<`]+?)\s*</smiles>`?" r"|`([A-Za-z0-9@+\-\[\]\(\)=#$%\\/.:*]{5,})`",
     re.IGNORECASE,
 )
 
