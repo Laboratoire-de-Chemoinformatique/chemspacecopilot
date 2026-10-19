@@ -352,6 +352,13 @@ def test_neighborhood_metric_follows_descriptor_kind():
     assert resolve("autoencoder", "Cosine") == "cosine"
     with pytest.raises(ValueError):
         resolve("autoencoder", "tanimoto")
+    # Peptide latents are no descriptor alias, but an embedding all the same.
+    assert resolve("peptide_latent") == "euclidean"
+    assert resolve("peptide_latent", "cosine") == "cosine"
+    with pytest.raises(ValueError, match="not 'tanimoto'"):
+        resolve("peptide_latent", "tanimoto")
+    with pytest.raises(ValueError, match="No neighbourhood metric"):
+        resolve("smiles_strings")
 
     # Counts [10,0], [1,0], [0,1]: row 1 is Euclidean-closest to row 2,
     # but shares all its features only with row 0, so Tanimoto picks row 0.
