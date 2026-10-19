@@ -1488,6 +1488,9 @@ class GTMToolkit(BaseDRToolkit):
         gtm_name: str,
         agent: Agent,
         strategy: str = "low",
+        objective: str = "entropy",
+        neighborhood_k: int = 10,
+        neighborhood_metric: str = "auto",
     ) -> str:
         """
         Train a GTM on pre-computed latent vectors (e.g. from Peptide Designer).
@@ -1505,11 +1508,30 @@ class GTMToolkit(BaseDRToolkit):
             gtm_name: Key under which the trained GTM model will be saved in agent.session_state
             agent: The agent whose session_state dict will be updated
             strategy: Optimization effort level — ``"low"``, ``"medium"``, or ``"high"``
+            objective: Score the search maximizes. One of:
+                - "entropy" (default): how evenly the vectors spread over the map nodes
+                - "neighborhood_preservation": fraction of each vector's
+                  neighborhood_k nearest latent-space neighbours that stay its
+                  nearest neighbours on the map. Use only when the user asks for it.
+            neighborhood_k: Neighbours per vector for neighborhood_preservation
+                (default 10).
+            neighborhood_metric: Latent-space metric for neighborhood_preservation:
+                "auto" (default, Euclidean) or "cosine". Ignored for the entropy objective.
 
         Returns:
-            Human-readable message reporting the best entropy score achieved
+            Human-readable message reporting the best score achieved
         """
         from cs_copilot.storage import S3
+
+        # The latents arrive as a bare CSV, so the only backend this tool can
+        # honestly claim is its own: peptide latents, which no small-molecule
+        # projection should ever be allowed to reuse.
+        backend = "peptide_latent"
+        if objective == "neighborhood_preservation":
+            # Resolve "auto" before loading data so a bad metric fails fast.
+            neighborhood_metric = gtm_operations.resolve_neighborhood_metric(
+                backend, neighborhood_metric
+            )
 
         logger.info(f"Training latent GTM from: {latent_vectors_csv}")
 
@@ -1525,11 +1547,13 @@ class GTMToolkit(BaseDRToolkit):
         X = df[numeric_cols].values.astype(np.float64)
         logger.info(f"Loaded {X.shape[0]} latent vectors with {X.shape[1]} dimensions")
 
-        # Train the GTM. The latents arrive as a bare CSV, so the only backend
-        # this tool can honestly claim is its own: peptide latents, which no
-        # small-molecule projection should ever be allowed to reuse.
         gtm_model, scaler, best_score = gtm_operations.train_latent_gtm(
-            X, strategy=strategy, descriptor_backend="peptide_latent"
+            X,
+            strategy=strategy,
+            descriptor_backend=backend,
+            objective=objective,
+            neighborhood_k=neighborhood_k,
+            neighborhood_metric=neighborhood_metric,
         )
 
         # Store in session state
@@ -1551,9 +1575,16 @@ class GTMToolkit(BaseDRToolkit):
             X, gtm_model, scaler, sequences=sequences, source_df=df
         )
 
+        if objective == "entropy":
+            score = f"Entropy: {best_score:.4f}"
+        else:
+            score = (
+                f"Neighborhood preservation (k={neighborhood_k}, {neighborhood_metric}): "
+                f"{best_score:.4f}"
+            )
         return (
             f"Latent GTM trained successfully on {X.shape[0]} vectors ({X.shape[1]} dims). "
-            f"Entropy: {best_score:.4f}. Model stored as '{gtm_name}' in session state. "
+            f"{score}. Model stored as '{gtm_name}' in session state. "
             f"Sampling is now available ({len(self._gtm_data.source)} density nodes populated)."
         )
 

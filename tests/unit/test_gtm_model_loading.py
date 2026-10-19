@@ -446,6 +446,67 @@ class TestTrainLatentGtm:
         # Centres come back in the original latent space, not the scaled one.
         assert centers.shape == (gtm.num_nodes, 5)
 
+    _SMALL = {
+        "n_basis_functions_sqrt": 2,
+        "n_nodes_n_basis_diff": 2,
+        "basis_width": 1.0,
+        "reg_coeff": 100.0,
+    }
+
+    def test_neighbourhood_preservation_is_scored_in_the_raw_latent_space(self):
+        """Peptide latents are no descriptor alias, yet still get a metric.
+
+        Neighbours come from the vectors as given, not the z-scored copy the
+        manifold is fitted on: one stretched axis makes the two disagree.
+        """
+        vectors = np.random.default_rng(0).standard_normal((60, 4)) * [1.0, 1.0, 1.0, 20.0]
+
+        gtm, scaler, score = gtm_operations.train_latent_gtm(
+            vectors,
+            config=self._SMALL,
+            descriptor_backend="peptide_latent",
+            objective="neighborhood_preservation",
+            neighborhood_k=5,
+        )
+
+        coords = (
+            gtm_operations.project_latent_on_gtm(vectors, gtm, scaler) @ gtm.nodes.cpu().numpy()
+        )
+        raw = gtm_operations._knn_indices(vectors, 5, "euclidean")
+        assert score == pytest.approx(gtm_operations.neighborhood_preservation(raw, coords))
+        with pytest.raises(ValueError, match="Unknown objective"):
+            gtm_operations.train_latent_gtm(
+                vectors, config=self._SMALL, descriptor_backend="peptide_latent", objective="x"
+            )
+
+    def test_the_tool_passes_the_objective_through_and_reports_it(self, monkeypatch, tmp_path):
+        from cs_copilot.tools.chemography.gtm import GTMToolkit
+
+        csv = tmp_path / "latents.csv"
+        latents = pd.DataFrame(np.random.default_rng(0).standard_normal((40, 4)))
+        latents.add_prefix("z_").to_csv(csv, index=False)
+        monkeypatch.setattr(gtm_operations.S3, "open", lambda path, mode="r": open(path, mode))
+        real, seen = gtm_operations.train_latent_gtm, {}
+
+        def small_fit(X, strategy, **kwargs):
+            seen.update(kwargs)
+            return real(X, config=self._SMALL, **kwargs)
+
+        monkeypatch.setattr(gtm_operations, "train_latent_gtm", small_fit)
+
+        message = GTMToolkit().train_gtm_on_latent_space(
+            str(csv),
+            "latents",
+            "map",
+            SimpleNamespace(session_state={}),
+            objective="neighborhood_preservation",
+            neighborhood_k=5,
+        )
+
+        assert seen["objective"] == "neighborhood_preservation"
+        assert seen["neighborhood_metric"] == "euclidean"  # "auto", resolved for peptides
+        assert "Neighborhood preservation (k=5, euclidean)" in message
+
 
 class TestDefaultManifold:
     """The published default map is the chembed manifold.
