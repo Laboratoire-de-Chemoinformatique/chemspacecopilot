@@ -5,6 +5,7 @@ notebooks/__pycache__/
 src/cs_copilot/__pycache__/
 src/cs_copilot/dr_methods/__pycache__/
 reports/
+docs/superpowers/
 data/
 tmp/
 # Robustness test artifacts (local copies, S3 is the source of truth)

@@ -1,8 +1,0 @@
-{
-  "purpose": "training frameset of the published chembed GTM manifold, recovered from /tmp",
-  "file": "gtm_frameset_training.csv",
-  "sha256": "60f43a73e072260e161714d52d8a63367ad6a8200b1d3ecd0d11603ac96d314c",
-  "rows": 50000,
-  "original_path": "/tmp/claude-1002/frameset/gtm_frameset_training.csv",
-  "manifold": "axelrolov/chemspacecopilot-gtm-chembed@ca1d609ba58a0b2074cee8779d28af8ce435b6ef"
-}
