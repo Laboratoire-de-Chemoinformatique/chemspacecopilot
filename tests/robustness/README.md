@@ -112,10 +112,12 @@ For `--system both`, a cross-arm comparison is also written to
 
 ## Manuscript reliability benchmark
 
-For the small controlled reliability study, follow the
-[manuscript revision protocol](../../docs/testing/manuscript-revision.md).
-It defines the 48 frozen plus 32 live case/stage executions (80 in total),
-the required scientific artifacts, and interpretation limits.
+`scripts/plan_revision_reliability.py` prepares the controlled study offline:
+48 frozen plus 32 live case/stage executions, 80 in total, in ten batches. It
+calls no provider, and records the exact commands, runtime and input hashes in
+a `study_plan.json` that `--verify-plan` checks. See
+[Counterbalancing and repetition count](#counterbalancing-and-repetition-count-in-the-manuscript-suite)
+below for how the matrix is built.
 
 `manuscript_reliability.yaml` implements the quantitative evaluation requested
 for the ChemSpace Copilot manuscript. It separates two sources of variability:
