@@ -56,7 +56,6 @@ from test_utils import ResponseParser, S3SessionManager  # noqa: E402
 from tool_tracker import ToolSequenceComparator  # noqa: E402
 
 logger = get_logger(__name__)
-load_dotenv()
 
 
 class ReliabilityTimeoutError(TimeoutError):
@@ -1995,6 +1994,15 @@ def compare_systems(
 
 def main():
     """Main entry point."""
+    # Here rather than at import. pytest imports every test module during
+    # collection, so a module-level load_dotenv() pulled the developer's .env
+    # -- CHEMBL_MYSQL_* among it -- into the environment of the whole unit
+    # test session, before a single test ran. ChemblToolkit then chose the
+    # MySQL backend over the REST API its tests mock, so eleven of them failed
+    # against a real database and the suite took hours. CI has no .env, so it
+    # never saw any of it.
+    load_dotenv()
+
     args = parse_args()
 
     # Load configuration
