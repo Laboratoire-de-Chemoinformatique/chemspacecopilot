@@ -3254,13 +3254,20 @@ def resolve_neighborhood_metric(descriptor_type: str, metric: str = "auto") -> s
     Descriptor-space metric for neighbourhood preservation.
 
     Morgan descriptors here are count fingerprints and use Tanimoto; latent
-    embeddings use Euclidean (``"auto"``) or cosine.
+    embeddings, peptide latents included, use Euclidean (``"auto"``) or cosine.
     """
+    try:
+        kind = MolecularDescriptorEncoder(descriptor_type).default_descriptor
+    except ValueError:
+        kind = descriptor_type  # peptide latents are not a descriptor alias
     allowed = {
         "morgan": ("tanimoto",),
         "autoencoder": ("euclidean", "cosine"),
         "chembed": ("euclidean", "cosine"),
-    }[MolecularDescriptorEncoder(descriptor_type).default_descriptor]
+        "peptide_latent": ("euclidean", "cosine"),
+    }.get(kind)
+    if allowed is None:
+        raise ValueError(f"No neighbourhood metric is defined for {descriptor_type!r}.")
     metric = allowed[0] if metric.lower() == "auto" else metric.lower()
     if metric not in allowed:
         raise ValueError(f"Use {allowed} for {descriptor_type} descriptors, not {metric!r}.")
@@ -5303,6 +5310,9 @@ def train_latent_gtm(
     strategy: str = "low",
     *,
     descriptor_backend: str,
+    objective: str = "entropy",
+    neighborhood_k: int = 10,
+    neighborhood_metric: str = "auto",
 ) -> tuple:
     """
     Train a GTM on pre-computed latent vectors (e.g. from Peptide Designer).
@@ -5329,25 +5339,54 @@ def train_latent_gtm(
             ``"chembed"``, ``"autoencoder"`` or ``"peptide_latent"``. Recorded on
             the manifold so a projection in the wrong space is refused rather
             than returning coordinates that look fine and mean nothing.
+        objective: Score to maximize, as in :func:`optimize_gtm` — ``"entropy"``
+            or ``"neighborhood_preservation"``.
+        neighborhood_k: Neighbours per vector for neighbourhood preservation
+            (capped at n_samples - 1).
+        neighborhood_metric: Latent-space metric for neighbourhood preservation,
+            ``"auto"`` (Euclidean) or ``"cosine"``; see :func:`resolve_neighborhood_metric`.
 
     Returns:
         tuple: (gtm_model, scaler, best_score) where:
             - gtm_model: Trained GTM model, tagged with ``descriptor_backend``
               and carrying its ``latent_scaler``
             - scaler: StandardScaler fitted on the latent vectors
-            - best_score: Shannon entropy score of the trained model
+            - best_score: Score of the trained model under ``objective``
     """
     from sklearn.preprocessing import StandardScaler
 
     if latent_vectors.ndim != 2:
         raise ValueError(f"Expected 2D array, got {latent_vectors.ndim}D")
+    if objective not in ("entropy", "neighborhood_preservation"):
+        raise ValueError(
+            f"Unknown objective: {objective!r}. Use 'entropy' or 'neighborhood_preservation'."
+        )
 
     n_samples, latent_dim = latent_vectors.shape
     logger.info(f"Training latent GTM on {n_samples} samples with {latent_dim} dimensions")
 
+    data_neighbors = None
+    if objective == "neighborhood_preservation":
+        if neighborhood_k < 1:
+            raise ValueError("neighborhood_k must be at least 1.")
+        # Neighbours in the space the vectors came from, not the scaled one, as
+        # optimize_gtm takes them on raw descriptors. The map never moves them.
+        data_neighbors = _knn_indices(
+            latent_vectors.astype(np.float64),
+            min(neighborhood_k, n_samples - 1),
+            resolve_neighborhood_metric(descriptor_backend, neighborhood_metric),
+        )
+
     # Scale the latent vectors
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(latent_vectors).astype(np.float64)
+
+    def score_map(model: Any) -> float:
+        resps, _ = model.project(torch.from_numpy(X_scaled).to(torch.float64))
+        resps = resps.cpu().numpy()
+        if data_neighbors is None:
+            return shannon_entropy(resps)
+        return neighborhood_preservation(data_neighbors, resps @ model.nodes.cpu().numpy())
 
     # Check CUDA availability
     device = "cpu"
@@ -5379,10 +5418,9 @@ def train_latent_gtm(
             standardize=False,
         )
         gtm.fit(torch.from_numpy(X_scaled).to(torch.float64))
-        resps, _ = gtm.project(torch.from_numpy(X_scaled).to(torch.float64))
-        score = shannon_entropy(resps.cpu().numpy())
+        score = score_map(gtm)
 
-        logger.info(f"Latent GTM trained with entropy: {score:.4f}")
+        logger.info(f"Latent GTM trained with {objective}: {score:.4f}")
         _tag_latent_gtm(gtm, scaler, descriptor_backend)
         return gtm, scaler, score
 
@@ -5417,7 +5455,7 @@ def train_latent_gtm(
     else:
         raise ValueError(f"Unknown strategy: {strategy!r}. Use 'low', 'medium', or 'high'.")
 
-    def objective(trial):
+    def run_trial(trial):
         if search_space is not None:
             nodes_sqrt = trial.suggest_categorical("nodes_sqrt", search_space["nodes_sqrt"])
             basis_sqrt = trial.suggest_categorical("basis_sqrt", search_space["basis_sqrt"])
@@ -5442,12 +5480,11 @@ def train_latent_gtm(
             standardize=False,
         )
         gtm_trial.fit(torch.from_numpy(X_scaled).to(torch.float64))
-        resps, _ = gtm_trial.project(torch.from_numpy(X_scaled).to(torch.float64))
-        return shannon_entropy(resps.cpu().numpy())
+        return score_map(gtm_trial)
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     study = optuna.create_study(direction="maximize", sampler=sampler)
-    study.optimize(objective, n_trials=n_trials_max)
+    study.optimize(run_trial, n_trials=n_trials_max)
 
     best = study.best_params
     num_basis = best["basis_sqrt"] ** 2
@@ -5463,10 +5500,9 @@ def train_latent_gtm(
         standardize=False,
     )
     gtm.fit(torch.from_numpy(X_scaled).to(torch.float64))
-    resps, _ = gtm.project(torch.from_numpy(X_scaled).to(torch.float64))
-    best_score = shannon_entropy(resps.cpu().numpy())
+    best_score = score_map(gtm)
 
-    logger.info(f"Latent GTM optimized with best entropy: {best_score:.4f}")
+    logger.info(f"Latent GTM optimized with best {objective}: {best_score:.4f}")
     _tag_latent_gtm(gtm, scaler, descriptor_backend)
     return gtm, scaler, best_score
 
