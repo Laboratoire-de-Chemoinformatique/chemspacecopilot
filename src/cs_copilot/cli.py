@@ -47,7 +47,7 @@ logging.disable(logging.NOTSET)
 logger = logging.getLogger(__name__)
 
 APP_NAME = "ChemSpace Copilot"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.4.0"
 HISTORY_FILE = os.path.expanduser("~/.cscopilot_history")
 
 

@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+type: software
+title: "ChemSpace Copilot"
+abstract: "LLM-powered agent system for GTM-based chemical space analysis."
+version: 0.4.0
+date-released: 2026-10-19
+license: MIT
+repository-code: "https://github.com/Laboratoire-de-Chemoinformatique/chemspacecopilot"
+authors:
+  - family-names: Orlov
+    given-names: Alexey A.
+    affiliation: "Laboratory of Chemoinformatics, UMR 7140 CNRS, University of Strasbourg"
+  - family-names: Volkov
+    given-names: Mikhail
+    affiliation: "Laboratory of Chemoinformatics, UMR 7140 CNRS, University of Strasbourg"
+  - family-names: Milova
+    given-names: Evgeniia S.
+    affiliation: "Laboratory of Chemoinformatics, UMR 7140 CNRS, University of Strasbourg"
+  - family-names: Horvath
+    given-names: Dragos
+    affiliation: "Laboratory of Chemoinformatics, UMR 7140 CNRS, University of Strasbourg"
+  - family-names: Varnek
+    given-names: Alexandre
+    affiliation: "Laboratory of Chemoinformatics, UMR 7140 CNRS, University of Strasbourg"

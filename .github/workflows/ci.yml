@@ -103,13 +103,17 @@ jobs:
           python -m venv /tmp/cs-copilot-wheel-smoke
           /tmp/cs-copilot-wheel-smoke/bin/pip install --no-deps dist/*.whl
           /tmp/cs-copilot-wheel-smoke/bin/python - <<'PY'
+          import tomllib
           import cs_copilot
           from importlib.metadata import distribution
           from pathlib import Path
 
           package_root = Path(next(iter(cs_copilot.__path__)))
           installed = distribution("cs_copilot")
-          assert installed.version == "0.2.0"
+          # Against pyproject, not a literal: a literal silently outlives each
+          # release and then fails the build that bumps the version.
+          declared = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          assert installed.version == declared, (installed.version, declared)
           assert any(item.name == "cscopilot-mcp" for item in installed.entry_points)
           assert package_root.joinpath(
               "skills/catalog/chembl-to-gtm-report/SKILL.md"
