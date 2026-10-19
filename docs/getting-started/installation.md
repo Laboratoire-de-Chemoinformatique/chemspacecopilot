@@ -45,26 +45,21 @@ chembed's, which huggingface_hub caches itself.
 
 | Model | Repository | Size |
 |---|---|---|
-| deepchemography LSTM autoencoder | `axelrolov/lstm_autoencoder` | 8.8 MB |
 | chembed SELFIES transformer VAE | `3BioCompBio/chembed-default` | 227 MB |
 | Peptide WAE | `axelrolov/wae_peptides` | — |
-| GTM manifold (LSTM latents) | `axelrolov/chemspacecopilot-gtm` | 4 MB |
 | GTM manifold (chembed latents) | `axelrolov/chemspacecopilot-gtm-chembed` | 3.5 MB |
 
-The small-molecule latent engine is chosen with `AUTOENCODER_BACKEND`, either
-`chembed` (the default) or `deepchemography`. The two produce different,
-non-interchangeable 256-dimensional latent spaces, so switching also requires a
-GTM manifold fitted on the matching one; see
-[Tools](../architecture/tools.md#molecular-latent-engines). A manifold is refit
-with:
+chembed is the small-molecule latent engine; the deepchemography LSTM
+autoencoder was retired after v0.4.0, and peptide design keeps the
+deepchemography WAE. A manifold is only valid for the latent space it was
+fitted on; see [Tools](../architecture/tools.md#the-molecular-latent-engine).
+One is refit with:
 
 ```bash
 uv run --no-sync python scripts/refit_gtm_manifold.py \
     --frameset gtm_frameset_training.csv \
-    --output ~/.cache/cs_copilot/models/gtm/GTM_manifold_chembed_900_225.pkl.gz
+    --output ~/.cache/cs_copilot/models/gtm-chembed/GTM_manifold_chembed_900_225.pkl.gz
 ```
-
-Peptide design keeps the deepchemography WAE regardless of this setting.
 
 ## Environment Configuration
 

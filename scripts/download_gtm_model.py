@@ -13,9 +13,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from cs_copilot.tools.constants import (
-    DEFAULT_GTM_MODEL_PATH,
-    HUGGINGFACE_GTM_REPO,
-    HUGGINGFACE_GTM_REVISION,
+    DEFAULT_GTM_CHEMBED_MODEL_PATH,
+    HUGGINGFACE_GTM_CHEMBED_REPO,
+    HUGGINGFACE_GTM_CHEMBED_REVISION,
 )
 
 
@@ -23,13 +23,13 @@ def download_gtm_model(target_dir: str = None):
     """Download the default GTM model from HuggingFace.
 
     Args:
-        target_dir: Directory to save the model (default: DEFAULT_GTM_MODEL_PATH)
+        target_dir: Directory to save the model (default: DEFAULT_GTM_CHEMBED_MODEL_PATH)
     """
     print("=" * 70)
     print("GTM Model Download from HuggingFace")
     print("=" * 70)
     print()
-    print(f"Repository: {HUGGINGFACE_GTM_REPO}")
+    print(f"Repository: {HUGGINGFACE_GTM_CHEMBED_REPO}")
     print()
 
     # Check if huggingface_hub is available
@@ -47,7 +47,7 @@ def download_gtm_model(target_dir: str = None):
 
     # Set up target directory
     if target_dir is None:
-        target_dir = Path(DEFAULT_GTM_MODEL_PATH).expanduser()
+        target_dir = Path(DEFAULT_GTM_CHEMBED_MODEL_PATH).expanduser()
     else:
         target_dir = Path(target_dir).expanduser()
 
@@ -73,8 +73,8 @@ def download_gtm_model(target_dir: str = None):
     print("Starting download (this may take a while)...")
     try:
         sd_kwargs = dict(
-            repo_id=HUGGINGFACE_GTM_REPO,
-            revision=HUGGINGFACE_GTM_REVISION,
+            repo_id=HUGGINGFACE_GTM_CHEMBED_REPO,
+            revision=HUGGINGFACE_GTM_CHEMBED_REVISION,
             local_dir=str(target_dir),
             allow_patterns=["*.pkl", "*.pkl.gz", "*.dill", "*.pt"],
         )
@@ -114,7 +114,7 @@ if __name__ == "__main__":
         "--target-dir",
         type=str,
         default=None,
-        help=f"Directory to save the model (default: {DEFAULT_GTM_MODEL_PATH})",
+        help=f"Directory to save the model (default: {DEFAULT_GTM_CHEMBED_MODEL_PATH})",
     )
 
     args = parser.parse_args()

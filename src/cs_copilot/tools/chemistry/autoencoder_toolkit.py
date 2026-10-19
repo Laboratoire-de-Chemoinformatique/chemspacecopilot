@@ -4,31 +4,23 @@
 Autoencoder toolkit for SMILES encoding and molecular generation.
 
 This module encodes SMILES strings to latent representations and samples new
-molecules from the latent space. The model behind it is pluggable: the latent
-engine is supplied as an ``AutoencoderEngine`` object, defaulting to the
-deepchemography LSTM autoencoder loaded from Hugging Face.
+molecules from the latent space. The latent engine is supplied as an
+``AutoencoderEngine`` object and defaults to chembed.
 """
 
 import logging
 import os
-from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Protocol, Tuple, Union
 
 import numpy as np
 import torch
 from agno.agent import Agent
 from rdkit import Chem
-from tqdm import tqdm
 
 from cs_copilot.generation_audit import (
     capture_generation_audit,
     generation_audit_summary,
     save_generation_audit,
-)
-from cs_copilot.storage import S3
-from cs_copilot.tools.constants import (
-    DEFAULT_AUTOENCODER_MODEL_PATH,
-    HUGGINGFACE_AUTOENCODER_REPO,
 )
 from cs_copilot.tools.io.session_memory import (
     compact_candidate_preview,
@@ -52,10 +44,6 @@ SampleReturnFormat = Literal["summary", "list"]
 #: smaller default rather than an interactive call that appears to hang.
 DEFAULT_SAMPLE_COUNT_GPU = 5000
 DEFAULT_SAMPLE_COUNT_CPU = 500
-
-#: Latent perturbation for neighbourhood exploration on the deepchemography
-#: LSTM, whose latent this value was tuned against. Engines expose their own.
-DEFAULT_NOISE_SCALE = 0.1
 
 
 def _filter_valid_unique_smiles(raw: List[Any]) -> List[str]:
@@ -136,7 +124,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
     Encodes SMILES strings to latent representations and samples new molecules
     from the latent space, using whichever :class:`AutoencoderEngine` it is
-    given. With no engine it loads the deepchemography LSTM autoencoder.
+    given, chembed by default.
     """
 
     # Class-level default: tests build this toolkit with ``__new__`` and never
@@ -153,14 +141,22 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         Initialize the AutoencoderToolkit.
 
         Args:
-            model_path: Path to the trained autoencoder model directory.
-                       If None, uses default path from deepchemography.
+            model_path: A local chembed ``.ckpt`` file. If None,
+                ``AUTOENCODER_MODEL_PATH`` is used when it names a file; otherwise
+                the engine loads its pinned checkpoint from Hugging Face.
             device: Device to run the model on ('cuda', 'cpu', or None for auto-detect)
-            engine: Latent engine to use. When None, the deepchemography LSTM
-                autoencoder is loaded from ``model_path``.
+            engine: Latent engine to use. When None, chembed.
         """
         super().__init__("autoencoder")
 
+        if engine is None:
+            # Imported here because chembed_engine imports AutoencoderError from
+            # this module. The check refuses a stale AUTOENCODER_BACKEND that
+            # still names the retired LSTM.
+            from .chembed_engine import ChembedEngine
+
+            resolve_autoencoder_backend()
+            engine = ChembedEngine()
         self.engine = engine
 
         # Set up device
@@ -169,24 +165,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         else:
             self.device = torch.device(device)
 
-        # Set up model path
-        if model_path is None:
-            # Get path from environment variable or use default
-            model_path = os.getenv("AUTOENCODER_MODEL_PATH", DEFAULT_AUTOENCODER_MODEL_PATH)
-            if engine is not None:
-                # An engine resolves its own checkpoint and overwrites model_path
-                # once loaded; announcing the deepchemography directory here would
-                # misreport which model is in use.
-                pass
-            elif model_path == DEFAULT_AUTOENCODER_MODEL_PATH:
-                logger.info(f"Using default autoencoder model path: {model_path}")
-            else:
-                logger.info(f"Using AUTOENCODER_MODEL_PATH from environment: {model_path}")
-
-        self.model_path = model_path  # Can be string path or Path object
-
-        # Check if model exists, download from Hugging Face if not
-        self._ensure_model_exists()
+        self.model_path = model_path or os.getenv("AUTOENCODER_MODEL_PATH")
 
         # Initialize model components
         self.model = None
@@ -205,200 +184,28 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         self.register(self.explore_latent_neighborhood)
         self.register(self.get_model_info)
 
-    def _get_hf_token_safe(self):
-        """Get Hugging Face token safely from environment or local login."""
-        try:
-            from huggingface_hub import get_token
-
-            return get_token()
-        except Exception as e:
-            logger.warning(f"Failed to get Hugging Face token: {e}")
-            return None
-
-    def _ensure_model_exists(self):
-        """
-        Ensure required files exist locally; download from Hugging Face if missing.
-        - Avoids temp dirs and symlinks
-        - Respects env-provided cache if present (but doesn't require it)
-        - Falls back to direct HTTP with Authorization when needed
-
-        An engine that manages its own checkpoint cache skips this entirely.
-        """
-        if self.engine is not None:
-            return
-
-        import os
-        import time
-        from pathlib import Path
-
-        import requests
-
-        base_path = Path(self.model_path)
-        files = ["config.pt", "vocab.pt", "model.pt"]
-
-        if all((base_path / f).exists() for f in files):
-            logger.info(f"Model files found at {self.model_path}")
-            return
-
-        logger.warning(
-            f"Model files not found at {self.model_path}. Attempting to download from Hugging Face..."
-        )
-        base_path.mkdir(parents=True, exist_ok=True)
-
-        # --- resolve token (env or local login), but don't force it if public ---
-        hf_token = (
-            os.getenv("HUGGINGFACE_HUB_TOKEN") or os.getenv("HF_TOKEN") or self._get_hf_token_safe()
-        )
-
-        # helper: robust HTTP download that adds Authorization if we have a token
-        def _download_via_requests(repo_id: str, revision: str, filename: str, dest: Path):
-            from huggingface_hub import hf_hub_url
-
-            url = hf_hub_url(repo_id=repo_id, filename=filename, revision=revision)
-            headers = {"Authorization": f"Bearer {hf_token}"} if hf_token else {}
-            # retries with exponential backoff
-            for attempt in range(3):
-                try:
-                    with requests.get(url, stream=True, headers=headers, timeout=(10, 120)) as r:
-                        if r.status_code == 401:
-                            raise AutoencoderError(
-                                "Hugging Face returned 401 Unauthorized. "
-                                "If this repo is private or gated, set HUGGINGFACE_HUB_TOKEN."
-                            )
-                        r.raise_for_status()
-                        with open(dest, "wb") as f:
-                            for chunk in r.iter_content(1024 * 64):
-                                if chunk:
-                                    f.write(chunk)
-                    if dest.stat().st_size <= 0:
-                        raise AutoencoderError(f"Empty file downloaded for {filename}")
-                    return
-                except Exception as e:
-                    if attempt == 2:
-                        raise
-                    wait = 2**attempt
-                    logger.warning(f"Download {filename} failed ({e!r}); retrying in {wait}s...")
-                    time.sleep(wait)
-
-        try:
-            # --- primary path: use snapshot_download with a minimal, test-friendly signature ---
-            from huggingface_hub import snapshot_download
-
-            # Tests expect these exact kwargs: repo_id, cache_dir, local_dir, resume_download
-            cache_dir = os.path.expanduser(
-                os.getenv("HUGGINGFACE_HUB_CACHE") or os.getenv("HF_HOME") or str(base_path)
-            )
-
-            # Avoid occasional stalls from the native downloader/progress in some shells
-            os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
-            os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-
-            snapshot_download(
-                repo_id=HUGGINGFACE_AUTOENCODER_REPO,
-                cache_dir=cache_dir,
-                local_dir=str(base_path),
-                resume_download=True,
-            )
-
-            # --- final verification ---
-            missing = [f for f in files if not (base_path / f).exists()]
-            if missing:
-                raise AutoencoderError(
-                    f"Downloaded files incomplete. Missing: {', '.join(missing)} at {self.model_path}"
-                )
-            logger.info(f"Successfully fetched model files into {self.model_path}")
-
-            # --- cleanup: remove any local .cache directory created under model dir ---
-            try:
-                cache_dir = base_path / ".cache"
-                if cache_dir.exists() and cache_dir.is_dir():
-                    import shutil as _shutil
-
-                    _shutil.rmtree(cache_dir, ignore_errors=True)
-                    logger.info(f"Removed residual cache directory: {cache_dir}")
-            except Exception as _cleanup_err:  # pragma: no cover - best effort cleanup
-                logger.debug(f"Cache cleanup skipped: {_cleanup_err!r}")
-
-        except ImportError as e:
-            raise AutoencoderError(
-                "huggingface_hub not installed. Install it with: pip install huggingface_hub"
-            ) from e
-        except Exception as e:
-            raise AutoencoderError(
-                f"Failed to download model from Hugging Face ({HUGGINGFACE_AUTOENCODER_REPO}): {repr(e)}. "
-                f"Original model path: {self.model_path}"
-            ) from e
-
     def _load_model(self):
-        """Load the trained autoencoder model and vocabulary."""
-        if self.engine is not None:
-            self.model, self.vocab, self.config = self.engine.load(
-                model_path=self.model_path, device=self.device
-            )
-            # Record what was actually loaded: the toolkit's default model_path
-            # names the deepchemography directory, which would otherwise end up
-            # in every generation audit regardless of the engine used.
-            checkpoint_path = getattr(self.engine, "checkpoint_path", None)
-            if checkpoint_path:
-                self.model_path = checkpoint_path
-            return
-
-        try:
-            # Import deepchemography components
-            from deepchemography import LSTMAutoencoder
-
-            # Build paths - handle both string and Path objects
-            base_path = Path(self.model_path)
-            config_path = str(base_path / "config.pt")
-            vocab_path = str(base_path / "vocab.pt")
-            model_path = str(base_path / "model.pt")
-
-            # Use S3.open() for loading - handles both S3 URLs and local paths transparently
-            with S3.open(config_path, "rb") as f:
-                self.config = torch.load(f, weights_only=False, map_location=self.device)
-
-            with S3.open(vocab_path, "rb") as f:
-                self.vocab = torch.load(f, weights_only=False, map_location=self.device)
-
-            with S3.open(model_path, "rb") as f:
-                model_state = torch.load(f, weights_only=False, map_location=self.device)
-
-            # Initialize and load the model
-            self.model = LSTMAutoencoder(self.vocab, self.config)
-            self.model.load_state_dict(model_state)
-            self.model = self.model.to(self.device)
-            self.model.eval()
-
-            logger.info(f"Autoencoder model loaded successfully from {self.model_path}")
-            logger.info(f"  Vocabulary size: {len(self.vocab)}")
-            logger.info(f"  Latent dimension: {self.config.d_z}")
-            logger.info(f"  Device: {self.device}")
-
-        except ImportError as e:
-            raise AutoencoderError(f"Failed to import deepchemography: {e}") from e
-        except Exception as e:
-            raise AutoencoderError(f"Failed to load autoencoder model: {e}") from e
+        """Load the engine's model, vocabulary and config."""
+        self.model, self.vocab, self.config = self.engine.load(
+            model_path=self.model_path, device=self.device
+        )
+        # Record what was actually loaded: a model_path that names no file is
+        # ignored, and would otherwise end up in every generation audit.
+        checkpoint_path = getattr(self.engine, "checkpoint_path", None)
+        if checkpoint_path:
+            self.model_path = checkpoint_path
 
     # ------------------------------------------------------------------
     # Engine hooks. None is registered as an Agno tool, so overriding them
-    # moves no contract name. Defaults are the deepchemography behaviour.
+    # moves no contract name.
     # ------------------------------------------------------------------
     def _latent_dim(self) -> int:
         """Return the width of one latent vector."""
-        if self.engine is not None:
-            return self.engine.latent_dim()
-        return self.config.d_z
+        return self.engine.latent_dim()
 
     def _decode_z(self, z: Any, *, max_len: int, temp: float, decode: str) -> List[str]:
         """Decode latent vectors to raw, unfiltered SMILES strings."""
-        if self.engine is not None:
-            return self.engine.decode(z, max_len=max_len, temp=temp, decode=decode)
-        with torch.no_grad():
-            return list(
-                self.model.sample(
-                    n_batch=z.shape[0], max_len=max_len, z=z, temp=temp, decode=decode
-                )
-            )
+        return self.engine.decode(z, max_len=max_len, temp=temp, decode=decode)
 
     def _resolve_sample_count(self, n_samples: Optional[int]) -> int:
         """Return the sample count to use, and log when the device decided it.
@@ -423,52 +230,24 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
     def _default_noise_scale(self) -> float:
         """Return the latent perturbation this engine needs to leave the parent."""
-        if self.engine is not None:
-            return self.engine.default_noise_scale()
-        return DEFAULT_NOISE_SCALE
+        return self.engine.default_noise_scale()
 
     @property
     def backend_name(self) -> str:
-        """Name the latent engine actually behind this toolkit.
+        """Name the latent engine behind this toolkit.
 
-        The LSTM is the engine that is present by its absence, so it is the one
-        that has to be named explicitly. Callers recording provenance use this
-        rather than the design-engine name, which stays ``"autoencoder"`` for
-        both engines.
+        Callers recording provenance use this rather than the design-engine
+        name, which stays ``"autoencoder"`` whatever the engine.
         """
-        return self.engine.name if self.engine is not None else "deepchemography"
+        return self.engine.name
 
     def _engine_info(self) -> Dict[str, Any]:
         """Return engine-specific model metadata."""
-        if self.engine is not None:
-            return self.engine.info()
-        return {
-            "backend": self.backend_name,
-            "vocabulary_size": len(self.vocab),
-            "latent_dimension": self.config.d_z,
-            "encoder_type": self.config.q_cell,
-            "encoder_layers": self.config.q_n_layers,
-            "encoder_hidden_size": self.config.q_d_h,
-            "decoder_type": self.config.d_cell,
-            "decoder_layers": self.config.d_n_layers,
-            "decoder_hidden_size": self.config.d_d_h,
-            "batch_normalization": self.config.use_batch_norm,
-            "bidirectional_encoder": self.config.q_bidir,
-        }
+        return self.engine.info()
 
     def _decode_settings(self, *, temp: float, decode: str, max_len: int) -> Dict[str, Any]:
         """Return the decode settings actually applied, for the generation audit."""
-        if self.engine is not None:
-            return self.engine.decode_settings(temp=temp, decode=decode, max_len=max_len)
-        # Named here as chembed names itself, so every audit says which engine
-        # ran. Without it an LSTM audit was only one that mentioned no engine,
-        # which stopped being a safe reading once chembed became the default.
-        return {
-            "temperature": temp,
-            "decode_mode": decode,
-            "max_length": max_len,
-            "backend": self.backend_name,
-        }
+        return self.engine.decode_settings(temp=temp, decode=decode, max_len=max_len)
 
     def validate_model_loaded(self) -> bool:
         """
@@ -509,46 +288,8 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         if not smiles_list:
             raise AutoencoderError("No SMILES strings provided")
 
-        if self.engine is not None:
-            result = self.engine.encode(list(smiles_list), batch_size=batch_size)
-            return result[0:1] if return_single else result
-
-        self.model.eval()
-        latent_vectors = []
-
-        with torch.no_grad():
-            for i in tqdm(range(0, len(smiles_list), batch_size), desc="Encoding SMILES"):
-                batch_smiles = smiles_list[i : i + batch_size]
-
-                # Convert SMILES to tensors
-                batch_tensors = []
-                for smiles in batch_smiles:
-                    try:
-                        smiles_std = standardize_smiles(smiles)
-                        if smiles_std is None:
-                            logger.warning(
-                                f"Invalid/unstandardizable SMILES: {smiles}, using fallback"
-                            )
-                            smiles = "C"  # Fallback to simple carbon
-                        else:
-                            smiles = smiles_std
-
-                        tensor = self.model.string2tensor(smiles, device=self.device)
-                        batch_tensors.append(tensor)
-                    except Exception as e:
-                        logger.warning(f"Error processing SMILES '{smiles}': {e}, using fallback")
-                        tensor = self.model.string2tensor("C", device=self.device)
-                        batch_tensors.append(tensor)
-
-                # Encode to latent space
-                z = self.model.forward_encoder(batch_tensors)
-                latent_vectors.append(z.cpu().numpy())
-
-        result = np.vstack(latent_vectors)
-
-        if return_single:
-            return result[0:1]
-        return result
+        result = self.engine.encode(list(smiles_list), batch_size=batch_size)
+        return result[0:1] if return_single else result
 
     def encode_smiles_array(
         self, smiles_list: Union[str, List[str]], batch_size: int = 32
@@ -605,9 +346,6 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         """
         if not self.validate_model_loaded():
             raise AutoencoderError("Model not loaded")
-
-        if self.engine is None:
-            self.model.eval()
 
         # If no latent vectors provided, sample from Gaussian prior
         sampled_from_prior = z is None
@@ -969,88 +707,51 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         }
 
 
-#: Backend selected when neither a caller nor ``AUTOENCODER_BACKEND`` names one.
-#: chembed reconstructs 12 of 12 reference molecules where the deepchemography
-#: LSTM manages 5, and the LSTM fails outright beyond roughly 50 SMILES
-#: characters, which is most of the potent chemotypes. Set
-#: ``AUTOENCODER_BACKEND=deepchemography`` to reproduce the frozen manuscript
-#: results. This selects the engine used to *generate* molecules; descriptor
-#: families pin their own engine, so the default map is unaffected.
-DEFAULT_AUTOENCODER_BACKEND = "chembed"
-
-#: Backend names that mean "whichever engine is configured", kept so persisted
-#: session state and descriptor aliases written as "autoencoder" keep resolving.
-_CONFIGURED_BACKEND_ALIASES = {"autoencoder", "default", ""}
-
-#: Unambiguous spellings accepted for the small-molecule LSTM engine.
-#:
-#: ``"deepchemography"`` names this engine after the package it loads
-#: ``LSTMAutoencoder`` from, and that same package ships the peptide WAE that
-#: ``peptide_designer_toolkit`` imports. They are unrelated models: retiring
-#: this small-molecule engine does not retire the dependency, and peptide
-#: design keeps needing it. ``"deepchemography_lstm"`` says which of the two is
-#: meant, and is the spelling to prefer in new prompts, configs and docs. The
-#: canonical value is unchanged so recorded provenance stays comparable.
-_BACKEND_ALIASES = {
-    "deepchemography_lstm": "deepchemography",
-    "lstm_autoencoder": "deepchemography",
-}
-_CANONICAL_BACKENDS = {"chembed", "deepchemography"}
+#: Values of ``AUTOENCODER_BACKEND`` and the robustness ``latent_engine`` key that
+#: name chembed, or no engine in particular.
+_CHEMBED_BACKEND_NAMES = {"chembed", "autoencoder", "default", ""}
 
 
 def resolve_autoencoder_backend(backend: Optional[str] = None) -> str:
-    """Resolve which latent engine to use.
+    """Return ``"chembed"``, the only small-molecule latent engine.
 
-    Order: explicit *backend*, then ``AUTOENCODER_BACKEND``, then
-    :data:`DEFAULT_AUTOENCODER_BACKEND`.
+    The deepchemography LSTM was retired after v0.4.0. Asking for it, by argument
+    or through ``AUTOENCODER_BACKEND``, raises instead of generating on chembed,
+    so no result gets attributed to a model that did not produce it.
 
     Args:
-        backend: Caller-supplied backend name, or None to consult the
-            environment. ``"autoencoder"`` means "the configured default";
-            ``"deepchemography_lstm"`` is the unambiguous spelling of the LSTM.
+        backend: Caller-supplied engine name, or None to check the environment.
 
     Returns:
-        Either ``"chembed"`` or ``"deepchemography"``.
+        ``"chembed"``.
 
     Raises:
-        AutoencoderError: If the resolved name is not a known backend.
+        AutoencoderError: If the name is anything else.
     """
-    name = (backend or "").strip().lower()
-    if name in _CONFIGURED_BACKEND_ALIASES:
-        name = os.getenv("AUTOENCODER_BACKEND", DEFAULT_AUTOENCODER_BACKEND).strip().lower()
-    if name in _CONFIGURED_BACKEND_ALIASES:
-        name = DEFAULT_AUTOENCODER_BACKEND
-    name = _BACKEND_ALIASES.get(name, name)
-    if name not in _CANONICAL_BACKENDS:
+    name = backend if backend is not None else os.getenv("AUTOENCODER_BACKEND", "")
+    name = name.strip().lower()
+    if name not in _CHEMBED_BACKEND_NAMES:
         raise AutoencoderError(
-            f"Unknown autoencoder backend {name!r}; expected 'chembed' or 'deepchemography' "
-            f"(spell the LSTM 'deepchemography_lstm' to distinguish it from the "
-            f"deepchemography package, which also provides the peptide WAE)."
+            f"Latent engine {name!r} is not available: chembed is the only small-molecule "
+            "engine. The deepchemography LSTM was retired after v0.4.0; check out that tag "
+            "to reproduce results recorded on it."
         )
-    return name
+    return "chembed"
 
 
 def make_autoencoder_toolkit(
-    backend: Optional[str] = None,
     *,
     model_path: Optional[str] = None,
     device: Optional[str] = None,
 ) -> AutoencoderToolkit:
-    """Build an :class:`AutoencoderToolkit` on the configured latent engine.
+    """Build an :class:`AutoencoderToolkit` on chembed.
 
     Args:
-        backend: ``"chembed"``, ``"deepchemography"``, or None/``"autoencoder"``
-            to use whichever :func:`resolve_autoencoder_backend` selects.
-        model_path: Model directory, or a chembed ``.ckpt`` file.
+        model_path: A local chembed ``.ckpt`` file, or None for the pinned checkpoint.
         device: Device to run the model on.
 
     Returns:
         A toolkit whose class is always ``AutoencoderToolkit``, so the Agno tool
         names it registers do not depend on the engine.
     """
-    engine: Optional[AutoencoderEngine] = None
-    if resolve_autoencoder_backend(backend) == "chembed":
-        from .chembed_engine import ChembedEngine
-
-        engine = ChembedEngine()
-    return AutoencoderToolkit(model_path=model_path, device=device, engine=engine)
+    return AutoencoderToolkit(model_path=model_path, device=device)

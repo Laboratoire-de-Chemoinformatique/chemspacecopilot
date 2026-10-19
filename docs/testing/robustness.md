@@ -56,9 +56,10 @@ intervals, an environment manifest, and a blinded human-review sheet.
 `general.latent_engine` pins the engine molecules are generated on, overriding
 `AUTOENCODER_BACKEND` for the whole suite. No prompt can select the engine, so
 an unpinned run reports whichever engine the operator's shell happened to
-supply. The config ships pinned to `chembed`, the default engine; set it to
-`deepchemography` to reproduce earlier results recorded on the LSTM. Each run's
-generation audit records the engine that actually ran.
+supply. The config ships pinned to `chembed`, the only engine; a config or shell
+still naming the retired deepchemography LSTM fails the run rather than
+generating on chembed under its name. Each run's generation audit records the
+engine that actually ran.
 
 ### Multi-agent Architecture Ablation
 

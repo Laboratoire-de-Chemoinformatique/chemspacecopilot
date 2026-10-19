@@ -15,9 +15,8 @@ Two controls make the number interpretable, and both are easy to omit:
   there are more molecules competing to be near. Comparing a 50,000-molecule
   set against a 2,000-molecule one measures the sizes, not the maps.
 
-Compares the chembed manifold against the deepchemography one by default,
-since both were fitted with the same hyperparameters on the same molecules and
-differ only in the latent space they describe.
+Measures the published chembed manifold. ``--fit-on-each`` adds a manifold
+fitted on the dataset itself, as an upper bound for the published one.
 
 Usage::
 
@@ -29,10 +28,8 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import glob
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -108,10 +105,9 @@ def preservation(
 def main(argv: Optional[List[str]] = None) -> int:
     import pandas as pd
     import torch
-    from huggingface_hub import hf_hub_download, snapshot_download
+    from huggingface_hub import hf_hub_download
 
     from cs_copilot.tools.chemistry.chembed_engine import ChembedEngine
-    from cs_copilot.tools.chemistry.descriptors import MolecularDescriptorEncoder
     from cs_copilot.tools.chemography.gtm_operations import (
         _knn_indices,
         load_gtm_model,
@@ -121,8 +117,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     from cs_copilot.tools.constants import (
         HUGGINGFACE_GTM_CHEMBED_REPO,
         HUGGINGFACE_GTM_CHEMBED_REVISION,
-        HUGGINGFACE_GTM_REPO,
-        HUGGINGFACE_GTM_REVISION,
     )
 
     args = parse_args(argv)
@@ -136,12 +130,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             filename="GTM_manifold_chembed_900_225.pkl.gz",
         )
     )
-    lstm_dir = snapshot_download(repo_id=HUGGINGFACE_GTM_REPO, revision=HUGGINGFACE_GTM_REVISION)
-    lstm_gtm = load_gtm_model(glob.glob(os.path.join(lstm_dir, "*.pkl.gz"))[0])
-
     engine = ChembedEngine()
     engine.load(model_path=None, device=torch.device(device))
-    lstm_encoder = MolecularDescriptorEncoder("autoencoder")
 
     datasets = {
         "frameset": pd.read_csv(args.frameset)[args.frameset_smiles_column].astype(str).tolist()
@@ -158,18 +148,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         if len(smiles) > size:
             smiles = [smiles[i] for i in rng.choice(len(smiles), size, replace=False)]
         chembed_x = engine.encode(smiles, batch_size=256).astype(np.float64)
-        lstm_x = lstm_encoder.encode(smiles).astype(np.float64)
 
-        # The LSTM toolkit substitutes "C" when encoding fails, which would give
+        # An engine that substitutes a placeholder when encoding fails would give
         # every failed molecule the same latent and inflate preservation.
-        distinct = len(np.unique(np.round(lstm_x, 6), axis=0))
-        if distinct < len(lstm_x):
+        distinct = len(np.unique(np.round(chembed_x, 6), axis=0))
+        if distinct < len(chembed_x):
             logger.warning(
-                "%s: only %d distinct deepchemography latents for %d molecules; "
+                "%s: only %d distinct chembed latents for %d molecules; "
                 "identical rows inflate preservation",
                 name,
                 distinct,
-                len(lstm_x),
+                len(chembed_x),
             )
 
         if args.fit_on_each:
@@ -206,14 +195,6 @@ def main(argv: Optional[List[str]] = None) -> int:
             chembed_x,
             chembed_gtm,
             resolve_neighborhood_metric("chembed"),
-            args.k,
-            args.shuffles,
-            rng,
-        )
-        report["manifolds"].setdefault("deepchemography", {})[name] = preservation(
-            lstm_x,
-            lstm_gtm,
-            resolve_neighborhood_metric("autoencoder"),
             args.k,
             args.shuffles,
             rng,

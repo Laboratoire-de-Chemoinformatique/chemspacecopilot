@@ -17,14 +17,12 @@ def test_save_density_plot_resolves_session_model_and_calls_plot_writer(monkeypa
         agent=None,
         use_default=False,
         generate_framesets=False,
-        descriptor_type=None,
     ):
         calls["resolve"] = {
             "gtm_model_file": gtm_model_file,
             "agent": agent,
             "use_default": use_default,
             "generate_framesets": generate_framesets,
-            "descriptor_type": descriptor_type,
         }
         return "resolved-model.pkl.gz"
 
@@ -62,9 +60,6 @@ def test_save_density_plot_resolves_session_model_and_calls_plot_writer(monkeypa
         "agent": agent,
         "use_default": False,
         "generate_framesets": False,
-        # Forwarded, because the descriptor family decides which published
-        # manifold a default resolution returns.
-        "descriptor_type": "morgan",
     }
     assert calls["save"] == {
         "dataset_file": "clean.csv",

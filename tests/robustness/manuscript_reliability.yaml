@@ -19,7 +19,8 @@
 #   of the design tools and picks it over the LLM engine; it does not name a
 #   latent engine, because the latent engine is fixed before the agent starts.
 #   general.latent_engine below pins it and overrides AUTOENCODER_BACKEND, so a
-#   run cannot inherit an engine from the operator's shell. The GTM prompts pin
+#   run cannot inherit an engine from the operator's shell. chembed is the only
+#   engine; the deepchemography LSTM was retired after v0.4.0. The GTM prompts pin
 #   descriptor_type=chembed to match, so every reported map is projected on the
 #   same latents the generator samples. Every run's generation audit records the
 #   backend that ran.

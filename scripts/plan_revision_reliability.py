@@ -309,7 +309,7 @@ def prepare(args):
                 input_files.update(item for item in path.rglob("*") if item.is_file())
             else:
                 input_files.add(path)
-    for folder in (args.synplanner_dir, args.autoencoder_dir, args.peptide_model_dir):
+    for folder in (args.synplanner_dir, args.peptide_model_dir):
         input_files.update(item for item in folder.resolve().rglob("*") if item.is_file())
     plan = {
         "schema_version": "1.0",
@@ -321,7 +321,6 @@ def prepare(args):
         "input_sha256": {str(path): sha256(path) for path in sorted(input_files)},
         "environment": {
             "PYTHONPATH": _python_path(root),
-            "AUTOENCODER_MODEL_PATH": str(args.autoencoder_dir.resolve()),
             "PEPTIDE_DESIGNER_MODEL_PATH": str(args.peptide_model_dir.resolve()),
             "USE_S3": "false",
             "HF_HUB_OFFLINE": "1",
@@ -364,7 +363,6 @@ def main():
     parser.add_argument("--seh-manifest", type=Path)
     parser.add_argument("--peptide-bundle", type=Path)
     parser.add_argument("--synplanner-dir", type=Path)
-    parser.add_argument("--autoencoder-dir", type=Path)
     parser.add_argument("--peptide-model-dir", type=Path)
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
@@ -378,7 +376,6 @@ def main():
             "seh_manifest",
             "peptide_bundle",
             "synplanner_dir",
-            "autoencoder_dir",
             "peptide_model_dir",
             "output_dir",
         )

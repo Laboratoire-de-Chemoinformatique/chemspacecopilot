@@ -43,10 +43,7 @@ def write_config(tmp_path, tests=None):
 
 
 def create_models(tmp_path, *, chembed_manifold=True):
-    folders = {
-        "autoencoder": ["config.pt", "vocab.pt", "model.pt"],
-        "peptide_designer": ["model.pt", "vocab.dict"],
-    }
+    folders = {"peptide_designer": ["model.pt", "vocab.dict"]}
     if chembed_manifold:
         # Every reported map projects onto this manifold, so a ready environment has it.
         folders["gtm-chembed"] = ["GTM_manifold_chembed_900_225.pkl.gz"]
@@ -77,7 +74,7 @@ def test_detects_git_lfs_pointer_and_empty_checkpoint(tmp_path):
     )
 
 
-def test_recovery_requires_eager_design_checkpoints_and_redacts_provider_key(tmp_path, versions):
+def test_recovery_requires_the_peptide_checkpoint_and_redacts_provider_key(tmp_path, versions):
     secret = "unique-test-key-never-print"
     report = readiness.check_readiness(
         write_config(tmp_path),
@@ -88,7 +85,6 @@ def test_recovery_requires_eager_design_checkpoints_and_redacts_provider_key(tmp
     assert report["ready_for_pilot"] is False
     assert report["model"]["credential"]["present"] is True
     assert secret not in json.dumps(report)
-    assert any("autoencoder checkpoint" in blocker for blocker in report["blockers"])
     assert any("peptide checkpoint" in blocker for blocker in report["blockers"])
 
 

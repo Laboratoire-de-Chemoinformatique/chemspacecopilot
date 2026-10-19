@@ -25,7 +25,6 @@ class GTMMCPFacade:
             gtm_model_file,
             agent=agent,
             use_default=use_default,
-            descriptor_type=descriptor_type,
         )
         return gtm_operations.save_gtm_plot(
             dataset_file,

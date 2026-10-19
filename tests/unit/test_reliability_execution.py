@@ -485,18 +485,25 @@ class TestLatentEnginePinning:
         assert os.environ["AUTOENCODER_BACKEND"] == "chembed"
 
     def test_config_overrides_an_inherited_environment(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("AUTOENCODER_BACKEND", "chembed")
+        monkeypatch.setenv("AUTOENCODER_BACKEND", "autoencoder")
 
-        RobustnessRunner(self._config(tmp_path, "deepchemography"))
+        RobustnessRunner(self._config(tmp_path, "chembed"))
 
-        assert os.environ["AUTOENCODER_BACKEND"] == "deepchemography"
+        assert os.environ["AUTOENCODER_BACKEND"] == "chembed"
+
+    def test_a_retired_engine_is_refused(self, tmp_path, monkeypatch):
+        """A config pinning the LSTM must fail, not quietly run on chembed."""
+        monkeypatch.delenv("AUTOENCODER_BACKEND", raising=False)
+
+        with pytest.raises(ValueError, match="latent_engine"):
+            RobustnessRunner(self._config(tmp_path, "deepchemography"))
 
     def test_unset_engine_leaves_the_environment_alone(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("AUTOENCODER_BACKEND", "deepchemography")
+        monkeypatch.setenv("AUTOENCODER_BACKEND", "autoencoder")
 
         RobustnessRunner(self._config(tmp_path, ""))
 
-        assert os.environ["AUTOENCODER_BACKEND"] == "deepchemography"
+        assert os.environ["AUTOENCODER_BACKEND"] == "autoencoder"
 
     def test_unknown_engine_is_refused(self, tmp_path, monkeypatch):
         monkeypatch.delenv("AUTOENCODER_BACKEND", raising=False)
@@ -507,4 +514,4 @@ class TestLatentEnginePinning:
     def test_the_shipped_reliability_config_pins_an_engine(self):
         config = yaml.safe_load((ROBUSTNESS_DIR / "manuscript_reliability.yaml").read_text())
 
-        assert config["general"]["latent_engine"] in {"chembed", "deepchemography"}
+        assert config["general"]["latent_engine"] == "chembed"

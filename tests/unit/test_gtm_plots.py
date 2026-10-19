@@ -989,7 +989,7 @@ def test_resolve_gtm_model_path_raises_when_no_source_available(monkeypatch, tmp
     """
 
     empty_cache = tmp_path / "empty_gtm_cache"
-    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_MODEL_PATH", str(empty_cache))
+    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_CHEMBED_MODEL_PATH", str(empty_cache))
 
     fake_hf = ModuleType("huggingface_hub")
 
@@ -1006,7 +1006,7 @@ def test_resolve_gtm_model_path_raises_when_no_source_available(monkeypatch, tmp
     assert "Could not resolve a default GTM model" in message
     assert str(empty_cache) in message
     assert "404 Repository Not Found" in message
-    assert gtm_operations.HUGGINGFACE_GTM_REPO in message
+    assert gtm_operations.HUGGINGFACE_GTM_CHEMBED_REPO in message
 
 
 def test_resolve_gtm_model_path_prefers_current_session_map_over_default(monkeypatch):
@@ -1019,7 +1019,7 @@ def test_resolve_gtm_model_path_prefers_current_session_map_over_default(monkeyp
         }
     )
 
-    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_MODEL_PATH", "/should/not/be/used")
+    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_CHEMBED_MODEL_PATH", "/should/not/be/used")
 
     resolved = gtm_operations.resolve_gtm_model_path(agent=agent, use_default=True)
 
@@ -1035,7 +1035,7 @@ def test_resolve_gtm_model_path_uses_default_when_default_map_session_has_no_cur
     default_dir.mkdir()
     default_model = default_dir / "default.pkl.gz"
     default_model.write_text("placeholder")
-    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_MODEL_PATH", str(default_dir))
+    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_CHEMBED_MODEL_PATH", str(default_dir))
     monkeypatch.setattr(gtm_operations, "load_gtm_model", lambda _path: object())
 
     agent = SimpleNamespace(
@@ -1055,7 +1055,7 @@ def test_resolve_gtm_model_path_skips_corrupt_cached_model(monkeypatch, tmp_path
     corrupt_model = default_dir / "corrupt.pkl"
     corrupt_model.write_text("not a pickle")
     downloaded_model = default_dir / "downloaded.pkl.gz"
-    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_MODEL_PATH", str(default_dir))
+    monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_CHEMBED_MODEL_PATH", str(default_dir))
 
     def _load_model(path):
         if Path(path) == corrupt_model:

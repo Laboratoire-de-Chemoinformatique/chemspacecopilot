@@ -239,12 +239,6 @@ def check_readiness(
     # recovery-only prompts. Check this shared startup cost explicitly.
     model_files = {}
     for name, variable, folder, filenames in (
-        (
-            "autoencoder",
-            "AUTOENCODER_MODEL_PATH",
-            "autoencoder",
-            ("config.pt", "vocab.pt", "model.pt"),
-        ),
         ("peptide", "PEPTIDE_DESIGNER_MODEL_PATH", "peptide_designer", ("model.pt", "vocab.dict")),
     ):
         directory = expand(env.get(variable) or f"~/.cache/cs_copilot/models/{folder}", env, home)
@@ -313,12 +307,9 @@ def check_readiness(
         prerequisite_cases[name] = item
 
     if "seh_analysis" in validators:
-        # Each descriptor family caches its manifold in its own directory, so a
-        # chembed session's map is not under the LSTM path. Accept either.
-        gtm_roots = (
-            home / ".cache/cs_copilot/models/gtm",
-            home / ".cache/cs_copilot/models/gtm-chembed",
-        )
+        # The chembed manifold caches in its own directory, never the retired
+        # LSTM's ``models/gtm``, which may still hold a manifold of that latent.
+        gtm_roots = (home / ".cache/cs_copilot/models/gtm-chembed",)
         model_files["cached_gtm"] = [
             artifact(str(item), base=project_root, env=env, home=home)
             for root in gtm_roots
