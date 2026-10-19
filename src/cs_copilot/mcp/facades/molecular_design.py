@@ -61,7 +61,7 @@ class MolecularDesignerFacade:
             "engines": [
                 {
                     "name": "autoencoder",
-                    "description": "LSTM autoencoder latent-space generation for SMILES.",
+                    "description": "chembed autoencoder latent-space generation for SMILES.",
                     "supported_modes": ["analog", "interpolate", "neighborhood", "sample"],
                 },
                 {

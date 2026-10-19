@@ -373,7 +373,7 @@ class GTMToolkit(BaseDRToolkit):
                 (default 10).
             neighborhood_metric: Descriptor-space metric for neighborhood_preservation.
                 "auto" (default) picks Tanimoto for Morgan count fingerprints and
-                Euclidean for autoencoder embeddings; "cosine" is also allowed for
+                Euclidean for chembed embeddings; "cosine" is also allowed for
                 embeddings. Ignored for the entropy objective.
 
         Returns:
@@ -553,7 +553,7 @@ class GTMToolkit(BaseDRToolkit):
         """
         use_default = _auto_use_default(agent, use_default)
         resolved_model = gtm_operations.resolve_gtm_model_path(
-            gtm_file, agent=agent, use_default=use_default, descriptor_type=descriptor_type
+            gtm_file, agent=agent, use_default=use_default
         )
         result = gtm_operations.load_gtm_density_matrix(
             dataset_file, resolved_model, descriptor_type=descriptor_type, agent=agent
@@ -613,7 +613,7 @@ class GTMToolkit(BaseDRToolkit):
         else:
             # Resolve model path (will check session state path, then explicit, then default)
             resolved_model = gtm_operations.resolve_gtm_model_path(
-                gtm_model, agent=agent, use_default=use_default, descriptor_type=descriptor_type
+                gtm_model, agent=agent, use_default=use_default
             )
             # Load the model
             gtm_for_projection = gtm_operations.load_gtm_model(resolved_model)
@@ -1266,7 +1266,7 @@ class GTMToolkit(BaseDRToolkit):
         """
         use_default = _auto_use_default(agent, use_default)
         resolved_model = gtm_operations.resolve_gtm_model_path(
-            gtm_model, agent=agent, use_default=use_default, descriptor_type=descriptor_type
+            gtm_model, agent=agent, use_default=use_default
         )
         artifact = gtm_operations.create_activity_landscape_artifact(
             dataset,
@@ -1458,7 +1458,7 @@ class GTMToolkit(BaseDRToolkit):
         """
         use_default = _auto_use_default(agent, use_default)
         resolved_model = gtm_operations.resolve_gtm_model_path(
-            gtm_model_file, agent=agent, use_default=use_default, descriptor_type=descriptor_type
+            gtm_model_file, agent=agent, use_default=use_default
         )
         result = gtm_operations.project_data_on_gtm(
             dataset_file,

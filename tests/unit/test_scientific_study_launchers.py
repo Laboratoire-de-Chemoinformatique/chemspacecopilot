@@ -12,7 +12,6 @@ SCRIPTS = Path(__file__).parents[2] / "scripts"
 # Launchers share sibling helpers and are normally executed as script files.
 sys.path.insert(0, str(SCRIPTS))
 import _study_common as common  # noqa: E402
-import run_generation_study as generation  # noqa: E402
 import run_retrosynthesis_study as retrosynthesis  # noqa: E402
 
 
@@ -151,13 +150,6 @@ def test_target_ids_do_not_control_output_paths(tmp_path):
     assert retrosynthesis.load_targets(targets, 1) == [
         {"target_id": "../user-label", "smiles": "CCO", "canonical_smiles": "CCO"}
     ]
-
-
-def test_generation_defaults_match_bounded_manuscript_protocol():
-    assert generation.PARENT_ID == "CHEMBL3327073"
-    from rdkit import Chem
-
-    assert Chem.MolFromSmiles(generation.PARENT_SMILES) is not None
 
 
 def test_controller_lock_blocks_concurrent_execution(tmp_path):

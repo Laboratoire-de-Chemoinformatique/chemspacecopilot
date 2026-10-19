@@ -83,7 +83,6 @@ from ..constants import (
     DEFAULT_GRADIENT_MAX_LENGTH,
     DEFAULT_GRADIENT_THICKNESS,
     DEFAULT_GTM_CHEMBED_MODEL_PATH,
-    DEFAULT_GTM_MODEL_PATH,
     DEFAULT_LEGEND_FONT_SIZE,
     DEFAULT_NODE_THRESHOLD,
     DEFAULT_POINTS_SIZE,
@@ -92,8 +91,6 @@ from ..constants import (
     HTML_EXTENSION,
     HUGGINGFACE_GTM_CHEMBED_REPO,
     HUGGINGFACE_GTM_CHEMBED_REVISION,
-    HUGGINGFACE_GTM_REPO,
-    HUGGINGFACE_GTM_REVISION,
     MIN_ORGANISM_DATA_POINTS,
     PKL_GZ_EXTENSION,
     PNG_EXTENSION,
@@ -823,41 +820,12 @@ def _prepare_gtm_training_data(
     return _copy_prepared_gtm_data(prepared, cache_hit=False)
 
 
-def resolve_default_manifold(
-    agent: Optional[Agent] = None,
-    descriptor_type: Optional[str] = None,
-) -> tuple[str, str, str]:
-    """Return ``(repo, revision, cache directory)`` for the right default manifold.
-
-    A manifold is valid only for the latent space it was fitted on, so the
-    published default follows the descriptor family instead of being one fixed
-    repository. Morgan sessions take the LSTM branch and are unaffected by it:
-    they project fingerprints, which ``validate_gtm_descriptor_backend``
-    refuses against either latent manifold.
-
-    The two caches stay in separate directories because the resolver returns
-    whatever loadable file it finds there, and both latents are 256 wide, so a
-    shared directory would mean projecting onto the wrong manifold in silence.
-    """
-    family = MolecularDescriptorEncoder(
-        get_session_descriptor_type(agent, descriptor_type)
-    ).default_descriptor
-    if family == "chembed":
-        return (
-            HUGGINGFACE_GTM_CHEMBED_REPO,
-            HUGGINGFACE_GTM_CHEMBED_REVISION,
-            DEFAULT_GTM_CHEMBED_MODEL_PATH,
-        )
-    return (HUGGINGFACE_GTM_REPO, HUGGINGFACE_GTM_REVISION, DEFAULT_GTM_MODEL_PATH)
-
-
 def resolve_gtm_model_path(
     gtm_file: Optional[str] = None,
     *,
     agent: Optional[Agent] = None,
     use_default: bool = False,
     generate_framesets: bool = False,
-    descriptor_type: Optional[str] = None,
 ) -> str:
     """
     Resolve GTM model path with priority:
@@ -873,9 +841,6 @@ def resolve_gtm_model_path(
         agent: Optional Agent instance to check session state
         use_default: If True, force use of default model even if session model exists
         generate_framesets: When True, generate cached frameset CSVs when downloading
-        descriptor_type: Descriptor family the caller is about to project. It
-            decides which published manifold the default resolves to; when
-            omitted, the session's descriptor type decides.
 
     Returns:
         Resolved path to the GTM model file
@@ -913,9 +878,12 @@ def resolve_gtm_model_path(
         )
         use_default = True
 
-    # Priority 3: Default model resolution, on the manifold fitted for this
-    # descriptor family rather than on one fixed repository.
-    repo_id, revision, cache_dir = resolve_default_manifold(agent, descriptor_type)
+    # Priority 3: the published default manifold, fitted on chembed latents.
+    repo_id, revision, cache_dir = (
+        HUGGINGFACE_GTM_CHEMBED_REPO,
+        HUGGINGFACE_GTM_CHEMBED_REVISION,
+        DEFAULT_GTM_CHEMBED_MODEL_PATH,
+    )
     logger.debug("Resolving default GTM model path from %s", repo_id)
 
     tried: list[str] = []
@@ -1013,8 +981,8 @@ class _CPUStorageUnpickler(dill.Unpickler):
 def load_gtm_model(gtm_model_path: str) -> Any:
     """Load a trusted GTM pickle using its actual compression and available device.
 
-    The published default map is a plain pickle despite its .pkl.gz name and
-    contains CUDA tensor storages. On CPU hosts these are remapped while loading,
+    Some published manifolds are plain pickles despite their .pkl.gz name and
+    contain CUDA tensor storages. On CPU hosts these are remapped while loading,
     and a saved CUDA device selector is updated so subsequent projection also
     uses CPU. CUDA-capable hosts retain the checkpoint's original device choices.
     """
@@ -1650,7 +1618,7 @@ def data_load_and_prep(
         dataset: Path to dataset CSV file (can be S3 URL, local path, or relative path)
         gtm_model: Path to GTM model file (can be S3 URL, local path, or relative path)
         descriptor_type: Optional descriptor backend override (e.g. ``"morgan"`` or
-            ``"autoencoder"``). When ``None``, the descriptor is resolved from the
+            ``"chembed"``). When ``None``, the descriptor is resolved from the
             agent's session state (``default_descriptor``) and falls back to the
             module default.
         agent: Optional agent whose ``session_state`` is consulted for the
@@ -3199,7 +3167,7 @@ def node_roundtrip_fidelity(
 def validate_gtm_descriptor_backend(gtm: Any, descriptor_type: str) -> None:
     """Refuse a GTM manifold fitted on a different latent model.
 
-    The deepchemography autoencoder and chembed both produce 256-wide latents,
+    chembed and the retired deepchemography LSTM both produce 256-wide latents,
     so a trial projection cannot tell them apart: the shapes agree and the
     coordinates come back silently meaningless. Manifolds fitted after this
     check existed carry a ``descriptor_backend`` tag; older ones do not, and
@@ -3262,7 +3230,6 @@ def resolve_neighborhood_metric(descriptor_type: str, metric: str = "auto") -> s
         kind = descriptor_type  # peptide latents are not a descriptor alias
     allowed = {
         "morgan": ("tanimoto",),
-        "autoencoder": ("euclidean", "cosine"),
         "chembed": ("euclidean", "cosine"),
         "peptide_latent": ("euclidean", "cosine"),
     }.get(kind)
@@ -5289,7 +5256,7 @@ def _tag_latent_gtm(gtm: Any, scaler: Any, descriptor_backend: str) -> None:
     """Record on the manifold which latent space it was fitted on, and its scaler.
 
     Without the tag, :func:`validate_gtm_descriptor_backend` takes its
-    warn-and-pass branch, which is exactly the chembed-versus-autoencoder case
+    warn-and-pass branch, which is exactly the chembed-versus-LSTM case
     it exists to catch: both latents are 256-wide, so nothing else tells them
     apart. Without the scaler, :func:`latent_centers_from_gtm` returns z-scored
     centres that a decoder consumes without complaint.
@@ -5336,7 +5303,7 @@ def train_latent_gtm(
         strategy: Optimization effort level — ``"low"``, ``"medium"``, or ``"high"``.
             Only used when *config* is None.
         descriptor_backend: Latent space these vectors came from, such as
-            ``"chembed"``, ``"autoencoder"`` or ``"peptide_latent"``. Recorded on
+            ``"chembed"`` or ``"peptide_latent"``. Recorded on
             the manifold so a projection in the wrong space is refused rather
             than returning coordinates that look fine and mean nothing.
         objective: Score to maximize, as in :func:`optimize_gtm` — ``"entropy"``

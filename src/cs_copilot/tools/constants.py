@@ -72,10 +72,6 @@ CHEMBL_ACTIVITY_FIELDS = [
 
 CHEMBL_MOLECULE_FIELDS = ["molecule_chembl_id", "canonical_smiles", "molecule_structures"]
 
-# Autoencoder model defaults
-DEFAULT_AUTOENCODER_MODEL_PATH = os.path.expanduser("~/.cache/cs_copilot/models/autoencoder")
-HUGGINGFACE_AUTOENCODER_REPO = "axelrolov/lstm_autoencoder"  # Hugging Face model repository
-
 # chembed SELFIES transformer VAE defaults. The checkpoint is downloaded and
 # cached by huggingface_hub itself, so there is no cs_copilot model directory.
 HUGGINGFACE_CHEMBED_REPO = "3BioCompBio/chembed-default"
@@ -87,26 +83,17 @@ DEFAULT_PEPTIDE_DESIGNER_MODEL_PATH = os.path.expanduser(
 )
 HUGGINGFACE_PEPTIDE_WAE_REPO = "axelrolov/wae_peptides"
 
-# GTM model defaults
-DEFAULT_GTM_MODEL_PATH = os.path.expanduser("~/.cache/cs_copilot/models/gtm")
-# A GTM manifold is only valid for the latent space it was fitted on, and both
-# latent models are 256 wide, so a mismatch cannot be caught by shape. Each
-# manifold is pinned by revision rather than tracking a branch, so a repository
-# update cannot swap it under results that depend on it.
-HUGGINGFACE_GTM_REPO = "axelrolov/chemspacecopilot-gtm"  # deepchemography LSTM latents
-HUGGINGFACE_GTM_REVISION = os.getenv(
-    "HUGGINGFACE_GTM_REVISION", "ad9f1257cd80aaa84fc422a78b1a9fc579d0510b"
-)
-
-# Companion manifold fitted on chembed latents from the same pinned frameset,
-# with the LSTM manifold's hyperparameters unchanged.
+# Default GTM manifold, fitted on chembed latents of the pinned frameset. A
+# manifold is only valid for the latent space it was fitted on, so it is pinned
+# by revision rather than tracking a branch: a repository update cannot swap it
+# under results that depend on it.
 HUGGINGFACE_GTM_CHEMBED_REPO = "axelrolov/chemspacecopilot-gtm-chembed"
 HUGGINGFACE_GTM_CHEMBED_REVISION = os.getenv(
     "HUGGINGFACE_GTM_CHEMBED_REVISION", "ca1d609ba58a0b2074cee8779d28af8ce435b6ef"
 )
-# Kept apart from the LSTM cache on purpose: the resolver returns any loadable
-# file it finds in one directory, so two manifolds sharing a directory would
-# hand a projection the wrong latent space without failing, both being 256 wide.
+# Not ~/.cache/cs_copilot/models/gtm, which may still hold the retired LSTM
+# manifold: the resolver returns any loadable file it finds in its directory,
+# and both latents are 256 wide, so it would project in the wrong space silently.
 DEFAULT_GTM_CHEMBED_MODEL_PATH = os.path.expanduser("~/.cache/cs_copilot/models/gtm-chembed")
 
 # DBAASP antimicrobial peptide data

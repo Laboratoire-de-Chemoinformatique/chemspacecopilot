@@ -41,11 +41,7 @@ def _patch_fast_gtm_optimization(monkeypatch, tmp_path: Path):
         calls["descriptors"] += 1
         column = descriptor_column
         if column is None:
-            column = (
-                "autoencoder_embedding"
-                if descriptor_type == "autoencoder"
-                else "morgan_fingerprint"
-            )
+            column = "chembed_embedding" if descriptor_type == "chembed" else "morgan_fingerprint"
         matrix = np.arange(len(df) * 2, dtype=np.float64).reshape(len(df), 2)
         df = df.copy()
         df[column] = [row.tolist() for row in matrix]
@@ -122,7 +118,7 @@ def test_optimize_gtm_model_cache_misses_when_descriptor_type_changes(monkeypatc
         "ae_gtm",
         "smiles",
         agent,
-        descriptor_type="autoencoder",
+        descriptor_type="chembed",
     )
 
     assert calls["standardize"] == 2
@@ -313,7 +309,7 @@ def test_optimize_gtm_neighborhood_preservation_objective(monkeypatch):
         _, _, best_score = gtm_operations.optimize_gtm(
             df,
             X=X,
-            descriptor_type="autoencoder",
+            descriptor_type="chembed",
             descriptor_column="morgan_fingerprint",
             objective="neighborhood_preservation",
             neighborhood_k=3,
@@ -324,7 +320,7 @@ def test_optimize_gtm_neighborhood_preservation_objective(monkeypatch):
     _, _, best_score = gtm_operations.optimize_gtm(
         df,
         X=X,
-        descriptor_type="autoencoder",
+        descriptor_type="chembed",
         descriptor_column="morgan_fingerprint",
         objective="neighborhood_preservation",
         neighborhood_k=3,
@@ -348,10 +344,10 @@ def test_optimize_gtm_neighborhood_preservation_objective(monkeypatch):
 def test_neighborhood_metric_follows_descriptor_kind():
     resolve = gtm_operations.resolve_neighborhood_metric
     assert resolve("morgan") == "tanimoto"
-    assert resolve("ae") == "euclidean"
-    assert resolve("autoencoder", "Cosine") == "cosine"
+    assert resolve("chembed") == "euclidean"
+    assert resolve("chembed", "Cosine") == "cosine"
     with pytest.raises(ValueError):
-        resolve("autoencoder", "tanimoto")
+        resolve("chembed", "tanimoto")
     # Peptide latents are no descriptor alias, but an embedding all the same.
     assert resolve("peptide_latent") == "euclidean"
     assert resolve("peptide_latent", "cosine") == "cosine"

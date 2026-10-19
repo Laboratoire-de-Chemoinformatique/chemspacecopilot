@@ -238,7 +238,7 @@ def _similarity_to_seed(smiles: str, seed_smiles: Optional[str]) -> Optional[flo
 
 
 class AutoencoderDesignEngine:
-    """Small-molecule design engine backed by the existing LSTM autoencoder."""
+    """Small-molecule design engine backed by the chembed autoencoder."""
 
     engine_name = "autoencoder"
     _SUPPORTED_MODES = {"sample", "analog", "neighborhood", "interpolate"}
@@ -429,7 +429,7 @@ class MolecularDesignerToolkit(Toolkit):
             "engines": [
                 {
                     "name": "autoencoder",
-                    "description": "LSTM autoencoder latent-space generation for SMILES.",
+                    "description": "chembed autoencoder latent-space generation for SMILES.",
                     "supported_modes": sorted(AutoencoderDesignEngine._SUPPORTED_MODES),
                 },
                 {

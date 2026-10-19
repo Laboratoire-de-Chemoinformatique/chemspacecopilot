@@ -286,10 +286,8 @@ class TestDetectCachedModels:
     def test_detect_cached_models_structure(self):
         result = _detect_cached_models()
         assert set(result.keys()) == {
-            "autoencoder",
             "chembed",
             "peptide_designer",
-            "gtm",
             "gtm_chembed",
             "dbaasp_data",
         }
@@ -311,9 +309,9 @@ class TestBuildRecommendations:
             "chembl_backend": {"backend": "sqlite", "description": "Local SQLite ChEMBL database"},
             "storage_backend": {"backend": "local", "bucket": None},
             "cached_models": {
-                "autoencoder": True,
+                "chembed": True,
                 "peptide_designer": True,
-                "gtm": True,
+                "gtm_chembed": True,
                 "dbaasp_data": True,
             },
         }
@@ -329,9 +327,9 @@ class TestBuildRecommendations:
             "chembl_backend": {"backend": "rest", "description": "ChEMBL REST API"},
             "storage_backend": {"backend": "local", "bucket": None},
             "cached_models": {
-                "autoencoder": False,
+                "chembed": False,
                 "peptide_designer": False,
-                "gtm": False,
+                "gtm_chembed": False,
                 "dbaasp_data": False,
             },
         }
@@ -348,9 +346,8 @@ class TestBuildRecommendations:
             "chembl_backend": {"backend": "sqlite", "description": "Local SQLite ChEMBL database"},
             "storage_backend": {"backend": "local", "bucket": None},
             "cached_models": {
-                "autoencoder": True,
+                "chembed": True,
                 "peptide_designer": True,
-                "gtm": True,
                 "gtm_chembed": True,
                 "dbaasp_data": True,
             },

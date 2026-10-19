@@ -332,8 +332,8 @@ class RobustnessRunner:
         The engine is chosen by ``AUTOENCODER_BACKEND`` at construction time and
         cannot be selected by a prompt, so leaving it to the ambient environment
         makes "which engine produced these molecules" a property of the operator's
-        shell rather than of the config. An explicit setting is also what lets a
-        reproduction run pin ``deepchemography`` and say so.
+        shell rather than of the config. chembed is the only engine, so this now
+        also fails a config or shell that still names the retired LSTM.
         """
         engine = (getattr(self.config, "latent_engine", "") or "").strip().lower()
         if not engine:
@@ -342,9 +342,8 @@ class RobustnessRunner:
                 os.environ.get("AUTOENCODER_BACKEND", "<unset, engine default>"),
             )
             return
-        # Canonicalise through the toolkit so an explicit spelling such as
-        # "deepchemography_lstm" pins the same engine, and so the environment
-        # downstream carries the canonical name.
+        # Resolve through the toolkit so the environment downstream carries the
+        # canonical name, and a retired engine fails here rather than at run time.
         from cs_copilot.tools.chemistry.autoencoder_toolkit import (
             AutoencoderError,
             resolve_autoencoder_backend,
