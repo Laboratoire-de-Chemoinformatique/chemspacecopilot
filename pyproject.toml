@@ -86,6 +86,7 @@ only-include = [
     ".github",
     ".modelconf",
     ".pre-commit-config.yaml",
+    "CITATION.cff",
     "Dockerfile",
     "Dockerfile.minio",
     "LICENSE",
