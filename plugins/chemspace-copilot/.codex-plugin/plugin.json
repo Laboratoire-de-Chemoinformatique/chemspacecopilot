@@ -1,6 +1,6 @@
 {
   "name": "chemspace-copilot",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Reproducible agentic chemical-space workflows through the ChemSpace Copilot MCP server.",
   "author": {
     "name": "Alexey Orlov",

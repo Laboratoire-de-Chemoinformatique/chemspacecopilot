@@ -15,7 +15,7 @@ def test_repo_plugin_manifest_and_mcp_profile_are_thin_and_versioned():
     mcp = json.loads((PLUGIN / ".mcp.json").read_text())
 
     assert manifest["name"] == "chemspace-copilot"
-    assert manifest["version"] == "0.2.0"
+    assert manifest["version"] == "0.4.0"
     assert manifest["skills"] == "./skills/"
     assert manifest["mcpServers"] == "./.mcp.json"
     assert "apps" not in manifest
