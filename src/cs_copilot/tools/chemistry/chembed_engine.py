@@ -3,20 +3,19 @@
 """chembed latent engine for :class:`~.autoencoder_toolkit.AutoencoderToolkit`.
 
 chembed is a SELFIES transformer VAE (Talibart & Gilis, *J. Cheminform.* 2026).
-It replaces the deepchemography LSTM autoencoder for small molecules, which
-cannot encode SMILES longer than roughly 50 characters and so returns almost
-nothing for the larger, more potent chemotypes.
+It replaced the deepchemography LSTM autoencoder for small molecules, retired
+after v0.4.0, which could not encode SMILES longer than roughly 50 characters and
+so returned almost nothing for the larger, more potent chemotypes.
 
-Two differences from the LSTM matter to callers:
+Two properties matter to callers:
 
 * Decoding is greedy and deterministic. ``temperature`` and ``decode_mode``
   have no effect, and ``max_length`` is fixed by the checkpoint. The engine
   accepts all three, ignores them, and records in the generation audit both
   what was requested and what was applied, so no artifact claims a setting
   that was never used.
-* All diversity therefore comes from latent noise, and the noise scales tuned
-  for the LSTM do not transfer: a single encoded molecule has a latent
-  standard deviation near 0.66.
+* All diversity therefore comes from latent noise: a single encoded molecule
+  has a latent standard deviation near 0.66.
 """
 
 from __future__ import annotations
@@ -39,7 +38,7 @@ from .autoencoder_toolkit import AutoencoderError
 logger = logging.getLogger(__name__)
 
 #: chembed batches at this width internally; the autoregressive decode is slow
-#: enough that the toolkit's LSTM-era default of 32 wastes most of the batch.
+#: enough that the toolkit's default of 32 wastes most of the batch.
 DEFAULT_BATCH_SIZE = 256
 
 #: Latent perturbation for neighbourhood exploration. Measured over aspirin,
@@ -87,9 +86,8 @@ class ChembedEngine:
     def load(self, *, model_path: Optional[str], device: Any) -> Tuple[Any, Any, Any]:
         """Load the VAE and return ``(model, vocab, config)``.
 
-        A *model_path* naming an existing file is treated as a local checkpoint.
-        The toolkit's default path points at the deepchemography model directory
-        and is ignored.
+        A *model_path* naming an existing file is treated as a local checkpoint;
+        anything else is ignored and the pinned checkpoint is fetched instead.
 
         Args:
             model_path: Toolkit-resolved path; used only when it is a real file.

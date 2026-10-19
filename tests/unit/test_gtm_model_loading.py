@@ -98,7 +98,7 @@ def test_corrupt_gzip_is_not_reinterpreted_as_plain_pickle(tmp_path, monkeypatch
 class TestDescriptorBackendGuard:
     """A manifold must refuse descriptors from a different latent model.
 
-    chembed and the deepchemography autoencoder both emit 256-wide latents, so
+    chembed and the retired deepchemography LSTM both emit 256-wide latents, so
     a trial projection cannot tell them apart: it succeeds and returns
     meaningless coordinates. The recorded tag is the only defence.
     """
@@ -107,13 +107,15 @@ class TestDescriptorBackendGuard:
         gtm = SimpleNamespace(descriptor_backend="chembed")
         gtm_operations.validate_gtm_descriptor_backend(gtm, "chembed")
 
-    def test_aliases_resolve_to_the_same_family(self):
+    def test_a_manifold_tagged_with_the_retired_lstm_is_refused(self):
+        """Maps fitted on LSTM latents survive in users' caches and session state."""
         gtm = SimpleNamespace(descriptor_backend="autoencoder")
-        gtm_operations.validate_gtm_descriptor_backend(gtm, "latent")
+        with pytest.raises(ValueError, match="meaningless coordinates"):
+            gtm_operations.validate_gtm_descriptor_backend(gtm, "chembed")
 
     @pytest.mark.parametrize(
         ("recorded", "supplied"),
-        [("autoencoder", "chembed"), ("chembed", "autoencoder")],
+        [("autoencoder", "chembed"), ("peptide_latent", "chembed"), ("chembed", "morgan")],
     )
     def test_mismatched_backend_is_refused(self, recorded, supplied):
         gtm = SimpleNamespace(descriptor_backend=recorded)
@@ -123,7 +125,7 @@ class TestDescriptorBackendGuard:
     def test_untagged_manifold_warns_but_is_allowed(self, caplog):
         """Manifolds published before the tag existed must keep working."""
         with caplog.at_level(logging.WARNING):
-            gtm_operations.validate_gtm_descriptor_backend(SimpleNamespace(), "autoencoder")
+            gtm_operations.validate_gtm_descriptor_backend(SimpleNamespace(), "chembed")
 
         assert "no descriptor_backend" in caplog.text
 
@@ -406,12 +408,12 @@ class TestTrainLatentGtm:
         assert gtm.latent_scaler is scaler
         # The guard can now do its job on a manifold this function produced.
         with pytest.raises(ValueError, match="meaningless coordinates"):
-            gtm_operations.validate_gtm_descriptor_backend(gtm, "autoencoder")
+            gtm_operations.validate_gtm_descriptor_backend(gtm, "morgan")
 
     @pytest.mark.parametrize(
         ("supplied", "recorded"),
         [
-            ("latent", "autoencoder"),  # an alias resolves to its family
+            ("chembed_embedding", "chembed"),  # an alias resolves to its family
             ("chembed", "chembed"),
             ("peptide_latent", "peptide_latent"),  # not a descriptor, kept verbatim
         ],
@@ -445,43 +447,17 @@ class TestTrainLatentGtm:
         assert centers.shape == (gtm.num_nodes, 5)
 
 
-class TestDefaultManifoldFollowsDescriptor:
-    """The default map is per latent space, not one fixed repository.
+class TestDefaultManifold:
+    """The published default map is the chembed manifold.
 
-    Both latents are 256 wide, so projecting chembed vectors onto the LSTM
-    manifold returns coordinates that are meaningless but never raise. The
-    published default therefore has to follow the descriptor family.
+    It is the only one left: the LSTM manifold went with its engine. Morgan
+    sessions are unaffected either way, since ``validate_gtm_descriptor_backend``
+    refuses fingerprints against a latent manifold.
     """
 
     def _agent(self, descriptor):
         return SimpleNamespace(
             session_state={gtm_operations.SESSION_DESCRIPTOR_TYPE_KEY: descriptor}
-        )
-
-    def test_chembed_sessions_get_the_chembed_manifold(self):
-        repo, revision, cache = gtm_operations.resolve_default_manifold(self._agent("chembed"))
-
-        assert repo == gtm_operations.HUGGINGFACE_GTM_CHEMBED_REPO
-        assert revision == gtm_operations.HUGGINGFACE_GTM_CHEMBED_REVISION
-        assert cache == gtm_operations.DEFAULT_GTM_CHEMBED_MODEL_PATH
-
-    def test_autoencoder_sessions_keep_the_lstm_manifold(self):
-        repo, revision, cache = gtm_operations.resolve_default_manifold(self._agent("autoencoder"))
-
-        assert repo == gtm_operations.HUGGINGFACE_GTM_REPO
-        assert revision == gtm_operations.HUGGINGFACE_GTM_REVISION
-        assert cache == gtm_operations.DEFAULT_GTM_MODEL_PATH
-
-    def test_explicit_descriptor_outranks_the_session(self):
-        repo, _, _ = gtm_operations.resolve_default_manifold(self._agent("autoencoder"), "chembed")
-
-        assert repo == gtm_operations.HUGGINGFACE_GTM_CHEMBED_REPO
-
-    def test_the_two_caches_are_separate_directories(self):
-        # One directory would mean the resolver returning whichever manifold it
-        # happened to find there first, with nothing to catch the mismatch.
-        assert (
-            gtm_operations.DEFAULT_GTM_CHEMBED_MODEL_PATH != gtm_operations.DEFAULT_GTM_MODEL_PATH
         )
 
     def test_chembed_default_resolves_into_the_chembed_cache(self, tmp_path, monkeypatch):
@@ -490,7 +466,6 @@ class TestDefaultManifoldFollowsDescriptor:
         chembed_map = chembed_cache / "chembed.pkl.gz"
         chembed_map.write_text("placeholder")
         monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_CHEMBED_MODEL_PATH", str(chembed_cache))
-        monkeypatch.setattr(gtm_operations, "DEFAULT_GTM_MODEL_PATH", str(tmp_path / "gtm-lstm"))
         monkeypatch.setattr(gtm_operations, "load_gtm_model", lambda _path: object())
 
         resolved = gtm_operations.resolve_gtm_model_path(

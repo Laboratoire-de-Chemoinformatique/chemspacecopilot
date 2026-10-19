@@ -283,8 +283,7 @@ class GeneralConfigSchema:
         if not 0 <= self.reliability_min_success_rate <= 1:
             raise ValueError("reliability_min_success_rate must be between 0 and 1")
         if self.latent_engine:
-            # The toolkit owns the engine names, including explicit spellings
-            # such as "deepchemography_lstm"; a second list here would drift.
+            # The toolkit owns the engine names; a second list here would drift.
             from cs_copilot.tools.chemistry.autoencoder_toolkit import (
                 AutoencoderError,
                 resolve_autoencoder_backend,

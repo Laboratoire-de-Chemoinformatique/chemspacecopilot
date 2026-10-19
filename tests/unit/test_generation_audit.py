@@ -18,15 +18,37 @@ metrics = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(metrics)
 
 
+class _StubEngine:
+    """Stand-in latent engine: the audit is what is under test, not a checkpoint."""
+
+    name = "chembed"
+
+    def decode(self, z, *, max_len, temp, decode):
+        return ["OCC", "CCO", "bad", "CCN"]
+
+    def latent_dim(self):
+        return 2
+
+    def decode_settings(self, *, temp, decode, max_len):
+        return {
+            "temperature": temp,
+            "decode_mode": decode,
+            "max_length": max_len,
+            "backend": self.name,
+        }
+
+    def default_noise_scale(self):
+        return 0.5
+
+
 def _backend():
     toolkit = AutoencoderToolkit.__new__(AutoencoderToolkit)
     toolkit.device = torch.device("cpu")
     toolkit.model_path = "test-only-no-download"
+    toolkit.engine = _StubEngine()
     toolkit.config = SimpleNamespace(d_z=2)
     toolkit.validate_model_loaded = lambda: True
-    toolkit.model = SimpleNamespace(
-        eval=lambda: None, sample=lambda **_kwargs: ["OCC", "CCO", "bad", "CCN"]
-    )
+    toolkit.model = SimpleNamespace(eval=lambda: None)
     return toolkit
 
 

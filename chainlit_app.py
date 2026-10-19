@@ -65,14 +65,10 @@ def get_user_role(username: str) -> str:
 def _apply_map_settings(session_agent, map_choice: str) -> None:
     """Propagate the selected map to the team's session_state.
 
-    The Default Map selects the chembed descriptor family, matching the default
-    generation engine, and ``resolve_gtm_model_path`` then resolves the manifold
-    published for that latent space. The deepchemography LSTM stays reachable as
-    ``descriptor_type="autoencoder"``, which resolves to its own manifold.
-    Each family pins its latent engine and ignores AUTOENCODER_BACKEND, because
-    projecting one engine's vectors onto the other's manifold returns
-    meaningless coordinates without raising: both latents are 256 wide.
-    Otherwise, the project keeps its historical Morgan-fingerprint default.
+    The Default Map selects the chembed descriptor family, the latent space the
+    generation engine samples, and ``resolve_gtm_model_path`` then resolves the
+    manifold published for it. Otherwise, the project keeps its historical
+    Morgan-fingerprint default.
     """
     if session_agent is None:
         return

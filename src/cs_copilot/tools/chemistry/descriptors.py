@@ -14,7 +14,6 @@ from .base_chemistry import calc_morgan_fp_batch
 
 logger = logging.getLogger(__name__)
 
-# DEFAULT_DESCRIPTOR_TYPE = "autoencoder"
 DEFAULT_DESCRIPTOR_TYPE = "morgan"
 DEFAULT_DESCRIPTOR_COLUMN = "descriptor_vector"
 
@@ -23,17 +22,12 @@ class MolecularDescriptorEncoder:
     """Factory-style encoder for generating molecular descriptor vectors.
 
     The encoder provides a simple interface that supports multiple descriptor
-    backends (autoencoder embeddings, Morgan fingerprints, ...). Alternative
+    backends (chembed latent embeddings, Morgan fingerprints, ...). Alternative
     descriptors can be requested via the ``descriptor_type`` argument when
     calling :meth:`encode`.
     """
 
     _ALIASES: Dict[str, str] = {
-        "autoencoder": "autoencoder",
-        "ae": "autoencoder",
-        "latent": "autoencoder",
-        "embedding": "autoencoder",
-        "autoencoder_embedding": "autoencoder",
         "chembed": "chembed",
         "selfies_vae": "chembed",
         "transformer_vae": "chembed",
@@ -44,29 +38,24 @@ class MolecularDescriptorEncoder:
         "mfp": "morgan",
     }
 
-    # chembed and the deepchemography autoencoder both produce 256-wide latents,
-    # so a shared column name would let vectors from one be silently reused as
-    # the other: _compute_descriptors treats an existing column as a cache and
-    # never checks which model wrote it. Distinct names are what prevents that.
+    # Names of the retired deepchemography LSTM family. They raise instead of
+    # aliasing chembed: tables and maps saved under them hold LSTM vectors, which
+    # chembed latents (also 256 wide) would silently be mixed with.
+    _RETIRED: frozenset = frozenset(
+        {"autoencoder", "ae", "latent", "embedding", "autoencoder_embedding"}
+    )
+
+    # chembed vectors never share the retired LSTM's autoencoder_embedding
+    # column: _compute_descriptors treats an existing column as a cache and never
+    # checks which model wrote it.
     _COLUMN_NAMES: Dict[str, str] = {
-        "autoencoder": "autoencoder_embedding",
         "chembed": "chembed_embedding",
         "morgan": "morgan_fingerprint",
     }
 
-    # Each descriptor family pins its latent engine. Resolving these through
-    # AUTOENCODER_BACKEND instead would make "autoencoder" mean whichever engine
-    # happened to be configured, writing one model's vectors into the other's
-    # cache column. The environment variable selects the engine used to
-    # *generate* molecules; it must not silently redefine a descriptor.
-    _DESCRIPTOR_ENGINES: Dict[str, str] = {
-        "autoencoder": "deepchemography",
-        "chembed": "chembed",
-    }
-
     def __init__(self, default_descriptor: str = DEFAULT_DESCRIPTOR_TYPE):
         self.default_descriptor = self._normalise_descriptor(default_descriptor)
-        self._autoencoder_toolkits: Dict[str, AutoencoderToolkit] = {}
+        self._autoencoder_toolkit: Optional[AutoencoderToolkit] = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -84,8 +73,8 @@ class MolecularDescriptorEncoder:
             descriptor_type: Name of the descriptor backend to use. When ``None``
                 the encoder's default descriptor is applied.
             **kwargs: Additional backend-specific keyword arguments. Supported
-                options include ``batch_size``/``model_path``/``device`` for the
-                autoencoder and ``nbits`` for Morgan fingerprints.
+                options include ``batch_size``/``model_path``/``device`` for
+                chembed and ``nbits`` for Morgan fingerprints.
 
         Returns:
             ``numpy.ndarray`` containing one descriptor vector per SMILES string.
@@ -97,10 +86,9 @@ class MolecularDescriptorEncoder:
         descriptor_key = self._normalise_descriptor(descriptor_type or self.default_descriptor)
         smiles = list(smiles_list)
 
-        if descriptor_key in {"autoencoder", "chembed"}:
+        if descriptor_key == "chembed":
             return self._encode_autoencoder(
                 smiles,
-                backend=descriptor_key,
                 batch_size=kwargs.pop("batch_size", 32),
                 model_path=kwargs.pop("model_path", None),
                 device=kwargs.pop("device", None),
@@ -130,6 +118,11 @@ class MolecularDescriptorEncoder:
     # ------------------------------------------------------------------
     def _normalise_descriptor(self, descriptor_type: str) -> str:
         key = descriptor_type.lower()
+        if key in self._RETIRED:
+            raise ValueError(
+                f"descriptor_type '{descriptor_type}' named the deepchemography LSTM "
+                "latents, retired after v0.4.0; use 'chembed'"
+            )
         if key not in self._ALIASES:
             raise ValueError(f"Unknown descriptor type '{descriptor_type}'")
         return self._ALIASES[key]
@@ -138,14 +131,11 @@ class MolecularDescriptorEncoder:
         self,
         smiles: Sequence[str],
         *,
-        backend: str,
         batch_size: int,
         model_path: Optional[str],
         device: Optional[str],
     ) -> np.ndarray:
-        toolkit = self._get_autoencoder_toolkit(
-            backend=self._DESCRIPTOR_ENGINES[backend], model_path=model_path, device=device
-        )
+        toolkit = self._get_autoencoder_toolkit(model_path=model_path, device=device)
         embeddings = toolkit.encode_smiles_array(list(smiles), batch_size=batch_size)
         return np.asarray(embeddings, dtype=np.float32)
 
@@ -166,18 +156,16 @@ class MolecularDescriptorEncoder:
         return np.vstack(fingerprints)
 
     def _get_autoencoder_toolkit(
-        self, *, backend: str, model_path: Optional[str], device: Optional[str]
+        self, *, model_path: Optional[str], device: Optional[str]
     ) -> AutoencoderToolkit:
-        # Allow callers to override the cached toolkit when explicit arguments
-        # are provided. Otherwise reuse one lazily initialised toolkit per
-        # backend -- caching a single one would hand chembed latents to callers
-        # asking for the deepchemography model, and the reverse.
+        # Explicit arguments build a fresh toolkit; otherwise reuse one lazily
+        # initialised toolkit.
         if model_path or device:
-            return make_autoencoder_toolkit(backend, model_path=model_path, device=device)
+            return make_autoencoder_toolkit(model_path=model_path, device=device)
 
-        if backend not in self._autoencoder_toolkits:
-            self._autoencoder_toolkits[backend] = make_autoencoder_toolkit(backend)
-        return self._autoencoder_toolkits[backend]
+        if self._autoencoder_toolkit is None:
+            self._autoencoder_toolkit = make_autoencoder_toolkit()
+        return self._autoencoder_toolkit
 
 
 __all__ = [

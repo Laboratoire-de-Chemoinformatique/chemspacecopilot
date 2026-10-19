@@ -245,13 +245,10 @@ class TestToolkitIntegration:
 
     def test_registered_tool_names_are_engine_independent(self, fake_chembed, monkeypatch):
         with_engine = AutoencoderToolkit(model_path="unused", device="cpu", engine=ChembedEngine())
+        defaulted = AutoencoderToolkit(model_path="unused", device="cpu")
 
-        monkeypatch.setattr(AutoencoderToolkit, "_ensure_model_exists", lambda self: None)
-        monkeypatch.setattr(AutoencoderToolkit, "_load_model", lambda self: None)
-        without_engine = AutoencoderToolkit(model_path="unused", device="cpu")
-
-        assert type(with_engine).__name__ == type(without_engine).__name__ == "AutoencoderToolkit"
-        assert set(with_engine.functions) == set(without_engine.functions)
+        assert type(with_engine).__name__ == type(defaulted).__name__ == "AutoencoderToolkit"
+        assert set(with_engine.functions) == set(defaulted.functions)
         assert {
             "encode_smiles",
             "decode_latent",
@@ -320,23 +317,15 @@ class TestNoiseScale:
     each: at 0.1 chembed returns the parent essentially every time.
     """
 
-    def test_engine_default_is_larger_than_the_lstm_value(self, loaded_engine):
-        from cs_copilot.tools.chemistry.autoencoder_toolkit import DEFAULT_NOISE_SCALE
-
-        assert loaded_engine.default_noise_scale() > DEFAULT_NOISE_SCALE
+    def test_engine_default_leaves_the_parent(self, loaded_engine):
+        """0.1, tuned for the retired LSTM, returned the parent nearly every time."""
+        assert loaded_engine.default_noise_scale() > 0.1
 
     def test_toolkit_uses_the_engine_default_when_none_given(self, fake_chembed, monkeypatch):
         from cs_copilot.tools.chemistry.chembed_engine import DEFAULT_NOISE_SCALE
 
         toolkit = AutoencoderToolkit(model_path="unused", device="cpu", engine=ChembedEngine())
         assert toolkit._default_noise_scale() == DEFAULT_NOISE_SCALE
-
-    def test_deepchemography_default_is_unchanged(self):
-        from cs_copilot.tools.chemistry.autoencoder_toolkit import DEFAULT_NOISE_SCALE
-
-        toolkit = AutoencoderToolkit.__new__(AutoencoderToolkit)
-        toolkit.engine = None
-        assert toolkit._default_noise_scale() == DEFAULT_NOISE_SCALE == 0.1
 
     def test_explicit_noise_scale_is_respected(self, fake_chembed, monkeypatch):
         toolkit = AutoencoderToolkit(model_path="unused", device="cpu", engine=ChembedEngine())
@@ -358,35 +347,24 @@ class TestNoiseScale:
 class TestDescriptorEnginePinning:
     """Descriptor families pin their engine; only generation follows the env.
 
-    AUTOENCODER_BACKEND selects the engine used to generate molecules. If it
-    also redefined a descriptor family, "autoencoder" would emit chembed vectors
-    into the autoencoder_embedding column, which _compute_descriptors reuses as
-    a cache without recording which model wrote it.
+    The retired LSTM's families are refused rather than aliased to chembed:
+    _compute_descriptors reuses an existing column as a cache without recording
+    which model wrote it, so an alias would mix LSTM and chembed vectors in one
+    autoencoder_embedding column.
     """
 
-    @pytest.mark.parametrize("configured", ["chembed", "deepchemography"])
-    def test_descriptor_family_engine_is_independent_of_the_env(self, configured, monkeypatch):
+    @pytest.mark.parametrize("retired", ["autoencoder", "ae", "latent", "embedding"])
+    def test_retired_descriptor_families_are_refused(self, retired):
         from cs_copilot.tools.chemistry.descriptors import MolecularDescriptorEncoder
 
-        monkeypatch.setenv("AUTOENCODER_BACKEND", configured)
+        with pytest.raises(ValueError, match="retired"):
+            MolecularDescriptorEncoder(retired)
 
-        engines = MolecularDescriptorEncoder._DESCRIPTOR_ENGINES
-        assert engines["autoencoder"] == "deepchemography"
-        assert engines["chembed"] == "chembed"
-
-    def test_columns_stay_one_per_engine(self):
+    def test_chembed_keeps_its_own_column(self):
         from cs_copilot.tools.chemistry.descriptors import MolecularDescriptorEncoder
 
-        columns = {
-            family: MolecularDescriptorEncoder(family).column_name()
-            for family in MolecularDescriptorEncoder._DESCRIPTOR_ENGINES
-        }
-
-        assert columns == {
-            "autoencoder": "autoencoder_embedding",
-            "chembed": "chembed_embedding",
-        }
-        assert len(set(columns.values())) == len(columns)
+        assert MolecularDescriptorEncoder("chembed").column_name() == "chembed_embedding"
+        assert MolecularDescriptorEncoder("morgan").column_name() == "morgan_fingerprint"
 
     def test_generation_default_is_chembed(self, monkeypatch):
         from cs_copilot.tools.chemistry.autoencoder_toolkit import resolve_autoencoder_backend
@@ -394,14 +372,18 @@ class TestDescriptorEnginePinning:
         monkeypatch.delenv("AUTOENCODER_BACKEND", raising=False)
 
         assert resolve_autoencoder_backend(None) == "chembed"
-        assert resolve_autoencoder_backend("deepchemography") == "deepchemography"
 
-    def test_env_overrides_the_generation_default(self, monkeypatch):
-        from cs_copilot.tools.chemistry.autoencoder_toolkit import resolve_autoencoder_backend
+    def test_a_retired_engine_in_the_env_fails_loudly(self, monkeypatch):
+        """Silently generating on chembed would attribute results to the wrong model."""
+        from cs_copilot.tools.chemistry.autoencoder_toolkit import (
+            AutoencoderError,
+            resolve_autoencoder_backend,
+        )
 
         monkeypatch.setenv("AUTOENCODER_BACKEND", "deepchemography")
 
-        assert resolve_autoencoder_backend(None) == "deepchemography"
+        with pytest.raises(AutoencoderError, match="retired"):
+            resolve_autoencoder_backend(None)
 
 
 class TestEngineNamingAndPeptideDependency:
@@ -413,26 +395,19 @@ class TestEngineNamingAndPeptideDependency:
     drop deepchemography" would delete peptide generation.
     """
 
-    def test_lstm_has_an_unambiguous_spelling(self):
-        from cs_copilot.tools.chemistry.autoencoder_toolkit import resolve_autoencoder_backend
-
-        assert resolve_autoencoder_backend("deepchemography_lstm") == "deepchemography"
-        assert resolve_autoencoder_backend("lstm_autoencoder") == "deepchemography"
-
-    def test_canonical_names_are_unchanged_so_records_stay_comparable(self):
-        from cs_copilot.tools.chemistry.autoencoder_toolkit import resolve_autoencoder_backend
-
-        assert resolve_autoencoder_backend("deepchemography") == "deepchemography"
-        assert resolve_autoencoder_backend("chembed") == "chembed"
-
-    def test_unknown_backend_explains_the_package_collision(self):
+    def test_retiring_the_engine_names_the_tag_that_still_has_it(self):
         from cs_copilot.tools.chemistry.autoencoder_toolkit import (
             AutoencoderError,
             resolve_autoencoder_backend,
         )
 
-        with pytest.raises(AutoencoderError, match="peptide WAE"):
-            resolve_autoencoder_backend("vae")
+        with pytest.raises(AutoencoderError, match="v0.4.0"):
+            resolve_autoencoder_backend("deepchemography_lstm")
+
+    def test_chembed_is_still_accepted_by_name(self):
+        from cs_copilot.tools.chemistry.autoencoder_toolkit import resolve_autoencoder_backend
+
+        assert resolve_autoencoder_backend("chembed") == "chembed"
 
     def test_peptide_designer_imports_the_package_independently(self):
         """Peptide generation must not route through the small-molecule engine."""
@@ -442,7 +417,6 @@ class TestEngineNamingAndPeptideDependency:
 
         # Its own import of the package, not a call into the molecule engine.
         assert "from deepchemography.peptides import" in source
-        assert "import LSTMAutoencoder" not in source
         assert "resolve_autoencoder_backend" not in source
 
     def test_the_dependency_is_still_declared(self):

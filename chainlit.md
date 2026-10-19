@@ -16,7 +16,7 @@ ChemSpace Copilot uses a multi-agent system powered by DeepSeek LLM, coordinatin
 | **GTM Activity Analysis** | Creates activity-density landscapes for SAR |
 | **GTM Loading** | Loads pre-existing GTM models from storage |
 | **GTM Chemotype Analysis** | Analyzes scaffold distributions and chemotypes |
-| **Autoencoder** | Molecular generation via LSTM autoencoders |
+| **Autoencoder** | Molecular generation via the chembed autoencoder |
 | **Autoencoder GTM Sampling** | Combines autoencoder with GTM for targeted generation |
 
 ## Capabilities

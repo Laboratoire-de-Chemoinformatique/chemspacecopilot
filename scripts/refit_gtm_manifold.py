@@ -21,7 +21,7 @@ scaling, exactly as the published model does.
 Usage::
 
     python scripts/refit_gtm_manifold.py --frameset gtm_frameset_training.csv \
-        --output ~/.cache/cs_copilot/models/gtm/GTM_manifold_chembed_900_225.pkl.gz
+        --output ~/.cache/cs_copilot/models/gtm-chembed/GTM_manifold_chembed_900_225.pkl.gz
 """
 
 from __future__ import annotations
