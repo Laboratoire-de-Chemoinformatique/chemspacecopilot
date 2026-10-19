@@ -114,8 +114,8 @@ For `--system both`, a cross-arm comparison is also written to
 
 For the small controlled reliability study, follow the
 [manuscript revision protocol](../../docs/testing/manuscript-revision.md).
-It defines the 48-execution controlled comparison plus 12 live case/stage
-executions, required scientific artifacts, and interpretation limits.
+It defines the 48 frozen plus 32 live case/stage executions (80 in total),
+the required scientific artifacts, and interpretation limits.
 
 `manuscript_reliability.yaml` implements the quantitative evaluation requested
 for the ChemSpace Copilot manuscript. It separates two sources of variability:

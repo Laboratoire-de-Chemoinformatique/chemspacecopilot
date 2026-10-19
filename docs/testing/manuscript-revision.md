@@ -38,11 +38,11 @@ published archive. Every repeat and architecture has a separate output prefix.
 | Component | Executions | Purpose |
 |---|---:|---|
 | Four frozen cases × two phrasings × three repetitions × two architectures | 48 | Repeatability and same-model architecture comparison |
-| Three live sEH workflows, each containing three dependent stages | 9 stages | End-to-end retrieval, analysis, generation, planning |
-| Three peptide workflows from the pinned public aggregate landscape | 3 | End-to-end orchestration of existing-map inference, analysis, logos and reporting |
+| Four live sEH workflows × two architectures, each containing three dependent stages | 24 stages | End-to-end retrieval, analysis, generation, planning |
+| Four peptide workflows × two architectures from the pinned public aggregate landscape | 8 | End-to-end orchestration of existing-map inference, analysis, logos and reporting |
 | Missing-input and invalid-input recovery cases | Optional, separate | Recovery behaviour |
 
-The 60 scientific case/stage executions are not 60 API calls or 60 independent
+The 80 scientific case/stage executions are not 80 API calls or 80 independent
 observations. Report per-case/per-arm denominators; the three sEH stages within a
 workflow share history and state. Recovery cases must not inflate the scientific
 success rate.
@@ -65,9 +65,20 @@ Batch order is (variant0, repeat0), (variant1, repeat0), (variant0, repeat1),
 (variant1, repeat1), (variant0, repeat2), (variant1, repeat2). Even-indexed batches
 run team first; odd-indexed batches run the flat agent first. Each batch config
 contains one explicit phrasing and one repetition. Keep global variant/repetition
-indices in the plan ledger when combining local runner records. Three subsequent
-live batches each contain the three-stage sEH chain and one peptide workflow.
-Thus the total remains 48 frozen + 12 live case/stage executions.
+indices in the plan ledger when combining local runner records. Four subsequent
+live batches each contain the three-stage sEH chain and one peptide workflow in
+both architectures, again eight executions per batch. Live has one phrasing, so
+arm order alternates on the repetition index, and four repetitions balance it
+2/2. Thus the total is 48 frozen + 32 live = 80 case/stage executions.
+
+The manuscript reports this matrix, run on 2026-10-17 with GTM maps and
+generation both on chembed. The code that ran is commit `1754a85`; release
+v0.4.0 is that commit plus version metadata, `CITATION.cff` and documentation.
+Earlier result sets used other matrices and are not pooled with it. The v2 to v4
+studies ran the live tier in the team arm only (48 + 12 = 60) on the LSTM
+autoencoder. A chembed run of 2026-10-16 used three live repetitions in both arms
+(48 + 24 = 72) in an environment that could not import SynPlanner, so all 18 of
+its route searches failed.
 
 All runs use predownloaded pinned molecular, peptide and SynPlanner assets, CPU
 scientific computation, one Torch thread, and fresh isolated agent state. Model
@@ -76,8 +87,8 @@ warm in every arm; no derived state or generated output crosses runs. Both arms
 receive the same SynPlanner configuration: 120 s, 100 iterations, depth 9, 10,000 tree
 nodes, 50 policy rules, min_mol_size 6, top_k 1, retry profiles disabled. Provider caching
 is outside local control and provider-reported cached tokens are retained.
-A separate pilot and all its reanalyses remain outside the 60-run denominator.
-Python, NumPy and Torch ambient RNGs use seeds 11/22/33 by global repetition,
+A separate pilot and all its reanalyses remain outside the 80-run denominator.
+Python, NumPy and Torch ambient RNGs use seeds 11/22/33/44 by global repetition,
 identically across arms, and are restored after each run. Explicit tool parameters
 can override these ambient states: the peptide conditional sampler defaults to
 random_state=42, recorded separately in the manifest and call trace. No provider
@@ -96,12 +107,12 @@ python scripts/plan_revision_reliability.py \
   --output-dir reports/reviewer_revision/reliability_study
 ```
 
-This command creates nine batch configs and a `study_plan.json` recording exact
+This command creates ten batch configs and a `study_plan.json` recording exact
 commands, global indices, expected counts, runtime/input hashes and non-secret
-inference environment settings. It does not call the model provider. Each frozen
-batch invokes the runner with `--n-variations 1 --repetitions 1 --system both`;
-each live batch uses `--system team`. Inspect offline readiness and verify the
-frozen hashes before executing those commands. Do not run an extra unsplit
+inference environment settings. It does not call the model provider. Every
+batch invokes the runner with `--n-variations 1 --repetitions 1 --system both`.
+Inspect offline readiness and verify the frozen hashes before executing those
+commands. Do not run an extra unsplit
 48-execution command in addition to these batches. A different reduced protocol
 must be declared before its measured runs.
 
@@ -125,7 +136,7 @@ hardware, actual provider identifier and date, inference settings, and scientifi
 RNG settings. Do not infer an immutable provider model snapshot from an alias.
 Describe small-sample architecture differences as exploratory tradeoffs.
 
-Both sEH analysis prompts use the cached default map with autoencoder descriptors.
+Both sEH analysis prompts use the cached default map with chembed descriptors.
 This evaluates retrieval/projection/landscape analysis, not new GTM fitting or
 optimization. If the revised paper needs evidence for construction reliability,
 add a separately declared small fitting task and its numerical acceptance checks.
