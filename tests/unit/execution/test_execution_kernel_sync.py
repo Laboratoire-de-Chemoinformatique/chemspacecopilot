@@ -13,7 +13,12 @@ import pytest
 from cs_copilot.execution.errors import ToolExecutionError
 from cs_copilot.execution.runner import bind_sync_invoker, execute_sync
 from cs_copilot.execution.tracing import current_tool_span_id
-from cs_copilot.storage import S3
+from cs_copilot.storage import (
+    OUTPUT_CONTEXT_KEY,
+    S3,
+    OutputOperation,
+    scoped_artifact_path,
+)
 
 from ._kernel_helpers import make_spec, payloads, tool_events
 
@@ -53,6 +58,22 @@ class _Toolkit:
         self.seen_boundary = S3.current_write_boundary()
         with S3.open(output_path, "w") as handle:
             handle.write("bounded")
+        return {"output_path": output_path}
+
+    def write_scoped(self) -> dict[str, Any]:
+        """Build an artifact path the way database toolkits do, without state."""
+        self.calls += 1
+        self.seen_boundary = S3.current_write_boundary()
+        output_path = scoped_artifact_path(
+            "dataset.csv",
+            OutputOperation.CHEMICAL_SPACE,
+            "datasets",
+            "filtered",
+            session_state=None,
+            workflow_slug="chemical_space",
+        )
+        with S3.open(output_path, "w") as handle:
+            handle.write("smiles\nCCO\n")
         return {"output_path": output_path}
 
     async def coroutine(self) -> str:
@@ -182,6 +203,33 @@ def test_session_writes_are_rewritten_into_the_run(bound_context):
     assert toolkit.seen_boundary == run_root
     with S3.open(rewritten, "r") as handle:
         assert handle.read() == "bounded"
+
+
+def test_scoped_paths_follow_the_bounded_run_without_session_context(bound_context):
+    """Tool code that builds its own paths must land in the run the boundary names."""
+    ctx = bound_context("sync-scoped-path")
+    ctx.session_state.pop(OUTPUT_CONTEXT_KEY, None)
+    toolkit = _Toolkit()
+    spec = make_spec("write_scoped", _Toolkit, write_scope="session")
+
+    # A fresh context stands in for the worker subprocess: no run context var,
+    # only what the kernel pins and what the session state carries.
+    outcome = contextvars.Context().run(
+        execute_sync,
+        spec,
+        ctx,
+        {},
+        invoke=bind_sync_invoker(spec, toolkit.write_scoped),
+    )
+
+    assert outcome.ok
+    run_root = ctx.run_context.layout.run_root
+    assert toolkit.seen_boundary == run_root
+    assert outcome.value["output_path"] == (
+        f"{run_root}/01_chemical_space/datasets/filtered/dataset.csv"
+    )
+    # The run identity must also survive the trip into a worker subprocess.
+    assert ctx.session_state[OUTPUT_CONTEXT_KEY]["run_id"] == ctx.run_context.layout.run_id
 
 
 @pytest.mark.parametrize("destination", ["/etc/passwd", "../escape.txt", "file:///tmp/x"])

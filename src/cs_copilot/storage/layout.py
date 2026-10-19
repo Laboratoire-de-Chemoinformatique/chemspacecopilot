@@ -16,12 +16,13 @@ import os
 import re
 import stat
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from typing import Any, BinaryIO, Optional
+from typing import Any, BinaryIO, Iterator, Optional
 
-from .client import S3, _open_existing_directory_tree
+from .client import S3, ScopedWriteDenied, _open_existing_directory_tree
 
 OUTPUT_CONTEXT_KEY = "output_context"
 LAYOUT_VERSION = 4
@@ -261,6 +262,14 @@ def ensure_output_context(
             session_state[OUTPUT_CONTEXT_KEY] = context
         return context
 
+    if run_id is None and S3.current_write_boundary() is not None:
+        # Minting a run here would place every artifact under a brand-new run
+        # root, which can never sit inside the boundary the caller opened.
+        raise ScopedWriteDenied(
+            "no workflow run is reachable for this scoped write; "
+            "the caller must bind the run that owns the active write boundary",
+            verdict="outside_boundary",
+        )
     resolved_run_id = (
         validate_identifier(run_id, field="run_id")
         if run_id is not None
@@ -298,6 +307,17 @@ def set_output_context(context: dict[str, Any]) -> dict[str, Any]:
     }
     _RUN_CONTEXT.set(normalized)
     return normalized
+
+
+@contextmanager
+def active_output_context(context: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    """Pin one run context for the enclosing scope, restoring the previous one."""
+
+    token = _RUN_CONTEXT.set(None)
+    try:
+        yield set_output_context(context)
+    finally:
+        _RUN_CONTEXT.reset(token)
 
 
 def current_output_layout(

@@ -136,7 +136,12 @@ def _tool_write_scope(spec: ToolSpec, ctx: ExecutionContext, *, commit_policy: s
         # Delegated tool calls set up their own read and write scopes.
         yield publications
         return
-    from cs_copilot.storage import S3
+    from cs_copilot.storage import (
+        LAYOUT_VERSION,
+        OUTPUT_CONTEXT_KEY,
+        S3,
+        active_output_context,
+    )
 
     layout = _active_output_layout(ctx)
     run_context = getattr(ctx, "run_context", None)
@@ -154,7 +159,20 @@ def _tool_write_scope(spec: ToolSpec, ctx: ExecutionContext, *, commit_policy: s
         )
         for record in run.artifacts.values()
     }
+    output_context = {
+        "layout_version": LAYOUT_VERSION,
+        "session_id": layout.session_id,
+        "run_id": layout.run_id,
+        "workflow_slug": layout.workflow_slug,
+    }
+    if isinstance(ctx.session_state, dict):
+        # Worker subprocesses only receive the serialized session state, so the
+        # run identity has to travel there too.
+        ctx.session_state[OUTPUT_CONTEXT_KEY] = dict(output_context)
     with ExitStack() as stack:
+        # Tool code resolves artifact paths through the run context. Pin the
+        # layout the boundary was derived from so the two cannot disagree.
+        stack.enter_context(active_output_context(output_context))
         stack.enter_context(S3.confine_artifact_reads(verified_reads))
         if spec.write_scope == "session" and not spec.read_only:
             stack.enter_context(

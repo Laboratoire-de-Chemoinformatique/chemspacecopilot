@@ -16,6 +16,7 @@ from cs_copilot.storage import (
     S3,
     OutputLayout,
     OutputOperation,
+    ScopedWriteDenied,
     StorageConfigError,
     ensure_output_context,
     get_s3_config,
@@ -185,6 +186,28 @@ def test_confined_local_writes_are_descriptor_safe_and_context_local(
         tmp_path / "data/sessions/test-session/workflows/bounded-run/inputs/request.json"
     )
     assert immutable_path.read_text() == "original"
+
+
+def test_minting_a_run_inside_a_write_boundary_is_refused(clean_storage_env, monkeypatch, tmp_path):
+    """A run minted under a boundary could only ever write outside it."""
+    monkeypatch.chdir(tmp_path)
+    old_prefix = S3.current_prefix()
+    S3.set_session_prefix("sessions/mint-guard-session")
+
+    try:
+        with S3.confine_writes("workflows/mint-guard-run"):
+            with pytest.raises(ScopedWriteDenied, match="no workflow run is reachable"):
+                ensure_output_context({}, workflow_slug="chemical_space")
+            # An explicit run id still resolves; only silent minting is refused.
+            context = ensure_output_context(
+                {},
+                workflow_slug="chemical_space",
+                run_id="mint-guard-run",
+            )
+    finally:
+        S3.set_session_prefix(old_prefix)
+
+    assert context["run_id"] == "mint-guard-run"
 
 
 def test_confined_writes_are_transactional_and_support_read_your_writes(
