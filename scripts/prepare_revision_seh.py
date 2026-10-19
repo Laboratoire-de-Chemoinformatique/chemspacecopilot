@@ -42,17 +42,40 @@ POLICY = {
     "assay_types": ["B", "F"],
     "excluded_assays_after_domain_review": EXCLUDED_ASSAYS,
     "assay_organism_filter": "none; human identity follows confidence-9 target assignment",
-    "standard_type": "IC50",
-    "standard_units": "nM",
     "standard_relation": "=",
     "standard_value": "finite and greater than zero",
     "data_validity_comment": "null or empty only",
     "potential_duplicate": "unflagged only (0, false, null or empty)",
     "chemical_identity": "RDKit cleanup, largest fragment, uncharge, canonical tautomer, remove stereochemistry",
-    "duplicate_measurements": "collapse same standardized structure + assay + exact numeric IC50; retain all source IDs",
-    "aggregation": "median pIC50 = median(9 - log10(IC50 in nM)); independent assays retained",
-    "classification": "active pIC50 > 6 (IC50 < 1000 nM); inactive pIC50 <= 5 (IC50 >= 10000 nM); otherwise intermediate",
+    "classification": "active > 6; inactive <= 5; otherwise intermediate",
     "conflicts": "retain all compounds; flag multiple observed classes and active/inactive disagreement separately",
+}
+
+# The endpoint rule. "ic50" is the original scope and derives
+# pIC50 = 9 - log10(IC50 in nM). "pchembl" admits any endpoint ChEMBL has
+# already normalised, taking pchembl_value directly, so Ki, EC50 and Kd join
+# IC50. A pooled column is not an IC50, so it is named pchembl, not pIC50.
+ACTIVITY_RULES = {
+    "ic50": {
+        "value_key": "pIC50",
+        "standard_type": "IC50",
+        "standard_units": "nM",
+        "duplicate_measurements": (
+            "collapse same standardized structure + assay + exact numeric IC50; "
+            "retain all source IDs"
+        ),
+        "aggregation": "median pIC50 = median(9 - log10(IC50 in nM)); independent assays retained",
+    },
+    "pchembl": {
+        "value_key": "pchembl",
+        "standard_type": "any endpoint carrying a ChEMBL pchembl_value (IC50, Ki, EC50, Kd, ...)",
+        "standard_units": "not constrained; pchembl_value is already -log10(molar)",
+        "duplicate_measurements": (
+            "collapse same standardized structure + assay + exact numeric pchembl_value; "
+            "retain all source IDs"
+        ),
+        "aggregation": "median pChEMBL across pooled endpoints; independent assays retained",
+    },
 }
 
 
@@ -214,8 +237,17 @@ def activity_class(pic50: float) -> str:
     return "inactive" if pic50 <= 5 else "intermediate"
 
 
-def prepare_dataset(target: dict, assays: list[dict], activities: list[dict]) -> dict[str, Any]:
+def prepare_dataset(
+    target: dict,
+    assays: list[dict],
+    activities: list[dict],
+    *,
+    rule: str = "ic50",
+) -> dict[str, Any]:
     """Apply predeclared filters and retain record-level exclusions and identities."""
+    if rule not in ACTIVITY_RULES:
+        raise ValueError(f"Unknown activity rule {rule!r}; use one of {sorted(ACTIVITY_RULES)}")
+    vkey = ACTIVITY_RULES[rule]["value_key"]
     if (
         target.get("target_chembl_id") != TARGET
         or target.get("organism") != "Homo sapiens"
@@ -243,8 +275,16 @@ def prepare_dataset(target: dict, assays: list[dict], activities: list[dict]) ->
             (_number(assay.get("confidence_score")) == 9, "assay_confidence_not_9"),
             (assay.get("assay_type") in {"B", "F"}, "assay_type_not_B_or_F"),
             (row.get("assay_chembl_id") not in EXCLUDED_ASSAYS, "phosphatase_domain_assay"),
-            (row.get("standard_type") == "IC50", "endpoint_not_IC50"),
-            (row.get("standard_units") == "nM", "units_not_nM"),
+            *(
+                [
+                    (row.get("standard_type") == "IC50", "endpoint_not_IC50"),
+                    (row.get("standard_units") == "nM", "units_not_nM"),
+                ]
+                if rule == "ic50"
+                # pchembl_value is ChEMBL's own -log10(molar), so the endpoint
+                # and the reported units no longer need constraining.
+                else [(_number(row.get("pchembl_value")) is not None, "no_pchembl_value")]
+            ),
             (row.get("standard_relation") == "=", "relation_not_equal"),
             (value is not None and value > 0, "value_not_finite_positive"),
             (row.get("data_validity_comment") in (None, ""), "data_validity_comment"),
@@ -265,26 +305,33 @@ def prepare_dataset(target: dict, assays: list[dict], activities: list[dict]) ->
                 }
             )
         else:
+            potency = 9 - math.log10(value) if rule == "ic50" else _number(row.get("pchembl_value"))
             accepted.append(
                 {
                     **row,
                     "standardized_smiles": smiles,
-                    "ic50_nm": value,
-                    "pIC50": 9 - math.log10(value),
+                    **({"ic50_nm": value} if rule == "ic50" else {}),
+                    vkey: potency,
                 }
             )
     grouped = defaultdict(list)
     for row in accepted:
-        grouped[(row["standardized_smiles"], row["assay_chembl_id"], row["ic50_nm"])].append(row)
+        grouped[(row["standardized_smiles"], row["assay_chembl_id"], row[vkey])].append(row)
     measurements = []
-    for (smiles, assay_id, value), rows in sorted(grouped.items()):
+    for (smiles, assay_id, potency), rows in sorted(grouped.items()):
         measurements.append(
             {
                 "canonical_smiles": smiles,
                 "assay_chembl_id": assay_id,
                 "assay_type": assay_by_id[assay_id]["assay_type"],
-                "ic50_nm": value,
-                "pIC50": 9 - math.log10(value),
+                **(
+                    {"ic50_nm": rows[0]["ic50_nm"]}
+                    if rule == "ic50"
+                    # Pooled endpoints have no single unit, so record which one
+                    # each measurement came from instead.
+                    else {"standard_type": rows[0].get("standard_type")}
+                ),
+                vkey: potency,
                 "activity_ids": sorted(r["activity_id"] for r in rows),
                 "molecule_chembl_ids": sorted({r["molecule_chembl_id"] for r in rows}),
                 "n_source_records": len(rows),
@@ -295,7 +342,7 @@ def prepare_dataset(target: dict, assays: list[dict], activities: list[dict]) ->
         by_structure[row["canonical_smiles"]].append(row)
     compounds = []
     for smiles, rows in sorted(by_structure.items()):
-        values = [r["pIC50"] for r in rows]
+        values = [r[vkey] for r in rows]
         median = statistics.median(values)
         label = activity_class(median)
         classes = {activity_class(v) for v in values}
@@ -303,17 +350,24 @@ def prepare_dataset(target: dict, assays: list[dict], activities: list[dict]) ->
             {
                 "canonical_smiles": smiles,
                 "target_chembl_id": TARGET,
-                "standard_type": "IC50",
-                "standard_units": "nM",
-                "standard_value": 10 ** (9 - median),
-                "pIC50": median,
+                "standard_type": (
+                    "IC50"
+                    if rule == "ic50"
+                    else "|".join(sorted({str(r.get("standard_type")) for r in rows}))
+                ),
+                **(
+                    {"standard_units": "nM", "standard_value": 10 ** (9 - median)}
+                    if rule == "ic50"
+                    else {}
+                ),
+                vkey: median,
                 "activity_class": label,
                 "activity_binary": {"active": 1, "inactive": 0}.get(label),
                 "n_measurements": len(rows),
                 "n_source_records": sum(r["n_source_records"] for r in rows),
-                "pIC50_min": min(values),
-                "pIC50_max": max(values),
-                "pIC50_range": max(values) - min(values),
+                f"{vkey}_min": min(values),
+                f"{vkey}_max": max(values),
+                f"{vkey}_range": max(values) - min(values),
                 "observed_classes": sorted(classes),
                 "activity_class_conflict": len(classes) > 1,
                 "active_inactive_conflict": {"active", "inactive"}.issubset(classes),
@@ -368,13 +422,22 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("reports/reviewer_revision/seh"))
     parser.add_argument("--expected-release", default="ChEMBL_37")
     parser.add_argument("--reuse-raw", action="store_true")
+    parser.add_argument(
+        "--activity-rule",
+        choices=sorted(ACTIVITY_RULES),
+        default="ic50",
+        help=(
+            "ic50: IC50 in nM only, pIC50 = 9 - log10(IC50). "
+            "pchembl: any endpoint with a pchembl_value, taken directly."
+        ),
+    )
     args = parser.parse_args()
     if not args.reuse_raw:
         download_snapshot(args.output_dir, args.expected_release)
     manifest, target, assays, activities = read_snapshot(args.output_dir)
     if manifest["expected_release"] != args.expected_release:
         raise ValueError("Saved snapshot differs from requested ChEMBL release")
-    result = prepare_dataset(target, assays, activities)
+    result = prepare_dataset(target, assays, activities, rule=args.activity_rule)
     if not result["compounds"]:
         raise ValueError("No eligible compounds; inspect saved raw pages and filters")
     for row in result["compounds"]:
@@ -393,7 +456,11 @@ def main() -> None:
 
     provenance = {
         "schema": "chemspacecopilot.seh_preparation.v1",
-        "policy": POLICY,
+        "policy": {
+            **POLICY,
+            "activity_rule": args.activity_rule,
+            **ACTIVITY_RULES[args.activity_rule],
+        },
         "domain_review_excluded_assays": [
             a for a in assays if a["assay_chembl_id"] in EXCLUDED_ASSAYS
         ],

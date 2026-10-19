@@ -72,6 +72,54 @@ def test_measurement_filters_are_explicit_and_do_not_mix_endpoints(updates, reas
     assert result["counts"]["excluded_by_first_failed_filter"] == {reason: 1}
 
 
+@pytest.mark.parametrize(
+    ("updates", "reason"),
+    [
+        ({"pchembl_value": None}, "no_pchembl_value"),
+        ({"pchembl_value": ""}, "no_pchembl_value"),
+        ({"standard_relation": "<", "pchembl_value": "7.0"}, "relation_not_equal"),
+        ({"potential_duplicate": 1, "pchembl_value": "7.0"}, "potential_duplicate"),
+    ],
+)
+def test_pchembl_rule_requires_a_pchembl_value_and_keeps_the_other_filters(updates, reason):
+    result = seh.prepare_dataset(target(), [assay()], [activity(**updates)], rule="pchembl")
+    assert not result["compounds"]
+    assert result["counts"]["excluded_by_first_failed_filter"] == {reason: 1}
+
+
+@pytest.mark.parametrize("endpoint", ["IC50", "Ki", "EC50", "Kd"])
+def test_pchembl_rule_admits_any_endpoint_and_takes_the_value_verbatim(endpoint):
+    result = seh.prepare_dataset(
+        target(),
+        [assay()],
+        [activity(standard_type=endpoint, standard_units="uM", pchembl_value="9.40")],
+        rule="pchembl",
+    )
+    (compound,) = result["compounds"]
+    # pchembl_value is already -log10(molar), so it is not recomputed and the
+    # reported units are irrelevant.
+    assert compound["pchembl"] == pytest.approx(9.40)
+    assert compound["standard_type"] == endpoint
+    assert "pIC50" not in compound and "standard_units" not in compound
+
+
+def test_ic50_rule_is_unchanged_and_still_rejects_other_endpoints():
+    kept = seh.prepare_dataset(target(), [assay()], [activity(value="100")])
+    (compound,) = kept["compounds"]
+    assert compound["pIC50"] == pytest.approx(7.0)
+    assert compound["standard_type"] == "IC50" and compound["standard_units"] == "nM"
+    assert "pchembl" not in compound
+    dropped = seh.prepare_dataset(
+        target(), [assay()], [activity(standard_type="Ki", pchembl_value="9.0")]
+    )
+    assert dropped["counts"]["excluded_by_first_failed_filter"] == {"endpoint_not_IC50": 1}
+
+
+def test_unknown_activity_rule_is_refused():
+    with pytest.raises(ValueError, match="Unknown activity rule"):
+        seh.prepare_dataset(target(), [assay()], [activity()], rule="pKi")
+
+
 def test_assay_confidence_and_type_are_read_from_assay_metadata():
     result = seh.prepare_dataset(
         target(),
