@@ -219,6 +219,21 @@ def find_smiles_column(df: pd.DataFrame) -> Optional[str]:
     return find_smiles_column_name(df.columns, exact_names=_SMILES_EXACT_NAMES)
 
 
+def require_activity_column(df: pd.DataFrame) -> str:
+    """Resolve the dataset's activity column, or refuse naming what was expected.
+
+    Callers that used to hard-code one column name should use this, so a dataset
+    keyed on pchembl_value works wherever one keyed on pIC50 does.
+    """
+    column = infer_activity_mapping(df).activity_column
+    if column is None:
+        raise ValueError(
+            "No activity column found; expected a p-scale potency column such as "
+            f"pIC50, pKi or pchembl_value, got {sorted(map(str, df.columns))}"
+        )
+    return column
+
+
 def infer_activity_mapping(
     df: pd.DataFrame,
     *,

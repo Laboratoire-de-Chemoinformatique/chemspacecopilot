@@ -98,9 +98,65 @@ def test_pchembl_rule_admits_any_endpoint_and_takes_the_value_verbatim(endpoint)
     (compound,) = result["compounds"]
     # pchembl_value is already -log10(molar), so it is not recomputed and the
     # reported units are irrelevant.
-    assert compound["pchembl"] == pytest.approx(9.40)
+    assert compound["pchembl_value"] == pytest.approx(9.40)
     assert compound["standard_type"] == endpoint
     assert "pIC50" not in compound and "standard_units" not in compound
+
+
+def test_pooled_potency_column_is_named_so_the_activity_detector_finds_it():
+    """`pchembl` is invisible to infer_activity_mapping; `pchembl_value` is not."""
+    pd = pytest.importorskip("pandas")
+    from cs_copilot.tools.chemistry.activity_schema import infer_activity_mapping
+
+    result = seh.prepare_dataset(
+        target(),
+        [assay()],
+        [activity(standard_type="Ki", standard_units="uM", pchembl_value="9.40")],
+        rule="pchembl",
+    )
+    mapping = infer_activity_mapping(pd.DataFrame(result["compounds"]))
+    assert mapping.activity_column == "pchembl_value"
+    assert mapping.endpoint == "pChEMBL"
+
+
+def test_pchembl_rule_keeps_records_whose_standard_value_is_absent():
+    """The positivity gate exists for log10(IC50); pchembl never takes that log."""
+    result = seh.prepare_dataset(
+        target(),
+        [assay()],
+        [activity(standard_type="Ki", standard_units=None, value=None, pchembl_value="8.5")],
+        rule="pchembl",
+    )
+    (compound,) = result["compounds"]
+    assert compound["pchembl_value"] == pytest.approx(8.5)
+
+
+def test_pooled_endpoints_sharing_a_pchembl_value_are_not_collapsed():
+    """ChEMBL rounds pchembl_value to 2 dp, so the endpoint must be in the key."""
+    result = seh.prepare_dataset(
+        target(),
+        [assay()],
+        [
+            activity(1, standard_type="IC50", pchembl_value="7.00"),
+            activity(2, standard_type="Ki", pchembl_value="7.00"),
+        ],
+        rule="pchembl",
+    )
+    assert len(result["measurements"]) == 2
+    assert {m["standard_type"] for m in result["measurements"]} == {"IC50", "Ki"}
+    (compound,) = result["compounds"]
+    assert compound["standard_type"] == "IC50|Ki"
+    assert compound["n_measurements"] == 2
+
+
+def test_ic50_measurements_stay_ordered_by_raw_potency():
+    """Grouping on the derived pIC50 would reverse the published row order."""
+    result = seh.prepare_dataset(
+        target(),
+        [assay()],
+        [activity(1, value="100"), activity(2, value="500")],
+    )
+    assert [m["ic50_nm"] for m in result["measurements"]] == [100.0, 500.0]
 
 
 def test_ic50_rule_is_unchanged_and_still_rejects_other_endpoints():
@@ -108,11 +164,26 @@ def test_ic50_rule_is_unchanged_and_still_rejects_other_endpoints():
     (compound,) = kept["compounds"]
     assert compound["pIC50"] == pytest.approx(7.0)
     assert compound["standard_type"] == "IC50" and compound["standard_units"] == "nM"
-    assert "pchembl" not in compound
+    assert "pchembl_value" not in compound
     dropped = seh.prepare_dataset(
         target(), [assay()], [activity(standard_type="Ki", pchembl_value="9.0")]
     )
     assert dropped["counts"]["excluded_by_first_failed_filter"] == {"endpoint_not_IC50": 1}
+
+
+def test_a_prepared_directory_is_not_overwritten_under_a_different_rule(tmp_path):
+    """The two rules share filenames but not schemas, and reports/ is gitignored."""
+    (tmp_path / "provenance.json").write_text(json.dumps({"policy": {"activity_rule": "ic50"}}))
+    with pytest.raises(ValueError, match="incompatible schema"):
+        seh.guard_prepared_outputs(tmp_path, "pchembl")
+    seh.guard_prepared_outputs(tmp_path, "ic50")
+    seh.guard_prepared_outputs(tmp_path / "empty", "pchembl")
+
+
+def test_a_provenance_written_before_the_rule_flag_counts_as_ic50(tmp_path):
+    (tmp_path / "provenance.json").write_text(json.dumps({"policy": {"standard_type": "IC50"}}))
+    with pytest.raises(ValueError, match="--activity-rule ic50"):
+        seh.guard_prepared_outputs(tmp_path, "pchembl")
 
 
 def test_unknown_activity_rule_is_refused():

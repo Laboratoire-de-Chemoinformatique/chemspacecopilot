@@ -15,7 +15,8 @@ Two properties matter to callers:
   what was requested and what was applied, so no artifact claims a setting
   that was never used.
 * All diversity therefore comes from latent noise: a single encoded molecule
-  has a latent standard deviation near 0.66.
+  has a latent standard deviation near 0.72, measured over eight drug-like
+  molecules on the pinned checkpoint (median 0.72, range 0.63-0.80).
 """
 
 from __future__ import annotations
@@ -38,7 +39,8 @@ from .autoencoder_toolkit import AutoencoderError
 logger = logging.getLogger(__name__)
 
 #: chembed batches at this width internally; the autoregressive decode is slow
-#: enough that the toolkit's default of 32 wastes most of the batch.
+#: enough that a narrower batch wastes most of it. Callers pass batch_size=None
+#: to get this rather than a width of their own invention.
 DEFAULT_BATCH_SIZE = 256
 
 #: Latent perturbation for neighbourhood exploration. Measured over aspirin,
@@ -146,7 +148,7 @@ class ChembedEngine:
     # ------------------------------------------------------------------
     # Encode / decode
     # ------------------------------------------------------------------
-    def encode(self, smiles_list: List[str], *, batch_size: int) -> np.ndarray:
+    def encode(self, smiles_list: List[str], *, batch_size: Optional[int]) -> np.ndarray:
         """Encode SMILES to one latent row each.
 
         The input is not standardized here: ``encode_multiple_smiles`` applies
@@ -155,7 +157,7 @@ class ChembedEngine:
 
         Args:
             smiles_list: SMILES strings to encode.
-            batch_size: Encoder batch size.
+            batch_size: Encoder batch size, or None for ``DEFAULT_BATCH_SIZE``.
 
         Returns:
             ``(len(smiles_list), latent_dim)`` float32 array.

@@ -27,12 +27,24 @@ def write_json(path: Path, value) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n")
 
 
+def potency_column(frame: pd.DataFrame) -> str:
+    """Name the curated p-scale potency column.
+
+    The sEH preparation emits pIC50 under its ic50 rule and pchembl_value when
+    it pools endpoints, so resolve the name instead of hard-coding one.
+    """
+    from cs_copilot.tools.chemistry.activity_schema import require_activity_column
+
+    return require_activity_column(frame)
+
+
 def curated_view(frame: pd.DataFrame) -> pd.DataFrame:
-    """Expose curated pIC50/classes without triggering generic raw-IC50 thresholds."""
-    required = {"canonical_smiles", "pIC50", "activity_class", "activity_binary"}
+    """Expose the curated potency/classes without triggering raw-IC50 thresholds."""
+    required = {"canonical_smiles", "activity_class", "activity_binary"}
     missing = required - set(frame.columns)
     if missing:
         raise ValueError(f"Missing curated fields: {sorted(missing)}")
+    potency_column(frame)
     view = frame.rename(
         columns={"canonical_smiles": "smi", "standard_value": "median_IC50_nM"}
     ).copy()
@@ -55,7 +67,9 @@ def build(args) -> dict:
     model_path = args.gtm_model.resolve()
     candidates_path = args.candidates_csv.resolve()
     inputs = {str(path): checksum(path) for path in (source, model_path, candidates_path)}
-    frame = curated_view(pd.read_csv(source))
+    curated = pd.read_csv(source)
+    potency = potency_column(curated)
+    frame = curated_view(curated)
     view_path = destination / "seh_tool_view.csv"
     frame.to_csv(view_path, index=False)
     state = {
@@ -73,7 +87,7 @@ def build(args) -> dict:
             "active_rule": "median IC50 < 1000 nM",
             "inactive_rule": "median IC50 >= 10000 nM",
             "intermediate_rule": "1000 <= median IC50 < 10000 nM; excluded from binary landscape",
-            "activity_source": "pIC50 continuous landscape; activity_comment preserves curated binary labels",
+            "activity_source": f"{potency} continuous landscape; activity_comment preserves curated binary labels",
             "map_selection": "pinned pretrained map; no new fit or hyperparameter selection",
         },
     }
@@ -128,7 +142,7 @@ def build(args) -> dict:
     density_path = destination / "seh_density.csv"
     density_table.to_csv(density_path, index=False)
     reg_density, reg_activity = ops.get_reg_density_matrix(
-        responsibilities, projected_frame["pIC50"]
+        responsibilities, projected_frame[potency]
     )
     activity_table = ops.reg_density_to_table(reg_density, reg_activity, node_threshold=0.1)
     activity_path = destination / "seh_activity_regression.csv"

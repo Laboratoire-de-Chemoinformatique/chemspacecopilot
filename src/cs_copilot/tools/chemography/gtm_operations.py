@@ -3191,11 +3191,19 @@ def validate_gtm_descriptor_backend(gtm: Any, descriptor_type: str) -> None:
         )
         return
     if recorded != expected:
+        # Offering descriptor_type=<recorded> is a dead end when the manifold
+        # predates the LSTM retirement: that name now raises, so say to refit.
+        remedy = (
+            f"That manifold predates the deepchemography LSTM retirement, so "
+            f"descriptor_type={recorded!r} is no longer accepted; refit or re-tag it on "
+            f"{expected!r}."
+            if recorded in MolecularDescriptorEncoder._RETIRED
+            else f"Use a manifold fitted on {expected!r}, or set descriptor_type={recorded!r}."
+        )
         raise ValueError(
             f"GTM manifold was fitted on {recorded!r} descriptors but {expected!r} descriptors "
             f"were supplied. Both are the same width, so projection would succeed and return "
-            f"meaningless coordinates. Use a manifold fitted on {expected!r}, or set "
-            f"descriptor_type={recorded!r}."
+            f"meaningless coordinates. {remedy}"
         )
 
 
@@ -3227,6 +3235,10 @@ def resolve_neighborhood_metric(descriptor_type: str, metric: str = "auto") -> s
     try:
         kind = MolecularDescriptorEncoder(descriptor_type).default_descriptor
     except ValueError:
+        if str(descriptor_type).strip().lower() in MolecularDescriptorEncoder._RETIRED:
+            # Swallowing this would report "no neighbourhood metric is defined",
+            # blaming the metric for a descriptor name that was retired.
+            raise
         kind = descriptor_type  # peptide latents are not a descriptor alias
     allowed = {
         "morgan": ("tanimoto",),

@@ -385,6 +385,30 @@ class TestDescriptorEnginePinning:
         with pytest.raises(AutoencoderError, match="retired"):
             resolve_autoencoder_backend(None)
 
+    def test_the_descriptor_path_names_its_engine_instead_of_reading_the_env(self, monkeypatch):
+        """AUTOENCODER_BACKEND picks the generator; it must not redefine a descriptor."""
+        from cs_copilot.tools.chemistry import descriptors as descriptors_module
+
+        calls = []
+        monkeypatch.setattr(
+            descriptors_module,
+            "make_autoencoder_toolkit",
+            lambda *args, **kwargs: calls.append((args, kwargs)) or SimpleNamespace(),
+        )
+        encoder = descriptors_module.MolecularDescriptorEncoder("chembed")
+        encoder._get_autoencoder_toolkit(model_path=None, device=None)
+        encoder._get_autoencoder_toolkit(model_path="/tmp/x.ckpt", device="cpu")
+
+        assert [args for args, _ in calls] == [("chembed",), ("chembed",)]
+
+    def test_a_stale_env_backend_still_refuses_to_build_a_generator(self, monkeypatch):
+        from cs_copilot.tools.chemistry.autoencoder_toolkit import make_autoencoder_toolkit
+
+        monkeypatch.setenv("AUTOENCODER_BACKEND", "deepchemography")
+
+        with pytest.raises(AutoencoderError, match="retired"):
+            make_autoencoder_toolkit()
+
 
 class TestEngineNamingAndPeptideDependency:
     """chembed replaces the small-molecule LSTM, not the deepchemography package.

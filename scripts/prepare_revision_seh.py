@@ -43,38 +43,48 @@ POLICY = {
     "excluded_assays_after_domain_review": EXCLUDED_ASSAYS,
     "assay_organism_filter": "none; human identity follows confidence-9 target assignment",
     "standard_relation": "=",
-    "standard_value": "finite and greater than zero",
     "data_validity_comment": "null or empty only",
     "potential_duplicate": "unflagged only (0, false, null or empty)",
     "chemical_identity": "RDKit cleanup, largest fragment, uncharge, canonical tautomer, remove stereochemistry",
-    "classification": "active > 6; inactive <= 5; otherwise intermediate",
     "conflicts": "retain all compounds; flag multiple observed classes and active/inactive disagreement separately",
 }
 
 # The endpoint rule. "ic50" is the original scope and derives
 # pIC50 = 9 - log10(IC50 in nM). "pchembl" admits any endpoint ChEMBL has
 # already normalised, taking pchembl_value directly, so Ki, EC50 and Kd join
-# IC50. A pooled column is not an IC50, so it is named pchembl, not pIC50.
+# IC50. A pooled column is not an IC50, so it is named pchembl_value -- which
+# is also the spelling infer_activity_mapping recognises as a p-scale potency
+# column; name it anything else and the dataset is undetectable downstream.
+# "standard_value" and "classification" are per-rule because the positivity
+# gate and the nM cut points only mean something for the ic50 rule.
+# Every key except "value_key" is provenance text, published verbatim.
 ACTIVITY_RULES = {
     "ic50": {
         "value_key": "pIC50",
         "standard_type": "IC50",
         "standard_units": "nM",
+        "standard_value": "finite and greater than zero",
         "duplicate_measurements": (
-            "collapse same standardized structure + assay + exact numeric IC50; "
+            "collapse same standardized structure + assay + endpoint + exact numeric IC50; "
             "retain all source IDs"
         ),
         "aggregation": "median pIC50 = median(9 - log10(IC50 in nM)); independent assays retained",
+        "classification": (
+            "active pIC50 > 6 (IC50 < 1000 nM); inactive pIC50 <= 5 (IC50 >= 10000 nM); "
+            "otherwise intermediate"
+        ),
     },
     "pchembl": {
-        "value_key": "pchembl",
+        "value_key": "pchembl_value",
         "standard_type": "any endpoint carrying a ChEMBL pchembl_value (IC50, Ki, EC50, Kd, ...)",
         "standard_units": "not constrained; pchembl_value is already -log10(molar)",
+        "standard_value": "not constrained; potency is read from pchembl_value",
         "duplicate_measurements": (
-            "collapse same standardized structure + assay + exact numeric pchembl_value; "
-            "retain all source IDs"
+            "collapse same standardized structure + assay + endpoint + exact numeric "
+            "pchembl_value; retain all source IDs"
         ),
         "aggregation": "median pChEMBL across pooled endpoints; independent assays retained",
+        "classification": "active pChEMBL > 6; inactive pChEMBL <= 5; otherwise intermediate",
     },
 }
 
@@ -231,10 +241,11 @@ def _number(value: Any) -> float | None:
         return None
 
 
-def activity_class(pic50: float) -> str:
-    if pic50 > 6:
+def activity_class(potency: float) -> str:
+    """Classify a p-scale potency: pIC50 under the ic50 rule, pChEMBL otherwise."""
+    if potency > 6:
         return "active"
-    return "inactive" if pic50 <= 5 else "intermediate"
+    return "inactive" if potency <= 5 else "intermediate"
 
 
 def prepare_dataset(
@@ -286,7 +297,17 @@ def prepare_dataset(
                 else [(_number(row.get("pchembl_value")) is not None, "no_pchembl_value")]
             ),
             (row.get("standard_relation") == "=", "relation_not_equal"),
-            (value is not None and value > 0, "value_not_finite_positive"),
+            *(
+                # Only the ic50 rule takes log10(standard_value), so only it
+                # needs the value finite and positive. Gating the pchembl rule
+                # on it would drop records whose pchembl_value is perfectly
+                # good. The position in this list is load-bearing: the first
+                # failing check is what provenance reports, so moving it would
+                # rewrite the published exclusion histogram.
+                [(value is not None and value > 0, "value_not_finite_positive")]
+                if rule == "ic50"
+                else []
+            ),
             (row.get("data_validity_comment") in (None, ""), "data_validity_comment"),
             (row.get("potential_duplicate") in (None, "", 0, "0", False), "potential_duplicate"),
         ]
@@ -316,9 +337,25 @@ def prepare_dataset(
             )
     grouped = defaultdict(list)
     for row in accepted:
-        grouped[(row["standardized_smiles"], row["assay_chembl_id"], row[vkey])].append(row)
+        # Duplicate identity: same structure, same assay, same endpoint, same
+        # number. Two details are load-bearing. The number is the raw IC50 for
+        # the ic50 rule, so grouping and the row order of clean_measurements.csv
+        # stay as published -- keying on the derived pIC50 reverses the order,
+        # because pIC50 decreases as IC50 grows. And the endpoint belongs in the
+        # key because the pchembl rule pools Ki/EC50/Kd: ChEMBL rounds
+        # pchembl_value to two decimals, so without the endpoint two genuinely
+        # different measurements collapse into one "duplicate" and only the
+        # lowest-activity_id endpoint survives into provenance.
+        grouped[
+            (
+                row["standardized_smiles"],
+                row["assay_chembl_id"],
+                row.get("standard_type") or "",
+                row["ic50_nm"] if rule == "ic50" else row[vkey],
+            )
+        ].append(row)
     measurements = []
-    for (smiles, assay_id, potency), rows in sorted(grouped.items()):
+    for (smiles, assay_id, endpoint, _value), rows in sorted(grouped.items()):
         measurements.append(
             {
                 "canonical_smiles": smiles,
@@ -328,10 +365,11 @@ def prepare_dataset(
                     {"ic50_nm": rows[0]["ic50_nm"]}
                     if rule == "ic50"
                     # Pooled endpoints have no single unit, so record which one
-                    # each measurement came from instead.
-                    else {"standard_type": rows[0].get("standard_type")}
+                    # each measurement came from instead. The group key makes
+                    # this the endpoint of every row in the group, not just one.
+                    else {"standard_type": endpoint}
                 ),
-                vkey: potency,
+                vkey: rows[0][vkey],
                 "activity_ids": sorted(r["activity_id"] for r in rows),
                 "molecule_chembl_ids": sorted({r["molecule_chembl_id"] for r in rows}),
                 "n_source_records": len(rows),
@@ -353,7 +391,7 @@ def prepare_dataset(
                 "standard_type": (
                     "IC50"
                     if rule == "ic50"
-                    else "|".join(sorted({str(r.get("standard_type")) for r in rows}))
+                    else "|".join(sorted({r["standard_type"] for r in rows}))
                 ),
                 **(
                     {"standard_units": "nM", "standard_value": 10 ** (9 - median)}
@@ -417,6 +455,29 @@ def write_csv(path: Path, records: list[dict], fields: list[str] | None = None) 
             )
 
 
+def guard_prepared_outputs(output_dir: Path, rule: str) -> None:
+    """Refuse to overwrite a prepared dataset that used a different rule.
+
+    The two rules write incompatible schemas under identical filenames, and
+    `reports/` is gitignored, so clobbering a frozen run is not recoverable.
+    `download_snapshot` already guards the raw pages this same way; the derived
+    deliverables had no equivalent. A provenance file written before the rule
+    flag existed describes an ic50 run.
+    """
+    provenance_path = output_dir / "provenance.json"
+    if not provenance_path.exists():
+        return
+    previous = json.loads(provenance_path.read_text()).get("policy", {}).get(
+        "activity_rule", "ic50"
+    )
+    if previous != rule:
+        raise ValueError(
+            f"{output_dir} holds a dataset prepared with --activity-rule {previous}; "
+            f"writing {rule} here would replace it with an incompatible schema. "
+            "Use a new --output-dir."
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=Path("reports/reviewer_revision/seh"))
@@ -432,6 +493,7 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+    guard_prepared_outputs(args.output_dir, args.activity_rule)
     if not args.reuse_raw:
         download_snapshot(args.output_dir, args.expected_release)
     manifest, target, assays, activities = read_snapshot(args.output_dir)
@@ -459,7 +521,8 @@ def main() -> None:
         "policy": {
             **POLICY,
             "activity_rule": args.activity_rule,
-            **ACTIVITY_RULES[args.activity_rule],
+            # value_key names the emitted column; it is wiring, not policy.
+            **{k: v for k, v in ACTIVITY_RULES[args.activity_rule].items() if k != "value_key"},
         },
         "domain_review_excluded_assays": [
             a for a in assays if a["assay_chembl_id"] in EXCLUDED_ASSAYS

@@ -74,7 +74,11 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--frameset-smiles-column", default="SMILES")
     parser.add_argument("--compounds", type=Path, default=None)
     parser.add_argument("--smiles-column", default="canonical_smiles")
-    parser.add_argument("--activity-column", default="pIC50")
+    parser.add_argument(
+        "--activity-column",
+        default=None,
+        help="Potency column; detected from the file when omitted (pIC50, pchembl_value, ...)",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--min-node-mass", type=float, default=1.0)
     parser.add_argument("--device", default=None)
@@ -90,6 +94,7 @@ def main(argv: Optional[list] = None) -> int:
     import torch
     from huggingface_hub import hf_hub_download
 
+    from cs_copilot.tools.chemistry.activity_schema import require_activity_column
     from cs_copilot.tools.chemistry.chembed_engine import ChembedEngine
     from cs_copilot.tools.chemography.gtm_operations import load_gtm_model
     from cs_copilot.tools.constants import (
@@ -153,7 +158,11 @@ def main(argv: Optional[list] = None) -> int:
     figure.colorbar(image, ax=axes[0], label="molecules per node")
 
     if args.compounds:
-        compounds = pd.read_csv(args.compounds).dropna(subset=[args.activity_column])
+        compounds = pd.read_csv(args.compounds)
+        # The curated sEH file is keyed on pIC50 or pchembl_value depending on
+        # its activity rule, so resolve the name rather than assume one.
+        args.activity_column = args.activity_column or require_activity_column(compounds)
+        compounds = compounds.dropna(subset=[args.activity_column])
         responsibilities = project(compounds[args.smiles_column].astype(str))
         activity = compounds[args.activity_column].to_numpy(float)
         coordinates = responsibilities @ nodes

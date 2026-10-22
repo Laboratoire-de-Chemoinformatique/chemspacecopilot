@@ -39,6 +39,40 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _chembed_repo() -> str:
+    from cs_copilot.tools.constants import HUGGINGFACE_CHEMBED_REPO
+
+    return HUGGINGFACE_CHEMBED_REPO
+
+
+def chembed_checkpoint() -> Path:
+    """Locate the cached chembed checkpoint so the plan can hash the real weights.
+
+    Every other model in the study is content-hashed from a project directory,
+    but chembed's checkpoint lives in the huggingface_hub cache and is fetched
+    by repo id with no revision pin. Unhashed, two runs on different caches, or
+    one after an upstream push, validate against the same plan while generating
+    from different weights.
+    """
+    from huggingface_hub import try_to_load_from_cache
+
+    from cs_copilot.tools.constants import (
+        CHEMBED_CHECKPOINT_FILENAME,
+        HUGGINGFACE_CHEMBED_REPO,
+    )
+
+    cached = try_to_load_from_cache(
+        repo_id=HUGGINGFACE_CHEMBED_REPO, filename=CHEMBED_CHECKPOINT_FILENAME
+    )
+    if not isinstance(cached, str):
+        raise ValueError(
+            f"chembed checkpoint {HUGGINGFACE_CHEMBED_REPO}/{CHEMBED_CHECKPOINT_FILENAME} is not "
+            "in the huggingface_hub cache; fetch it before planning so the plan records the "
+            "weights the study will actually generate from"
+        )
+    return Path(cached)
+
+
 def runtime_hashes(root: Path) -> dict[str, str]:
     paths = [
         path
@@ -311,6 +345,7 @@ def prepare(args):
                 input_files.add(path)
     for folder in (args.synplanner_dir, args.peptide_model_dir):
         input_files.update(item for item in folder.resolve().rglob("*") if item.is_file())
+    input_files.add(chembed_checkpoint())
     plan = {
         "schema_version": "1.0",
         "purpose": "Predeclared prospective study, no executions performed by this planning script",
@@ -322,6 +357,7 @@ def prepare(args):
         "environment": {
             "PYTHONPATH": _python_path(root),
             "PEPTIDE_DESIGNER_MODEL_PATH": str(args.peptide_model_dir.resolve()),
+            "HUGGINGFACE_CHEMBED_REPO": _chembed_repo(),
             "USE_S3": "false",
             "HF_HUB_OFFLINE": "1",
             "OMP_NUM_THREADS": "1",
