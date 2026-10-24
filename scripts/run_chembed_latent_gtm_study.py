@@ -69,7 +69,11 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--compounds", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--smiles-column", default="canonical_smiles")
-    parser.add_argument("--activity-column", default="pIC50")
+    parser.add_argument(
+        "--activity-column",
+        default=None,
+        help="Potency column; detected from the file when omitted (pIC50, pchembl_value, ...)",
+    )
     parser.add_argument("--top-nodes", type=int, default=10)
     parser.add_argument("--n-candidates", type=int, default=200)
     parser.add_argument("--noise-scale", type=float, default=0.5)
@@ -150,6 +154,7 @@ def describe(smiles: Sequence[str], reference_fps, reference_smiles: set) -> Dic
 def main(argv: Optional[List[str]] = None) -> int:
     import torch
 
+    from cs_copilot.tools.chemistry.activity_schema import require_activity_column
     from cs_copilot.tools.chemistry.chembed_engine import ChembedEngine
     from cs_copilot.tools.chemography.gtm_operations import (
         latent_centers_from_gtm,
@@ -165,6 +170,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     frame = pd.read_csv(args.compounds)
+    # The curated sEH file is keyed on pIC50 or pchembl_value depending on its
+    # activity rule, so resolve the name rather than assume one.
+    args.activity_column = args.activity_column or require_activity_column(frame)
     frame = frame.dropna(subset=[args.smiles_column, args.activity_column])
     smiles = frame[args.smiles_column].astype(str).tolist()
     activity = frame[args.activity_column].to_numpy(dtype=float)

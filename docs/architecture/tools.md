@@ -91,7 +91,8 @@ accepted and have no effect, so **an agent must not offer a temperature or
 sampling sweep when this engine is active** — `get_model_info()` reports
 `supports_temperature` and `supports_stochastic_decode` as `False`. Diversity
 comes only from latent noise (`noise_scale`, `latent_std`): a single encoded
-molecule has a latent standard deviation near 0.72. Every generation audit records the requested
+molecule has a latent standard deviation near 0.72. Every generation audit
+records the requested
 settings alongside the applied ones, plus `ignored_parameters`, so no artifact
 claims a setting that was never used.
 

@@ -120,7 +120,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     args = parse_args(argv)
-    rng = np.random.default_rng(args.seed)
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
 
     chembed_gtm = load_gtm_model(
@@ -144,7 +143,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     logger.info("Comparing at n=%d per dataset, k=%s", size, args.k)
 
     report: Dict[str, Dict] = {"sample_size": size, "k": list(args.k), "manifolds": {}}
-    for name, smiles in datasets.items():
+    for index, (name, smiles) in enumerate(datasets.items()):
+        # One generator per dataset, not one per run: a shared stream makes every
+        # dataset after the first depend on how many manifold arms were scored
+        # before it, so adding or removing an arm silently moves the subsample
+        # and the shuffled baseline at an unchanged --seed.
+        rng = np.random.default_rng([args.seed, index])
         if len(smiles) > size:
             smiles = [smiles[i] for i in rng.choice(len(smiles), size, replace=False)]
         chembed_x = engine.encode(smiles, batch_size=256).astype(np.float64)

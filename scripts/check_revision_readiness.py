@@ -258,8 +258,16 @@ def check_readiness(
     manifold_directory = Path(
         expand(env.get("GTM_CHEMBED_MODEL_PATH") or "~/.cache/cs_copilot/models/gtm-chembed", env, home)
     )
+    # Mirrors GTM_MODEL_SUFFIXES in cs_copilot.tools.constants: the loader takes
+    # all four, so looking only for .pkl.gz calls a usable manifold missing.
+    manifold_patterns = ("*.pkl.gz", "*.pkl", "*.dill", "*.pt")
     manifold_files = (
-        sorted(str(item) for item in manifold_directory.glob("*.pkl.gz") if item.is_file())
+        sorted(
+            str(item)
+            for pattern in manifold_patterns
+            for item in manifold_directory.glob(pattern)
+            if item.is_file()
+        )
         if manifold_directory.is_dir()
         else []
     )
@@ -307,14 +315,10 @@ def check_readiness(
         prerequisite_cases[name] = item
 
     if "seh_analysis" in validators:
-        # The chembed manifold caches in its own directory, never the retired
-        # LSTM's ``models/gtm``, which may still hold a manifold of that latent.
-        gtm_roots = (home / ".cache/cs_copilot/models/gtm-chembed",)
-        model_files["cached_gtm"] = [
-            artifact(str(item), base=project_root, env=env, home=home)
-            for root in gtm_roots
-            for item in sorted(root.glob("*.pkl*"))
-        ]
+        # The same resolved directory and suffix set as the manifold check
+        # above, which honours GTM_CHEMBED_MODEL_PATH. A second hardcoded scan
+        # reported a correctly provisioned machine as missing its map.
+        model_files["cached_gtm"] = model_files["gtm_chembed"]
         cached_map_present = any(item["status"] == "present" for item in model_files["cached_gtm"])
         for name, spec in selected.items():
             analysis = any(

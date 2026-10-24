@@ -93,8 +93,11 @@ class AutoencoderEngine(Protocol):
         """Return ``(model, vocab, config)``; the toolkit assigns them onto itself."""
         ...
 
-    def encode(self, smiles_list: List[str], *, batch_size: int) -> np.ndarray:
-        """Return one latent row per input SMILES, shape ``(n, latent_dim)`` float32."""
+    def encode(self, smiles_list: List[str], *, batch_size: Optional[int]) -> np.ndarray:
+        """Return one latent row per input SMILES, shape ``(n, latent_dim)`` float32.
+
+        ``batch_size`` None means the engine picks its own width.
+        """
         ...
 
     def decode(self, z: Any, *, max_len: int, temp: float, decode: str) -> List[str]:
@@ -151,11 +154,12 @@ class AutoencoderToolkit(BaseChemistryToolkit):
 
         if engine is None:
             # Imported here because chembed_engine imports AutoencoderError from
-            # this module. The check refuses a stale AUTOENCODER_BACKEND that
-            # still names the retired LSTM.
+            # this module. AUTOENCODER_BACKEND is deliberately NOT read here: it
+            # selects the engine used to *generate* molecules and must not
+            # silently redefine a descriptor. make_autoencoder_toolkit is the
+            # generation entry point, and that is where the check belongs.
             from .chembed_engine import ChembedEngine
 
-            resolve_autoencoder_backend()
             engine = ChembedEngine()
         self.engine = engine
 
@@ -270,7 +274,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         return self._latent_dim()
 
     def _encode_smiles_ndarray(
-        self, smiles_list: Union[str, List[str]], batch_size: int = 32
+        self, smiles_list: Union[str, List[str]], batch_size: Optional[int] = None
     ) -> np.ndarray:
         """
         Internal helper: encode SMILES and return a numpy.ndarray.
@@ -292,7 +296,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         return result[0:1] if return_single else result
 
     def encode_smiles_array(
-        self, smiles_list: Union[str, List[str]], batch_size: int = 32
+        self, smiles_list: Union[str, List[str]], batch_size: Optional[int] = None
     ) -> np.ndarray:
         """
         Public API for internal callers that need a numpy.ndarray result.
@@ -300,7 +304,7 @@ class AutoencoderToolkit(BaseChemistryToolkit):
         return self._encode_smiles_ndarray(smiles_list, batch_size=batch_size)
 
     def encode_smiles(
-        self, smiles_list: Union[str, List[str]], batch_size: int = 32
+        self, smiles_list: Union[str, List[str]], batch_size: Optional[int] = None
     ) -> Union[List[float], List[List[float]]]:
         """
         Tool-exposed API: returns JSON-serializable Python lists to avoid
@@ -740,18 +744,30 @@ def resolve_autoencoder_backend(backend: Optional[str] = None) -> str:
 
 
 def make_autoencoder_toolkit(
+    backend: Optional[str] = None,
     *,
     model_path: Optional[str] = None,
     device: Optional[str] = None,
 ) -> AutoencoderToolkit:
     """Build an :class:`AutoencoderToolkit` on chembed.
 
+    This is the *generation* entry point, so it is what honours a stale
+    ``AUTOENCODER_BACKEND`` naming the retired LSTM: generating on chembed under
+    that name would attribute molecules to a model that did not produce them.
+    Descriptor callers pass ``backend="chembed"`` to say they mean the encoder,
+    not the generator, and are unaffected by the variable.
+
     Args:
+        backend: Engine name, or None to read ``AUTOENCODER_BACKEND``.
         model_path: A local chembed ``.ckpt`` file, or None for the pinned checkpoint.
         device: Device to run the model on.
 
     Returns:
         A toolkit whose class is always ``AutoencoderToolkit``, so the Agno tool
         names it registers do not depend on the engine.
+
+    Raises:
+        AutoencoderError: If the resolved name is not chembed.
     """
+    resolve_autoencoder_backend(backend)
     return AutoencoderToolkit(model_path=model_path, device=device)

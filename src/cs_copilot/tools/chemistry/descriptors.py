@@ -89,7 +89,9 @@ class MolecularDescriptorEncoder:
         if descriptor_key == "chembed":
             return self._encode_autoencoder(
                 smiles,
-                batch_size=kwargs.pop("batch_size", 32),
+                # None lets the engine pick its own width; chembed batches at
+                # 256 internally and a hardcoded 32 wastes most of the batch.
+                batch_size=kwargs.pop("batch_size", None),
                 model_path=kwargs.pop("model_path", None),
                 device=kwargs.pop("device", None),
             )
@@ -131,7 +133,7 @@ class MolecularDescriptorEncoder:
         self,
         smiles: Sequence[str],
         *,
-        batch_size: int,
+        batch_size: Optional[int],
         model_path: Optional[str],
         device: Optional[str],
     ) -> np.ndarray:
@@ -159,12 +161,14 @@ class MolecularDescriptorEncoder:
         self, *, model_path: Optional[str], device: Optional[str]
     ) -> AutoencoderToolkit:
         # Explicit arguments build a fresh toolkit; otherwise reuse one lazily
-        # initialised toolkit.
+        # initialised toolkit. "chembed" is passed explicitly because
+        # AUTOENCODER_BACKEND selects the *generation* engine: a stale value
+        # must not redefine, or refuse, a descriptor.
         if model_path or device:
-            return make_autoencoder_toolkit(model_path=model_path, device=device)
+            return make_autoencoder_toolkit("chembed", model_path=model_path, device=device)
 
         if self._autoencoder_toolkit is None:
-            self._autoencoder_toolkit = make_autoencoder_toolkit()
+            self._autoencoder_toolkit = make_autoencoder_toolkit("chembed")
         return self._autoencoder_toolkit
 
 
